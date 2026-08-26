@@ -1,0 +1,17 @@
+services:
+  db:
+    image: postgres:17-alpine
+    container_name: edificio_xyz_db
+    restart: always
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgrespassword
+      POSTGRES_DB: postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./database/migrations:/docker-entrypoint-initdb.d
+
+volumes:
+  postgres_data:

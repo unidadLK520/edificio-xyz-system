@@ -1,0 +1,7 @@
+node_modules/
+__pycache__/
+.env
+.env.local
+postgres_data/
+.DS_Store
+.vscode/
