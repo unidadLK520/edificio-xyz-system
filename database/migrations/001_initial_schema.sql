@@ -1,60 +1,140 @@
-SET search_path TO edificio, public;
+CREATE SCHEMA IF NOT EXISTS edificio;
 
--- =====================================================================
--- DATOS SEMILLA (SEED DATA) DE PRUEBA - EDIFICIO XYZ
--- =====================================================================
+CREATE TABLE edificio.usuarios (
+    id_usuario SERIAL PRIMARY KEY,
+    nombre_usuario VARCHAR(50) UNIQUE NOT NULL,
+    correo VARCHAR(100) UNIQUE NOT NULL,
+    password_hash VARCHAR(255) NOT NULL,
+    rol VARCHAR(20) CHECK (rol IN ('admin', 'copropietario', 'inquilino', 'personal')) NOT NULL,
+    activo BOOLEAN DEFAULT TRUE,
+    creado_en TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
 
--- 1. Usuarios del Sistema
-INSERT INTO edificio.usuarios (nombre_usuario, correo, password_hash, id_rol) VALUES
-    ('admin', 'admin@edificioxyz.com', '$2a$12$eImiTXuWVxfM37uY4JANjOL.88448rGfJp5.1234567890abc', 1),
-    ('directorio', 'directorio@edificioxyz.com', '$2a$12$eImiTXuWVxfM37uY4JANjOL.88448rGfJp5.1234567890abc', 2),
-    ('consulta', 'consulta@edificioxyz.com', '$2a$12$eImiTXuWVxfM37uY4JANjOL.88448rGfJp5.1234567890abc', 3);
+CREATE TABLE edificio.personas (
+    id_persona SERIAL PRIMARY KEY,
+    id_usuario INT UNIQUE REFERENCES edificio.usuarios(id_usuario) ON DELETE SET NULL,
+    nombres VARCHAR(100) NOT NULL,
+    apellidos VARCHAR(100) NOT NULL,
+    ci_nit VARCHAR(20) UNIQUE NOT NULL,
+    telefono VARCHAR(20),
+    es_propietario BOOLEAN DEFAULT FALSE,
+    creado_en TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
 
--- 2. Copropietarios (Personas)
-INSERT INTO edificio.personas (nombres, apellidos, ci_nit, telefono, correo, direccion) VALUES
-    ('Carlos', 'Mendoza', '4589123 LP', '71523489', 'carlos.mendoza@gmail.com', 'Edificio XYZ, Dpto 101'),
-    ('Ana', 'Rios', '3891204 CB', '78912345', 'ana.rios@gmail.com', 'Edificio XYZ, Dpto 102'),
-    ('Roberto', 'Gomez', '5129034 SC', '76543210', 'roberto.gomez@gmail.com', 'Edificio XYZ, Dpto 201');
+CREATE TABLE edificio.departamentos (
+    id_departamento SERIAL PRIMARY KEY,
+    numero VARCHAR(10) UNIQUE NOT NULL,
+    piso INT NOT NULL,
+    area_m2 NUMERIC(8,2) NOT NULL,
+    id_propietario INT REFERENCES edificio.personas(id_persona) ON DELETE SET NULL,
+    creado_en TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
 
--- 3. Departamentos
-INSERT INTO edificio.departamentos (numero, piso, area_m2, id_propietario, estado) VALUES
-    ('101', 1, 85.50, 1, 'Ocupado'),
-    ('102', 1, 92.00, 2, 'Ocupado'),
-    ('201', 2, 85.50, 3, 'Ocupado');
+CREATE TABLE edificio.parqueos (
+    id_parqueo SERIAL PRIMARY KEY,
+    numero VARCHAR(10) UNIQUE NOT NULL,
+    id_departamento INT REFERENCES edificio.departamentos(id_departamento) ON DELETE SET NULL
+);
 
--- 4. Parqueos y Bauleras
-INSERT INTO edificio.parqueos (numero, id_departamento) VALUES
-    ('P-01', 1),
-    ('P-02', 2),
-    ('P-03', 3);
+CREATE TABLE edificio.bauleras (
+    id_baulera SERIAL PRIMARY KEY,
+    numero VARCHAR(10) UNIQUE NOT NULL,
+    id_departamento INT REFERENCES edificio.departamentos(id_departamento) ON DELETE SET NULL
+);
 
-INSERT INTO edificio.bauleras (numero, id_departamento) VALUES
-    ('B-01', 1),
-    ('B-02', 2);
+CREATE TABLE edificio.ocupantes_departamento (
+    id_ocupante SERIAL PRIMARY KEY,
+    id_departamento INT REFERENCES edificio.departamentos(id_departamento) ON DELETE CASCADE,
+    id_persona INT REFERENCES edificio.personas(id_persona) ON DELETE CASCADE,
+    tipo_residente VARCHAR(20) CHECK (tipo_residente IN ('propietario', 'inquilino', 'familiar')) NOT NULL,
+    fecha_inicio DATE NOT NULL,
+    fecha_fin DATE
+);
 
--- 5. Historial de Ocupantes
-INSERT INTO edificio.ocupantes_departamento (id_departamento, id_persona, tipo_ocupante, fecha_inicio) VALUES
-    (1, 1, 'Propietario', '2025-01-01'),
-    (2, 2, 'Propietario', '2025-01-01'),
-    (3, 3, 'Propietario', '2025-02-01');
+CREATE TABLE edificio.expensas (
+    id_expensa SERIAL PRIMARY KEY,
+    id_departamento INT REFERENCES edificio.departamentos(id_departamento) ON DELETE CASCADE,
+    periodo VARCHAR(7) NOT NULL,
+    monto NUMERIC(10,2) NOT NULL,
+    fecha_vencimiento DATE NOT NULL,
+    estado VARCHAR(20) CHECK (estado IN ('pendiente', 'pagado', 'mora')) DEFAULT 'pendiente',
+    creado_en TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
 
--- 6. Expensas
-INSERT INTO edificio.expensas (id_departamento, periodo, monto, fecha_vencimiento, saldo_pendiente, estado) VALUES
-    (1, '2026-07-01', 450.00, '2026-07-10', 0.00, 'Pagado'),
-    (2, '2026-07-01', 480.00, '2026-07-10', 0.00, 'Pagado'),
-    (3, '2026-07-01', 450.00, '2026-07-10', 450.00, 'Moroso'),
-    (1, '2026-08-01', 450.00, '2026-08-10', 450.00, 'Pendiente'),
-    (2, '2026-08-01', 480.00, '2026-08-10', 480.00, 'Pendiente');
+CREATE TABLE edificio.pagos (
+    id_pago SERIAL PRIMARY KEY,
+    id_expensa INT REFERENCES edificio.expensas(id_expensa) ON DELETE CASCADE,
+    id_departamento INT REFERENCES edificio.departamentos(id_departamento) ON DELETE CASCADE,
+    monto_pagado NUMERIC(10,2) NOT NULL,
+    fecha_pago TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    metodo_pago VARCHAR(30) CHECK (metodo_pago IN ('transferencia', 'efectivo', 'qr')) NOT NULL,
+    comprobante_url VARCHAR(255)
+);
 
--- 7. Pagos Registrados
-INSERT INTO edificio.pagos (id_expensa, id_departamento, monto_pagado, metodo_pago, id_usuario_registro) VALUES
-    (1, 1, 450.00, 'Transferencia', 1),
-    (2, 2, 480.00, 'QR', 1);
+CREATE TABLE edificio.cuentas_bancarias (
+    id_cuenta SERIAL PRIMARY KEY,
+    banco VARCHAR(100) NOT NULL,
+    numero_cuenta VARCHAR(50) UNIQUE NOT NULL,
+    tipo_cuenta VARCHAR(30) NOT NULL,
+    saldo NUMERIC(12,2) DEFAULT 0.00
+);
 
--- 8. Cuentas Bancarias
-INSERT INTO edificio.cuentas_bancarias (banco, numero_cuenta, tipo_cuenta, saldo_actual) VALUES
-    ('Banco Nacional', '1000-459201-9', 'Cuenta Corriente', 15430.50);
+CREATE TABLE edificio.movimientos_caja (
+    id_movimiento SERIAL PRIMARY KEY,
+    tipo VARCHAR(10) CHECK (tipo IN ('ingreso', 'egreso')) NOT NULL,
+    monto NUMERIC(10,2) NOT NULL,
+    concepto TEXT NOT NULL,
+    fecha TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
 
--- 9. Empleados
-INSERT INTO edificio.empleados (nombres, apellidos, ci, cargo, salario_base, fecha_ingreso) VALUES
-    ('Mario', 'Condori', '6781203 LP', 'Portero / Conserje', 2500.00, '2024-03-01');
+CREATE TABLE edificio.empleados (
+    id_empleado SERIAL PRIMARY KEY,
+    nombres VARCHAR(100) NOT NULL,
+    apellidos VARCHAR(100) NOT NULL,
+    ci VARCHAR(20) UNIQUE NOT NULL,
+    cargo VARCHAR(50) NOT NULL,
+    salario NUMERIC(10,2) NOT NULL,
+    fecha_contratacion DATE NOT NULL
+);
+
+CREATE TABLE edificio.pagos_salarios (
+    id_pago_salario SERIAL PRIMARY KEY,
+    id_empleado INT REFERENCES edificio.empleados(id_empleado) ON DELETE CASCADE,
+    periodo VARCHAR(7) NOT NULL,
+    monto NUMERIC(10,2) NOT NULL,
+    fecha_pago DATE NOT NULL
+);
+
+CREATE TABLE edificio.comunicados (
+    id_comunicado SERIAL PRIMARY KEY,
+    titulo VARCHAR(150) NOT NULL,
+    contenido TEXT NOT NULL,
+    publicado_por INT REFERENCES edificio.usuarios(id_usuario),
+    fecha_publicacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE edificio.documentos (
+    id_documento SERIAL PRIMARY KEY,
+    titulo VARCHAR(150) NOT NULL,
+    categoria VARCHAR(50) NOT NULL,
+    archivo_url VARCHAR(255) NOT NULL,
+    fecha_subida TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE edificio.reservas (
+    id_reserva SERIAL PRIMARY KEY,
+    id_departamento INT REFERENCES edificio.departamentos(id_departamento) ON DELETE CASCADE,
+    area VARCHAR(50) CHECK (area IN ('churrasquera', 'salon_eventos')) NOT NULL,
+    fecha_reserva DATE NOT NULL,
+    estado VARCHAR(20) CHECK (estado IN ('confirmada', 'cancelada')) DEFAULT 'confirmada'
+);
+
+CREATE TABLE edificio.auditoria (
+    id_auditoria SERIAL PRIMARY KEY,
+    tabla_afectada VARCHAR(50) NOT NULL,
+    operacion VARCHAR(10) NOT NULL,
+    datos_anteriores JSONB,
+    datos_nuevos JSONB,
+    ejecutado_por VARCHAR(50) DEFAULT CURRENT_USER,
+    fecha TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
