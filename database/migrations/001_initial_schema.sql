@@ -90,9 +90,35 @@ CREATE TABLE edificio.expensas (
     UNIQUE (id_departamento, periodo)
 );
 
+-- =====================================================================
+-- 5. CAJA Y BANCOS
+-- (declaradas antes de "pagos" porque "pagos" ahora referencia estas tablas)
+-- =====================================================================
+
+CREATE TABLE edificio.cuentas_bancarias (
+    id_cuenta       SERIAL PRIMARY KEY,
+    banco           VARCHAR(80) NOT NULL,
+    numero_cuenta   VARCHAR(50) NOT NULL,
+    tipo_cuenta     VARCHAR(30),
+    saldo_actual    NUMERIC(12,2) NOT NULL DEFAULT 0
+);
+
+CREATE TABLE edificio.caja (
+    id_movimiento_caja SERIAL PRIMARY KEY,
+    monto               NUMERIC(10,2) NOT NULL,
+    tipo                VARCHAR(10) NOT NULL CHECK (tipo IN ('Ingreso','Egreso')),
+    concepto            TEXT,
+    fecha               TIMESTAMP NOT NULL DEFAULT NOW(),
+    id_usuario_registro INT REFERENCES edificio.usuarios(id_usuario)
+);
+
+-- =====================================================================
+-- 3b. PAGOS (con trazabilidad hacia caja o banco)
+-- =====================================================================
+
 CREATE TABLE edificio.pagos (
     id_pago             SERIAL PRIMARY KEY,
-    id_expensa          INT REFERENCES edificio.expensas(id_expensa), 
+    id_expensa          INT REFERENCES edificio.expensas(id_expensa),
     id_departamento     INT NOT NULL REFERENCES edificio.departamentos(id_departamento),
     monto_pagado        NUMERIC(10,2) NOT NULL,
     interes_pagado      NUMERIC(10,2) NOT NULL DEFAULT 0,
@@ -100,7 +126,15 @@ CREATE TABLE edificio.pagos (
     metodo_pago         VARCHAR(30), -- Efectivo, Transferencia, QR, Tarjeta
     es_anticipado       BOOLEAN NOT NULL DEFAULT FALSE,
     id_usuario_registro INT REFERENCES edificio.usuarios(id_usuario),
-    comprobante_url     TEXT
+    comprobante_url     TEXT,
+    -- Ajuste: destino del dinero (uno u otro; ninguno permitido hasta conciliar)
+    id_cuenta           INT REFERENCES edificio.cuentas_bancarias(id_cuenta),
+    id_movimiento_caja  INT REFERENCES edificio.caja(id_movimiento_caja),
+    CONSTRAINT chk_pago_destino CHECK (
+        (id_cuenta IS NOT NULL AND id_movimiento_caja IS NULL) OR
+        (id_cuenta IS NULL AND id_movimiento_caja IS NOT NULL) OR
+        (id_cuenta IS NULL AND id_movimiento_caja IS NULL) -- pago registrado, pendiente de conciliar destino
+    )
 );
 
 -- =====================================================================
@@ -124,18 +158,6 @@ CREATE TABLE edificio.movimientos (
     id_usuario_registro INT REFERENCES edificio.usuarios(id_usuario)
 );
 
--- =====================================================================
--- 5. CAJA Y BANCOS
--- =====================================================================
-
-CREATE TABLE edificio.cuentas_bancarias (
-    id_cuenta       SERIAL PRIMARY KEY,
-    banco           VARCHAR(80) NOT NULL,
-    numero_cuenta   VARCHAR(50) NOT NULL,
-    tipo_cuenta     VARCHAR(30),
-    saldo_actual    NUMERIC(12,2) NOT NULL DEFAULT 0
-);
-
 CREATE TABLE edificio.movimientos_bancarios (
     id_mov_bancario SERIAL PRIMARY KEY,
     id_cuenta       INT NOT NULL REFERENCES edificio.cuentas_bancarias(id_cuenta),
@@ -144,15 +166,6 @@ CREATE TABLE edificio.movimientos_bancarios (
     tipo            VARCHAR(10) NOT NULL CHECK (tipo IN ('Deposito','Retiro')),
     fecha           TIMESTAMP NOT NULL DEFAULT NOW(),
     conciliado      BOOLEAN NOT NULL DEFAULT FALSE
-);
-
-CREATE TABLE edificio.caja (
-    id_movimiento_caja SERIAL PRIMARY KEY,
-    monto               NUMERIC(10,2) NOT NULL,
-    tipo                VARCHAR(10) NOT NULL CHECK (tipo IN ('Ingreso','Egreso')),
-    concepto            TEXT,
-    fecha               TIMESTAMP NOT NULL DEFAULT NOW(),
-    id_usuario_registro INT REFERENCES edificio.usuarios(id_usuario)
 );
 
 -- =====================================================================
@@ -178,7 +191,11 @@ CREATE TABLE edificio.pagos_empleados (
     anticipos       NUMERIC(10,2) NOT NULL DEFAULT 0,
     bonificaciones  NUMERIC(10,2) NOT NULL DEFAULT 0,
     descuentos      NUMERIC(10,2) NOT NULL DEFAULT 0,
-    fecha_pago      TIMESTAMP NOT NULL DEFAULT NOW()
+    fecha_pago      TIMESTAMP NOT NULL DEFAULT NOW(),
+    -- Ajuste: enlace al egreso general para que aparezca en reportes globales.
+    -- Regla de negocio: insertar primero en edificio.movimientos (categoría "Salarios")
+    -- y luego aquí, referenciando ese id_movimiento.
+    id_movimiento   INT REFERENCES edificio.movimientos(id_movimiento)
 );
 
 -- =====================================================================
@@ -234,14 +251,19 @@ CREATE TABLE edificio.auditoria (
 CREATE INDEX idx_expensas_departamento ON edificio.expensas(id_departamento);
 CREATE INDEX idx_expensas_estado ON edificio.expensas(estado);
 CREATE INDEX idx_pagos_departamento ON edificio.pagos(id_departamento);
+CREATE INDEX idx_pagos_cuenta ON edificio.pagos(id_cuenta);
+CREATE INDEX idx_pagos_movimiento_caja ON edificio.pagos(id_movimiento_caja);
 CREATE INDEX idx_movimientos_fecha ON edificio.movimientos(fecha);
 CREATE INDEX idx_movimientos_categoria ON edificio.movimientos(id_categoria);
 CREATE INDEX idx_ocupantes_departamento ON edificio.ocupantes_departamento(id_departamento);
+CREATE INDEX idx_pagos_empleados_movimiento ON edificio.pagos_empleados(id_movimiento);
 CREATE INDEX idx_auditoria_tabla ON edificio.auditoria(tabla_afectada);
 CREATE INDEX idx_auditoria_usuario ON edificio.auditoria(id_usuario);
+CREATE INDEX idx_auditoria_datos_nuevos ON edificio.auditoria USING GIN (datos_nuevos);
+CREATE INDEX idx_auditoria_datos_anteriores ON edificio.auditoria USING GIN (datos_anteriores);
 
 -- =====================================================================
--- FUNCIÓN Y TRIGGERS DE AUDITORÍA (CORREGIDO)
+-- FUNCIÓN Y TRIGGERS DE AUDITORÍA
 -- =====================================================================
 
 CREATE OR REPLACE FUNCTION edificio.fn_auditoria() RETURNS TRIGGER AS $$
@@ -321,3 +343,9 @@ SELECT d.numero AS departamento, pg.fecha_pago, pg.monto_pagado,
 FROM edificio.pagos pg
 JOIN edificio.departamentos d ON d.id_departamento = pg.id_departamento
 ORDER BY d.numero, pg.fecha_pago;
+
+-- Conciliación: pagos aún sin destino asignado en caja/banco
+CREATE VIEW edificio.vw_pagos_pendientes_conciliar AS
+SELECT id_pago, id_departamento, monto_pagado, metodo_pago, fecha_pago
+FROM edificio.pagos
+WHERE id_cuenta IS NULL AND id_movimiento_caja IS NULL;
