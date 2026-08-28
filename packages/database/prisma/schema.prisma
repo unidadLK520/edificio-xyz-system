@@ -1,0 +1,336 @@
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["multiSchema"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+  schemas  = ["edificio", "public"]
+}
+
+model Rol {
+  idRol       Int       @id @default(autoincrement()) @map("id_rol")
+  nombre      String    @unique @db.VarChar(50)
+  descripcion String?   @db.Text
+  usuarios    Usuario[]
+
+  @@map("roles")
+  @@schema("edificio")
+}
+
+model Usuario {
+  idUsuario       Int          @id @default(autoincrement()) @map("id_usuario")
+  nombreUsuario   String       @unique @map("nombre_usuario") @db.VarChar(50)
+  correo          String       @unique @db.VarChar(150)
+  passwordHash    String       @map("password_hash") @db.VarChar(255)
+  idRol           Int          @map("id_rol")
+  activo          Boolean      @default(true)
+  fechaCreacion   DateTime     @default(now()) @map("fecha_creacion") @db.Timestamp(6)
+  ultimoAcceso    DateTime?    @map("ultimo_acceso") @db.Timestamp(6)
+  rol             Rol          @relation(fields: [idRol], references: [idRol])
+  
+  cajaRegistros       Caja[]
+  pagosRegistrados    Pago[]
+  movimientos         Movimiento[]
+  comunicadosCreados  Comunicado[]
+  documentosSubidos   Documento[]
+  auditorias          Auditoria[]
+
+  @@map("usuarios")
+  @@schema("edificio")
+}
+
+model Persona {
+  idPersona      Int                    @id @default(autoincrement()) @map("id_persona")
+  nombres        String                 @db.VarChar(100)
+  apellidos      String                 @db.VarChar(100)
+  ciNit          String                 @unique @map("ci_nit") @db.VarChar(30)
+  telefono       String?                @db.VarChar(30)
+  correo         String?                @db.VarChar(150)
+  direccion      String?                @db.Text
+  fechaRegistro  DateTime               @default(now()) @map("fecha_registro") @db.Timestamp(6)
+  
+  departamentosPropios Departamento[]   @relation("PropietarioDepartamentos")
+  ocupaciones          OcupanteDepartamento[]
+  comunicadosEnvios    ComunicadoEnvio[]
+
+  @@map("personas")
+  @@schema("edificio")
+}
+
+model Departamento {
+  idDepartamento Int                    @id @default(autoincrement()) @map("id_departamento")
+  numero         String                 @unique @db.VarChar(10)
+  piso           Int?
+  areaM2         Decimal?               @map("area_m2") @db.Decimal(8, 2)
+  idPropietario  Int?                   @map("id_propietario")
+  estado         String                 @default("Ocupado") @db.VarChar(20)
+  
+  propietario    Persona?               @relation("PropietarioDepartamentos", fields: [idPropietario], references: [idPersona])
+  parqueos       Parqueo[]
+  bauleras       Baulera[]
+  ocupantes      OcupanteDepartamento[]
+  expensas       Expensa[]
+  pagos          Pago[]
+
+  @@map("departamentos")
+  @@schema("edificio")
+}
+
+model Parqueo {
+  idParqueo      Int           @id @default(autoincrement()) @map("id_parqueo")
+  numero         String        @unique @db.VarChar(10)
+  idDepartamento Int?          @map("id_departamento")
+  departamento   Departamento? @relation(fields: [idDepartamento], references: [idDepartamento])
+
+  @@map("parqueos")
+  @@schema("edificio")
+}
+
+model Baulera {
+  idBaulera      Int           @id @default(autoincrement()) @map("id_baulera")
+  numero         String        @unique @db.VarChar(10)
+  idDepartamento Int?          @map("id_departamento")
+  departamento   Departamento? @relation(fields: [idDepartamento], references: [idDepartamento])
+
+  @@map("bauleras")
+  @@schema("edificio")
+}
+
+model OcupanteDepartamento {
+  idOcupacion    Int          @id @default(autoincrement()) @map("id_ocupacion")
+  idDepartamento Int          @map("id_departamento")
+  idPersona      Int          @map("id_persona")
+  tipoOcupante   String       @map("tipo_ocupante") @db.VarChar(20) // Propietario, Inquilino
+  fechaInicio    DateTime     @map("fecha_inicio") @db.Date
+  fechaFin       DateTime?    @map("fecha_fin") @db.Date
+  
+  departamento   Departamento @relation(fields: [idDepartamento], references: [idDepartamento])
+  persona        Persona      @relation(fields: [idPersona], references: [idPersona])
+
+  @@index([idDepartamento], map: "idx_ocupantes_departamento")
+  @@map("ocupantes_departamento")
+  @@schema("edificio")
+}
+
+model Expensa {
+  idExpensa        Int          @id @default(autoincrement()) @map("id_expensa")
+  idDepartamento   Int          @map("id_departamento")
+  periodo          DateTime     @db.Date
+  monto            Decimal      @db.Decimal(10, 2)
+  tasaInteresMora  Decimal      @default(0) @map("tasa_interes_mora") @db.Decimal(5, 2)
+  fechaVencimiento DateTime     @map("fecha_vencimiento") @db.Date
+  saldoPendiente   Decimal      @map("saldo_pendiente") @db.Decimal(10, 2)
+  estado           String       @default("Pendiente") @db.VarChar(20) // Pendiente, Pagado, Parcial, Moroso
+  fechaCreacion    DateTime     @default(now()) @map("fecha_creacion") @db.Timestamp(6)
+  
+  departamento     Departamento @relation(fields: [idDepartamento], references: [idDepartamento])
+  pagos            Pago[]
+
+  @@unique([idDepartamento, periodo])
+  @@index([idDepartamento], map: "idx_expensas_departamento")
+  @@index([estado], map: "idx_expensas_estado")
+  @@map("expensas")
+  @@schema("edificio")
+}
+
+model CuentaBancaria {
+  idCuenta     Int                   @id @default(autoincrement()) @map("id_cuenta")
+  banco        String                @db.VarChar(80)
+  numeroCuenta String                @map("numero_cuenta") @db.VarChar(50)
+  tipoCuenta   String?               @map("tipo_cuenta") @db.VarChar(30)
+  saldoActual  Decimal               @default(0) @map("saldo_actual") @db.Decimal(12, 2)
+  
+  pagos        Pago[]
+  movimientos  MovimientoBancario[]
+
+  @@map("cuentas_bancarias")
+  @@schema("edificio")
+}
+
+model Caja {
+  idMovimientoCaja    Int       @id @default(autoincrement()) @map("id_movimiento_caja")
+  monto               Decimal   @db.Decimal(10, 2)
+  tipo                String    @db.VarChar(10) // Ingreso, Egreso
+  concepto            String?   @db.Text
+  fecha               DateTime  @default(now()) @db.Timestamp(6)
+  idUsuarioRegistro   Int?      @map("id_usuario_registro")
+  
+  usuarioRegistro     Usuario?  @relation(fields: [idUsuarioRegistro], references: [idUsuario])
+  pagos               Pago[]
+
+  @@map("caja")
+  @@schema("edificio")
+}
+
+model Pago {
+  idPago              Int             @id @default(autoincrement()) @map("id_pago")
+  idExpensa           Int?            @map("id_expensa")
+  idDepartamento      Int             @map("id_departamento")
+  montoPagado         Decimal         @map("monto_pagado") @db.Decimal(10, 2)
+  interesPagado       Decimal         @default(0) @map("interes_pagado") @db.Decimal(10, 2)
+  fechaPago           DateTime        @default(now()) @map("fecha_pago") @db.Timestamp(6)
+  metodoPago          String?         @map("metodo_pago") @db.VarChar(30)
+  esAnticipado        Boolean         @default(false) @map("es_anticipado")
+  idUsuarioRegistro   Int?            @map("id_usuario_registro")
+  comprobanteUrl      String?         @map("comprobante_url") @db.Text
+  idCuenta            Int?            @map("id_cuenta")
+  idMovimientoCaja    Int?            @map("id_movimiento_caja")
+  
+  expensa             Expensa?        @relation(fields: [idExpensa], references: [idExpensa])
+  departamento        Departamento    @relation(fields: [idDepartamento], references: [idDepartamento])
+  usuarioRegistro     Usuario?        @relation(fields: [idUsuarioRegistro], references: [idUsuario])
+  cuentaBancaria      CuentaBancaria? @relation(fields: [idCuenta], references: [idCuenta])
+  cajaMovimiento      Caja?           @relation(fields: [idMovimientoCaja], references: [idMovimientoCaja])
+
+  @@index([idDepartamento], map: "idx_pagos_departamento")
+  @@index([idCuenta], map: "idx_pagos_cuenta")
+  @@index([idMovimientoCaja], map: "idx_pagos_movimiento_caja")
+  @@map("pagos")
+  @@schema("edificio")
+}
+
+model CategoriaMovimiento {
+  idCategoria Int          @id @default(autoincrement()) @map("id_categoria")
+  nombre      String       @db.VarChar(80)
+  tipo        String       @db.VarChar(10) // Ingreso, Egreso
+  movimientos Movimiento[]
+
+  @@map("categorias_movimiento")
+  @@schema("edificio")
+}
+
+model Movimiento {
+  idMovimiento        Int                   @id @default(autoincrement()) @map("id_movimiento")
+  tipo                String                @db.VarChar(10) // Ingreso, Egreso
+  idCategoria         Int                   @map("id_categoria")
+  monto               Decimal               @db.Decimal(10, 2)
+  descripcion         String?               @db.Text
+  fecha               DateTime              @default(now()) @db.Timestamp(6)
+  comprobanteUrl      String?               @map("comprobante_url") @db.Text
+  idUsuarioRegistro   Int?                  @map("id_usuario_registro")
+  
+  categoria           CategoriaMovimiento   @relation(fields: [idCategoria], references: [idCategoria])
+  usuarioRegistro     Usuario?              @relation(fields: [idUsuarioRegistro], references: [idUsuario])
+  movimientosBancarios MovimientoBancario[]
+  pagosEmpleados      PagoEmpleado[]
+
+  @@index([fecha], map: "idx_movimientos_fecha")
+  @@index([idCategoria], map: "idx_movimientos_categoria")
+  @@map("movimientos")
+  @@schema("edificio")
+}
+
+model MovimientoBancario {
+  idMovBancario Int             @id @default(autoincrement()) @map("id_mov_bancario")
+  idCuenta      Int             @map("id_cuenta")
+  idMovimiento  Int?            @map("id_movimiento")
+  monto         Decimal         @db.Decimal(10, 2)
+  tipo          String          @db.VarChar(10) // Deposito, Retiro
+  fecha         DateTime        @default(now()) @db.Timestamp(6)
+  conciliado    Boolean         @default(false)
+  
+  cuenta        CuentaBancaria  @relation(fields: [idCuenta], references: [idCuenta])
+  movimiento    Movimiento?     @relation(fields: [idMovimiento], references: [idMovimiento])
+
+  @@map("movimientos_bancarios")
+  @@schema("edificio")
+}
+
+model Empleado {
+  idEmpleado   Int            @id @default(autoincrement()) @map("id_empleado")
+  nombres      String         @db.VarChar(100)
+  apellidos    String         @db.VarChar(100)
+  ci           String         @unique @db.VarChar(30)
+  cargo        String?        @db.VarChar(80)
+  salarioBase  Decimal        @map("salario_base") @db.Decimal(10, 2)
+  fechaIngreso DateTime       @map("fecha_ingreso") @db.Date
+  activo       Boolean        @default(true)
+  
+  pagos        PagoEmpleado[]
+
+  @@map("empleados")
+  @@schema("edificio")
+}
+
+model PagoEmpleado {
+  idPagoEmpleado Int        @id @default(autoincrement()) @map("id_pago_empleado")
+  idEmpleado     Int        @map("id_empleado")
+  periodo        DateTime   @db.Date
+  salarioPagado  Decimal    @map("salario_pagado") @db.Decimal(10, 2)
+  anticipos      Decimal    @default(0) @db.Decimal(10, 2)
+  bonificaciones Decimal    @default(0) @db.Decimal(10, 2)
+  descuentos     Decimal    @default(0) @db.Decimal(10, 2)
+  fechaPago      DateTime   @default(now()) @map("fecha_pago") @db.Timestamp(6)
+  idMovimiento   Int?       @map("id_movimiento")
+  
+  empleado       Empleado   @relation(fields: [idEmpleado], references: [idEmpleado])
+  movimiento     Movimiento? @relation(fields: [idMovimiento], references: [idMovimiento])
+
+  @@index([idMovimiento], map: "idx_pagos_empleados_movimiento")
+  @@map("pagos_empleados")
+  @@schema("edificio")
+}
+
+model Comunicado {
+  idComunicado      Int               @id @default(autoincrement()) @map("id_comunicado")
+  titulo            String            @db.VarChar(150)
+  contenido         String            @db.Text
+  fechaPublicacion  DateTime          @default(now()) @map("fecha_publicacion") @db.Timestamp(6)
+  canalEnvio        String?           @map("canal_envio") @db.VarChar(30) // Correo, WhatsApp, Ambos, Solo sistema
+  idUsuarioCreador  Int?              @map("id_usuario_creador")
+  
+  usuarioCreador    Usuario?          @relation(fields: [idUsuarioCreador], references: [idUsuario])
+  envios            ComunicadoEnvio[]
+
+  @@map("comunicados")
+  @@schema("edificio")
+}
+
+model ComunicadoEnvio {
+  idEnvio       Int         @id @default(autoincrement()) @map("id_envio")
+  idComunicado  Int         @map("id_comunicado")
+  idPersona     Int         @map("id_persona")
+  fechaEnvio    DateTime?   @map("fecha_envio") @db.Timestamp(6)
+  estadoEnvio   String?     @default("Pendiente") @map("estado_envio") @db.VarChar(20)
+  
+  comunicado    Comunicado  @relation(fields: [idComunicado], references: [idComunicado])
+  persona       Persona     @relation(fields: [idPersona], references: [idPersona])
+
+  @@map("comunicados_envios")
+  @@schema("edificio")
+}
+
+model Documento {
+  idDocumento      Int       @id @default(autoincrement()) @map("id_documento")
+  tipoDocumento    String    @map("tipo_documento") @db.VarChar(30)
+  nombre           String    @db.VarChar(200)
+  urlArchivo       String    @map("url_archivo") @db.Text
+  fechaSubida      DateTime  @default(now()) @map("fecha_subida") @db.Timestamp(6)
+  idUsuarioSubida  Int?      @map("id_usuario_subida")
+  descripcion      String?   @db.Text
+  
+  usuarioSubida    Usuario?  @relation(fields: [idUsuarioSubida], references: [idUsuario])
+
+  @@map("documentos")
+  @@schema("edificio")
+}
+
+model Auditoria {
+  idAuditoria      BigInt    @id @default(autoincrement()) @map("id_auditoria")
+  tablaAfectada    String    @map("tabla_afectada") @db.VarChar(80)
+  idRegistro       String?   @map("id_registro")
+  accion           String    @db.VarChar(10) // INSERT, UPDATE, DELETE
+  datosAnteriores  Json?     @map("datos_anteriores")
+  datosNuevos      Json?     @map("datos_nuevos")
+  idUsuario        Int?      @map("id_usuario")
+  fechaHora        DateTime  @default(now()) @map("fecha_hora") @db.Timestamp(6)
+  
+  usuario          Usuario?  @relation(fields: [idUsuario], references: [idUsuario])
+
+  @@index([tablaAfectada], map: "idx_auditoria_tabla")
+  @@index([idUsuario], map: "idx_auditoria_usuario")
+  @@map("auditoria")
+  @@schema("edificio")
+}
