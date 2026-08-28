@@ -42,4 +42,10 @@ Usuarios de prueba (ver `database/seeds/001_seed_data.sql`):
 - consulta@edificioxyz.com
 
 ### 3. Frontend
-Pendiente de inicializar — carpeta `frontend/` aún vacía.
+```
+cd frontend
+cp .env.example .env
+pnpm install
+pnpm dev
+```
+App disponible en `http://localhost:5173`. Requiere el backend corriendo (paso 2). Detalles en `frontend/README.md`.
