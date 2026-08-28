@@ -1,3 +1,6 @@
+// apps/web/app/(dashboard)/page.tsx
+// Vista principal del Dashboard — Métricas y resumen operativo
+
 import React from 'react';
 import { prisma } from '@edificio-xyz/database';
 import { formatCurrency, formatDate, formatPeriodo } from '@/lib/utils';

@@ -1,3 +1,6 @@
+// apps/web/app/(dashboard)/comunicados/page.tsx
+// Gestión y publicación de comunicados para residentes
+
 import React from 'react';
 import { prisma } from '@edificio-xyz/database';
 import { formatDate } from '@/lib/utils';

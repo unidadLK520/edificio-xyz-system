@@ -1,3 +1,6 @@
+// apps/web/app/(dashboard)/departamentos/page.tsx
+// Gestión y listado de departamentos, parqueos y bauleras
+
 import React from 'react';
 import { prisma } from '@edificio-xyz/database';
 import { Home, Car, Box, User, Phone, Mail, CheckCircle2 } from 'lucide-react';

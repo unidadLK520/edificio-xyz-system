@@ -1,3 +1,6 @@
+// apps/web/app/(auth)/login/page.tsx
+// Página de inicio de sesión de Edificio XYZ
+
 'use client';
 
 import React, { useState } from 'react';

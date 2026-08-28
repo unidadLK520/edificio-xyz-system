@@ -1,3 +1,6 @@
+// apps/web/app/api/auth/logout/route.ts
+// Endpoint API de cierre de sesión
+
 import { NextResponse } from 'next/server';
 
 export async function POST() {

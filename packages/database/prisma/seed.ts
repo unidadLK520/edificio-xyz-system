@@ -1,3 +1,6 @@
+// packages/database/prisma/seed.ts
+// Script de población inicial de datos (seed)
+
 import { PrismaClient } from '@prisma/client';
 import bcrypt from 'bcryptjs';
 

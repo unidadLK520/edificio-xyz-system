@@ -1,3 +1,6 @@
+// apps/web/next.config.ts
+// Configuración de Next.js para la aplicación web
+
 import type { NextConfig } from 'next';
 import path from 'path';
 

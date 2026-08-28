@@ -1,3 +1,6 @@
+// apps/web/app/api/v1/health/route.ts
+// Endpoint de salud y conectividad de base de datos
+
 import { NextResponse } from 'next/server';
 import { prisma } from '@edificio-xyz/database';
 

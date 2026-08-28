@@ -1,3 +1,6 @@
+// apps/web/app/(dashboard)/expensas/page.tsx
+// Gestión y recaudación de expensas del edificio
+
 import React from 'react';
 import { prisma } from '@edificio-xyz/database';
 import { formatCurrency, formatDate, formatPeriodo } from '@/lib/utils';

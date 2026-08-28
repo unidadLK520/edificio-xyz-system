@@ -1,3 +1,6 @@
+// apps/web/middleware.ts
+// Middleware de autenticación y redirección para rutas protegidas
+
 import { NextResponse, type NextRequest } from 'next/server';
 
 import { jwtVerify } from 'jose';

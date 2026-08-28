@@ -1,3 +1,6 @@
+// apps/web/app/(dashboard)/layout.tsx
+// Layout principal del panel de administración (Dashboard)
+
 import React from 'react';
 import Link from 'next/link';
 import { redirect } from 'next/navigation';

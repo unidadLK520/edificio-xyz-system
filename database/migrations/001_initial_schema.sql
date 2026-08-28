@@ -1,3 +1,4 @@
+-- database/migrations/001_initial_schema.sql
 -- =====================================================================
 -- SISTEMA DE ADMINISTRACIÓN EDIFICIO XYZ
 -- Script de creación de base de datos - PostgreSQL 14+

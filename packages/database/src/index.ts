@@ -1,3 +1,6 @@
+// packages/database/src/index.ts
+// Instancia y exportación de Prisma Client
+
 import { PrismaClient } from '@prisma/client';
 
 const globalForPrisma = globalThis as unknown as { prisma: PrismaClient };

@@ -6,6 +6,8 @@
     "dev": "turbo dev",
     "build": "turbo build",
     "lint": "turbo lint",
+    "api:dev": "pnpm --filter @edificio-xyz/api dev",
+    "web:dev": "pnpm --filter web dev",
     "db:generate": "turbo db:generate",
     "db:push": "turbo db:push",
     "db:seed": "turbo db:seed",

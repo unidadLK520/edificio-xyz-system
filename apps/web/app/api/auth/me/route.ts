@@ -1,3 +1,6 @@
+// apps/web/app/api/auth/me/route.ts
+// Endpoint API para obtener el usuario autenticado
+
 import { NextResponse } from 'next/server';
 import { getSession } from '@/lib/auth';
 

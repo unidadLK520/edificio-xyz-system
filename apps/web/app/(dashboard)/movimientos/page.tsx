@@ -1,3 +1,6 @@
+// apps/web/app/(dashboard)/movimientos/page.tsx
+// Libro contable, movimientos financieros e ingresos/egresos
+
 import React from 'react';
 import { prisma } from '@edificio-xyz/database';
 import { formatCurrency, formatDate } from '@/lib/utils';

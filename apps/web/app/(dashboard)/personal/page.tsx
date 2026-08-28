@@ -1,3 +1,6 @@
+// apps/web/app/(dashboard)/personal/page.tsx
+// Administración de empleados y nómina salarial
+
 import React from 'react';
 import { prisma } from '@edificio-xyz/database';
 import { formatCurrency, formatDate } from '@/lib/utils';

@@ -1,3 +1,6 @@
+// apps/web/lib/auth.ts
+// Utilidades de autenticación y verificación de JWT para Next.js
+
 import { SignJWT, jwtVerify } from 'jose';
 import { cookies } from 'next/headers';
 

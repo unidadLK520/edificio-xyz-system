@@ -1,3 +1,6 @@
+// apps/web/app/api/auth/login/route.ts
+// Endpoint API de autenticación e inicio de sesión
+
 import { NextResponse } from 'next/server';
 import { prisma } from '@edificio-xyz/database';
 import bcrypt from 'bcryptjs';

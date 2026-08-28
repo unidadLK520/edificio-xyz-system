@@ -1,3 +1,6 @@
+// apps/web/lib/utils.ts
+// Funciones de utilidad para formateo y clases CSS
+
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 
