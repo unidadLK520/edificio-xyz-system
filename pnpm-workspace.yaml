@@ -1,3 +1,6 @@
+# pnpm-workspace.yaml
+# Definición de workspaces del monorepo
+
 packages:
   - "apps/*"
   - "packages/*"

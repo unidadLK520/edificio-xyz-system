@@ -1,3 +1,6 @@
+# docker-compose.yml
+# Orquestación de servicios en contenedores (PostgreSQL)
+
 services:
   db:
     image: postgres:17-alpine

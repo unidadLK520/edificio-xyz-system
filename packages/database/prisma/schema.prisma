@@ -1,3 +1,6 @@
+// packages/database/prisma/schema.prisma
+// Esquema de datos de Prisma ORM para PostgreSQL
+
 generator client {
   provider        = "prisma-client-js"
   previewFeatures = ["multiSchema"]

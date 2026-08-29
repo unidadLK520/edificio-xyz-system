@@ -1,3 +1,6 @@
+/* apps/web/app/globals.css */
+/* Estilos globales y tokens de diseño para Tailwind CSS */
+
 @import "tailwindcss";
 
 :root {
