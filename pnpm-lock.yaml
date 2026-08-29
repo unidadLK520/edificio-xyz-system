@@ -18,11 +18,11 @@ importers:
         specifier: ^5.8.2
         version: 5.9.3
 
-  apps/api:
+  backend:
     dependencies:
       '@edificio-xyz/database':
         specifier: workspace:*
-        version: link:../../packages/database
+        version: link:../packages/database
       bcryptjs:
         specifier: ^3.0.2
         version: 3.0.3
@@ -44,7 +44,7 @@ importers:
     devDependencies:
       '@edificio-xyz/typescript-config':
         specifier: workspace:*
-        version: link:../../packages/typescript-config
+        version: link:../packages/typescript-config
       '@types/bcryptjs':
         specifier: ^2.4.6
         version: 2.4.6
@@ -64,11 +64,11 @@ importers:
         specifier: ^5.8.2
         version: 5.9.3
 
-  apps/web:
+  frontend:
     dependencies:
       '@edificio-xyz/database':
         specifier: workspace:*
-        version: link:../../packages/database
+        version: link:../packages/database
       bcryptjs:
         specifier: ^3.0.2
         version: 3.0.3
@@ -96,7 +96,7 @@ importers:
     devDependencies:
       '@edificio-xyz/typescript-config':
         specifier: workspace:*
-        version: link:../../packages/typescript-config
+        version: link:../packages/typescript-config
       '@tailwindcss/postcss':
         specifier: ^4.0.9
         version: 4.3.3

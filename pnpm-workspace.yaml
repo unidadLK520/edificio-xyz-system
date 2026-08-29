@@ -2,5 +2,7 @@
 # Definición de workspaces del monorepo
 
 packages:
-  - "apps/*"
+  - "backend"
+  - "frontend"
   - "packages/*"
+

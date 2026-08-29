@@ -30,8 +30,8 @@ pnpm db:push
 pnpm db:seed
 
 # 6. Copiar variables de entorno
-cp .env.example apps/web/.env
-cp apps/api/.env.example apps/api/.env
+cp .env.example frontend/.env
+cp backend/.env.example backend/.env
 ```
 
 ---
@@ -67,9 +67,8 @@ pnpm db:studio
 
 ```
 edificio-xyz-system/
-├── apps/
-│   ├── web/          ← Next.js 15 (React, Tailwind, Server Components)
-│   └── api/          ← Express + TypeScript (REST API, puerto 4000)
+├── backend/          ← Express + TypeScript (REST API, puerto 4000)
+├── frontend/         ← Next.js 15 (React 19, Tailwind, Server Components, puerto 3000)
 ├── packages/
 │   ├── database/     ← Prisma ORM + Schema + Seed
 │   └── typescript-config/  ← tsconfigs compartidos
@@ -93,13 +92,13 @@ edificio-xyz-system/
 - Commits en español: `feat: agregar endpoint de pagos`, `fix: corregir cálculo de mora`
 - **No hacer push directo a `main`** — usar Pull Requests
 
-### Backend (apps/api)
+### Backend (backend)
 - Validar **todas** las entradas con `zod`
 - Usar **transacciones Prisma** para operaciones que afectan múltiples tablas
 - Respuestas de error consistentes: `{ error, message, details? }`
 - Respuestas paginadas: `{ data, meta: { total, page, limit, totalPages } }`
 
-### Frontend (apps/web)
+### Frontend (frontend)
 - Preferir **Server Components** para data fetching
 - Usar **Server Actions** para mutaciones
 - Estilos con **Tailwind CSS**

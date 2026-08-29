@@ -52,13 +52,13 @@ Copia los archivos de ejemplo a sus respectivos `.env`:
 ```bash
 # En Windows (PowerShell):
 Copy-Item .env.example .env
-Copy-Item apps/web/.env.example apps/web/.env
-Copy-Item apps/api/.env.example apps/api/.env
+Copy-Item frontend/.env.example frontend/.env
+Copy-Item backend/.env.example backend/.env
 
 # En Linux / macOS (Bash):
 cp .env.example .env
-cp apps/web/.env.example apps/web/.env
-cp apps/api/.env.example apps/api/.env
+cp frontend/.env.example frontend/.env
+cp backend/.env.example backend/.env
 ```
 
 ---
@@ -108,25 +108,30 @@ El sistema incluye usuarios preconfigurados con contraseñas seguras (hasheadas 
 
 ```
 edificio-xyz-system/
-├── apps/
-│   ├── web/                         # Frontend Next.js 15 + React 19 + Tailwind CSS
-│   │   ├── app/
-│   │   │   ├── (auth)/login/        # Autenticación y Login
-│   │   │   ├── (dashboard)/         # Portal administrativo y módulos
-│   │   │   │   ├── expensas/        # Emisiones y cobros de expensas
-│   │   │   │   ├── departamentos/   # Departamentos y copropietarios
-│   │   │   │   ├── movimientos/     # Caja y finanzas
-│   │   │   │   ├── comunicados/     # Tablón digital de avisos
-│   │   │   │   └── personal/        # Empleados y sueldos
-│   │   │   └── api/                 # Endpoints Next.js (auth, health)
-│   │   └── lib/                     # Helpers, JWT (jose) y utilidades
-│   │
-│   └── api/                         # Backend REST API Express + TypeScript
-│       └── src/
-│           ├── index.ts             # Entry point del servidor Express
-│           ├── config.ts            # Configuración y variables de entorno
-│           ├── middlewares/         # Middlewares de autenticación JWT y manejo de errores
-│           └── routes/              # Routers por dominio (auth, expensas, dptos, etc.)
+├── backend/                         # Backend REST API Express + TypeScript
+│   ├── src/
+│   │   ├── index.ts                 # Entry point del servidor Express
+│   │   ├── config.ts                # Configuración y variables de entorno
+│   │   ├── middlewares/             # Middlewares de autenticación JWT y manejo de errores
+│   │   └── routes/                  # Routers por dominio (auth, expensas, dptos, etc.)
+│   ├── .env                         # Variables de entorno locales
+│   ├── package.json
+│   └── tsconfig.json
+│
+├── frontend/                        # Frontend Next.js 15 + React 19 + Tailwind CSS
+│   ├── app/
+│   │   ├── (auth)/login/            # Autenticación y Login
+│   │   ├── (dashboard)/             # Portal administrativo y módulos
+│   │   │   ├── expensas/            # Emisiones y cobros de expensas
+│   │   │   ├── departamentos/       # Departamentos y copropietarios
+│   │   │   ├── movimientos/         # Caja y finanzas
+│   │   │   ├── comunicados/         # Tablón digital de avisos
+│   │   │   └── personal/            # Empleados y sueldos
+│   │   └── api/                     # Endpoints Next.js (auth, health)
+│   ├── lib/                         # Helpers, JWT (jose) y utilidades
+│   ├── .env                         # Variables de entorno locales
+│   ├── package.json
+│   └── next.config.ts
 │
 ├── packages/
 │   ├── database/                    # Prisma ORM + Esquema + Seeders + Singleton
@@ -140,7 +145,7 @@ edificio-xyz-system/
 ├── database/
 │   └── migrations/                  # Script SQL inicial de base de datos
 ├── docker-compose.yml               # Orquestación de PostgreSQL
-├── pnpm-workspace.yaml              # Definición de workspaces de pnpm
+├── pnpm-workspace.yaml              # Definición de workspaces de pnpm (backend, frontend, packages/*)
 ├── turbo.json                       # Configuración de Turborepo
 └── package.json                     # Scripts y dependencias raíz
 ```
