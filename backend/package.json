@@ -12,6 +12,7 @@
     "@edificio-xyz/database": "workspace:*",
     "bcryptjs": "^3.0.2",
     "cors": "^2.8.5",
+    "dotenv": "^17.4.2",
     "express": "^4.18.2",
     "helmet": "^7.1.0",
     "jose": "^5.9.6",

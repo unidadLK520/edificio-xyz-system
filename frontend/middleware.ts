@@ -2,17 +2,24 @@
 // Middleware de autenticación y redirección para rutas protegidas
 
 import { NextResponse, type NextRequest } from 'next/server';
-
 import { jwtVerify } from 'jose';
 
-const SECRET_KEY = new TextEncoder().encode(
-  process.env.JWT_SECRET || 'edificio_xyz_super_secure_jwt_secret_key_2026'
-);
+console.log('[middleware] JWT_SECRET presente:', Boolean(process.env.JWT_SECRET));
+console.log('[middleware] valor (debug temporal):', process.env.JWT_SECRET);
+
+const jwtSecretEnv = process.env.JWT_SECRET;
+
+if (!jwtSecretEnv) {
+  throw new Error(
+    'JWT_SECRET no está definido. Configura la variable de entorno antes de iniciar la app.'
+  );
+}
+
+const SECRET_KEY = new TextEncoder().encode(jwtSecretEnv);
 
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
-  // Ignorar rutas públicas y recursos estáticos
   if (
     pathname.startsWith('/_next') ||
     pathname.startsWith('/api') ||

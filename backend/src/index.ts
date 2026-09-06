@@ -1,6 +1,6 @@
 // backend/src/index.ts
 // Entry point del servidor Express — Edificio XYZ API
-
+import 'dotenv/config';
 import express, { Application } from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
