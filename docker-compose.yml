@@ -1,3 +1,6 @@
+# docker-compose.yml
+# Orquestación de servicios en contenedores (PostgreSQL)
+
 services:
   db:
     image: postgres:17-alpine
@@ -11,7 +14,7 @@ services:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      - ./database/migrations:/docker-entrypoint-initdb.d
+      - ./database/migrations/001_initial_schema.sql:/docker-entrypoint-initdb.d/001_initial_schema.sql
 
 volumes:
   postgres_data:
