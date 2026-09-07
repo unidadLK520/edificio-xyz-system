@@ -4,9 +4,6 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { jwtVerify } from 'jose';
 
-console.log('[middleware] JWT_SECRET presente:', Boolean(process.env.JWT_SECRET));
-console.log('[middleware] valor (debug temporal):', process.env.JWT_SECRET);
-
 const jwtSecretEnv = process.env.JWT_SECRET;
 
 if (!jwtSecretEnv) {
