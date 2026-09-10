@@ -1,0 +1,22 @@
+{
+  "name": "edificio-xyz-system",
+  "version": "2.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "turbo dev",
+    "build": "turbo build",
+    "lint": "turbo lint",
+    "api:dev": "pnpm --filter @edificio-xyz/api dev",
+    "web:dev": "pnpm --filter web dev",
+    "db:generate": "turbo db:generate",
+    "db:push": "turbo db:push",
+    "db:seed": "turbo db:seed",
+    "db:studio": "pnpm --filter @edificio-xyz/database db:studio"
+  },
+  "packageManager": "pnpm@10.33.0",
+  "devDependencies": {
+    "turbo": "^2.4.4",
+    "prettier": "^3.5.3",
+    "typescript": "^5.8.2"
+  }
+}

@@ -1,0 +1,53 @@
+//turbo.json
+{
+  "$schema": "https://turbo.build/schema.json",
+  "tasks": {
+    "build": {
+      "dependsOn": [
+        "^build",
+        "^db:generate"
+      ],
+      "env": [
+        "JWT_SECRET",
+        "DATABASE_URL",
+        "NEXT_PUBLIC_API_URL",
+        "CORS_ORIGIN",
+        "NODE_ENV",
+        "PORT"
+      ],
+      "outputs": [
+        ".next/**",
+        "!.next/cache/**",
+        "dist/**"
+      ]
+    },
+    "lint": {
+      "dependsOn": [
+        "^lint"
+      ]
+    },
+    "dev": {
+      "cache": false,
+      "persistent": true
+    },
+    "start": {
+      "dependsOn": [
+        "build"
+      ],
+      "persistent": true
+    },
+    "db:generate": {
+      "cache": false
+    },
+    "db:push": {
+      "cache": false
+    },
+    "db:seed": {
+      "cache": false
+    },
+    "db:studio": {
+      "cache": false,
+      "persistent": true
+    }
+  }
+}
