@@ -10,6 +10,7 @@ import { Router, Response, NextFunction, IRouter } from 'express';
 import { prisma } from '@edificio-xyz/database';
 import { z } from 'zod';
 import { authMiddleware, AuthRequest } from '../middlewares/auth.middleware';
+import { authorizeRoles } from '../middlewares/role.middleware';
 
 export const departamentosRouter: IRouter = Router();
 departamentosRouter.use(authMiddleware);
@@ -115,6 +116,7 @@ departamentosRouter.get(
 // ── POST /departamentos ──────────────────────────────────────────────────────
 departamentosRouter.post(
   '/',
+  authorizeRoles('Administrador', 'Directorio'),
   async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
     try {
       const result = departamentoSchema.safeParse(req.body);
@@ -152,6 +154,7 @@ departamentosRouter.post(
 // ── PUT /departamentos/:id ───────────────────────────────────────────────────
 departamentosRouter.put(
   '/:id',
+  authorizeRoles('Administrador', 'Directorio'),
   async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
     try {
       const id = parseInt(req.params.id);
@@ -188,6 +191,7 @@ departamentosRouter.put(
 // ── DELETE /departamentos/:id ────────────────────────────────────────────────
 departamentosRouter.delete(
   '/:id',
+  authorizeRoles('Administrador', 'Directorio'),
   async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
     try {
       const id = parseInt(req.params.id);
