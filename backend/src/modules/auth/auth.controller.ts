@@ -42,7 +42,12 @@ export class AuthController {
     }
   };
 
-  logout = (_req: Request, res: Response): void => {
+  logout = (req: Request, res: Response): void => {
+    const authHeader = req.headers.authorization;
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      const token = authHeader.substring(7);
+      this.service.logout(token);
+    }
     res.json({ message: 'Sesión cerrada exitosamente' });
   };
 

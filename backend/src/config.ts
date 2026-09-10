@@ -15,4 +15,5 @@ export const config = {
   jwtSecret: new TextEncoder().encode(jwtSecretEnv),
   corsOrigin: process.env.CORS_ORIGIN || 'http://localhost:3000',
   isDev: (process.env.NODE_ENV || 'development') === 'development',
+  sessionIdleTimeoutMinutes: parseFloat(process.env.SESSION_IDLE_TIMEOUT_MINUTES || '30'),
 } as const;

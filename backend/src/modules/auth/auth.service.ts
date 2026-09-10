@@ -5,6 +5,7 @@ import { compare } from 'bcryptjs';
 import { SignJWT } from 'jose';
 import { config } from '../../config';
 import { authRepository, AuthRepository } from './auth.repository';
+import { sessionManager } from './session.manager';
 
 export interface LoginCredentials {
   correo: string;
@@ -41,6 +42,9 @@ export class AuthService {
       .setExpirationTime('8h')
       .sign(config.jwtSecret);
 
+    // Registrar actividad inicial de la sesión
+    sessionManager.recordActivity(token);
+
     return {
       token,
       usuario: {
@@ -51,6 +55,10 @@ export class AuthService {
         ultimoAcceso: usuario.ultimoAcceso,
       },
     };
+  }
+
+  logout(token: string): void {
+    sessionManager.blacklistToken(token);
   }
 
   async getMe(idUsuario: number) {
