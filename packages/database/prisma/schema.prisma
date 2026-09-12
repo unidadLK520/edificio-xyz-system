@@ -29,6 +29,8 @@ model Usuario {
   passwordHash    String       @map("password_hash") @db.VarChar(255)
   idRol           Int          @map("id_rol")
   activo          Boolean      @default(true)
+  intentosFallidos Int         @default(0) @map("intentos_fallidos")
+  bloqueadoHasta  DateTime?    @map("bloqueado_hasta") @db.Timestamp(6)
   fechaCreacion   DateTime     @default(now()) @map("fecha_creacion") @db.Timestamp(6)
   ultimoAcceso    DateTime?    @map("ultimo_acceso") @db.Timestamp(6)
   rol             Rol          @relation(fields: [idRol], references: [idRol])

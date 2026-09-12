@@ -32,6 +32,27 @@ export class AuthRepository {
       data: { ultimoAcceso: fecha },
     });
   }
+
+  async registrarIntentoFallido(idUsuario: number, intentosFallidos: number, bloqueadoHasta: Date | null = null) {
+    return prisma.usuario.update({
+      where: { idUsuario },
+      data: {
+        intentosFallidos,
+        bloqueadoHasta,
+      },
+    });
+  }
+
+  async resetIntentos(idUsuario: number, fechaAcceso: Date = new Date()) {
+    return prisma.usuario.update({
+      where: { idUsuario },
+      data: {
+        intentosFallidos: 0,
+        bloqueadoHasta: null,
+        ultimoAcceso: fechaAcceso,
+      },
+    });
+  }
 }
 
 export const authRepository = new AuthRepository();

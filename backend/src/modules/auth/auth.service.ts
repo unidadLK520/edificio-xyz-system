@@ -1,5 +1,5 @@
 // backend/src/modules/auth/auth.service.ts
-// Lógica de negocio de autenticación (verificación de contraseña y generación de JWT)
+// Lógica de negocio de autenticación (verificación de credenciales, control de intentos fallidos y JWT)
 
 import { compare } from 'bcryptjs';
 import { SignJWT } from 'jose';
@@ -12,23 +12,101 @@ export interface LoginCredentials {
   password: string;
 }
 
+export type LoginResult =
+  | {
+      success: true;
+      data: {
+        token: string;
+        usuario: {
+          idUsuario: number;
+          nombreUsuario: string;
+          correo: string;
+          rol: string;
+          ultimoAcceso: Date | null;
+        };
+      };
+    }
+  | {
+      success: false;
+      reason: 'INVALID_CREDENTIALS' | 'USER_INACTIVE';
+      message: string;
+    };
+
 export class AuthService {
   constructor(private readonly repository: AuthRepository = authRepository) {}
 
-  async login(credentials: LoginCredentials) {
+  async login(credentials: LoginCredentials): Promise<LoginResult> {
     const usuario = await this.repository.findByCorreo(credentials.correo);
 
-    if (!usuario || !usuario.activo) {
-      return null;
+    // 1. Si el usuario no existe, rechazar con mensaje genérico (CA02)
+    if (!usuario) {
+      return {
+        success: false,
+        reason: 'INVALID_CREDENTIALS',
+        message: 'Credenciales inválidas',
+      };
     }
 
+    // 2. CA03: Si el usuario está inactivo, rechazar con mensaje indicando que no está habilitado
+    if (!usuario.activo) {
+      return {
+        success: false,
+        reason: 'USER_INACTIVE',
+        message: 'El usuario no está habilitado',
+      };
+    }
+
+    const now = new Date();
+
+    // 3. CA02 / CA07: Verificar si el usuario se encuentra bloqueado temporalmente
+    const estaBloqueado = usuario.bloqueadoHasta && usuario.bloqueadoHasta > now;
+    if (estaBloqueado) {
+      // Rechazar con mensaje genérico SIN revelar que la cuenta está bloqueada
+      return {
+        success: false,
+        reason: 'INVALID_CREDENTIALS',
+        message: 'Credenciales inválidas',
+      };
+    }
+
+    // 4. Validar contraseña
     const passwordValido = await compare(credentials.password, usuario.passwordHash);
+
     if (!passwordValido) {
-      return null;
+      // Si el bloqueo anterior ya expiró, se reinicia el conteo desde 1
+      const baseIntentos =
+        usuario.bloqueadoHasta && usuario.bloqueadoHasta <= now
+          ? 0
+          : usuario.intentosFallidos;
+
+      const nuevosIntentos = baseIntentos + 1;
+
+      // Al 3er intento fallido consecutivo, bloquear por 10 minutos (CA07)
+      if (nuevosIntentos >= 3) {
+        const bloqueadoHasta = new Date(now.getTime() + 10 * 60 * 1000);
+        await this.repository.registrarIntentoFallido(
+          usuario.idUsuario,
+          nuevosIntentos,
+          bloqueadoHasta
+        );
+      } else {
+        await this.repository.registrarIntentoFallido(
+          usuario.idUsuario,
+          nuevosIntentos,
+          null
+        );
+      }
+
+      return {
+        success: false,
+        reason: 'INVALID_CREDENTIALS',
+        message: 'Credenciales inválidas',
+      };
     }
 
-    // Actualizar último acceso
-    await this.repository.updateUltimoAcceso(usuario.idUsuario, new Date());
+    // 5. Contraseña válida: reiniciar intentos, limpiar bloqueo y actualizar último acceso
+    const ultimoAcceso = new Date();
+    await this.repository.resetIntentos(usuario.idUsuario, ultimoAcceso);
 
     // Generar JWT (8 horas)
     const token = await new SignJWT({
@@ -46,13 +124,16 @@ export class AuthService {
     sessionManager.recordActivity(token);
 
     return {
-      token,
-      usuario: {
-        idUsuario: usuario.idUsuario,
-        nombreUsuario: usuario.nombreUsuario,
-        correo: usuario.correo,
-        rol: usuario.rol.nombre,
-        ultimoAcceso: usuario.ultimoAcceso,
+      success: true,
+      data: {
+        token,
+        usuario: {
+          idUsuario: usuario.idUsuario,
+          nombreUsuario: usuario.nombreUsuario,
+          correo: usuario.correo,
+          rol: usuario.rol.nombre,
+          ultimoAcceso,
+        },
       },
     };
   }

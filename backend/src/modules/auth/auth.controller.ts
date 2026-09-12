@@ -28,15 +28,15 @@ export class AuthController {
 
       const loginResult = await this.service.login(result.data);
 
-      if (!loginResult) {
+      if (!loginResult.success) {
         res.status(401).json({
           error: 'Unauthorized',
-          message: 'Credenciales incorrectas o usuario inactivo',
+          message: loginResult.message,
         });
         return;
       }
 
-      res.json(loginResult);
+      res.json(loginResult.data);
     } catch (err) {
       next(err);
     }
