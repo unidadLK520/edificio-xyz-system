@@ -2,14 +2,20 @@
 // Lógica de negocio de autenticación (verificación de credenciales, control de intentos fallidos y JWT)
 
 import { compare } from 'bcryptjs';
-import { SignJWT } from 'jose';
+import { decodeJwt, SignJWT } from 'jose';
 import { config } from '../../config';
-import { authRepository, AuthRepository } from './auth.repository';
 import { sessionManager } from './session.manager';
+import { authRepository, AuthRepository } from './auth.repository';
+import { auditoriaService, AuditoriaService } from '../auditoria';
 
 export interface LoginCredentials {
   correo: string;
   password: string;
+}
+
+export interface LoginMetadata {
+  ip?: string;
+  userAgent?: string;
 }
 
 export type LoginResult =
@@ -33,13 +39,27 @@ export type LoginResult =
     };
 
 export class AuthService {
-  constructor(private readonly repository: AuthRepository = authRepository) {}
+  constructor(
+    private readonly repository: AuthRepository = authRepository,
+    private readonly auditoria: AuditoriaService = auditoriaService
+  ) {}
 
-  async login(credentials: LoginCredentials): Promise<LoginResult> {
+  async login(
+    credentials: LoginCredentials,
+    metadata?: LoginMetadata
+  ): Promise<LoginResult> {
     const usuario = await this.repository.findByCorreo(credentials.correo);
 
-    // 1. Si el usuario no existe, rechazar con mensaje genérico (CA02)
+    // 1. Si el usuario no existe, rechazar con mensaje genérico (CA02) y auditar
     if (!usuario) {
+      await this.auditoria.registrarLoginFallido(null, {
+        correo: credentials.correo,
+        motivo: 'Usuario inexistente',
+        resultado: 'CREDENCIALES_INVALIDAS',
+        ip: metadata?.ip,
+        userAgent: metadata?.userAgent,
+      });
+
       return {
         success: false,
         reason: 'INVALID_CREDENTIALS',
@@ -47,8 +67,16 @@ export class AuthService {
       };
     }
 
-    // 2. CA03: Si el usuario está inactivo, rechazar con mensaje indicando que no está habilitado
+    // 2. CA03: Si el usuario está inactivo, rechazar con mensaje indicando que no está habilitado y auditar
     if (!usuario.activo) {
+      await this.auditoria.registrarLoginFallido(usuario.idUsuario, {
+        correo: credentials.correo,
+        motivo: 'El usuario no está habilitado (inactivo)',
+        resultado: 'USUARIO_INACTIVO',
+        ip: metadata?.ip,
+        userAgent: metadata?.userAgent,
+      });
+
       return {
         success: false,
         reason: 'USER_INACTIVE',
@@ -58,9 +86,17 @@ export class AuthService {
 
     const now = new Date();
 
-    // 3. CA02 / CA07: Verificar si el usuario se encuentra bloqueado temporalmente
+    // 3. CA02 / CA07 / CA10: Verificar si el usuario se encuentra bloqueado temporalmente
     const estaBloqueado = usuario.bloqueadoHasta && usuario.bloqueadoHasta > now;
     if (estaBloqueado) {
+      await this.auditoria.registrarLoginFallido(usuario.idUsuario, {
+        correo: credentials.correo,
+        motivo: 'Intento durante bloqueo temporal activo',
+        resultado: 'CUENTA_BLOQUEADA',
+        ip: metadata?.ip,
+        userAgent: metadata?.userAgent,
+      });
+
       // Rechazar con mensaje genérico SIN revelar que la cuenta está bloqueada
       return {
         success: false,
@@ -81,7 +117,7 @@ export class AuthService {
 
       const nuevosIntentos = baseIntentos + 1;
 
-      // Al 3er intento fallido consecutivo, bloquear por 10 minutos (CA07)
+      // Al 3er intento fallido consecutivo, bloquear por 10 minutos (CA07 / CA10)
       if (nuevosIntentos >= 3) {
         const bloqueadoHasta = new Date(now.getTime() + 10 * 60 * 1000);
         await this.repository.registrarIntentoFallido(
@@ -89,12 +125,39 @@ export class AuthService {
           nuevosIntentos,
           bloqueadoHasta
         );
+
+        // Registrar evento específico de bloqueo temporal
+        await this.auditoria.registrarBloqueoTemporal(usuario.idUsuario, {
+          correo: credentials.correo,
+          bloqueadoHasta,
+          ip: metadata?.ip,
+          userAgent: metadata?.userAgent,
+        });
+
+        // Registrar también el login fallido
+        await this.auditoria.registrarLoginFallido(usuario.idUsuario, {
+          correo: credentials.correo,
+          motivo: 'Tercer intento fallido consecutivo - Cuenta bloqueada por 10 minutos',
+          resultado: 'BLOQUEO_TEMPORAL',
+          intentos: nuevosIntentos,
+          ip: metadata?.ip,
+          userAgent: metadata?.userAgent,
+        });
       } else {
         await this.repository.registrarIntentoFallido(
           usuario.idUsuario,
           nuevosIntentos,
           null
         );
+
+        await this.auditoria.registrarLoginFallido(usuario.idUsuario, {
+          correo: credentials.correo,
+          motivo: 'Contraseña inválida',
+          resultado: 'CREDENCIALES_INVALIDAS',
+          intentos: nuevosIntentos,
+          ip: metadata?.ip,
+          userAgent: metadata?.userAgent,
+        });
       }
 
       return {
@@ -123,6 +186,14 @@ export class AuthService {
     // Registrar actividad inicial de la sesión
     sessionManager.recordActivity(token);
 
+    // Registrar auditoría de login exitoso (CA08)
+    await this.auditoria.registrarLoginExitoso(usuario.idUsuario, {
+      correo: usuario.correo,
+      rol: usuario.rol.nombre,
+      ip: metadata?.ip,
+      userAgent: metadata?.userAgent,
+    });
+
     return {
       success: true,
       data: {
@@ -138,8 +209,24 @@ export class AuthService {
     };
   }
 
-  logout(token: string): void {
+  async logout(token: string, metadata?: LoginMetadata): Promise<void> {
     sessionManager.blacklistToken(token);
+
+    let idUsuario: number | null = null;
+    try {
+      const decoded = decodeJwt(token);
+      if (decoded && typeof (decoded as any).idUsuario === 'number') {
+        idUsuario = (decoded as any).idUsuario;
+      }
+    } catch {
+      // Si el formato del token es inválido, continúa con idUsuario null
+    }
+
+    // Registrar evento de logout en auditoría (CA08)
+    await this.auditoria.registrarLogout(idUsuario, {
+      ip: metadata?.ip,
+      userAgent: metadata?.userAgent,
+    });
   }
 
   async getMe(idUsuario: number) {

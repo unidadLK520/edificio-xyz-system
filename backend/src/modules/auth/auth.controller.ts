@@ -26,7 +26,10 @@ export class AuthController {
         return;
       }
 
-      const loginResult = await this.service.login(result.data);
+      const userAgent = req.headers['user-agent'] as string | undefined;
+      const ip = req.ip || (req.socket.remoteAddress as string | undefined);
+
+      const loginResult = await this.service.login(result.data, { ip, userAgent });
 
       if (!loginResult.success) {
         res.status(401).json({
@@ -42,11 +45,13 @@ export class AuthController {
     }
   };
 
-  logout = (req: Request, res: Response): void => {
+  logout = async (req: Request, res: Response): Promise<void> => {
     const authHeader = req.headers.authorization;
     if (authHeader && authHeader.startsWith('Bearer ')) {
       const token = authHeader.substring(7);
-      this.service.logout(token);
+      const userAgent = req.headers['user-agent'] as string | undefined;
+      const ip = req.ip || (req.socket.remoteAddress as string | undefined);
+      await this.service.logout(token, { ip, userAgent });
     }
     res.json({ message: 'Sesión cerrada exitosamente' });
   };

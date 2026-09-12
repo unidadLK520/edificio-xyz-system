@@ -326,7 +326,8 @@ model Auditoria {
   idAuditoria      BigInt    @id @default(autoincrement()) @map("id_auditoria")
   tablaAfectada    String    @map("tabla_afectada") @db.VarChar(80)
   idRegistro       String?   @map("id_registro")
-  accion           String    @db.VarChar(10) // INSERT, UPDATE, DELETE
+  accion           String    @db.VarChar(50) // INSERT, UPDATE, DELETE, LOGIN_EXITOSO, LOGIN_FALLIDO, LOGOUT, USUARIO_MODIFICADO, etc.
+  resultado        String?   @db.VarChar(50) // EXITO, CREDENCIALES_INVALIDAS, USUARIO_INACTIVO, CUENTA_BLOQUEADA, BLOQUEO_TEMPORAL
   datosAnteriores  Json?     @map("datos_anteriores")
   datosNuevos      Json?     @map("datos_nuevos")
   idUsuario        Int?      @map("id_usuario")
