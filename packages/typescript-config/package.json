@@ -1,0 +1,13 @@
+{
+  "name": "@edificio-xyz/typescript-config",
+  "version": "1.0.0",
+  "private": true,
+  "files": [
+    "base.json",
+    "nextjs.json"
+  ],
+  "exports": {
+    "./base.json": "./base.json",
+    "./nextjs.json": "./nextjs.json"
+  }
+}
