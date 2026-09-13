@@ -9,6 +9,7 @@ import { Router, Response, NextFunction, IRouter } from 'express';
 import { prisma } from '@edificio-xyz/database';
 import { z } from 'zod';
 import { authMiddleware, AuthRequest } from '../middlewares/auth.middleware';
+import { authorizeRoles } from '../middlewares/role.middleware';
 
 export const expensasRouter: IRouter = Router();
 expensasRouter.use(authMiddleware);
@@ -121,6 +122,7 @@ expensasRouter.get(
 // ── POST /expensas ───────────────────────────────────────────────────────────
 expensasRouter.post(
   '/',
+  authorizeRoles('Administrador', 'Directorio'),
   async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
     try {
       const result = expensaSchema.safeParse(req.body);
@@ -160,6 +162,7 @@ expensasRouter.post(
 // ── POST /expensas/:id/pagos ─────────────────────────────────────────────────
 expensasRouter.post(
   '/:id/pagos',
+  authorizeRoles('Administrador', 'Directorio'),
   async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
     try {
       const id = parseInt(req.params.id);
