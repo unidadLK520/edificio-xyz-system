@@ -10,6 +10,7 @@ async function main() {
   console.log('🌱 Iniciando seed de base de datos Edificio XYZ...');
 
   // 1. Roles
+  console.log('Upserting rol Admin...');
   const rolAdmin = await prisma.rol.upsert({
     where: { nombre: 'Administrador' },
     update: {},
@@ -19,6 +20,7 @@ async function main() {
     },
   });
 
+  console.log('Upserting rol Directorio...');
   const rolDirectorio = await prisma.rol.upsert({
     where: { nombre: 'Directorio' },
     update: {},
@@ -28,6 +30,7 @@ async function main() {
     },
   });
 
+  console.log('Upserting rol Consulta...');
   const rolConsulta = await prisma.rol.upsert({
     where: { nombre: 'Consulta' },
     update: {},
@@ -37,10 +40,23 @@ async function main() {
     },
   });
 
+  console.log('Upserting rol Copropietario...');
+  const rolCopropietario = await prisma.rol.upsert({
+    where: { nombre: 'Copropietario' },
+    update: {},
+    create: {
+      nombre: 'Copropietario',
+      descripcion: 'Consulta de expensas, registro de comprobantes y recepción de avisos',
+    },
+  });
+  console.log('Roles listos. Hasheando contraseñas...');
+
   // 2. Usuarios Iniciales
   const hashAdmin = await bcrypt.hash('admin123', 10);
   const hashDirectorio = await bcrypt.hash('directorio123', 10);
   const hashConsulta = await bcrypt.hash('consulta123', 10);
+  const hashCopropietario = await bcrypt.hash('copropietario123', 10);
+  console.log('Contraseñas hasheadas. Upserting usuarios...');
 
   const adminUser = await prisma.usuario.upsert({
     where: { correo: 'admin@edificioxyz.com' },
@@ -74,6 +90,18 @@ async function main() {
       correo: 'consulta@edificioxyz.com',
       passwordHash: hashConsulta,
       idRol: rolConsulta.idRol,
+      activo: true,
+    },
+  });
+
+  await prisma.usuario.upsert({
+    where: { correo: 'copropietario@edificioxyz.com' },
+    update: { passwordHash: hashCopropietario },
+    create: {
+      nombreUsuario: 'copropietario',
+      correo: 'copropietario@edificioxyz.com',
+      passwordHash: hashCopropietario,
+      idRol: rolCopropietario.idRol,
       activo: true,
     },
   });
