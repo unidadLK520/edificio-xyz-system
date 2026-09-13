@@ -6,7 +6,7 @@ import path from 'path';
 
 const nextConfig: NextConfig = {
   transpilePackages: ['@edificio-xyz/database'],
-  outputFileTracingRoot: path.join(__dirname, '../../'),
+  outputFileTracingRoot: path.join(__dirname, '../'),
   eslint: {
     ignoreDuringBuilds: true,
   },
