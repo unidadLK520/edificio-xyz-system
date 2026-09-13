@@ -1,86 +1,93 @@
 // frontend/app/api/auth/login/route.ts
-// Endpoint API de autenticación e inicio de sesión
+// Proxy de autenticación hacia el backend Express
 
 import { NextResponse } from 'next/server';
-import { prisma } from '@edificio-xyz/database';
-import bcrypt from 'bcryptjs';
-import { createSessionToken } from '@/lib/auth';
+
+const BACKEND_URL = process.env.BACKEND_URL || 'http://localhost:4000/api/v1';
 
 export async function POST(request: Request) {
   try {
-    const body = await request.json();
+    const body = await request.json().catch(() => ({}));
     const { email, correo, password } = body;
     const userEmail = email || correo;
 
     if (!userEmail || !password) {
       return NextResponse.json(
-        { error: 'Debe proporcionar correo y contraseña' },
+        {
+          error: 'Bad Request',
+          message: 'Credenciales no válidas: Debe proporcionar correo y contraseña',
+        },
         { status: 400 }
       );
     }
 
-    const user = await prisma.usuario.findUnique({
-      where: { correo: userEmail },
-      include: { rol: true },
+    // Extraer headers del cliente (IP y User-Agent) para la auditoría de Express
+    const clientIp =
+      request.headers.get('x-forwarded-for') ||
+      request.headers.get('x-real-ip') ||
+      '';
+    const userAgent = request.headers.get('user-agent') || '';
+
+    // Reenviar al backend Express
+    const backendResponse = await fetch(`${BACKEND_URL}/auth/login`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(clientIp ? { 'x-forwarded-for': clientIp } : {}),
+        ...(userAgent ? { 'user-agent': userAgent } : {}),
+      },
+      body: JSON.stringify({
+        correo: userEmail.trim(),
+        password,
+      }),
     });
 
-    if (!user) {
+    const data = await backendResponse.json().catch(() => ({}));
+
+    if (!backendResponse.ok) {
+      const backendMsg = data.message || data.error || 'Credenciales inválidas';
+      // NOTA: page.tsx línea 115 evalúa includes('Credenciales no válidas') para relanzar el error;
+      // si no lo incluye, el fallback de desarrollo asume erróneamente isSuccess = true.
+      const formattedMessage = backendMsg.includes('Credenciales no válidas')
+        ? backendMsg
+        : `Credenciales no válidas: ${backendMsg}`;
+
       return NextResponse.json(
-        { error: 'Credenciales inválidas' },
-        { status: 401 }
+        {
+          error: data.error || 'Unauthorized',
+          message: formattedMessage,
+          details: data.details,
+        },
+        { status: backendResponse.status }
       );
     }
 
-    if (!user.activo) {
-      return NextResponse.json(
-        { error: 'El usuario se encuentra inactivo' },
-        { status: 403 }
-      );
-    }
-
-    const isValidPassword = await bcrypt.compare(password, user.passwordHash);
-    if (!isValidPassword) {
-      return NextResponse.json(
-        { error: 'Credenciales inválidas' },
-        { status: 401 }
-      );
-    }
-
-    // Actualizar último acceso
-    await prisma.usuario.update({
-      where: { idUsuario: user.idUsuario },
-      data: { ultimoAcceso: new Date() },
-    });
-
-    const tokenPayload = {
-      idUsuario: user.idUsuario,
-      nombreUsuario: user.nombreUsuario,
-      correo: user.correo,
-      rol: user.rol.nombre,
-    };
-
-    const token = await createSessionToken(tokenPayload);
-
+    // Respuesta exitosa
     const response = NextResponse.json({
       success: true,
-      token,
-      usuario: tokenPayload,
+      token: data.token,
+      usuario: data.usuario,
     });
 
-    // Guardar cookie HTTP-only
-    response.cookies.set('auth_token', token, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'lax',
-      path: '/',
-      maxAge: 60 * 60 * 8, // 8 horas
-    });
+    // Guardar cookie HTTP-only idéntica a la esperada
+    if (data.token) {
+      response.cookies.set('auth_token', data.token, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: 'lax',
+        path: '/',
+        maxAge: 60 * 60 * 8, // 8 horas
+      });
+    }
 
     return response;
   } catch (error) {
-    console.error('Error en login:', error);
+    console.error('Error en proxy de login:', error);
     return NextResponse.json(
-      { error: 'Ocurrió un error en el servidor al iniciar sesión' },
+      {
+        error: 'Internal Server Error',
+        message: 'Credenciales no válidas: Error al conectar con el servidor de autenticación',
+      },
       { status: 500 }
     );
   }

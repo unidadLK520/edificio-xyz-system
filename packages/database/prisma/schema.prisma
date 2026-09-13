@@ -9,6 +9,7 @@ generator client {
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
   schemas  = ["edificio", "public"]
 }
 
@@ -29,6 +30,8 @@ model Usuario {
   passwordHash    String       @map("password_hash") @db.VarChar(255)
   idRol           Int          @map("id_rol")
   activo          Boolean      @default(true)
+  intentosFallidos Int         @default(0) @map("intentos_fallidos")
+  bloqueadoHasta  DateTime?    @map("bloqueado_hasta") @db.Timestamp(6)
   fechaCreacion   DateTime     @default(now()) @map("fecha_creacion") @db.Timestamp(6)
   ultimoAcceso    DateTime?    @map("ultimo_acceso") @db.Timestamp(6)
   rol             Rol          @relation(fields: [idRol], references: [idRol])
@@ -324,7 +327,8 @@ model Auditoria {
   idAuditoria      BigInt    @id @default(autoincrement()) @map("id_auditoria")
   tablaAfectada    String    @map("tabla_afectada") @db.VarChar(80)
   idRegistro       String?   @map("id_registro")
-  accion           String    @db.VarChar(10) // INSERT, UPDATE, DELETE
+  accion           String    @db.VarChar(50) // INSERT, UPDATE, DELETE, LOGIN_EXITOSO, LOGIN_FALLIDO, LOGOUT, USUARIO_MODIFICADO, etc.
+  resultado        String?   @db.VarChar(50) // EXITO, CREDENCIALES_INVALIDAS, USUARIO_INACTIVO, CUENTA_BLOQUEADA, BLOQUEO_TEMPORAL
   datosAnteriores  Json?     @map("datos_anteriores")
   datosNuevos      Json?     @map("datos_nuevos")
   idUsuario        Int?      @map("id_usuario")
