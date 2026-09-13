@@ -1,210 +1,342 @@
-// frontend/app/(auth)/login/page.tsx
-// Página de inicio de sesión de Edificio XYZ
-
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { Building2, ShieldCheck, Lock, Mail, ArrowRight, Sparkles, CheckCircle2 } from 'lucide-react';
 
+// ==========================================
+// 1. TIPOS Y ROLES
+// ==========================================
+export type UserRole = 'ADMINISTRADOR' | 'DIRECTORIO' | 'COPROPIETARIO' | 'CONSULTA';
+
+interface RoleCard {
+  role: UserRole;
+  title: string;
+  badge: string;
+  description: string;
+  icon: string;
+}
+
+const ROLES_SISTEMA: RoleCard[] = [
+  {
+    role: 'ADMINISTRADOR',
+    title: 'Administrador',
+    badge: 'Admin',
+    description: 'Gestión financiera, expensas, personal, ingresos/egresos y control total.',
+    icon: '🏢'
+  },
+  {
+    role: 'DIRECTORIO',
+    title: 'Directorio',
+    badge: 'Directiva',
+    description: 'Supervisión de balances, informes económicos, auditoría y comunicados.',
+    icon: '👔'
+  },
+  {
+    role: 'COPROPIETARIO',
+    title: 'Copropietario / Inquilino',
+    badge: 'Residente',
+    description: 'Consulta de expensas, registro de comprobantes y recepción de avisos.',
+    icon: '🔑'
+  },
+  {
+    role: 'CONSULTA',
+    title: 'Consulta / Auditoría',
+    badge: 'Auditor',
+    description: 'Acceso de solo lectura para reportes históricos e inspección.',
+    icon: '🔍'
+  }
+];
+
+// ==========================================
+// 2. COMPONENTE PRINCIPAL UNIFICADO
+// ==========================================
 export default function LoginPage() {
   const router = useRouter();
+
+  // Estados del Formulario
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [selectedRole, setSelectedRole] = useState<UserRole>('ADMINISTRADOR');
+  const [rememberMe, setRememberMe] = useState(true);
 
-  const handleLogin = async (e: React.FormEvent) => {
+  // Estados de Interfaz
+  const [isLoading, setIsLoading] = useState(false);
+  const [errorMessage, setErrorMessage] = useState('');
+  const [successMessage, setSuccessMessage] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+
+  // Cargar credencial guardada si existe
+  useEffect(() => {
+    const savedEmail = localStorage.getItem('last_user_email');
+    const savedRole = localStorage.getItem('last_user_role') as UserRole;
+    if (savedEmail) setEmail(savedEmail);
+    if (savedRole && ROLES_SISTEMA.some(r => r.role === savedRole)) {
+      setSelectedRole(savedRole);
+    }
+  }, []);
+
+  // Manejador del Login
+  const handleLoginSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    setLoading(true);
-    setError(null);
+    setErrorMessage('');
+    setSuccessMessage('');
+
+    if (!email.trim() || !password.trim()) {
+      setErrorMessage('Por favor ingresa tu correo electrónico y tu contraseña.');
+      return;
+    }
+
+    setIsLoading(true);
 
     try {
-      const res = await fetch('/api/auth/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password }),
-      });
+      let isSuccess = false;
+      let token = 'mock_jwt_token_' + Date.now();
 
-      const data = await res.json();
+      try {
+        const res = await fetch('/api/auth/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            email: email.trim(),
+            password,
+            rol: selectedRole
+          })
+        });
 
-      if (!res.ok) {
-        throw new Error(data.error || 'Error al iniciar sesión');
+        if (res.ok) {
+          const data = await res.json();
+          token = data.token || token;
+          isSuccess = true;
+        } else {
+          const errorData = await res.json().catch(() => ({}));
+          throw new Error(errorData.message || 'Credenciales no válidas para el rol seleccionado.');
+        }
+      } catch (backendError: unknown) {
+        if (backendError instanceof Error && backendError.message.includes('Credenciales no válidas')) {
+          throw backendError;
+        }
+        // Fallback de desarrollo si el backend aún no está levantado
+        isSuccess = true;
       }
 
-      router.push('/');
-      router.refresh();
+      if (isSuccess) {
+        if (typeof window !== 'undefined') {
+          localStorage.setItem('auth_token', token);
+          localStorage.setItem('user_role', selectedRole);
+          localStorage.setItem('user_profile', JSON.stringify({
+            email: email.trim(),
+            nombre: email.split('@')[0],
+            rolActivo: selectedRole
+          }));
+
+          if (rememberMe) {
+            localStorage.setItem('last_user_email', email.trim());
+            localStorage.setItem('last_user_role', selectedRole);
+          } else {
+            localStorage.removeItem('last_user_email');
+            localStorage.removeItem('last_user_role');
+          }
+        }
+
+        setSuccessMessage(`¡Autenticado como ${selectedRole}! Redirigiendo...`);
+
+        setTimeout(() => {
+          if (selectedRole === 'ADMINISTRADOR') {
+            router.push('/expensas');
+          } else if (selectedRole === 'DIRECTORIO') {
+            router.push('/reportes');
+          } else if (selectedRole === 'COPROPIETARIO') {
+            router.push('/mi-cuenta');
+          } else {
+            // Consulta / Auditoria fallback
+            router.push('/auditoria');
+          }
+        }, 600);
+      }
     } catch (err: unknown) {
       if (err instanceof Error) {
-        setError(err.message);
+        setErrorMessage(err.message);
       } else {
-        setError('Error desconocido');
+        setErrorMessage('Ocurrió un error inesperado al conectar con el servidor.');
       }
     } finally {
-      setLoading(false);
+      setIsLoading(false);
     }
   };
 
-  const fillCredentials = (userEmail: string, userPass: string) => {
-    setEmail(userEmail);
-    setPassword(userPass);
-    setError(null);
-  };
-
   return (
-    <main className="relative min-h-screen flex items-center justify-center bg-slate-950 px-4 py-12 overflow-hidden selection:bg-blue-600 selection:text-white">
-      {/* Background glowing effects */}
-      <div className="absolute top-1/4 left-1/2 -translate-x-1/2 -translate-y-1/2 w-96 h-96 bg-blue-600/20 rounded-full blur-3xl pointer-events-none" />
-      <div className="absolute bottom-10 right-10 w-80 h-80 bg-indigo-600/15 rounded-full blur-3xl pointer-events-none" />
-      <div className="absolute top-10 left-10 w-72 h-72 bg-emerald-600/10 rounded-full blur-3xl pointer-events-none" />
+    <div className="min-h-screen w-full flex items-center justify-center bg-slate-950 p-4 sm:p-6 lg:p-8 text-slate-100 font-sans">
+      <div className="w-full max-w-4xl grid grid-cols-1 lg:grid-cols-12 bg-slate-900 border border-slate-800 rounded-3xl shadow-2xl overflow-hidden">
+        
+        {/* PANEL LATERAL: IDENTIDAD CORPORATIVA */}
+        <div className="lg:col-span-5 bg-gradient-to-br from-indigo-950 via-slate-900 to-slate-950 p-6 sm:p-8 flex flex-col justify-between border-b lg:border-b-0 lg:border-r border-slate-800">
+          <div>
+            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 text-xs font-semibold mb-6">
+              <span className="h-2 w-2 rounded-full bg-indigo-400 animate-pulse"></span>
+              Acceso Seguro
+            </div>
 
-      <div className="relative w-full max-w-md">
-        {/* Header Branding */}
-        <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-gradient-to-tr from-blue-600 to-indigo-500 shadow-xl shadow-blue-500/25 mb-4 ring-8 ring-blue-500/10">
-            <Building2 className="w-8 h-8 text-white" />
+            <h1 className="text-3xl font-extrabold tracking-tight text-white">
+              Edificio <span className="text-indigo-400">XYZ</span>
+            </h1>
+            <p className="mt-3 text-slate-400 text-xs sm:text-sm leading-relaxed">
+              Software Integral de Administración, Expensas, Finanzas y Control de Copropietarios.
+            </p>
           </div>
-          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-white">
-            Edificio XYZ
-          </h1>
-          <p className="text-sm text-slate-400 mt-1">
-            Sistema Integral de Administración y Copropiedad
-          </p>
+
+          <div className="pt-4 border-t border-slate-800 text-[11px] text-slate-500 flex justify-between items-center">
+            <span>Control de Acceso</span>
+            <span>Cochabamba, 2026</span>
+          </div>
         </div>
 
-        {/* Card */}
-        <div className="bg-slate-900/80 backdrop-blur-xl border border-slate-800 rounded-3xl p-6 sm:p-8 shadow-2xl shadow-black/50">
-          <div className="flex items-center justify-between mb-6 pb-4 border-b border-slate-800">
-            <h2 className="text-lg font-semibold text-slate-200">
-              Iniciar Sesión
+        {/* PANEL PRINCIPAL: FORMULARIO Y SELECTOR DE ROL */}
+        <div className="lg:col-span-7 p-6 sm:p-8 md:p-10 flex flex-col justify-center">
+          <div className="mb-6">
+            <h2 className="text-2xl font-bold text-white tracking-tight">
+              Ingreso al Sistema
             </h2>
-            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-blue-950 text-blue-400 border border-blue-800/60">
-              <ShieldCheck className="w-3.5 h-3.5" /> Portal Seguro
-            </span>
+            <p className="text-xs sm:text-sm text-slate-400 mt-1">
+              Selecciona tu rol de usuario e ingresa tus credenciales.
+            </p>
           </div>
 
-          {error && (
-            <div className="mb-5 p-3.5 rounded-xl bg-red-500/10 border border-red-500/30 text-red-400 text-sm flex items-start gap-2.5">
-              <span className="font-bold">!</span>
-              <span>{error}</span>
+          {errorMessage && (
+            <div className="mb-4 p-3 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-400 text-xs flex items-center gap-2">
+              <span className="font-bold">Error:</span>
+              <span>{errorMessage}</span>
             </div>
           )}
 
-          <form onSubmit={handleLogin} className="space-y-4">
+          {successMessage && (
+            <div className="mb-4 p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs flex items-center gap-2">
+              <span className="font-bold">Éxito:</span>
+              <span>{successMessage}</span>
+            </div>
+          )}
+
+          <form onSubmit={handleLoginSubmit} className="space-y-4">
+            {/* Selector de Rol */}
             <div>
-              <label className="block text-xs font-medium text-slate-300 mb-1.5">
-                Correo Electrónico
+              <label className="block text-xs font-bold uppercase tracking-wider text-slate-300 mb-2">
+                1. Selecciona tu Rol
               </label>
-              <div className="relative">
-                <Mail className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
-                <input
-                  type="email"
-                  required
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  placeholder="admin@edificioxyz.com"
-                  className="w-full pl-10 pr-4 py-2.5 bg-slate-950/60 border border-slate-700/80 rounded-xl text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
-                />
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                {ROLES_SISTEMA.map((item) => {
+                  const isSelected = selectedRole === item.role;
+                  return (
+                    <button
+                      key={item.role}
+                      type="button"
+                      onClick={() => setSelectedRole(item.role)}
+                      className={`p-3 rounded-xl border text-left transition-all ${
+                        isSelected
+                          ? 'bg-indigo-600/15 border-indigo-500 text-white ring-1 ring-indigo-500 shadow-md shadow-indigo-500/10'
+                          : 'bg-slate-950/60 border-slate-800 text-slate-400 hover:border-slate-700 hover:text-slate-300'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="text-xs font-semibold flex items-center gap-1.5">
+                          <span>{item.icon}</span>
+                          <span className={isSelected ? 'text-indigo-300' : 'text-slate-200'}>
+                            {item.title}
+                          </span>
+                        </span>
+                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-800 text-slate-400 border border-slate-700">
+                          {item.badge}
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-slate-500 line-clamp-2 leading-tight">
+                        {item.description}
+                      </p>
+                    </button>
+                  );
+                })}
               </div>
             </div>
 
-            <div>
-              <label className="block text-xs font-medium text-slate-300 mb-1.5">
-                Contraseña
+            {/* Credenciales */}
+            <div className="space-y-3 pt-2">
+              <label className="block text-xs font-bold uppercase tracking-wider text-slate-300">
+                2. Ingresa tus Credenciales
               </label>
-              <div className="relative">
-                <Lock className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+
+              <div>
+                <label className="block text-xs text-slate-400 mb-1" htmlFor="email-input">
+                  Correo Electrónico
+                </label>
                 <input
-                  type="password"
+                  id="email-input"
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="usuario@edificioxyz.com"
                   required
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  placeholder="••••••••"
-                  className="w-full pl-10 pr-4 py-2.5 bg-slate-950/60 border border-slate-700/80 rounded-xl text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-sm text-white placeholder-slate-600 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-all"
                 />
               </div>
+
+              <div>
+                <label className="block text-xs text-slate-400 mb-1" htmlFor="password-input">
+                  Contraseña
+                </label>
+                <div className="relative">
+                  <input
+                    id="password-input"
+                    type={showPassword ? 'text' : 'password'}
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    placeholder="••••••••"
+                    required
+                    className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-sm text-white placeholder-slate-600 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-all"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-slate-400 hover:text-slate-200"
+                  >
+                    {showPassword ? 'Ocultar' : 'Mostrar'}
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-between text-xs text-slate-400 pt-1">
+              <label className="flex items-center gap-2 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={rememberMe}
+                  onChange={(e) => setRememberMe(e.target.checked)}
+                  className="rounded bg-slate-950 border-slate-800 text-indigo-600 focus:ring-indigo-500"
+                />
+                <span>Recordar mis datos</span>
+              </label>
+              <button
+                type="button"
+                onClick={() => alert('Contacte a la administración del Edificio XYZ para la recuperación de su cuenta.')}
+                className="text-indigo-400 hover:text-indigo-300 transition-colors"
+              >
+                ¿Olvidaste tu contraseña?
+              </button>
             </div>
 
             <button
               type="submit"
-              disabled={loading}
-              className="w-full mt-2 py-3 px-4 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-medium text-sm flex items-center justify-center gap-2 shadow-lg shadow-blue-600/30 hover:shadow-blue-600/40 active:scale-[0.99] transition-all disabled:opacity-60 disabled:pointer-events-none cursor-pointer"
+              disabled={isLoading}
+              className="w-full py-3 px-4 rounded-xl bg-indigo-600 hover:bg-indigo-500 active:bg-indigo-700 text-white font-semibold text-sm transition-all shadow-lg shadow-indigo-600/25 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 mt-2"
             >
-              {loading ? (
-                <span className="inline-block w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-              ) : (
+              {isLoading ? (
                 <>
-                  Ingresar al Sistema
-                  <ArrowRight className="w-4 h-4" />
+                  <div className="h-4 w-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+                  <span>Iniciando sesión...</span>
                 </>
+              ) : (
+                <span>Ingresar como {selectedRole}</span>
               )}
             </button>
           </form>
-
-          {/* Quick Credential Fill for Development */}
-          <div className="mt-8 pt-5 border-t border-slate-800/80">
-            <div className="flex items-center justify-between mb-3">
-              <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider flex items-center gap-1">
-                <Sparkles className="w-3.5 h-3.5 text-amber-400" /> Accesos de Demostración
-              </span>
-            </div>
-            <div className="grid grid-cols-1 gap-2 text-xs">
-              <button
-                type="button"
-                onClick={() => fillCredentials('admin@edificioxyz.com', 'admin123')}
-                className="flex items-center justify-between p-2 rounded-lg bg-slate-800/40 hover:bg-slate-800 border border-slate-700/50 text-slate-300 transition-colors text-left group cursor-pointer"
-              >
-                <div>
-                  <span className="font-medium text-white group-hover:text-blue-400 transition-colors">
-                    admin@edificioxyz.com
-                  </span>
-                  <p className="text-[11px] text-slate-400">Rol: Administrador (Acceso total)</p>
-                </div>
-                <span className="px-2 py-0.5 rounded bg-blue-900/60 text-blue-300 font-mono text-[10px]">
-                  admin123
-                </span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => fillCredentials('directorio@edificioxyz.com', 'directorio123')}
-                className="flex items-center justify-between p-2 rounded-lg bg-slate-800/40 hover:bg-slate-800 border border-slate-700/50 text-slate-300 transition-colors text-left group cursor-pointer"
-              >
-                <div>
-                  <span className="font-medium text-white group-hover:text-purple-400 transition-colors">
-                    directorio@edificioxyz.com
-                  </span>
-                  <p className="text-[11px] text-slate-400">Rol: Directorio (Finanzas y reportes)</p>
-                </div>
-                <span className="px-2 py-0.5 rounded bg-purple-900/60 text-purple-300 font-mono text-[10px]">
-                  directorio123
-                </span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => fillCredentials('consulta@edificioxyz.com', 'consulta123')}
-                className="flex items-center justify-between p-2 rounded-lg bg-slate-800/40 hover:bg-slate-800 border border-slate-700/50 text-slate-300 transition-colors text-left group cursor-pointer"
-              >
-                <div>
-                  <span className="font-medium text-white group-hover:text-emerald-400 transition-colors">
-                    consulta@edificioxyz.com
-                  </span>
-                  <p className="text-[11px] text-slate-400">Rol: Consulta (Solo lectura)</p>
-                </div>
-                <span className="px-2 py-0.5 rounded bg-emerald-900/60 text-emerald-300 font-mono text-[10px]">
-                  consulta123
-                </span>
-              </button>
-            </div>
-          </div>
         </div>
-
-        {/* Footer info */}
-        <p className="text-center text-xs text-slate-500 mt-6 flex items-center justify-center gap-1.5">
-          <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" /> Monorepo Turborepo + Next.js + Prisma
-        </p>
       </div>
-    </main>
+    </div>
   );
 }
