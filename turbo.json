@@ -10,6 +10,7 @@
       "env": [
         "JWT_SECRET",
         "DATABASE_URL",
+        "DIRECT_URL",
         "NEXT_PUBLIC_API_URL",
         "CORS_ORIGIN",
         "NODE_ENV",
