@@ -33,7 +33,9 @@ model Usuario {
   bloqueadoHasta  DateTime?    @map("bloqueado_hasta") @db.Timestamp(6)
   fechaCreacion   DateTime     @default(now()) @map("fecha_creacion") @db.Timestamp(6)
   ultimoAcceso    DateTime?    @map("ultimo_acceso") @db.Timestamp(6)
+  idPersona       Int?         @map("id_persona")
   rol             Rol          @relation(fields: [idRol], references: [idRol])
+  persona         Persona?     @relation(fields: [idPersona], references: [idPersona])
   
   cajaRegistros       Caja[]
   pagosRegistrados    Pago[]
@@ -59,6 +61,7 @@ model Persona {
   departamentosPropios Departamento[]   @relation("PropietarioDepartamentos")
   ocupaciones          OcupanteDepartamento[]
   comunicadosEnvios    ComunicadoEnvio[]
+  usuarios   Usuario[]
 
   @@map("personas")
   @@schema("edificio")
