@@ -3,9 +3,13 @@ name: CI
 
 on:
   push:
-    branches: [main, develop]
+    branches: ['**']
   pull_request:
-    branches: [main, develop]
+    branches: ['**']
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   build-and-lint:
@@ -17,10 +21,11 @@ jobs:
       NEXT_PUBLIC_API_URL: "http://localhost:4000"
       CORS_ORIGIN: "http://localhost:3000"
       NODE_ENV: "production"
+      SESSION_IDLE_TIMEOUT_MINUTES: "30"
 
     steps:
       - name: Checkout del repositorio
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Configurar pnpm
         uses: pnpm/action-setup@v4
