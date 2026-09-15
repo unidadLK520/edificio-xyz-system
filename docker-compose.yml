@@ -16,7 +16,7 @@ services:
       - postgres_data:/var/lib/postgresql/data
       - ./database/migrations/001_initial_schema.sql:/docker-entrypoint-initdb.d/001_initial_schema.sql
       - ./database/migrations/002_agregar_id_persona_usuarios.sql:/docker-entrypoint-initdb.d/002_agregar_id_persona_usuarios.sql
-      - ./database/seeds/001_seed_data.sql:/docker-entrypoint-initdb.d/003_seed_data.sql
+      - ./database/migrations/003_modulos_deseables.sql:/docker-entrypoint-initdb.d/003_modulos_deseables.sql
 
 volumes:
   postgres_data:
