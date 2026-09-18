@@ -19,10 +19,8 @@ export function errorMiddleware(
   const statusCode = err.statusCode || 500;
   const message = err.message || 'Error interno del servidor';
 
-  // Log en desarrollo
-  if (config.isDev) {
-    console.error(`[ERROR] ${req.method} ${req.path}:`, err);
-  }
+  // Registrar siempre el error en consola para diagnóstico (Render/logs)
+  console.error(`[ERROR] ${req.method} ${req.path}:`, err);
 
   // Errores de Prisma conocidos
   if (err.code === 'P2002') {
