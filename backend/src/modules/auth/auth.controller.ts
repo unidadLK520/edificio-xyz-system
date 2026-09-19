@@ -7,8 +7,11 @@ import { authService, AuthService } from './auth.service';
 import { AuthRequest } from '../../middlewares/auth.middleware';
 
 export const loginSchema = z.object({
-  correo: z.string().email('Correo inválido'),
+  correo: z.string().email('Correo inválido').optional(),
+  email: z.string().email('Correo inválido').optional(),
   password: z.string().min(1, 'Contraseña requerida'),
+}).refine(data => !!(data.correo || data.email), {
+  message: 'Debe ingresar su correo electrónico',
 });
 
 export class AuthController {
@@ -20,16 +23,20 @@ export class AuthController {
       if (!result.success) {
         res.status(400).json({
           error: 'Validation Error',
-          message: 'Datos inválidos',
+          message: 'Datos inválidos o faltantes',
           details: result.error.flatten().fieldErrors,
         });
         return;
       }
 
+      const correo = (result.data.correo || result.data.email)!.trim();
       const userAgent = req.headers['user-agent'] as string | undefined;
       const ip = req.ip || (req.socket.remoteAddress as string | undefined);
 
-      const loginResult = await this.service.login(result.data, { ip, userAgent });
+      const loginResult = await this.service.login(
+        { correo, password: result.data.password },
+        { ip, userAgent }
+      );
 
       if (!loginResult.success) {
         res.status(401).json({
