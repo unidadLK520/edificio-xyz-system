@@ -6,6 +6,21 @@ import ThemeToggle from '@/components/ThemeToggle';
 export default function Layout({ children }: { children: React.ReactNode }) {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
+  const handleLogout = async () => {
+    try {
+      await fetch('/api/auth/logout', { method: 'POST' });
+    } catch {
+      // Continuar con limpieza local incluso si hay error de red
+    }
+    if (typeof window !== 'undefined') {
+      document.cookie = 'auth_token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT';
+      localStorage.removeItem('auth_token');
+      localStorage.removeItem('user_role');
+      localStorage.removeItem('user_profile');
+    }
+    window.location.href = '/login';
+  };
+
   return (
     <div className="flex h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-white font-sans overflow-hidden transition-colors duration-300">
       
@@ -35,6 +50,9 @@ export default function Layout({ children }: { children: React.ReactNode }) {
         </div>
         
         <nav className="flex-1 p-4 space-y-1.5 overflow-y-auto">
+              <a href="/usuarios" onClick={() => setIsMobileMenuOpen(false)} className="block py-2.5 px-4 text-sm font-medium text-slate-600 hover:text-slate-900 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800 dark:hover:text-white rounded-xl transition-colors flex items-center gap-2">
+                <span>👤</span> Gestión de Usuarios
+              </a>
               <a href="/expensas" onClick={() => setIsMobileMenuOpen(false)} className="block py-2.5 px-4 text-sm font-medium text-slate-600 hover:text-slate-900 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800 dark:hover:text-white rounded-xl transition-colors">Expensas</a>
               <a href="/residentes" onClick={() => setIsMobileMenuOpen(false)} className="block py-2.5 px-4 text-sm font-medium text-slate-600 hover:text-slate-900 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800 dark:hover:text-white rounded-xl transition-colors">Residentes</a>
               <a href="/egresos" onClick={() => setIsMobileMenuOpen(false)} className="block py-2.5 px-4 text-sm font-medium text-slate-600 hover:text-slate-900 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800 dark:hover:text-white rounded-xl transition-colors">Egresos</a>
@@ -47,9 +65,13 @@ export default function Layout({ children }: { children: React.ReactNode }) {
             <span>Tema visual</span>
             <ThemeToggle />
           </div>
-          <a href="/login" className="block text-center py-2.5 px-4 bg-rose-50 text-rose-600 hover:bg-rose-100 dark:bg-rose-900/20 dark:text-rose-400 dark:hover:bg-rose-900/40 border border-rose-200 dark:border-rose-800/50 rounded-xl text-sm font-bold transition-colors">
+          <button 
+            type="button"
+            onClick={handleLogout}
+            className="w-full text-center py-2.5 px-4 bg-rose-50 text-rose-600 hover:bg-rose-100 dark:bg-rose-900/20 dark:text-rose-400 dark:hover:bg-rose-900/40 border border-rose-200 dark:border-rose-800/50 rounded-xl text-sm font-bold transition-colors cursor-pointer"
+          >
             Cerrar Sesión
-          </a>
+          </button>
         </div>
       </aside>
       

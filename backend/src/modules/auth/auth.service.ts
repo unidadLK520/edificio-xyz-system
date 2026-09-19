@@ -177,6 +177,7 @@ export class AuthService {
       nombreUsuario: usuario.nombreUsuario,
       correo: usuario.correo,
       rol: usuario.rol.nombre,
+      idRol: usuario.idRol,
     })
       .setProtectedHeader({ alg: 'HS256' })
       .setIssuedAt()
