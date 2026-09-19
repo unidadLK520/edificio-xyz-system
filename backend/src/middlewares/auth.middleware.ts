@@ -11,6 +11,7 @@ export interface JWTPayload {
   nombreUsuario: string;
   correo: string;
   rol: string;
+  idRol?: number;
 }
 
 // Extendemos Request para adjuntar el usuario autenticado

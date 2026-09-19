@@ -9,6 +9,7 @@ import { expensasRouter } from './expensas.routes';
 import { movimientosRouter } from './movimientos.routes';
 import { comunicadosRouter } from './comunicados.routes';
 import { personalRouter } from './personal.routes';
+import { usuariosRouter } from '../modules/usuarios/usuarios.routes';
 
 export const router: IRouter = Router();
 
@@ -17,8 +18,10 @@ router.use('/health', healthRouter);
 router.use('/auth', authRouter);
 
 // Rutas protegidas (auth requerido en cada router)
+router.use('/usuarios', usuariosRouter);
 router.use('/departamentos', departamentosRouter);
 router.use('/expensas', expensasRouter);
 router.use('/movimientos', movimientosRouter);
 router.use('/comunicados', comunicadosRouter);
 router.use('/personal', personalRouter);
+
