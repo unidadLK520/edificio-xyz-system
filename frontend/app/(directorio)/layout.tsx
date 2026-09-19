@@ -2,9 +2,12 @@
 
 import React, { useState } from 'react';
 import Link from 'next/link';
+import Image from 'next/image';
 import { usePathname } from 'next/navigation';
 import ThemeToggle from '@/components/ThemeToggle';
+import edificioBg from '@/public/images/edificio_bg.jpg';
 import {
+
   Building2,
   FileBarChart,
   ShieldAlert,
@@ -114,10 +117,15 @@ export default function DirectorioLayout({ children }: { children: React.ReactNo
         </header>
 
         <main className="flex-1 overflow-y-auto relative transition-colors duration-300">
-          <div
-            className="fixed inset-0 pointer-events-none opacity-[0.04] dark:opacity-[0.06] bg-cover bg-center -z-0"
-            style={{ backgroundImage: `url('/images/edificio_bg.jpg')` }}
-          />
+          <div className="fixed inset-0 pointer-events-none opacity-[0.24] dark:opacity-[0.30] overflow-hidden -z-0">
+            <Image
+              src={edificioBg}
+              alt="Edificio XYZ"
+              fill
+              placeholder="blur"
+              className="object-cover object-center"
+            />
+          </div>
           <div className="relative z-10">
             {children}
           </div>
