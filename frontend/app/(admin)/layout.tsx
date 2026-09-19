@@ -10,13 +10,14 @@ import {
   Users,
   Wallet,
   Users2,
+  UserCog,
   LogOut,
   Menu,
   X,
-  Shield,
 } from 'lucide-react';
 
 const ADMIN_LINKS = [
+  { href: '/usuarios', label: 'Gestión de Usuarios', icon: UserCog },
   { href: '/residentes', label: 'Residentes', icon: Users },
   { href: '/expensas', label: 'Expensas', icon: Receipt },
   { href: '/egresos', label: 'Egresos', icon: Wallet },
@@ -26,6 +27,21 @@ const ADMIN_LINKS = [
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const pathname = usePathname();
+
+  const handleLogout = async () => {
+    try {
+      await fetch('/api/auth/logout', { method: 'POST' });
+    } catch {
+      // Continuar con limpieza local
+    }
+    if (typeof window !== 'undefined') {
+      document.cookie = 'auth_token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT';
+      localStorage.removeItem('auth_token');
+      localStorage.removeItem('user_role');
+      localStorage.removeItem('user_profile');
+    }
+    window.location.href = '/login';
+  };
 
   return (
     <div className="flex h-screen bg-[#e6e2da] dark:bg-slate-950 text-[#262422] dark:text-slate-100 font-sans overflow-hidden transition-colors duration-300 selection:bg-blue-600 selection:text-white">
@@ -37,7 +53,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         />
       )}
 
-      {/* Sidebar (fijo en PC, deslizante en móvil) */}
+      {/* Sidebar */}
       <aside
         className={`fixed inset-y-0 left-0 z-50 w-72 md:w-64 bg-[#ede9e1] dark:bg-slate-900/95 border-r border-[#cec8bc] dark:border-slate-800 flex flex-col h-full transition-transform duration-300 ease-in-out transform ${
           isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full'
@@ -92,19 +108,19 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
             <span>Tema visual</span>
             <ThemeToggle />
           </div>
-          <a
-            href="/api/auth/logout"
+          <button
+            type="button"
+            onClick={handleLogout}
             className="flex items-center justify-center gap-2 w-full text-center py-2.5 px-4 bg-rose-100/70 text-rose-800 hover:bg-rose-100 dark:bg-rose-950/30 dark:text-rose-400 dark:hover:bg-rose-900/40 border border-rose-300 dark:border-rose-900/50 rounded-xl text-xs font-bold transition-colors cursor-pointer"
           >
             <LogOut className="w-3.5 h-3.5" />
             Cerrar Sesión
-          </a>
+          </button>
         </div>
       </aside>
 
       {/* Main content wrapper con fondo responsivo de edificio */}
       <div className="flex-1 flex flex-col min-w-0 h-screen overflow-hidden relative">
-        {/* Topbar para móvil */}
         <header className="md:hidden h-14 flex items-center justify-between px-4 border-b border-[#cec8bc] dark:border-slate-800 bg-[#ede9e1] dark:bg-slate-900 shrink-0 z-30">
           <button
             className="text-[#5c5750] dark:text-slate-300 hover:text-[#262422] dark:hover:text-white focus:outline-none p-1.5"
@@ -118,9 +134,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           <ThemeToggle />
         </header>
 
-        {/* Contenido principal scrolleable con imagen de fondo arquitectónica sutil */}
         <main className="flex-1 overflow-y-auto relative transition-colors duration-300">
-          {/* Fondo arquitectónico ultra sutil */}
           <div
             className="fixed inset-0 pointer-events-none opacity-[0.04] dark:opacity-[0.06] bg-cover bg-center -z-0"
             style={{ backgroundImage: `url('/images/edificio_bg.jpg')` }}

@@ -9,6 +9,8 @@ import { expensasRouter } from './expensas.routes';
 import { movimientosRouter } from './movimientos.routes';
 import { comunicadosRouter } from './comunicados.routes';
 import { personalRouter } from './personal.routes';
+import { usuariosRouter } from '../modules/usuarios/usuarios.routes';
+import { personasRouter } from '../modules/personas';
 
 export const router: IRouter = Router();
 
@@ -17,8 +19,12 @@ router.use('/health', healthRouter);
 router.use('/auth', authRouter);
 
 // Rutas protegidas (auth requerido en cada router)
+router.use('/usuarios', usuariosRouter);
+//-----------------------------Giovani Quiroz------------------------
+router.use('/personas', personasRouter);
 router.use('/departamentos', departamentosRouter);
 router.use('/expensas', expensasRouter);
 router.use('/movimientos', movimientosRouter);
 router.use('/comunicados', comunicadosRouter);
 router.use('/personal', personalRouter);
+

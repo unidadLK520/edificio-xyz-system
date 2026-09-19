@@ -18,13 +18,17 @@ healthRouter.get('/', async (_req: Request, res: Response) => {
       version: '1.0.0',
       database: 'connected',
     });
-  } catch {
+  } catch (err: unknown) {
+    const errorMessage = err instanceof Error ? err.message : String(err);
+    console.error('❌ Error al conectar con la base de datos en /health:', errorMessage);
+
     res.status(503).json({
       status: 'degraded',
       timestamp: new Date().toISOString(),
       service: 'Edificio XYZ API',
       version: '1.0.0',
       database: 'disconnected',
+      error: errorMessage,
     });
   }
 });

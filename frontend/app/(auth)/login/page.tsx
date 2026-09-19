@@ -126,63 +126,66 @@ export default function LoginPage() {
       let isSuccess = false;
       let token = 'mock_jwt_token_' + Date.now();
 
-      try {
-        const res = await fetch('/api/auth/login', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            email: email.trim(),
-            password,
-            rol: selectedRole,
-          }),
-        });
+      let actualRole: UserRole = selectedRole;
 
-        if (res.ok) {
-          const data = await res.json();
-          token = data.token || token;
-          isSuccess = true;
-        } else {
-          const errorData = await res.json().catch(() => ({}));
-          throw new Error(errorData.message || 'Credenciales no válidas para el rol seleccionado.');
-        }
-      } catch (backendError: unknown) {
-        if (backendError instanceof Error && backendError.message.includes('Credenciales no válidas')) {
-          throw backendError;
-        }
-        // Fallback de desarrollo si el backend aún no está levantado
+      const res = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: email.trim(),
+          correo: email.trim(),
+          password,
+          rol: selectedRole
+        })
+      });
+
+      const data = await res.json().catch(() => ({}));
+
+      if (res.ok && data.token) {
+        token = data.token;
         isSuccess = true;
+        if (data.usuario?.rol) {
+          actualRole = data.usuario.rol as UserRole;
+        }
+      } else {
+        const errorMsg = data.message || 'Credenciales inválidas. Por favor intente nuevamente.';
+        throw new Error(errorMsg);
       }
 
       if (isSuccess) {
         if (typeof window !== 'undefined') {
+          // Guardar cookie accesible por el cliente/navegador
+          document.cookie = `auth_token=${token}; path=/; max-age=${60 * 60 * 8}; SameSite=Lax`;
+
           localStorage.setItem('auth_token', token);
-          localStorage.setItem('user_role', selectedRole);
+          localStorage.setItem('user_role', actualRole);
           localStorage.setItem(
             'user_profile',
             JSON.stringify({
               email: email.trim(),
-              nombre: email.split('@')[0],
-              rolActivo: selectedRole,
+              nombre: data.usuario?.nombreUsuario || email.split('@')[0],
+              rolActivo: actualRole,
             })
           );
 
           if (rememberMe) {
             localStorage.setItem('last_user_email', email.trim());
-            localStorage.setItem('last_user_role', selectedRole);
+            localStorage.setItem('last_user_role', actualRole);
           } else {
             localStorage.removeItem('last_user_email');
             localStorage.removeItem('last_user_role');
           }
         }
 
-        setSuccessMessage(`¡Autenticado como ${selectedRole}! Redirigiendo...`);
+        setSuccessMessage(`¡Autenticado como ${actualRole}! Redirigiendo...`);
 
         setTimeout(() => {
-          if (selectedRole === 'ADMINISTRADOR') {
+          const roleUpper = String(actualRole).toUpperCase();
+          if (roleUpper === 'ADMINISTRADOR') {
             router.push('/residentes');
-          } else if (selectedRole === 'DIRECTORIO') {
+          } else if (roleUpper === 'DIRECTORIO') {
             router.push('/reportes');
-          } else if (selectedRole === 'COPROPIETARIO') {
+          } else if (roleUpper === 'COPROPIETARIO') {
             router.push('/mi-cuenta');
           } else {
             router.push('/auditoria');
