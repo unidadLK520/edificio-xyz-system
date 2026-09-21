@@ -180,6 +180,131 @@ async function proxyRequest(request: NextRequest, { params }: { params: Promise<
       }
     }
 
+    if (targetPath.startsWith('auditoria')) {
+      return NextResponse.json([
+        {
+          id: 'AUD-9021',
+          fechaHora: '2026-09-18 21:45:12',
+          usuario: 'Carlos Administrador',
+          correo: 'admin@edificioxyz.com',
+          rol: 'Administrador',
+          modulo: 'Copropietarios',
+          accion: 'CREACION',
+          severidad: 'INFO',
+          descripcion: 'Registro de nuevo residente e inquilino en Dpto 301.',
+          ip: '192.168.1.45 (Cochabamba, BO)',
+          detallesCambio: {
+            entidad: 'Copropietario',
+            idRegistro: 'RES-105',
+            camposModificados: [
+              { campo: 'Nombre', antes: '— (Nuevo)', despues: 'Gabriel Romero Soria' },
+              { campo: 'Departamento', antes: '—', despues: 'Dpto 301 (Piso 3)' },
+              { campo: 'Parqueo', antes: '—', despues: 'P-08' },
+              { campo: 'Estado', antes: '—', despues: 'Activo' },
+            ],
+          },
+        },
+        {
+          id: 'AUD-9020',
+          fechaHora: '2026-09-18 20:12:05',
+          usuario: 'Mesa Directiva',
+          correo: 'directorio@edificioxyz.com',
+          rol: 'Directorio',
+          modulo: 'Finanzas',
+          accion: 'MODIFICACION',
+          severidad: 'ADVERTENCIA',
+          descripcion: 'Aprobación y conciliación de gasto por mantenimiento de ascensores.',
+          ip: '190.181.24.12 (Santa Cruz, BO)',
+          detallesCambio: {
+            entidad: 'Gasto / Egreso',
+            idRegistro: 'EGR-412',
+            camposModificados: [
+              { campo: 'Estado Conciliación', antes: 'Pendiente', despues: 'Aprobado' },
+              { campo: 'Monto Aprobado', antes: 'Bs. 0.00', despues: 'Bs. 3,500.00' },
+              { campo: 'Aprobado Por', antes: 'Ninguno', despues: 'Directorio Finanzas' },
+            ],
+          },
+        },
+        {
+          id: 'AUD-9019',
+          fechaHora: '2026-09-18 19:30:44',
+          usuario: 'Sistema Automático',
+          correo: 'cron@edificioxyz.com',
+          rol: 'Sistema',
+          modulo: 'Expensas',
+          accion: 'CREACION',
+          severidad: 'INFO',
+          descripcion: 'Generación automática del lote mensual de expensas período vigente.',
+          ip: 'Servidor Central AWS sa-east-1',
+          detallesCambio: {
+            entidad: 'Lote Expensas',
+            idRegistro: 'EXP-2026-09',
+            camposModificados: [
+              { campo: 'Total Unidades Emitidas', antes: '0', despues: '24 Departamentos' },
+              { campo: 'Total Facturación', antes: 'Bs. 0.00', despues: 'Bs. 12,480.00' },
+            ],
+          },
+        },
+        {
+          id: 'AUD-9018',
+          fechaHora: '2026-09-18 18:05:19',
+          usuario: 'Carlos Administrador',
+          correo: 'admin@edificioxyz.com',
+          rol: 'Administrador',
+          modulo: 'Seguridad/Roles',
+          accion: 'LOGIN',
+          severidad: 'INFO',
+          descripcion: 'Inicio de sesión exitoso mediante credenciales JWT.',
+          ip: '192.168.1.45 (Cochabamba, BO)',
+        },
+        {
+          id: 'AUD-9017',
+          fechaHora: '2026-09-18 17:42:30',
+          usuario: 'Intento Desconocido',
+          correo: 'root@edificioxyz.com',
+          rol: 'No Autenticado',
+          modulo: 'Seguridad/Roles',
+          accion: 'LOGIN',
+          severidad: 'CRITICO',
+          descripcion: 'Intento fallido de autenticación. Contraseña incorrecta rechazada.',
+          ip: '185.220.101.5 (IP Bloqueada preventivamente)',
+        },
+      ]);
+    }
+
+    if (targetPath.startsWith('copropietarios') || targetPath.startsWith('residentes')) {
+      return NextResponse.json([
+        {
+          id: 1,
+          nombreCompleto: 'Carlos Mendoza Rojas',
+          ci: '4829103 CBBA',
+          tipo: 'Propietario',
+          deptoNumero: '101',
+          piso: 1,
+          parqueo: 'P-01',
+          baulera: 'B-01',
+          telefono: '+591 71234567',
+          correo: 'carlos.mendoza@email.com',
+          fechaIngreso: '2023-01-15',
+          estado: 'Activo',
+        },
+        {
+          id: 2,
+          nombreCompleto: 'Mariana Flores Soliz',
+          ci: '5920144 SCZ',
+          tipo: 'Inquilino',
+          deptoNumero: '102',
+          piso: 1,
+          parqueo: 'P-02',
+          baulera: 'Sin baulera',
+          telefono: '+591 79876543',
+          correo: 'mariana.flores@email.com',
+          fechaIngreso: '2024-03-01',
+          estado: 'Activo',
+        },
+      ]);
+    }
+
     if (targetPath.startsWith('health')) {
       return NextResponse.json({ status: 'OK', message: 'API Next.js Activa (Modo Local Frontend)' });
     }

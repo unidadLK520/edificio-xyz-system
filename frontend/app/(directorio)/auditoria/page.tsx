@@ -4,7 +4,8 @@
 
 'use client';
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
+
 import {
   ShieldAlert,
   Search,
@@ -158,12 +159,34 @@ const LOGS_INICIALES: LogAuditoria[] = [
 ];
 
 export default function AuditoriaPage() {
-  const [logs] = useState<LogAuditoria[]>(LOGS_INICIALES);
+  const [logs, setLogs] = useState<LogAuditoria[]>(LOGS_INICIALES);
+  const [loading, setLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [filtroModulo, setFiltroModulo] = useState<string>('Todos');
   const [filtroAccion, setFiltroAccion] = useState<string>('Todos');
   const [filtroSeveridad, setFiltroSeveridad] = useState<string>('Todos');
   const [selectedLog, setSelectedLog] = useState<LogAuditoria | null>(null);
+
+  useEffect(() => {
+    async function fetchLogs() {
+      try {
+        setLoading(true);
+        const res = await fetch('/api/v1/auditoria');
+        if (res.ok) {
+          const data = await res.json();
+          if (Array.isArray(data) && data.length > 0) {
+            setLogs(data);
+          }
+        }
+      } catch (err) {
+        console.warn('Usando logs iniciales de auditoría:', err);
+      } finally {
+        setLoading(false);
+      }
+    }
+    fetchLogs();
+  }, []);
+
 
   // Filtrado reactivo de logs
   const logsFiltrados = useMemo(() => {
