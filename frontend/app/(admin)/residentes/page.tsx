@@ -1,469 +1,381 @@
-// frontend/app/(admin)/residentes/page.tsx
-// Módulo de Administración de Copropietarios: Registro y Lista de Residentes
-// Entregables: Dev Frontend 1 (UI Registro) y Dev Frontend 2 (UI Lista)
-
 'use client';
 
-import React, { useState, useMemo } from 'react';
-import {
-  Users,
-  UserPlus,
-  Search,
-  Filter,
-  Home,
-  Car,
-  Box,
-  Phone,
-  Mail,
-  CheckCircle2,
-  XCircle,
-  Plus,
-  Eye,
-  History,
-  ShieldCheck,
-  Building2,
-  Calendar,
-  X,
-  FileText,
-  BadgeCheck,
-} from 'lucide-react';
-
-interface Copropietario {
-  id: number;
-  nombreCompleto: string;
-  ci: string;
-  tipo: 'Propietario' | 'Inquilino';
-  deptoNumero: string;
-  piso: number;
-  parqueo?: string;
-  baulera?: string;
-  telefono: string;
-  correo: string;
-  fechaIngreso: string;
-  estado: 'Activo' | 'Inactivo';
-  historialOcupacion?: Array<{
-    periodo: string;
-    ocupante: string;
-    tipo: string;
-    motivoSalida?: string;
-  }>;
-}
-
-const RESIDENTES_INICIALES: Copropietario[] = [
-  {
-    id: 1,
-    nombreCompleto: 'Carlos Mendoza Rojas',
-    ci: '4829103 CBBA',
-    tipo: 'Propietario',
-    deptoNumero: '101',
-    piso: 1,
-    parqueo: 'P-01',
-    baulera: 'B-01',
-    telefono: '+591 71234567',
-    correo: 'carlos.mendoza@email.com',
-    fechaIngreso: '2023-01-15',
-    estado: 'Activo',
-    historialOcupacion: [
-      { periodo: '2023 - Presente', ocupante: 'Carlos Mendoza Rojas', tipo: 'Propietario' },
-      { periodo: '2020 - 2022', ocupante: 'Juan Pérez García', tipo: 'Inquilino', motivoSalida: 'Fin de contrato' },
-    ],
-  },
-  {
-    id: 2,
-    nombreCompleto: 'Mariana Flores Soliz',
-    ci: '5920144 SCZ',
-    tipo: 'Inquilino',
-    deptoNumero: '102',
-    piso: 1,
-    parqueo: 'P-02',
-    baulera: 'Sin baulera',
-    telefono: '+591 79876543',
-    correo: 'mariana.flores@email.com',
-    fechaIngreso: '2024-03-01',
-    estado: 'Activo',
-    historialOcupacion: [
-      { periodo: '2024 - Presente', ocupante: 'Mariana Flores Soliz', tipo: 'Inquilino' },
-      { periodo: '2021 - 2024', ocupante: 'Roberto Gómez', tipo: 'Inquilino', motivoSalida: 'Traslado laboral' },
-    ],
-  },
-  {
-    id: 3,
-    nombreCompleto: 'Alejandro Vargas Morales',
-    ci: '3948120 LPZ',
-    tipo: 'Propietario',
-    deptoNumero: '201',
-    piso: 2,
-    parqueo: 'P-05',
-    baulera: 'B-03',
-    telefono: '+591 67123980',
-    correo: 'alejandro.vargas@email.com',
-    fechaIngreso: '2022-06-10',
-    estado: 'Activo',
-    historialOcupacion: [
-      { periodo: '2022 - Presente', ocupante: 'Alejandro Vargas Morales', tipo: 'Propietario' },
-    ],
-  },
-  {
-    id: 4,
-    nombreCompleto: 'Valeria Torrico Camacho',
-    ci: '6129841 CBBA',
-    tipo: 'Propietario',
-    deptoNumero: '202',
-    piso: 2,
-    parqueo: 'Sin parqueo',
-    baulera: 'B-04',
-    telefono: '+591 75432198',
-    correo: 'valeria.torrico@email.com',
-    fechaIngreso: '2021-11-20',
-    estado: 'Inactivo',
-    historialOcupacion: [
-      { periodo: '2021 - 2025', ocupante: 'Valeria Torrico Camacho', tipo: 'Propietario', motivoSalida: 'Puesto en alquiler' },
-    ],
-  },
-  {
-    id: 5,
-    nombreCompleto: 'Gabriel Romero Soria',
-    ci: '5319802 CBBA',
-    tipo: 'Inquilino',
-    deptoNumero: '301',
-    piso: 3,
-    parqueo: 'P-08',
-    baulera: 'B-07',
-    telefono: '+591 70192834',
-    correo: 'gabriel.romero@email.com',
-    fechaIngreso: '2024-08-01',
-    estado: 'Activo',
-    historialOcupacion: [
-      { periodo: '2024 - Presente', ocupante: 'Gabriel Romero Soria', tipo: 'Inquilino' },
-    ],
-  },
-];
+import React, { useState, useEffect, useCallback } from 'react';
+import ResidentesModal, { PersonaData } from '@/components/residentes/ResidentesModal';
+import FichaResidenteModal from '@/components/residentes/FichaResidenteModal';
+import AsignarUnidadModal from '@/components/residentes/AsignarUnidadModal';
 
 export default function ResidentesPage() {
-  const [residentes, setResidentes] = useState<Copropietario[]>(RESIDENTES_INICIALES);
+  const [personas, setPersonas] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  // Filtros y Paginación (CA2)
   const [searchTerm, setSearchTerm] = useState('');
-  const [filtroTipo, setFiltroTipo] = useState<'Todos' | 'Propietario' | 'Inquilino'>('Todos');
-  const [filtroEstado, setFiltroEstado] = useState<'Todos' | 'Activo' | 'Inactivo'>('Todos');
+  const [tipoOcupanteFilter, setTipoOcupanteFilter] = useState('');
+  const [page, setPage] = useState(1);
+  const [limit] = useState(10);
+  const [total, setTotal] = useState(0);
+  const [totalPages, setTotalPages] = useState(1);
+
+  // Rol de usuario (CA9)
+  const [userRole, setUserRole] = useState<string>('Administrador');
+  const isReadOnly = userRole === 'Consulta';
 
   // Modales
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [selectedResidenteHistory, setSelectedResidenteHistory] = useState<Copropietario | null>(null);
+  const [personaToEdit, setPersonaToEdit] = useState<PersonaData | null>(null);
 
-  // Formulario de nuevo copropietario
-  const [formData, setFormData] = useState({
-    nombreCompleto: '',
-    ci: '',
-    tipo: 'Propietario' as 'Propietario' | 'Inquilino',
-    deptoNumero: '',
-    piso: 1,
-    parqueo: '',
-    baulera: '',
-    telefono: '',
-    correo: '',
-    fechaIngreso: new Date().toISOString().split('T')[0],
-  });
+  const [isFichaOpen, setIsFichaOpen] = useState(false);
+  const [selectedPersonaId, setSelectedPersonaId] = useState<number | null>(null);
 
-  const [formSuccess, setFormSuccess] = useState(false);
+  const [isAsignarOpen, setIsAsignarOpen] = useState(false);
+  const [personaToAssign, setPersonaToAssign] = useState<{ idPersona: number; nombres: string; apellidos: string } | null>(null);
 
-  // Filtrado reactivo
-  const residentesFiltrados = useMemo(() => {
-    return residentes.filter((r) => {
-      const matchSearch =
-        r.nombreCompleto.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        r.ci.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        r.deptoNumero.includes(searchTerm) ||
-        r.telefono.includes(searchTerm) ||
-        r.correo.toLowerCase().includes(searchTerm.toLowerCase());
+  // Cargar rol del localStorage
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const storedRole = localStorage.getItem('user_role') || 'Administrador';
+      setUserRole(storedRole);
+    }
+  }, []);
 
-      const matchTipo = filtroTipo === 'Todos' || r.tipo === filtroTipo;
-      const matchEstado = filtroEstado === 'Todos' || r.estado === filtroEstado;
+  // Función para obtener la lista de personas desde el API (CA2, CA5)
+  const fetchPersonas = useCallback(async () => {
+    setLoading(true);
+    setErrorMessage(null);
 
-      return matchSearch && matchTipo && matchEstado;
-    });
-  }, [residentes, searchTerm, filtroTipo, filtroEstado]);
+    try {
+      const queryParams = new URLSearchParams();
+      queryParams.set('page', String(page));
+      queryParams.set('limit', String(limit));
+      if (searchTerm.trim()) queryParams.set('buscar', searchTerm.trim());
+      if (tipoOcupanteFilter) queryParams.set('tipoOcupante', tipoOcupanteFilter);
 
-  // Contadores métricos
-  const totalResidentes = residentes.length;
-  const totalPropietarios = residentes.filter((r) => r.tipo === 'Propietario').length;
-  const totalInquilinos = residentes.filter((r) => r.tipo === 'Inquilino').length;
-  const totalActivos = residentes.filter((r) => r.estado === 'Activo').length;
+      const res = await fetch(`/api/v1/personas?${queryParams.toString()}`);
+      const json = await res.json();
 
-  const handleCreateCopropietario = (e: React.FormEvent) => {
-    e.preventDefault();
-    const nuevo: Copropietario = {
-      id: Date.now(),
-      nombreCompleto: formData.nombreCompleto,
-      ci: formData.ci,
-      tipo: formData.tipo,
-      deptoNumero: formData.deptoNumero,
-      piso: Number(formData.piso) || 1,
-      parqueo: formData.parqueo ? `P-${formData.parqueo}` : 'Sin parqueo',
-      baulera: formData.baulera ? `B-${formData.baulera}` : 'Sin baulera',
-      telefono: formData.telefono,
-      correo: formData.correo,
-      fechaIngreso: formData.fechaIngreso,
-      estado: 'Activo',
-      historialOcupacion: [
-        {
-          periodo: `${new Date().getFullYear()} - Presente`,
-          ocupante: formData.nombreCompleto,
-          tipo: formData.tipo,
-        },
-      ],
-    };
+      if (!res.ok) {
+        throw new Error(json.message || 'Error al obtener la lista de personas');
+      }
 
-    setResidentes([nuevo, ...residentes]);
-    setFormSuccess(true);
-    setTimeout(() => {
-      setFormSuccess(false);
-      setIsModalOpen(false);
-      setFormData({
-        nombreCompleto: '',
-        ci: '',
-        tipo: 'Propietario',
-        deptoNumero: '',
-        piso: 1,
-        parqueo: '',
-        baulera: '',
-        telefono: '',
-        correo: '',
-        fechaIngreso: new Date().toISOString().split('T')[0],
-      });
-    }, 800);
+      setPersonas(json.data || []);
+      if (json.meta) {
+        setTotal(json.meta.total || 0);
+        setTotalPages(json.meta.totalPages || 1);
+      }
+    } catch (err: any) {
+      setErrorMessage(err.message || 'Error al conectar con la API de personas');
+    } finally {
+      setLoading(false);
+    }
+  }, [page, limit, searchTerm, tipoOcupanteFilter]);
+
+  useEffect(() => {
+    fetchPersonas();
+  }, [fetchPersonas]);
+
+  // Handlers para Modales
+  const handleOpenCreate = () => {
+    if (isReadOnly) return;
+    setPersonaToEdit(null);
+    setIsModalOpen(true);
   };
+
+  const handleOpenEdit = (p: any) => {
+    if (isReadOnly) return;
+    setPersonaToEdit({
+      idPersona: p.idPersona,
+      ciNit: p.ciNit,
+      nombres: p.nombres,
+      apellidos: p.apellidos,
+      telefono: p.telefono,
+      correo: p.correo,
+      direccion: p.direccion,
+    });
+    setIsModalOpen(true);
+  };
+
+  const handleOpenFicha = (idPersona: number) => {
+    setSelectedPersonaId(idPersona);
+    setIsFichaOpen(true);
+  };
+
+  const handleOpenAsignar = (p: any) => {
+    if (isReadOnly) return;
+    setPersonaToAssign({
+      idPersona: p.idPersona,
+      nombres: p.nombres,
+      apellidos: p.apellidos,
+    });
+    setIsAsignarOpen(true);
+  };
+
+  // Cálculo de estadísticas locales rápidas
+  const totalPropietarios = personas.filter(
+    (p) => (p.departamentosPropios && p.departamentosPropios.length > 0) || p.ocupaciones?.some((o: any) => o.tipoOcupante === 'Propietario')
+  ).length;
+
+  const totalInquilinos = personas.filter(
+    (p) => p.ocupaciones?.some((o: any) => o.tipoOcupante === 'Inquilino')
+  ).length;
 
   return (
     <div className="p-4 sm:p-8 space-y-6 max-w-7xl mx-auto">
-      {/* Encabezado del Módulo */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-[#cec8bc] dark:border-slate-800">
+      
+      {/* Header y Estadísticas */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl sm:text-3xl font-bold text-[#262422] dark:text-white tracking-tight">
-            Directorio de Residentes e Inmuebles
+          <h1 className="text-2xl font-extrabold text-slate-900 dark:text-white flex items-center gap-2">
+            <span>👥</span> Administración de Copropietarios e Inquilinos
           </h1>
-          <p className="text-xs sm:text-sm text-[#66615b] dark:text-slate-400 mt-1">
-            Gestión de propietarios, inquilinos, asignación de unidades y trazabilidad histórica.
+          <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
+            Gestión del padrón del edificio, registro de datos personales y asignación de unidades habitacionales (HU02).
           </p>
         </div>
 
-        <button
-          type="button"
-          onClick={() => setIsModalOpen(true)}
-          className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-blue-700 hover:bg-blue-600 dark:bg-blue-600 dark:hover:bg-blue-500 text-white font-semibold text-sm shadow-md shadow-blue-800/20 active:scale-95 transition-all cursor-pointer"
-        >
-          <UserPlus className="w-4 h-4" />
-          Registrar Copropietario / Inquilino
-        </button>
+        {/* Botón Nuevo Residente (CA1, CA9) */}
+        {!isReadOnly && (
+          <button
+            onClick={handleOpenCreate}
+            className="px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-sm rounded-xl shadow-lg shadow-indigo-600/25 transition-all flex items-center justify-center gap-2 shrink-0 cursor-pointer"
+          >
+            <span>➕</span> Registrar Residente
+          </button>
+        )}
       </div>
 
-      {/* Tarjetas KPI de Resumen */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className="p-4 rounded-2xl bg-[#ede9e1] dark:bg-slate-900 border border-[#cec8bc] dark:border-slate-800 shadow-sm">
-          <div className="flex items-center justify-between text-xs font-semibold text-[#66615b] dark:text-slate-400 mb-1">
-            <span>Total Residentes</span>
-            <Users className="w-4 h-4 text-blue-700 dark:text-blue-400" />
+      {/* Tarjetas de Estadísticas */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-5 rounded-2xl shadow-sm flex items-center gap-4">
+          <div className="w-12 h-12 rounded-xl bg-indigo-50 dark:bg-indigo-950/50 text-indigo-600 dark:text-indigo-400 flex items-center justify-center text-xl font-bold">
+            👥
           </div>
-          <div className="text-2xl font-bold text-[#262422] dark:text-white">{totalResidentes}</div>
-          <span className="text-[11px] text-[#7d776f] dark:text-slate-500">{totalActivos} activos en el edificio</span>
+          <div>
+            <span className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider block">
+              Total Registrados
+            </span>
+            <span className="text-2xl font-extrabold text-slate-900 dark:text-white">{total}</span>
+          </div>
         </div>
 
-        <div className="p-4 rounded-2xl bg-[#ede9e1] dark:bg-slate-900 border border-[#cec8bc] dark:border-slate-800 shadow-sm">
-          <div className="flex items-center justify-between text-xs font-semibold text-[#66615b] dark:text-slate-400 mb-1">
-            <span>Propietarios</span>
-            <ShieldCheck className="w-4 h-4 text-indigo-700 dark:text-indigo-400" />
+        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-5 rounded-2xl shadow-sm flex items-center gap-4">
+          <div className="w-12 h-12 rounded-xl bg-emerald-50 dark:bg-emerald-950/50 text-emerald-600 dark:text-emerald-400 flex items-center justify-center text-xl font-bold">
+            🏠
           </div>
-          <div className="text-2xl font-bold text-indigo-900 dark:text-indigo-300">{totalPropietarios}</div>
-          <span className="text-[11px] text-[#7d776f] dark:text-slate-500">Titulares de unidades</span>
+          <div>
+            <span className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider block">
+              Propietarios (Página)
+            </span>
+            <span className="text-2xl font-extrabold text-slate-900 dark:text-white">{totalPropietarios}</span>
+          </div>
         </div>
 
-        <div className="p-4 rounded-2xl bg-[#ede9e1] dark:bg-slate-900 border border-[#cec8bc] dark:border-slate-800 shadow-sm">
-          <div className="flex items-center justify-between text-xs font-semibold text-[#66615b] dark:text-slate-400 mb-1">
-            <span>Inquilinos</span>
-            <Home className="w-4 h-4 text-emerald-700 dark:text-emerald-400" />
+        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-5 rounded-2xl shadow-sm flex items-center gap-4">
+          <div className="w-12 h-12 rounded-xl bg-blue-50 dark:bg-blue-950/50 text-blue-600 dark:text-blue-400 flex items-center justify-center text-xl font-bold">
+            🔑
           </div>
-          <div className="text-2xl font-bold text-emerald-800 dark:text-emerald-400">{totalInquilinos}</div>
-          <span className="text-[11px] text-[#7d776f] dark:text-slate-500">Arrendatarios vigentes</span>
-        </div>
-
-        <div className="p-4 rounded-2xl bg-[#ede9e1] dark:bg-slate-900 border border-[#cec8bc] dark:border-slate-800 shadow-sm">
-          <div className="flex items-center justify-between text-xs font-semibold text-[#66615b] dark:text-slate-400 mb-1">
-            <span>Unidades Asignadas</span>
-            <Building2 className="w-4 h-4 text-amber-700 dark:text-amber-400" />
+          <div>
+            <span className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider block">
+              Inquilinos (Página)
+            </span>
+            <span className="text-2xl font-extrabold text-slate-900 dark:text-white">{totalInquilinos}</span>
           </div>
-          <div className="text-2xl font-bold text-amber-800 dark:text-amber-400">{totalActivos} / 24</div>
-          <span className="text-[11px] text-[#7d776f] dark:text-slate-500">Departamentos ocupados</span>
         </div>
       </div>
 
-      {/* Controles de Búsqueda y Filtros */}
-      <div className="p-4 rounded-2xl bg-[#ede9e1] dark:bg-slate-900 border border-[#cec8bc] dark:border-slate-800 flex flex-col md:flex-row gap-3 items-stretch md:items-center justify-between shadow-sm">
-        {/* Barra de Búsqueda */}
-        <div className="relative flex-1">
-          <Search className="w-4 h-4 text-[#7d776f] dark:text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+      {/* Barra de Filtros y Búsqueda (CA2) */}
+      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-4 rounded-2xl shadow-sm flex flex-col sm:flex-row gap-4 items-center justify-between">
+        
+        {/* Buscador de texto */}
+        <div className="relative w-full sm:w-80">
+          <span className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
+            🔍
+          </span>
           <input
             type="text"
-            placeholder="Buscar por nombre, CI, departamento, teléfono..."
             value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full pl-10 pr-4 py-2 bg-[#dfd9ce] dark:bg-slate-950 border border-[#cec8bc] dark:border-slate-700 rounded-xl text-sm text-[#1c1917] dark:text-white placeholder-[#857f76] dark:placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-600 focus:bg-[#ede9e1] dark:focus:bg-slate-950 transition-all"
+            onChange={(e) => {
+              setSearchTerm(e.target.value);
+              setPage(1);
+            }}
+            placeholder="Buscar por CI, Nombre o Apellido..."
+            className="w-full pl-10 pr-4 py-2 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/50 dark:text-white transition-colors"
           />
         </div>
 
-        {/* Filtros Dropdowns */}
-        <div className="flex items-center gap-2.5">
-          <div className="flex items-center gap-1.5 bg-[#dfd9ce] dark:bg-slate-950 px-3 py-2 rounded-xl border border-[#cec8bc] dark:border-slate-700 text-xs">
-            <Filter className="w-3.5 h-3.5 text-[#7d776f] dark:text-slate-400" />
-            <select
-              value={filtroTipo}
-              onChange={(e) => setFiltroTipo(e.target.value as any)}
-              className="bg-transparent text-[#262422] dark:text-white focus:outline-none cursor-pointer font-medium"
-            >
-              <option value="Todos">Tipo: Todos</option>
-              <option value="Propietario">Propietarios</option>
-              <option value="Inquilino">Inquilinos</option>
-            </select>
-          </div>
-
-          <div className="flex items-center gap-1.5 bg-[#dfd9ce] dark:bg-slate-950 px-3 py-2 rounded-xl border border-[#cec8bc] dark:border-slate-700 text-xs">
-            <select
-              value={filtroEstado}
-              onChange={(e) => setFiltroEstado(e.target.value as any)}
-              className="bg-transparent text-[#262422] dark:text-white focus:outline-none cursor-pointer font-medium"
-            >
-              <option value="Todos">Estado: Todos</option>
-              <option value="Activo">Activos</option>
-              <option value="Inactivo">Inactivos</option>
-            </select>
-          </div>
+        {/* Filtro por Tipo de Ocupante */}
+        <div className="flex items-center gap-3 w-full sm:w-auto">
+          <label className="text-xs font-semibold text-slate-500 dark:text-slate-400 whitespace-nowrap">
+            Filtrar Tipo:
+          </label>
+          <select
+            value={tipoOcupanteFilter}
+            onChange={(e) => {
+              setTipoOcupanteFilter(e.target.value);
+              setPage(1);
+            }}
+            className="w-full sm:w-48 px-3 py-2 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/50 dark:text-white transition-colors"
+          >
+            <option value="">Todos los residentes</option>
+            <option value="Propietario">Solo Propietarios</option>
+            <option value="Inquilino">Solo Inquilinos</option>
+          </select>
         </div>
       </div>
 
-      {/* UI Lista de Copropietarios (Tabla y Cards) */}
-      <div className="rounded-2xl bg-[#ede9e1] dark:bg-slate-900 border border-[#cec8bc] dark:border-slate-800 shadow-sm overflow-hidden">
+      {/* Mensaje de Error global */}
+      {errorMessage && (
+        <div className="p-4 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900/60 rounded-xl text-rose-700 dark:text-rose-300 text-sm">
+          ⚠️ {errorMessage}
+        </div>
+      )}
+
+      {/* Tabla de Personas/Residentes */}
+      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-sm overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-left text-sm">
-            <thead>
-              <tr className="border-b border-[#cec8bc] dark:border-slate-800 bg-[#e3ded4] dark:bg-slate-950 text-xs font-semibold text-[#5c5750] dark:text-slate-400">
-                <th className="py-3.5 px-4">Residente</th>
-                <th className="py-3.5 px-4">Depto / Inmueble</th>
-                <th className="py-3.5 px-4">Parqueo / Baulera</th>
-                <th className="py-3.5 px-4">Contacto</th>
-                <th className="py-3.5 px-4">Ingreso</th>
-                <th className="py-3.5 px-4 text-center">Estado</th>
-                <th className="py-3.5 px-4 text-right">Historial</th>
+            <thead className="bg-slate-50 dark:bg-slate-850 text-slate-500 dark:text-slate-400 uppercase text-xs font-semibold tracking-wider border-b border-slate-200 dark:border-slate-800">
+              <tr>
+                <th className="px-6 py-4">CI / NIT</th>
+                <th className="px-6 py-4">Nombre Completo</th>
+                <th className="px-6 py-4">Contacto</th>
+                <th className="px-6 py-4">Tipo / Rol</th>
+                <th className="px-6 py-4">Unidades Asociadas</th>
+                <th className="px-6 py-4 text-right">Acciones</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-[#cec8bc]/70 dark:divide-slate-800">
-              {residentesFiltrados.length === 0 ? (
+            <tbody className="divide-y divide-slate-200 dark:divide-slate-800 text-slate-800 dark:text-slate-200">
+              {loading ? (
                 <tr>
-                  <td colSpan={7} className="py-12 text-center text-[#7d776f] dark:text-slate-500 text-sm">
-                    No se encontraron copropietarios con los filtros aplicados.
+                  <td colSpan={6} className="px-6 py-12 text-center text-slate-500">
+                    <div className="flex justify-center items-center gap-2">
+                      <svg className="w-5 h-5 animate-spin text-indigo-600" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+                      </svg>
+                      <span>Cargando padrón de personas...</span>
+                    </div>
+                  </td>
+                </tr>
+              ) : personas.length === 0 ? (
+                <tr>
+                  <td colSpan={6} className="px-6 py-12 text-center text-slate-500">
+                    No se encontraron registros de propietarios o inquilinos que coincidan con la búsqueda.
                   </td>
                 </tr>
               ) : (
-                residentesFiltrados.map((residente) => (
-                  <tr
-                    key={residente.id}
-                    className="hover:bg-[#e4dfd5] dark:hover:bg-slate-800/40 transition-colors"
-                  >
-                    {/* Residente */}
-                    <td className="py-3.5 px-4">
-                      <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 rounded-full bg-[#d6cfc3] dark:bg-blue-950 flex items-center justify-center text-xs font-bold text-blue-900 dark:text-blue-300">
-                          {residente.nombreCompleto.slice(0, 2).toUpperCase()}
+                personas.map((p) => {
+                  const tienePropios = p.departamentosPropios && p.departamentosPropios.length > 0;
+                  const tieneInquilino = p.ocupaciones?.some((o: any) => o.tipoOcupante === 'Inquilino');
+
+                  return (
+                    <tr key={p.idPersona} className="hover:bg-slate-50/60 dark:hover:bg-slate-850/50 transition-colors">
+                      
+                      {/* CI / NIT */}
+                      <td className="px-6 py-4 font-mono text-xs font-bold text-slate-900 dark:text-white whitespace-nowrap">
+                        {p.ciNit}
+                      </td>
+
+                      {/* Nombre Completo */}
+                      <td className="px-6 py-4 font-medium whitespace-nowrap">
+                        {p.nombres} {p.apellidos}
+                      </td>
+
+                      {/* Contacto */}
+                      <td className="px-6 py-4 text-xs space-y-0.5">
+                        {p.telefono && <div>📞 {p.telefono}</div>}
+                        {p.correo && <div className="text-slate-500 dark:text-slate-400">✉️ {p.correo}</div>}
+                        {!p.telefono && !p.correo && <span className="text-slate-400 italic">Sin datos</span>}
+                      </td>
+
+                      {/* Tipo / Rol (Badges) */}
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="flex flex-wrap gap-1.5">
+                          {tienePropios && (
+                            <span className="px-2.5 py-1 text-[11px] font-bold bg-emerald-100 text-emerald-800 dark:bg-emerald-950/70 dark:text-emerald-300 rounded-full border border-emerald-300 dark:border-emerald-800/60">
+                              Propietario
+                            </span>
+                          )}
+                          {tieneInquilino && (
+                            <span className="px-2.5 py-1 text-[11px] font-bold bg-blue-100 text-blue-800 dark:bg-blue-950/70 dark:text-blue-300 rounded-full border border-blue-300 dark:border-blue-800/60">
+                              Inquilino
+                            </span>
+                          )}
+                          {!tienePropios && !tieneInquilino && (
+                            <span className="px-2.5 py-1 text-[11px] font-semibold bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400 rounded-full">
+                              Sin Asignación
+                            </span>
+                          )}
                         </div>
-                        <div>
-                          <span className="font-bold text-[#262422] dark:text-white block">
-                            {residente.nombreCompleto}
-                          </span>
-                          <span className="text-xs text-[#66615b] dark:text-slate-400">
-                            CI: {residente.ci}
-                          </span>
+                      </td>
+
+                      {/* Unidades Asociadas (CA8) */}
+                      <td className="px-6 py-4">
+                        <div className="flex flex-wrap gap-1.5">
+                          {p.departamentosPropios?.map((dep: any) => (
+                            <span
+                              key={`prop-${dep.idDepartamento}`}
+                              className="px-2 py-0.5 text-xs font-semibold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 rounded-md border border-slate-200 dark:border-slate-700"
+                              title="Propiedad directa"
+                            >
+                              🏠 #{dep.numero}
+                            </span>
+                          ))}
+                          {p.ocupaciones?.map((ocu: any) => (
+                            <span
+                              key={`ocu-${ocu.idOcupacion}`}
+                              className="px-2 py-0.5 text-xs font-semibold bg-indigo-50 dark:bg-indigo-950/50 text-indigo-700 dark:text-indigo-300 rounded-md border border-indigo-200 dark:border-indigo-800/50"
+                              title={`Ocupante: ${ocu.tipoOcupante}`}
+                            >
+                              🔑 #{ocu.departamento?.numero || 'N/D'}
+                            </span>
+                          ))}
+                          {(!p.departamentosPropios || p.departamentosPropios.length === 0) &&
+                            (!p.ocupaciones || p.ocupaciones.length === 0) && (
+                              <span className="text-slate-400 text-xs italic">-</span>
+                            )}
                         </div>
-                      </div>
-                    </td>
+                      </td>
 
-                    {/* Depto */}
-                    <td className="py-3.5 px-4">
-                      <div className="flex items-center gap-1.5">
-                        <span className="font-semibold text-blue-900 dark:text-blue-300 px-2 py-0.5 rounded bg-blue-100 dark:bg-blue-950 border border-blue-200 dark:border-blue-800/50 text-xs">
-                          Dpto {residente.deptoNumero}
-                        </span>
-                        <span
-                          className={`text-[11px] px-2 py-0.5 rounded font-medium ${
-                            residente.tipo === 'Propietario'
-                              ? 'bg-purple-100 text-purple-800 dark:bg-purple-950/70 dark:text-purple-300'
-                              : 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/70 dark:text-emerald-300'
-                          }`}
-                        >
-                          {residente.tipo}
-                        </span>
-                      </div>
-                      <span className="text-[11px] text-[#7d776f] dark:text-slate-500 block mt-0.5">
-                        Piso {residente.piso}
-                      </span>
-                    </td>
+                      {/* Botones de Acciones (CA3, CA5, CA6, CA9) */}
+                      <td className="px-6 py-4 text-right whitespace-nowrap">
+                        <div className="flex items-center justify-end gap-1.5">
+                          {/* Ficha (CA5) */}
+                          <button
+                            onClick={() => handleOpenFicha(p.idPersona)}
+                            title="Ver Ficha Completa del Residente"
+                            className="p-1.5 text-slate-600 hover:text-indigo-600 dark:text-slate-400 dark:hover:text-indigo-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors"
+                          >
+                            👁️ <span className="sr-only">Ficha</span>
+                          </button>
 
-                    {/* Parqueo / Baulera */}
-                    <td className="py-3.5 px-4 text-xs">
-                      <div className="flex items-center gap-1 text-[#383430] dark:text-slate-300">
-                        <Car className="w-3.5 h-3.5 text-[#7d776f]" />
-                        <span>{residente.parqueo}</span>
-                      </div>
-                      <div className="flex items-center gap-1 text-[#66615b] dark:text-slate-400 mt-0.5">
-                        <Box className="w-3.5 h-3.5 text-[#7d776f]" />
-                        <span>{residente.baulera}</span>
-                      </div>
-                    </td>
+                          {!isReadOnly && (
+                            <>
+                              {/* Asignar Unidad (CA6) */}
+                              <button
+                                onClick={() => handleOpenAsignar(p)}
+                                title="Asignar Departamento"
+                                className="p-1.5 text-slate-600 hover:text-emerald-600 dark:text-slate-400 dark:hover:text-emerald-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors"
+                              >
+                                🏠 <span className="sr-only">Asignar</span>
+                              </button>
 
-                    {/* Contacto */}
-                    <td className="py-3.5 px-4 text-xs">
-                      <div className="flex items-center gap-1.5 text-[#262422] dark:text-slate-200">
-                        <Phone className="w-3.5 h-3.5 text-blue-700 dark:text-blue-400" />
-                        <span>{residente.telefono}</span>
-                      </div>
-                      <div className="flex items-center gap-1.5 text-[#66615b] dark:text-slate-400 mt-0.5">
-                        <Mail className="w-3.5 h-3.5 text-[#7d776f]" />
-                        <span>{residente.correo}</span>
-                      </div>
-                    </td>
-
-                    {/* Fecha de Ingreso */}
-                    <td className="py-3.5 px-4 text-xs text-[#5c5750] dark:text-slate-400">
-                      {residente.fechaIngreso}
-                    </td>
-
-                    {/* Estado */}
-                    <td className="py-3.5 px-4 text-center">
-                      <span
-                        className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                          residente.estado === 'Activo'
-                            ? 'bg-emerald-100 text-emerald-800 border border-emerald-300 dark:bg-emerald-950 dark:text-emerald-400 dark:border-emerald-800/50'
-                            : 'bg-stone-200 text-stone-700 border border-stone-300 dark:bg-slate-800 dark:text-slate-400 dark:border-slate-700'
-                        }`}
-                      >
-                        {residente.estado === 'Activo' ? (
-                          <CheckCircle2 className="w-3 h-3 text-emerald-600 dark:text-emerald-400" />
-                        ) : (
-                          <XCircle className="w-3 h-3 text-stone-500" />
-                        )}
-                        {residente.estado}
-                      </span>
-                    </td>
-
-                    {/* Botón Historial */}
-                    <td className="py-3.5 px-4 text-right">
-                      <button
-                        type="button"
-                        onClick={() => setSelectedResidenteHistory(residente)}
-                        className="p-1.5 rounded-lg bg-[#dfd9ce] hover:bg-[#d5cebf] dark:bg-slate-800 dark:hover:bg-slate-700 text-blue-700 dark:text-blue-400 transition-colors inline-flex items-center gap-1 text-xs font-semibold cursor-pointer"
-                        title="Ver historial de ocupantes"
-                      >
-                        <History className="w-3.5 h-3.5" />
-                        <span className="hidden sm:inline">Historial</span>
-                      </button>
-                    </td>
-                  </tr>
-                ))
+                              {/* Editar (CA3) */}
+                              <button
+                                onClick={() => handleOpenEdit(p)}
+                                title="Editar Datos Personales"
+                                className="p-1.5 text-slate-600 hover:text-blue-600 dark:text-slate-400 dark:hover:text-blue-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors"
+                              >
+                                ✏️ <span className="sr-only">Editar</span>
+                              </button>
+                            </>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })
               )}
             </tbody>
           </table>
