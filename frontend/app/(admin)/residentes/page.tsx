@@ -380,55 +380,260 @@ export default function ResidentesPage() {
             </tbody>
           </table>
         </div>
-
-        {/* Paginación */}
-        <div className="px-6 py-4 border-t border-slate-200 dark:border-slate-800 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-slate-500 dark:text-slate-400">
-          <div>
-            Mostrando página <strong className="text-slate-800 dark:text-slate-200">{page}</strong> de{' '}
-            <strong className="text-slate-800 dark:text-slate-200">{totalPages}</strong> (Total: {total} registros)
-          </div>
-
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => setPage((p) => Math.max(1, p - 1))}
-              disabled={page <= 1 || loading}
-              className="px-3 py-1.5 border border-slate-200 dark:border-slate-800 rounded-lg disabled:opacity-40 hover:bg-slate-100 dark:hover:bg-slate-800 font-semibold transition-colors"
-            >
-              ◀ Anterior
-            </button>
-            <button
-              onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-              disabled={page >= totalPages || loading}
-              className="px-3 py-1.5 border border-slate-200 dark:border-slate-800 rounded-lg disabled:opacity-40 hover:bg-slate-100 dark:hover:bg-slate-800 font-semibold transition-colors"
-            >
-              Siguiente ▶
-            </button>
-          </div>
-        </div>
       </div>
 
-      {/* Modales de Operación */}
-      <ResidentesModal
-        isOpen={isModalOpen}
-        onClose={() => setIsModalOpen(false)}
-        onSuccess={fetchPersonas}
-        personaToEdit={personaToEdit}
-      />
+      {/* MODAL 1: UI Registro de Copropietarios / Inquilinos (Dev Frontend 1) */}
+      {isModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-[#ede9e1] dark:bg-slate-900 border border-[#cec8bc] dark:border-slate-800 rounded-3xl p-6 sm:p-8 max-w-lg w-full shadow-2xl relative max-h-[90vh] overflow-y-auto">
+            <button
+              type="button"
+              onClick={() => setIsModalOpen(false)}
+              className="absolute top-5 right-5 p-1.5 rounded-lg text-[#7d776f] hover:text-[#262422] dark:hover:text-white hover:bg-[#dfd9ce] dark:hover:bg-slate-800 transition-colors"
+            >
+              <X className="w-5 h-5" />
+            </button>
 
-      <FichaResidenteModal
-        isOpen={isFichaOpen}
-        onClose={() => setIsFichaOpen(false)}
-        personaId={selectedPersonaId}
-        onOcupacionUpdated={fetchPersonas}
-        canEdit={!isReadOnly}
-      />
+            <div className="flex items-center gap-3 mb-5">
+              <div className="w-10 h-10 rounded-xl bg-blue-700 text-white flex items-center justify-center shadow-md shadow-blue-800/20">
+                <UserPlus className="w-5 h-5" />
+              </div>
+              <div>
+                <h2 className="text-lg font-bold text-[#262422] dark:text-white">
+                  Registrar Nuevo Copropietario
+                </h2>
+                <p className="text-xs text-[#66615b] dark:text-slate-400">
+                  Completa los datos del residente y asignación de inmueble.
+                </p>
+              </div>
+            </div>
 
-      <AsignarUnidadModal
-        isOpen={isAsignarOpen}
-        onClose={() => setIsAsignarOpen(false)}
-        persona={personaToAssign}
-        onSuccess={fetchPersonas}
-      />
+            {formSuccess && (
+              <div className="mb-4 p-3 rounded-xl bg-emerald-100 text-emerald-800 border border-emerald-300 text-xs font-semibold flex items-center gap-2">
+                <CheckCircle2 className="w-4 h-4 text-emerald-700" />
+                ¡Copropietario registrado exitosamente!
+              </div>
+            )}
+
+            <form onSubmit={handleCreateCopropietario} className="space-y-4">
+              <div>
+                <label className="block text-xs font-semibold text-[#383430] dark:text-slate-300 mb-1">
+                  Nombre Completo *
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={formData.nombreCompleto}
+                  onChange={(e) => setFormData({ ...formData, nombreCompleto: e.target.value })}
+                  placeholder="Ej. Roberto Arce Balderrama"
+                  className="w-full px-3.5 py-2 bg-[#dfd9ce] dark:bg-slate-950 border border-[#cec8bc] dark:border-slate-700 rounded-xl text-sm text-[#1c1917] dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-600 focus:bg-[#ede9e1]"
+                />
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-[#383430] dark:text-slate-300 mb-1">
+                    C.I. / Documento *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={formData.ci}
+                    onChange={(e) => setFormData({ ...formData, ci: e.target.value })}
+                    placeholder="Ej. 5123980 CBBA"
+                    className="w-full px-3.5 py-2 bg-[#dfd9ce] dark:bg-slate-950 border border-[#cec8bc] dark:border-slate-700 rounded-xl text-sm text-[#1c1917] dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-600 focus:bg-[#ede9e1]"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-[#383430] dark:text-slate-300 mb-1">
+                    Tipo de Ocupante *
+                  </label>
+                  <select
+                    value={formData.tipo}
+                    onChange={(e) => setFormData({ ...formData, tipo: e.target.value as any })}
+                    className="w-full px-3.5 py-2 bg-[#dfd9ce] dark:bg-slate-950 border border-[#cec8bc] dark:border-slate-700 rounded-xl text-sm text-[#1c1917] dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-600 font-medium"
+                  >
+                    <option value="Propietario">Propietario</option>
+                    <option value="Inquilino">Inquilino</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-[#383430] dark:text-slate-300 mb-1">
+                    Número de Departamento *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={formData.deptoNumero}
+                    onChange={(e) => setFormData({ ...formData, deptoNumero: e.target.value })}
+                    placeholder="Ej. 402"
+                    className="w-full px-3.5 py-2 bg-[#dfd9ce] dark:bg-slate-950 border border-[#cec8bc] dark:border-slate-700 rounded-xl text-sm text-[#1c1917] dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-600 focus:bg-[#ede9e1]"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-[#383430] dark:text-slate-300 mb-1">
+                    Piso
+                  </label>
+                  <input
+                    type="number"
+                    min="1"
+                    max="20"
+                    value={formData.piso}
+                    onChange={(e) => setFormData({ ...formData, piso: Number(e.target.value) })}
+                    className="w-full px-3.5 py-2 bg-[#dfd9ce] dark:bg-slate-950 border border-[#cec8bc] dark:border-slate-700 rounded-xl text-sm text-[#1c1917] dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-600 focus:bg-[#ede9e1]"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-[#383430] dark:text-slate-300 mb-1">
+                    Parqueo Asignado
+                  </label>
+                  <input
+                    type="text"
+                    value={formData.parqueo}
+                    onChange={(e) => setFormData({ ...formData, parqueo: e.target.value })}
+                    placeholder="Ej. 10 (se guardará como P-10)"
+                    className="w-full px-3.5 py-2 bg-[#dfd9ce] dark:bg-slate-950 border border-[#cec8bc] dark:border-slate-700 rounded-xl text-sm text-[#1c1917] dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-600 focus:bg-[#ede9e1]"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-[#383430] dark:text-slate-300 mb-1">
+                    Baulera Asignada
+                  </label>
+                  <input
+                    type="text"
+                    value={formData.baulera}
+                    onChange={(e) => setFormData({ ...formData, baulera: e.target.value })}
+                    placeholder="Ej. 08 (se guardará como B-08)"
+                    className="w-full px-3.5 py-2 bg-[#dfd9ce] dark:bg-slate-950 border border-[#cec8bc] dark:border-slate-700 rounded-xl text-sm text-[#1c1917] dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-600 focus:bg-[#ede9e1]"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-[#383430] dark:text-slate-300 mb-1">
+                    Teléfono / WhatsApp *
+                  </label>
+                  <input
+                    type="tel"
+                    required
+                    value={formData.telefono}
+                    onChange={(e) => setFormData({ ...formData, telefono: e.target.value })}
+                    placeholder="+591 7XXXXXXX"
+                    className="w-full px-3.5 py-2 bg-[#dfd9ce] dark:bg-slate-950 border border-[#cec8bc] dark:border-slate-700 rounded-xl text-sm text-[#1c1917] dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-600 focus:bg-[#ede9e1]"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-[#383430] dark:text-slate-300 mb-1">
+                    Correo Electrónico *
+                  </label>
+                  <input
+                    type="email"
+                    required
+                    value={formData.correo}
+                    onChange={(e) => setFormData({ ...formData, correo: e.target.value })}
+                    placeholder="residente@email.com"
+                    className="w-full px-3.5 py-2 bg-[#dfd9ce] dark:bg-slate-950 border border-[#cec8bc] dark:border-slate-700 rounded-xl text-sm text-[#1c1917] dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-600 focus:bg-[#ede9e1]"
+                  />
+                </div>
+              </div>
+
+              <div className="pt-3 flex items-center justify-end gap-3">
+                <button
+                  type="button"
+                  onClick={() => setIsModalOpen(false)}
+                  className="px-4 py-2.5 rounded-xl border border-[#cec8bc] dark:border-slate-700 text-xs font-semibold text-[#5c5750] dark:text-slate-300 hover:bg-[#dfd9ce] dark:hover:bg-slate-800 transition-colors"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  className="px-5 py-2.5 rounded-xl bg-blue-700 hover:bg-blue-600 dark:bg-blue-600 dark:hover:bg-blue-500 text-white text-xs font-bold shadow-md shadow-blue-800/20 active:scale-95 transition-all"
+                >
+                  Guardar Residente
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL 2: Historial de Ocupantes por Departamento (Requisito RFP) */}
+      {selectedResidenteHistory && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-[#ede9e1] dark:bg-slate-900 border border-[#cec8bc] dark:border-slate-800 rounded-3xl p-6 sm:p-8 max-w-lg w-full shadow-2xl relative">
+            <button
+              type="button"
+              onClick={() => setSelectedResidenteHistory(null)}
+              className="absolute top-5 right-5 p-1.5 rounded-lg text-[#7d776f] hover:text-[#262422] dark:hover:text-white hover:bg-[#dfd9ce] dark:hover:bg-slate-800 transition-colors"
+            >
+              <X className="w-5 h-5" />
+            </button>
+
+            <div className="flex items-center gap-3 mb-5">
+              <div className="w-10 h-10 rounded-xl bg-purple-700 text-white flex items-center justify-center shadow-md shadow-purple-800/20">
+                <History className="w-5 h-5" />
+              </div>
+              <div>
+                <h2 className="text-lg font-bold text-[#262422] dark:text-white">
+                  Historial de Ocupación · Depto {selectedResidenteHistory.deptoNumero}
+                </h2>
+                <p className="text-xs text-[#66615b] dark:text-slate-400">
+                  Trazabilidad de ocupantes y arrendatarios de la unidad.
+                </p>
+              </div>
+            </div>
+
+            <div className="space-y-3">
+              {selectedResidenteHistory.historialOcupacion?.map((item, idx) => (
+                <div
+                  key={idx}
+                  className="p-3.5 rounded-2xl bg-[#dfd9ce] dark:bg-slate-950 border border-[#cec8bc] dark:border-slate-800 flex items-start justify-between gap-3"
+                >
+                  <div>
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className="font-bold text-sm text-[#262422] dark:text-white">
+                        {item.ocupante}
+                      </span>
+                      <span className="text-[10px] px-2 py-0.5 rounded bg-blue-100 dark:bg-blue-950 text-blue-900 dark:text-blue-300 font-semibold">
+                        {item.tipo}
+                      </span>
+                    </div>
+                    {item.motivoSalida && (
+                      <p className="text-xs text-[#66615b] dark:text-slate-400">
+                        Motivo salida: {item.motivoSalida}
+                      </p>
+                    )}
+                  </div>
+                  <span className="text-xs font-semibold text-[#5c5750] dark:text-slate-400 shrink-0">
+                    {item.periodo}
+                  </span>
+                </div>
+              ))}
+            </div>
+
+            <div className="mt-6 pt-4 border-t border-[#cec8bc] dark:border-slate-800 flex justify-end">
+              <button
+                type="button"
+                onClick={() => setSelectedResidenteHistory(null)}
+                className="px-4 py-2 rounded-xl bg-[#dfd9ce] dark:bg-slate-800 text-xs font-semibold text-[#383430] dark:text-white hover:bg-[#d5cebf] transition-colors"
+              >
+                Cerrar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
