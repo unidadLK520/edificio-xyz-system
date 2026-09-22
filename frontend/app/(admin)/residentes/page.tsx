@@ -2,9 +2,9 @@
 // Módulo de Administración de Copropietarios: Registro y Lista de Residentes
 // Entregables: Dev Frontend 1 (UI Registro) y Dev Frontend 2 (UI Lista)
 
-'use client';
+'use client'
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo } from 'react'
 import {
   Users,
   UserPlus,
@@ -25,28 +25,28 @@ import {
   Calendar,
   X,
   FileText,
-  BadgeCheck,
-} from 'lucide-react';
+  BadgeCheck
+} from 'lucide-react'
 
 interface Copropietario {
-  id: number;
-  nombreCompleto: string;
-  ci: string;
-  tipo: 'Propietario' | 'Inquilino';
-  deptoNumero: string;
-  piso: number;
-  parqueo?: string;
-  baulera?: string;
-  telefono: string;
-  correo: string;
-  fechaIngreso: string;
-  estado: 'Activo' | 'Inactivo';
+  id: number
+  nombreCompleto: string
+  ci: string
+  tipo: 'Propietario' | 'Inquilino'
+  deptoNumero: string
+  piso: number
+  parqueo?: string
+  baulera?: string
+  telefono: string
+  correo: string
+  fechaIngreso: string
+  estado: 'Activo' | 'Inactivo'
   historialOcupacion?: Array<{
-    periodo: string;
-    ocupante: string;
-    tipo: string;
-    motivoSalida?: string;
-  }>;
+    periodo: string
+    ocupante: string
+    tipo: string
+    motivoSalida?: string
+  }>
 }
 
 const RESIDENTES_INICIALES: Copropietario[] = [
@@ -65,8 +65,13 @@ const RESIDENTES_INICIALES: Copropietario[] = [
     estado: 'Activo',
     historialOcupacion: [
       { periodo: '2023 - Presente', ocupante: 'Carlos Mendoza Rojas', tipo: 'Propietario' },
-      { periodo: '2020 - 2022', ocupante: 'Juan Pérez García', tipo: 'Inquilino', motivoSalida: 'Fin de contrato' },
-    ],
+      {
+        periodo: '2020 - 2022',
+        ocupante: 'Juan Pérez García',
+        tipo: 'Inquilino',
+        motivoSalida: 'Fin de contrato'
+      }
+    ]
   },
   {
     id: 2,
@@ -83,8 +88,13 @@ const RESIDENTES_INICIALES: Copropietario[] = [
     estado: 'Activo',
     historialOcupacion: [
       { periodo: '2024 - Presente', ocupante: 'Mariana Flores Soliz', tipo: 'Inquilino' },
-      { periodo: '2021 - 2024', ocupante: 'Roberto Gómez', tipo: 'Inquilino', motivoSalida: 'Traslado laboral' },
-    ],
+      {
+        periodo: '2021 - 2024',
+        ocupante: 'Roberto Gómez',
+        tipo: 'Inquilino',
+        motivoSalida: 'Traslado laboral'
+      }
+    ]
   },
   {
     id: 3,
@@ -100,8 +110,8 @@ const RESIDENTES_INICIALES: Copropietario[] = [
     fechaIngreso: '2022-06-10',
     estado: 'Activo',
     historialOcupacion: [
-      { periodo: '2022 - Presente', ocupante: 'Alejandro Vargas Morales', tipo: 'Propietario' },
-    ],
+      { periodo: '2022 - Presente', ocupante: 'Alejandro Vargas Morales', tipo: 'Propietario' }
+    ]
   },
   {
     id: 4,
@@ -117,8 +127,13 @@ const RESIDENTES_INICIALES: Copropietario[] = [
     fechaIngreso: '2021-11-20',
     estado: 'Inactivo',
     historialOcupacion: [
-      { periodo: '2021 - 2025', ocupante: 'Valeria Torrico Camacho', tipo: 'Propietario', motivoSalida: 'Puesto en alquiler' },
-    ],
+      {
+        periodo: '2021 - 2025',
+        ocupante: 'Valeria Torrico Camacho',
+        tipo: 'Propietario',
+        motivoSalida: 'Puesto en alquiler'
+      }
+    ]
   },
   {
     id: 5,
@@ -134,20 +149,22 @@ const RESIDENTES_INICIALES: Copropietario[] = [
     fechaIngreso: '2024-08-01',
     estado: 'Activo',
     historialOcupacion: [
-      { periodo: '2024 - Presente', ocupante: 'Gabriel Romero Soria', tipo: 'Inquilino' },
-    ],
-  },
-];
+      { periodo: '2024 - Presente', ocupante: 'Gabriel Romero Soria', tipo: 'Inquilino' }
+    ]
+  }
+]
 
 export default function ResidentesPage() {
-  const [residentes, setResidentes] = useState<Copropietario[]>(RESIDENTES_INICIALES);
-  const [searchTerm, setSearchTerm] = useState('');
-  const [filtroTipo, setFiltroTipo] = useState<'Todos' | 'Propietario' | 'Inquilino'>('Todos');
-  const [filtroEstado, setFiltroEstado] = useState<'Todos' | 'Activo' | 'Inactivo'>('Todos');
+  const [residentes, setResidentes] = useState<Copropietario[]>(RESIDENTES_INICIALES)
+  const [searchTerm, setSearchTerm] = useState('')
+  const [filtroTipo, setFiltroTipo] = useState<'Todos' | 'Propietario' | 'Inquilino'>('Todos')
+  const [filtroEstado, setFiltroEstado] = useState<'Todos' | 'Activo' | 'Inactivo'>('Todos')
 
   // Modales
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [selectedResidenteHistory, setSelectedResidenteHistory] = useState<Copropietario | null>(null);
+  const [isModalOpen, setIsModalOpen] = useState(false)
+  const [selectedResidenteHistory, setSelectedResidenteHistory] = useState<Copropietario | null>(
+    null
+  )
 
   // Formulario de nuevo copropietario
   const [formData, setFormData] = useState({
@@ -160,10 +177,10 @@ export default function ResidentesPage() {
     baulera: '',
     telefono: '',
     correo: '',
-    fechaIngreso: new Date().toISOString().split('T')[0],
-  });
+    fechaIngreso: new Date().toISOString().split('T')[0]
+  })
 
-  const [formSuccess, setFormSuccess] = useState(false);
+  const [formSuccess, setFormSuccess] = useState(false)
 
   // Filtrado reactivo
   const residentesFiltrados = useMemo(() => {
@@ -173,23 +190,23 @@ export default function ResidentesPage() {
         r.ci.toLowerCase().includes(searchTerm.toLowerCase()) ||
         r.deptoNumero.includes(searchTerm) ||
         r.telefono.includes(searchTerm) ||
-        r.correo.toLowerCase().includes(searchTerm.toLowerCase());
+        r.correo.toLowerCase().includes(searchTerm.toLowerCase())
 
-      const matchTipo = filtroTipo === 'Todos' || r.tipo === filtroTipo;
-      const matchEstado = filtroEstado === 'Todos' || r.estado === filtroEstado;
+      const matchTipo = filtroTipo === 'Todos' || r.tipo === filtroTipo
+      const matchEstado = filtroEstado === 'Todos' || r.estado === filtroEstado
 
-      return matchSearch && matchTipo && matchEstado;
-    });
-  }, [residentes, searchTerm, filtroTipo, filtroEstado]);
+      return matchSearch && matchTipo && matchEstado
+    })
+  }, [residentes, searchTerm, filtroTipo, filtroEstado])
 
   // Contadores métricos
-  const totalResidentes = residentes.length;
-  const totalPropietarios = residentes.filter((r) => r.tipo === 'Propietario').length;
-  const totalInquilinos = residentes.filter((r) => r.tipo === 'Inquilino').length;
-  const totalActivos = residentes.filter((r) => r.estado === 'Activo').length;
+  const totalResidentes = residentes.length
+  const totalPropietarios = residentes.filter((r) => r.tipo === 'Propietario').length
+  const totalInquilinos = residentes.filter((r) => r.tipo === 'Inquilino').length
+  const totalActivos = residentes.filter((r) => r.estado === 'Activo').length
 
   const handleCreateCopropietario = (e: React.FormEvent) => {
-    e.preventDefault();
+    e.preventDefault()
     const nuevo: Copropietario = {
       id: Date.now(),
       nombreCompleto: formData.nombreCompleto,
@@ -207,16 +224,16 @@ export default function ResidentesPage() {
         {
           periodo: `${new Date().getFullYear()} - Presente`,
           ocupante: formData.nombreCompleto,
-          tipo: formData.tipo,
-        },
-      ],
-    };
+          tipo: formData.tipo
+        }
+      ]
+    }
 
-    setResidentes([nuevo, ...residentes]);
-    setFormSuccess(true);
+    setResidentes([nuevo, ...residentes])
+    setFormSuccess(true)
     setTimeout(() => {
-      setFormSuccess(false);
-      setIsModalOpen(false);
+      setFormSuccess(false)
+      setIsModalOpen(false)
       setFormData({
         nombreCompleto: '',
         ci: '',
@@ -227,10 +244,10 @@ export default function ResidentesPage() {
         baulera: '',
         telefono: '',
         correo: '',
-        fechaIngreso: new Date().toISOString().split('T')[0],
-      });
-    }, 800);
-  };
+        fechaIngreso: new Date().toISOString().split('T')[0]
+      })
+    }, 800)
+  }
 
   return (
     <div className="p-4 sm:p-8 space-y-6 max-w-7xl mx-auto">
@@ -263,7 +280,9 @@ export default function ResidentesPage() {
             <Users className="w-4 h-4 text-blue-700 dark:text-blue-400" />
           </div>
           <div className="text-2xl font-bold text-[#262422] dark:text-white">{totalResidentes}</div>
-          <span className="text-[11px] text-[#7d776f] dark:text-slate-500">{totalActivos} activos en el edificio</span>
+          <span className="text-[11px] text-[#7d776f] dark:text-slate-500">
+            {totalActivos} activos en el edificio
+          </span>
         </div>
 
         <div className="p-4 rounded-2xl bg-[#ede9e1] dark:bg-slate-900 border border-[#cec8bc] dark:border-slate-800 shadow-sm">
@@ -271,8 +290,12 @@ export default function ResidentesPage() {
             <span>Propietarios</span>
             <ShieldCheck className="w-4 h-4 text-indigo-700 dark:text-indigo-400" />
           </div>
-          <div className="text-2xl font-bold text-indigo-900 dark:text-indigo-300">{totalPropietarios}</div>
-          <span className="text-[11px] text-[#7d776f] dark:text-slate-500">Titulares de unidades</span>
+          <div className="text-2xl font-bold text-indigo-900 dark:text-indigo-300">
+            {totalPropietarios}
+          </div>
+          <span className="text-[11px] text-[#7d776f] dark:text-slate-500">
+            Titulares de unidades
+          </span>
         </div>
 
         <div className="p-4 rounded-2xl bg-[#ede9e1] dark:bg-slate-900 border border-[#cec8bc] dark:border-slate-800 shadow-sm">
@@ -280,8 +303,12 @@ export default function ResidentesPage() {
             <span>Inquilinos</span>
             <Home className="w-4 h-4 text-emerald-700 dark:text-emerald-400" />
           </div>
-          <div className="text-2xl font-bold text-emerald-800 dark:text-emerald-400">{totalInquilinos}</div>
-          <span className="text-[11px] text-[#7d776f] dark:text-slate-500">Arrendatarios vigentes</span>
+          <div className="text-2xl font-bold text-emerald-800 dark:text-emerald-400">
+            {totalInquilinos}
+          </div>
+          <span className="text-[11px] text-[#7d776f] dark:text-slate-500">
+            Arrendatarios vigentes
+          </span>
         </div>
 
         <div className="p-4 rounded-2xl bg-[#ede9e1] dark:bg-slate-900 border border-[#cec8bc] dark:border-slate-800 shadow-sm">
@@ -289,8 +316,12 @@ export default function ResidentesPage() {
             <span>Unidades Asignadas</span>
             <Building2 className="w-4 h-4 text-amber-700 dark:text-amber-400" />
           </div>
-          <div className="text-2xl font-bold text-amber-800 dark:text-amber-400">{totalActivos} / 24</div>
-          <span className="text-[11px] text-[#7d776f] dark:text-slate-500">Departamentos ocupados</span>
+          <div className="text-2xl font-bold text-amber-800 dark:text-amber-400">
+            {totalActivos} / 24
+          </div>
+          <span className="text-[11px] text-[#7d776f] dark:text-slate-500">
+            Departamentos ocupados
+          </span>
         </div>
       </div>
 
@@ -355,7 +386,10 @@ export default function ResidentesPage() {
             <tbody className="divide-y divide-[#cec8bc]/70 dark:divide-slate-800">
               {residentesFiltrados.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="py-12 text-center text-[#7d776f] dark:text-slate-500 text-sm">
+                  <td
+                    colSpan={7}
+                    className="py-12 text-center text-[#7d776f] dark:text-slate-500 text-sm"
+                  >
                     No se encontraron copropietarios con los filtros aplicados.
                   </td>
                 </tr>
@@ -723,5 +757,5 @@ export default function ResidentesPage() {
         </div>
       )}
     </div>
-  );
+  )
 }

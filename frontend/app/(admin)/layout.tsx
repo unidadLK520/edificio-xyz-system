@@ -1,50 +1,40 @@
-'use client';
+'use client'
 
-import React, { useState } from 'react';
-import Link from 'next/link';
-import Image from 'next/image';
-import { usePathname } from 'next/navigation';
-import ThemeToggle from '@/components/ThemeToggle';
-import edificioBg from '@/public/images/edificio_bg.jpg';
-import {
-
-  Building2,
-  Receipt,
-  Users,
-  Wallet,
-  Users2,
-  UserCog,
-  LogOut,
-  Menu,
-  X,
-} from 'lucide-react';
+import React, { useState } from 'react'
+import Link from 'next/link'
+import Image from 'next/image'
+import { usePathname } from 'next/navigation'
+import ThemeToggle from '@/components/ThemeToggle'
+import edificioBg from '@/public/images/edificio_bg.jpg'
+import { Building2, Receipt, Users, Wallet, Users2, UserCog, LogOut, Menu, X } from 'lucide-react'
 
 const ADMIN_LINKS = [
   { href: '/usuarios', label: 'Gestión de Usuarios', icon: UserCog },
   { href: '/residentes', label: 'Residentes', icon: Users },
+  { href: '/departamentos', label: 'Departamentos', icon: Building2 },
   { href: '/expensas', label: 'Expensas', icon: Receipt },
   { href: '/egresos', label: 'Egresos', icon: Wallet },
-  { href: '/personal', label: 'Personal', icon: Users2 },
-];
+  { href: '/personal', label: 'Personal', icon: Users2 }
+]
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
-  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
-  const pathname = usePathname();
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
+  const pathname = usePathname()
 
   const handleLogout = async () => {
     try {
-      await fetch('/api/auth/logout', { method: 'POST' });
+      await fetch('/api/auth/logout', { method: 'POST' })
     } catch {
       // Continuar con limpieza local
     }
     if (typeof window !== 'undefined') {
-      document.cookie = 'auth_token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT';
-      localStorage.removeItem('auth_token');
-      localStorage.removeItem('user_role');
-      localStorage.removeItem('user_profile');
+      document.cookie = 'auth_token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT'
+      localStorage.removeItem('auth_token')
+      localStorage.removeItem('user_role')
+      localStorage.removeItem('user_profile')
     }
-    window.location.href = '/login';
-  };
+    window.location.href = '/login'
+  }
 
   return (
     <div className="flex h-screen bg-[#e6e2da] dark:bg-slate-950 text-[#262422] dark:text-slate-100 font-sans overflow-hidden transition-colors duration-300 selection:bg-blue-600 selection:text-white">
@@ -86,8 +76,8 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
 
         <nav className="flex-1 p-3 space-y-1.5 overflow-y-auto">
           {ADMIN_LINKS.map((link) => {
-            const IconComp = link.icon;
-            const isActive = pathname === link.href || pathname.startsWith(link.href + '/');
+            const IconComp = link.icon
+            const isActive = pathname === link.href || pathname.startsWith(link.href + '/')
             return (
               <Link
                 key={link.href}
@@ -99,10 +89,12 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                     : 'text-[#5c5750] hover:text-[#262422] hover:bg-[#e4dfd5] dark:text-slate-400 dark:hover:text-white dark:hover:bg-slate-800/60'
                 }`}
               >
-                <IconComp className={`w-4 h-4 ${isActive ? 'text-blue-700 dark:text-indigo-400' : 'text-[#7d776f]'}`} />
+                <IconComp
+                  className={`w-4 h-4 ${isActive ? 'text-blue-700 dark:text-indigo-400' : 'text-[#7d776f]'}`}
+                />
                 <span>{link.label}</span>
               </Link>
-            );
+            )
           })}
         </nav>
 
@@ -148,11 +140,9 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
               className="object-cover object-center"
             />
           </div>
-          <div className="relative z-10">
-            {children}
-          </div>
+          <div className="relative z-10">{children}</div>
         </main>
       </div>
     </div>
-  );
+  )
 }
