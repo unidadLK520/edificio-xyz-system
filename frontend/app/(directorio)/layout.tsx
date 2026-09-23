@@ -1,21 +1,21 @@
-'use client'
+'use client';
 
-import React, { useState } from 'react'
-import Link from 'next/link'
-import Image from 'next/image'
-import { usePathname } from 'next/navigation'
-import ThemeToggle from '@/components/ThemeToggle'
-import edificioBg from '@/public/images/edificio_bg.jpg'
-import { Building2, FileBarChart, ShieldAlert, LogOut, Menu, X, Briefcase } from 'lucide-react'
+import React, { useState } from 'react';
+import Link from 'next/link';
+import Image from 'next/image';
+import { usePathname } from 'next/navigation';
+import ThemeToggle from '@/components/ThemeToggle';
+import edificioBg from '@/public/images/edificio_bg.jpg';
+import { Building2, FileBarChart, ShieldAlert, LogOut, Menu, X, Briefcase } from 'lucide-react';
 
 const DIRECTORIO_LINKS = [
   { href: '/reportes', label: 'Reportes y Finanzas', icon: FileBarChart },
-  { href: '/auditoria', label: 'Auditoría y Trazabilidad', icon: ShieldAlert }
-]
+  { href: '/auditoria', label: 'Auditoría y Trazabilidad', icon: ShieldAlert },
+];
 
 export default function DirectorioLayout({ children }: { children: React.ReactNode }) {
-  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
-  const pathname = usePathname()
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const pathname = usePathname();
 
   return (
     <div className="flex h-screen bg-[#e6e2da] dark:bg-slate-950 text-[#262422] dark:text-slate-100 font-sans overflow-hidden transition-colors duration-300 selection:bg-blue-600 selection:text-white">
@@ -57,8 +57,8 @@ export default function DirectorioLayout({ children }: { children: React.ReactNo
 
         <nav className="flex-1 p-3 space-y-1.5 overflow-y-auto">
           {DIRECTORIO_LINKS.map((link) => {
-            const IconComp = link.icon
-            const isActive = pathname === link.href || pathname.startsWith(link.href + '/')
+            const IconComp = link.icon;
+            const isActive = pathname === link.href || pathname.startsWith(link.href + '/');
             return (
               <Link
                 key={link.href}
@@ -75,7 +75,7 @@ export default function DirectorioLayout({ children }: { children: React.ReactNo
                 />
                 <span>{link.label}</span>
               </Link>
-            )
+            );
           })}
         </nav>
 
@@ -123,5 +123,5 @@ export default function DirectorioLayout({ children }: { children: React.ReactNo
         </main>
       </div>
     </div>
-  )
+  );
 }
