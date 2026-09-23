@@ -112,23 +112,31 @@ edificio-xyz-system/
 │   ├── src/
 │   │   ├── index.ts                 # Entry point del servidor Express
 │   │   ├── config.ts                # Configuración y variables de entorno
-│   │   ├── middlewares/             # Middlewares de autenticación JWT y manejo de errores
-│   │   └── routes/                  # Routers por dominio (auth, expensas, dptos, etc.)
+│   │   ├── middlewares/             # Middlewares de autenticación JWT, errores y RBAC
+│   │   ├── modules/                 # Módulos por dominio de negocio
+│   │   │   ├── personas/            # Módulo de administración de personas y copropietarios (HU02)
+│   │   │   ├── usuarios/            # Gestión y registro de usuarios por administrador
+│   │   │   ├── auditoria/           # Trazabilidad y registros de auditoría
+│   │   │   └── auth/                # Login, sesiones y renovación de tokens
+│   │   └── routes/                  # Enrutador centralizado de la API REST (/api/v1)
+│   ├── tests/                       # Pruebas unitarias y HTTP E2E automatizadas
 │   ├── .env                         # Variables de entorno locales
 │   ├── package.json
 │   └── tsconfig.json
 │
 ├── frontend/                        # Frontend Next.js 15 + React 19 + Tailwind CSS
 │   ├── app/
+│   │   ├── (admin)/                 # Rutas administrativas
+│   │   │   ├── residentes/          # Módulo de administración de copropietarios e inquilinos (HU02)
+│   │   │   └── usuarios/            # Registro de usuarios por administrador
+│   │   ├── (copropietario)/         # Portal del residente / copropietario
+│   │   ├── (directorio)/            # Portal del directorio y auditoría del sistema
+│   │   │   └── auditoria/           # Log de auditoría y trazabilidad
 │   │   ├── (auth)/login/            # Autenticación y Login
-│   │   ├── (dashboard)/             # Portal administrativo y módulos
-│   │   │   ├── expensas/            # Emisiones y cobros de expensas
-│   │   │   ├── departamentos/       # Departamentos y copropietarios
-│   │   │   ├── movimientos/         # Caja y finanzas
-│   │   │   ├── comunicados/         # Tablón digital de avisos
-│   │   │   └── personal/            # Empleados y sueldos
-│   │   └── api/                     # Endpoints Next.js (auth, health)
-│   ├── lib/                         # Helpers, JWT (jose) y utilidades
+│   │   └── api/                     # Proxy de API Next.js e endpoints de autenticación
+│   ├── components/                  # Componentes reutilizables de UI
+│   │   └── residentes/              # Modales de residentes (ResidentesModal, FichaResidenteModal, AsignarUnidadModal)
+│   ├── lib/                         # Helpers, JWT (jose) y utilidades de autenticación
 │   ├── .env                         # Variables de entorno locales
 │   ├── package.json
 │   └── next.config.ts
@@ -136,19 +144,25 @@ edificio-xyz-system/
 ├── packages/
 │   ├── database/                    # Prisma ORM + Esquema + Seeders + Singleton
 │   │   ├── prisma/
-│   │   │   ├── schema.prisma        # Esquema de datos PostgreSQL multi-schema
+│   │   │   ├── schema.prisma        # Esquema de datos PostgreSQL multi-schema (`edificio`, `public`)
 │   │   │   └── seed.ts              # Población completa de datos demo
-│   │   └── src/index.ts             # Instancia exportable de PrismaClient
+│   │   └── src/index.ts             # Instancia exportable del cliente Prisma
 │   │
-│   └── typescript-config/           # Tsconfigs compartidos en el monorepo
+│   └── typescript-config/           # TSConfigs compartidos en el monorepo
 │
 ├── database/
-│   └── migrations/                  # Script SQL inicial de base de datos
-├── docker-compose.yml               # Orquestación de PostgreSQL
+│   └── migrations/                  # Scripts SQL de estructura inicial
+├── .github/
+│   └── workflows/
+│       └── ci.yml                   # Pipeline CI de GitHub Actions (build, lint, db:generate)
+├── .npmrc                           # Autorizaciones de build-scripts para pnpm v10
+├── vercel.json                      # Configuración de despliegue en Vercel
+├── docker-compose.yml               # Orquestación de PostgreSQL local
 ├── pnpm-workspace.yaml              # Definición de workspaces de pnpm (backend, frontend, packages/*)
-├── turbo.json                       # Configuración de Turborepo
-└── package.json                     # Scripts y dependencias raíz
+├── turbo.json                       # Pipelines y caché de Turborepo
+└── package.json                     # Scripts globales y dependencias raíz
 ```
+
 
 ---
 

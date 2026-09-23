@@ -1,3 +1,4 @@
+// frontend/app/(directorio)/layout.tsx
 'use client';
 
 import React, { useState } from 'react';

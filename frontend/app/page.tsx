@@ -1,3 +1,4 @@
+// frontend/app/page.tsx
 import { redirect } from 'next/navigation';
 import { getSession } from '@/lib/auth';
 
