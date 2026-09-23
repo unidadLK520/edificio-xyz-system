@@ -140,14 +140,6 @@ export default function ResidentesPage() {
     p.ocupaciones?.some((o: any) => o.tipoOcupante === 'Inquilino')
   ).length
 
-  // Cálculo de estadísticas locales rápidas
-  const totalPropietarios = personas.filter(
-    (p) => (p.departamentosPropios && p.departamentosPropios.length > 0) || p.ocupaciones?.some((o: any) => o.tipoOcupante === 'Propietario')
-  ).length;
-
-  const totalInquilinos = personas.filter(
-    (p) => p.ocupaciones?.some((o: any) => o.tipoOcupante === 'Inquilino')
-  ).length;
 
   return (
     <div className="p-4 sm:p-6 lg:p-8 space-y-6 max-w-7xl mx-auto">
