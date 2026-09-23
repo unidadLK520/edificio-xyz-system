@@ -1,19 +1,19 @@
 // frontend/app/layout.tsx
 // Layout raíz de la aplicación web
 
-import type { Metadata } from 'next';
-import './globals.css';
+import type { Metadata } from 'next'
+import './globals.css'
 
 export const metadata: Metadata = {
   title: 'Edificio XYZ - Sistema de Administración Integral',
   description:
-    'Plataforma integral de gestión de copropietarios, expensas, finanzas y mantenimiento para el Edificio XYZ.',
-};
+    'Plataforma integral de gestión de copropietarios, expensas, finanzas y mantenimiento para el Edificio XYZ.'
+}
 
 export default function RootLayout({
-  children,
+  children
 }: Readonly<{
-  children: React.ReactNode;
+  children: React.ReactNode
 }>) {
   return (
     <html lang="es">
@@ -21,5 +21,5 @@ export default function RootLayout({
         {children}
       </body>
     </html>
-  );
+  )
 }

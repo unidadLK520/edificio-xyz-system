@@ -2,9 +2,10 @@
 // Módulo de Auditoría del Sistema (HU 1.3 - Requisito 10 del RFP)
 // Registro de operaciones, modificaciones, historial de usuarios, fecha/hora y detalle de eventos.
 
-'use client';
+'use client'
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react'
+
 import {
   ShieldAlert,
   Search,
@@ -25,25 +26,25 @@ import {
   X,
   ArrowRight,
   Shield,
-  Download,
-} from 'lucide-react';
+  Download
+} from 'lucide-react'
 
 interface LogAuditoria {
-  id: string;
-  fechaHora: string;
-  usuario: string;
-  correo: string;
-  rol: string;
-  modulo: 'Copropietarios' | 'Expensas' | 'Finanzas' | 'Seguridad/Roles' | 'Personal';
-  accion: 'CREACION' | 'MODIFICACION' | 'ELIMINACION' | 'LOGIN' | 'LOGOUT';
-  severidad: 'INFO' | 'ADVERTENCIA' | 'CRITICO';
-  descripcion: string;
-  ip: string;
+  id: string
+  fechaHora: string
+  usuario: string
+  correo: string
+  rol: string
+  modulo: 'Copropietarios' | 'Expensas' | 'Finanzas' | 'Seguridad/Roles' | 'Personal'
+  accion: 'CREACION' | 'MODIFICACION' | 'ELIMINACION' | 'LOGIN' | 'LOGOUT'
+  severidad: 'INFO' | 'ADVERTENCIA' | 'CRITICO'
+  descripcion: string
+  ip: string
   detallesCambio?: {
-    entidad: string;
-    idRegistro: string | number;
-    camposModificados?: Array<{ campo: string; antes: string; despues: string }>;
-  };
+    entidad: string
+    idRegistro: string | number
+    camposModificados?: Array<{ campo: string; antes: string; despues: string }>
+  }
 }
 
 const LOGS_INICIALES: LogAuditoria[] = [
@@ -65,9 +66,9 @@ const LOGS_INICIALES: LogAuditoria[] = [
         { campo: 'Nombre', antes: '— (Nuevo)', despues: 'Gabriel Romero Soria' },
         { campo: 'Departamento', antes: '—', despues: 'Dpto 301 (Piso 3)' },
         { campo: 'Parqueo', antes: '—', despues: 'P-08' },
-        { campo: 'Estado', antes: '—', despues: 'Activo' },
-      ],
-    },
+        { campo: 'Estado', antes: '—', despues: 'Activo' }
+      ]
+    }
   },
   {
     id: 'AUD-9020',
@@ -86,9 +87,9 @@ const LOGS_INICIALES: LogAuditoria[] = [
       camposModificados: [
         { campo: 'Estado Conciliación', antes: 'Pendiente', despues: 'Aprobado' },
         { campo: 'Monto Aprobado', antes: 'Bs. 0.00', despues: 'Bs. 3,500.00' },
-        { campo: 'Aprobado Por', antes: 'Ninguno', despues: 'Directorio Finanzas' },
-      ],
-    },
+        { campo: 'Aprobado Por', antes: 'Ninguno', despues: 'Directorio Finanzas' }
+      ]
+    }
   },
   {
     id: 'AUD-9019',
@@ -106,9 +107,9 @@ const LOGS_INICIALES: LogAuditoria[] = [
       idRegistro: 'EXP-2026-09',
       camposModificados: [
         { campo: 'Total Unidades Emitidas', antes: '0', despues: '24 Departamentos' },
-        { campo: 'Total Facturación', antes: 'Bs. 0.00', despues: 'Bs. 12,480.00' },
-      ],
-    },
+        { campo: 'Total Facturación', antes: 'Bs. 0.00', despues: 'Bs. 12,480.00' }
+      ]
+    }
   },
   {
     id: 'AUD-9018',
@@ -120,7 +121,7 @@ const LOGS_INICIALES: LogAuditoria[] = [
     accion: 'LOGIN',
     severidad: 'INFO',
     descripcion: 'Inicio de sesión exitoso mediante credenciales JWT.',
-    ip: '192.168.1.45 (Cochabamba, BO)',
+    ip: '192.168.1.45 (Cochabamba, BO)'
   },
   {
     id: 'AUD-9017',
@@ -132,7 +133,7 @@ const LOGS_INICIALES: LogAuditoria[] = [
     accion: 'LOGIN',
     severidad: 'CRITICO',
     descripcion: 'Intento fallido de autenticación. Contraseña incorrecta rechazada.',
-    ip: '185.220.101.5 (IP Bloqueada preventivamente)',
+    ip: '185.220.101.5 (IP Bloqueada preventivamente)'
   },
   {
     id: 'AUD-9016',
@@ -151,19 +152,40 @@ const LOGS_INICIALES: LogAuditoria[] = [
       camposModificados: [
         { campo: 'Estado Residencia', antes: 'Activo', despues: 'Inactivo / Desvinculado' },
         { campo: 'Fecha Salida', antes: '—', despues: '2026-09-18' },
-        { campo: 'Motivo', antes: '—', despues: 'Puesto en alquiler' },
-      ],
-    },
-  },
-];
+        { campo: 'Motivo', antes: '—', despues: 'Puesto en alquiler' }
+      ]
+    }
+  }
+]
 
 export default function AuditoriaPage() {
-  const [logs] = useState<LogAuditoria[]>(LOGS_INICIALES);
-  const [searchTerm, setSearchTerm] = useState('');
-  const [filtroModulo, setFiltroModulo] = useState<string>('Todos');
-  const [filtroAccion, setFiltroAccion] = useState<string>('Todos');
-  const [filtroSeveridad, setFiltroSeveridad] = useState<string>('Todos');
-  const [selectedLog, setSelectedLog] = useState<LogAuditoria | null>(null);
+  const [logs, setLogs] = useState<LogAuditoria[]>(LOGS_INICIALES)
+  const [loading, setLoading] = useState(false)
+  const [searchTerm, setSearchTerm] = useState('')
+  const [filtroModulo, setFiltroModulo] = useState<string>('Todos')
+  const [filtroAccion, setFiltroAccion] = useState<string>('Todos')
+  const [filtroSeveridad, setFiltroSeveridad] = useState<string>('Todos')
+  const [selectedLog, setSelectedLog] = useState<LogAuditoria | null>(null)
+
+  useEffect(() => {
+    async function fetchLogs() {
+      try {
+        setLoading(true)
+        const res = await fetch('/api/v1/auditoria')
+        if (res.ok) {
+          const data = await res.json()
+          if (Array.isArray(data) && data.length > 0) {
+            setLogs(data)
+          }
+        }
+      } catch (err) {
+        console.warn('Usando logs iniciales de auditoría:', err)
+      } finally {
+        setLoading(false)
+      }
+    }
+    fetchLogs()
+  }, [])
 
   // Filtrado reactivo de logs
   const logsFiltrados = useMemo(() => {
@@ -173,21 +195,23 @@ export default function AuditoriaPage() {
         log.usuario.toLowerCase().includes(searchTerm.toLowerCase()) ||
         log.correo.toLowerCase().includes(searchTerm.toLowerCase()) ||
         log.descripcion.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        log.ip.toLowerCase().includes(searchTerm.toLowerCase());
+        log.ip.toLowerCase().includes(searchTerm.toLowerCase())
 
-      const matchModulo = filtroModulo === 'Todos' || log.modulo === filtroModulo;
-      const matchAccion = filtroAccion === 'Todos' || log.accion === filtroAccion;
-      const matchSeveridad = filtroSeveridad === 'Todos' || log.severidad === filtroSeveridad;
+      const matchModulo = filtroModulo === 'Todos' || log.modulo === filtroModulo
+      const matchAccion = filtroAccion === 'Todos' || log.accion === filtroAccion
+      const matchSeveridad = filtroSeveridad === 'Todos' || log.severidad === filtroSeveridad
 
-      return matchSearch && matchModulo && matchAccion && matchSeveridad;
-    });
-  }, [logs, searchTerm, filtroModulo, filtroAccion, filtroSeveridad]);
+      return matchSearch && matchModulo && matchAccion && matchSeveridad
+    })
+  }, [logs, searchTerm, filtroModulo, filtroAccion, filtroSeveridad])
 
   // Contadores
-  const totalEventos = logs.length;
-  const totalCriticos = logs.filter((l) => l.severidad === 'CRITICO').length;
-  const totalModificaciones = logs.filter((l) => l.accion === 'MODIFICACION' || l.accion === 'ELIMINACION').length;
-  const totalCreaciones = logs.filter((l) => l.accion === 'CREACION').length;
+  const totalEventos = logs.length
+  const totalCriticos = logs.filter((l) => l.severidad === 'CRITICO').length
+  const totalModificaciones = logs.filter(
+    (l) => l.accion === 'MODIFICACION' || l.accion === 'ELIMINACION'
+  ).length
+  const totalCreaciones = logs.filter((l) => l.accion === 'CREACION').length
 
   return (
     <div className="p-4 sm:p-8 space-y-6 max-w-7xl mx-auto">
@@ -198,14 +222,17 @@ export default function AuditoriaPage() {
             Auditoría y Registro de Operaciones
           </h1>
           <p className="text-xs sm:text-sm text-[#66615b] dark:text-slate-400 mt-1">
-            Supervisión integral de todas las modificaciones, accesos y operaciones realizadas en el sistema.
+            Supervisión integral de todas las modificaciones, accesos y operaciones realizadas en el
+            sistema.
           </p>
         </div>
 
         <div className="flex items-center gap-2">
           <button
             type="button"
-            onClick={() => alert('Generando exportación de logs de auditoría en formato PDF / Excel...')}
+            onClick={() =>
+              alert('Generando exportación de logs de auditoría en formato PDF / Excel...')
+            }
             className="inline-flex items-center gap-2 px-3.5 py-2.5 rounded-xl bg-[#dfd9ce] hover:bg-[#d5cebf] dark:bg-slate-800 dark:hover:bg-slate-700 text-xs font-bold text-[#262422] dark:text-white transition-colors border border-[#cec8bc] dark:border-slate-700 cursor-pointer"
           >
             <Download className="w-4 h-4" />
@@ -222,7 +249,9 @@ export default function AuditoriaPage() {
             <Activity className="w-4 h-4 text-blue-700 dark:text-blue-400" />
           </div>
           <div className="text-2xl font-bold text-[#262422] dark:text-white">{totalEventos}</div>
-          <span className="text-[11px] text-[#7d776f] dark:text-slate-500">Eventos auditados en el período</span>
+          <span className="text-[11px] text-[#7d776f] dark:text-slate-500">
+            Eventos auditados en el período
+          </span>
         </div>
 
         <div className="p-4 rounded-2xl bg-[#ede9e1] dark:bg-slate-900 border border-[#cec8bc] dark:border-slate-800 shadow-sm">
@@ -230,8 +259,12 @@ export default function AuditoriaPage() {
             <span>Modificaciones / Bajas</span>
             <AlertTriangle className="w-4 h-4 text-amber-700 dark:text-amber-400" />
           </div>
-          <div className="text-2xl font-bold text-amber-900 dark:text-amber-300">{totalModificaciones}</div>
-          <span className="text-[11px] text-[#7d776f] dark:text-slate-500">Cambios de estado o registros</span>
+          <div className="text-2xl font-bold text-amber-900 dark:text-amber-300">
+            {totalModificaciones}
+          </div>
+          <span className="text-[11px] text-[#7d776f] dark:text-slate-500">
+            Cambios de estado o registros
+          </span>
         </div>
 
         <div className="p-4 rounded-2xl bg-[#ede9e1] dark:bg-slate-900 border border-[#cec8bc] dark:border-slate-800 shadow-sm">
@@ -239,8 +272,12 @@ export default function AuditoriaPage() {
             <span>Creaciones de Datos</span>
             <CheckCircle2 className="w-4 h-4 text-emerald-700 dark:text-emerald-400" />
           </div>
-          <div className="text-2xl font-bold text-emerald-800 dark:text-emerald-400">{totalCreaciones}</div>
-          <span className="text-[11px] text-[#7d776f] dark:text-slate-500">Nuevos registros dados de alta</span>
+          <div className="text-2xl font-bold text-emerald-800 dark:text-emerald-400">
+            {totalCreaciones}
+          </div>
+          <span className="text-[11px] text-[#7d776f] dark:text-slate-500">
+            Nuevos registros dados de alta
+          </span>
         </div>
 
         <div className="p-4 rounded-2xl bg-[#ede9e1] dark:bg-slate-900 border border-[#cec8bc] dark:border-slate-800 shadow-sm">
@@ -249,7 +286,9 @@ export default function AuditoriaPage() {
             <ShieldAlert className="w-4 h-4 text-rose-700 dark:text-rose-400" />
           </div>
           <div className="text-2xl font-bold text-rose-800 dark:text-rose-400">{totalCriticos}</div>
-          <span className="text-[11px] text-[#7d776f] dark:text-slate-500">Intentos o bajas sensibles</span>
+          <span className="text-[11px] text-[#7d776f] dark:text-slate-500">
+            Intentos o bajas sensibles
+          </span>
         </div>
       </div>
 
@@ -334,7 +373,10 @@ export default function AuditoriaPage() {
             <tbody className="divide-y divide-[#cec8bc]/70 dark:divide-slate-800">
               {logsFiltrados.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="py-12 text-center text-[#7d776f] dark:text-slate-500 text-sm">
+                  <td
+                    colSpan={7}
+                    className="py-12 text-center text-[#7d776f] dark:text-slate-500 text-sm"
+                  >
                     No se encontraron registros de auditoría con los filtros seleccionados.
                   </td>
                 </tr>
@@ -386,10 +428,10 @@ export default function AuditoriaPage() {
                           log.accion === 'CREACION'
                             ? 'bg-emerald-100 text-emerald-800 border border-emerald-300 dark:bg-emerald-950 dark:text-emerald-400'
                             : log.accion === 'MODIFICACION'
-                            ? 'bg-blue-100 text-blue-800 border border-blue-300 dark:bg-blue-950 dark:text-blue-400'
-                            : log.accion === 'ELIMINACION'
-                            ? 'bg-rose-100 text-rose-800 border border-rose-300 dark:bg-rose-950 dark:text-rose-400'
-                            : 'bg-purple-100 text-purple-800 border border-purple-300 dark:bg-purple-950 dark:text-purple-300'
+                              ? 'bg-blue-100 text-blue-800 border border-blue-300 dark:bg-blue-950 dark:text-blue-400'
+                              : log.accion === 'ELIMINACION'
+                                ? 'bg-rose-100 text-rose-800 border border-rose-300 dark:bg-rose-950 dark:text-rose-400'
+                                : 'bg-purple-100 text-purple-800 border border-purple-300 dark:bg-purple-950 dark:text-purple-300'
                         }`}
                       >
                         {log.accion}
@@ -455,23 +497,39 @@ export default function AuditoriaPage() {
             {/* Metadatos del evento */}
             <div className="space-y-3 mb-5 p-4 rounded-2xl bg-[#dfd9ce] dark:bg-slate-950 border border-[#cec8bc] dark:border-slate-800 text-xs">
               <div className="flex justify-between py-1 border-b border-[#cec8bc]/70 dark:border-slate-800">
-                <span className="font-semibold text-[#5c5750] dark:text-slate-400">Fecha y Hora:</span>
-                <span className="font-mono text-[#262422] dark:text-white">{selectedLog.fechaHora}</span>
+                <span className="font-semibold text-[#5c5750] dark:text-slate-400">
+                  Fecha y Hora:
+                </span>
+                <span className="font-mono text-[#262422] dark:text-white">
+                  {selectedLog.fechaHora}
+                </span>
               </div>
               <div className="flex justify-between py-1 border-b border-[#cec8bc]/70 dark:border-slate-800">
-                <span className="font-semibold text-[#5c5750] dark:text-slate-400">Usuario Responsable:</span>
-                <span className="font-bold text-[#262422] dark:text-white">{selectedLog.usuario} ({selectedLog.rol})</span>
+                <span className="font-semibold text-[#5c5750] dark:text-slate-400">
+                  Usuario Responsable:
+                </span>
+                <span className="font-bold text-[#262422] dark:text-white">
+                  {selectedLog.usuario} ({selectedLog.rol})
+                </span>
               </div>
               <div className="flex justify-between py-1 border-b border-[#cec8bc]/70 dark:border-slate-800">
-                <span className="font-semibold text-[#5c5750] dark:text-slate-400">Módulo Afectado:</span>
-                <span className="font-bold text-blue-800 dark:text-blue-300">{selectedLog.modulo}</span>
+                <span className="font-semibold text-[#5c5750] dark:text-slate-400">
+                  Módulo Afectado:
+                </span>
+                <span className="font-bold text-blue-800 dark:text-blue-300">
+                  {selectedLog.modulo}
+                </span>
               </div>
               <div className="flex justify-between py-1 border-b border-[#cec8bc]/70 dark:border-slate-800">
-                <span className="font-semibold text-[#5c5750] dark:text-slate-400">Tipo de Acción:</span>
+                <span className="font-semibold text-[#5c5750] dark:text-slate-400">
+                  Tipo de Acción:
+                </span>
                 <span className="font-bold">{selectedLog.accion}</span>
               </div>
               <div className="flex justify-between py-1">
-                <span className="font-semibold text-[#5c5750] dark:text-slate-400">Dirección IP:</span>
+                <span className="font-semibold text-[#5c5750] dark:text-slate-400">
+                  Dirección IP:
+                </span>
                 <span className="font-mono text-[#262422] dark:text-white">{selectedLog.ip}</span>
               </div>
             </div>
@@ -494,11 +552,15 @@ export default function AuditoriaPage() {
                       </span>
                       <div className="grid grid-cols-2 gap-2 text-[11px]">
                         <div className="p-2 rounded bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900 text-rose-900 dark:text-rose-300">
-                          <span className="block font-semibold text-[10px] text-rose-700 dark:text-rose-400">Antes:</span>
+                          <span className="block font-semibold text-[10px] text-rose-700 dark:text-rose-400">
+                            Antes:
+                          </span>
                           {campo.antes}
                         </div>
                         <div className="p-2 rounded bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-900 text-emerald-900 dark:text-emerald-300">
-                          <span className="block font-semibold text-[10px] text-emerald-700 dark:text-emerald-400">Después:</span>
+                          <span className="block font-semibold text-[10px] text-emerald-700 dark:text-emerald-400">
+                            Después:
+                          </span>
                           {campo.despues}
                         </div>
                       </div>
@@ -521,5 +583,5 @@ export default function AuditoriaPage() {
         </div>
       )}
     </div>
-  );
+  )
 }

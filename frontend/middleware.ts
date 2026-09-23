@@ -1,21 +1,21 @@
 // frontend/middleware.ts
 // Middleware de autenticación y redirección para rutas protegidas
 
-import { NextResponse, type NextRequest } from 'next/server';
-import { jwtVerify } from 'jose';
+import { NextResponse, type NextRequest } from 'next/server'
+import { jwtVerify } from 'jose'
 
-const jwtSecretEnv = process.env.JWT_SECRET;
+const jwtSecretEnv = process.env.JWT_SECRET
 
 if (!jwtSecretEnv) {
   throw new Error(
     'JWT_SECRET no está definido. Configura la variable de entorno antes de iniciar la app.'
-  );
+  )
 }
 
-const SECRET_KEY = new TextEncoder().encode(jwtSecretEnv);
+const SECRET_KEY = new TextEncoder().encode(jwtSecretEnv)
 
 export async function middleware(request: NextRequest) {
-  const { pathname } = request.nextUrl;
+  const { pathname } = request.nextUrl
 
   if (
     pathname.startsWith('/_next') ||
@@ -23,27 +23,27 @@ export async function middleware(request: NextRequest) {
     pathname.startsWith('/favicon.ico') ||
     pathname === '/login'
   ) {
-    return NextResponse.next();
+    return NextResponse.next()
   }
 
-  const token = request.cookies.get('auth_token')?.value;
+  const token = request.cookies.get('auth_token')?.value
 
   if (!token) {
-    const loginUrl = new URL('/login', request.url);
-    return NextResponse.redirect(loginUrl);
+    const loginUrl = new URL('/login', request.url)
+    return NextResponse.redirect(loginUrl)
   }
 
   try {
-    await jwtVerify(token, SECRET_KEY);
-    return NextResponse.next();
+    await jwtVerify(token, SECRET_KEY)
+    return NextResponse.next()
   } catch {
-    const loginUrl = new URL('/login', request.url);
-    const response = NextResponse.redirect(loginUrl);
-    response.cookies.delete('auth_token');
-    return response;
+    const loginUrl = new URL('/login', request.url)
+    const response = NextResponse.redirect(loginUrl)
+    response.cookies.delete('auth_token')
+    return response
   }
 }
 
 export const config = {
-  matcher: ['/((?!_next/static|_next/image|favicon.ico).*)'],
-};
+  matcher: ['/((?!_next/static|_next/image|favicon.ico).*)']
+}

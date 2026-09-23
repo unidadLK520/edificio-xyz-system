@@ -1,14 +1,13 @@
-'use client';
+'use client'
 
-import React, { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
-import Image from 'next/image';
-import ThemeToggle from '@/components/ThemeToggle';
-import edificioBg from '@/public/images/edificio_bg.jpg';
-import edificioLobby from '@/public/images/edificio_lobby.jpg';
+import React, { useState, useEffect } from 'react'
+import { useRouter } from 'next/navigation'
+import Image from 'next/image'
+import ThemeToggle from '@/components/ThemeToggle'
+import edificioBg from '@/public/images/edificio_bg.jpg'
+import edificioLobby from '@/public/images/edificio_lobby.jpg'
 import {
   Building2,
-
   Shield,
   Briefcase,
   KeyRound,
@@ -19,22 +18,22 @@ import {
   ArrowRight,
   Lock,
   Mail,
-  ShieldCheck,
-} from 'lucide-react';
+  ShieldCheck
+} from 'lucide-react'
 
 // ==========================================
 // 1. TIPOS Y ROLES
 // ==========================================
-export type UserRole = 'ADMINISTRADOR' | 'DIRECTORIO' | 'COPROPIETARIO' | 'CONSULTA';
+export type UserRole = 'ADMINISTRADOR' | 'DIRECTORIO' | 'COPROPIETARIO' | 'CONSULTA'
 
 interface RoleCard {
-  role: UserRole;
-  title: string;
-  badge: string;
-  description: string;
-  icon: React.ComponentType<{ className?: string }>;
-  defaultEmail: string;
-  defaultPass: string;
+  role: UserRole
+  title: string
+  badge: string
+  description: string
+  icon: React.ComponentType<{ className?: string }>
+  defaultEmail: string
+  defaultPass: string
 }
 
 const ROLES_SISTEMA: RoleCard[] = [
@@ -45,7 +44,7 @@ const ROLES_SISTEMA: RoleCard[] = [
     description: 'Gestión financiera, expensas, residentes, personal y control total.',
     icon: Shield,
     defaultEmail: 'admin@edificioxyz.com',
-    defaultPass: 'admin123',
+    defaultPass: 'admin123'
   },
   {
     role: 'DIRECTORIO',
@@ -54,7 +53,7 @@ const ROLES_SISTEMA: RoleCard[] = [
     description: 'Supervisión de balances, informes económicos, auditoría y comunicados.',
     icon: Briefcase,
     defaultEmail: 'directorio@edificioxyz.com',
-    defaultPass: 'directorio123',
+    defaultPass: 'directorio123'
   },
   {
     role: 'COPROPIETARIO',
@@ -63,7 +62,7 @@ const ROLES_SISTEMA: RoleCard[] = [
     description: 'Consulta de expensas, registro de pagos y recepción de avisos.',
     icon: KeyRound,
     defaultEmail: 'residente@edificioxyz.com',
-    defaultPass: 'residente123',
+    defaultPass: 'residente123'
   },
   {
     role: 'CONSULTA',
@@ -72,65 +71,65 @@ const ROLES_SISTEMA: RoleCard[] = [
     description: 'Acceso de solo lectura para reportes históricos e inspección.',
     icon: Search,
     defaultEmail: 'consulta@edificioxyz.com',
-    defaultPass: 'consulta123',
-  },
-];
+    defaultPass: 'consulta123'
+  }
+]
 
 // ==========================================
 // 2. COMPONENTE PRINCIPAL UNIFICADO
 // ==========================================
 export default function LoginPage() {
-  const router = useRouter();
+  const router = useRouter()
 
   // Estados del Formulario
-  const [selectedRole, setSelectedRole] = useState<UserRole>('ADMINISTRADOR');
-  const [email, setEmail] = useState(ROLES_SISTEMA[0].defaultEmail);
-  const [password, setPassword] = useState(ROLES_SISTEMA[0].defaultPass);
-  const [rememberMe, setRememberMe] = useState(true);
+  const [selectedRole, setSelectedRole] = useState<UserRole>('ADMINISTRADOR')
+  const [email, setEmail] = useState(ROLES_SISTEMA[0].defaultEmail)
+  const [password, setPassword] = useState(ROLES_SISTEMA[0].defaultPass)
+  const [rememberMe, setRememberMe] = useState(true)
 
   // Estados de Interfaz
-  const [isLoading, setIsLoading] = useState(false);
-  const [errorMessage, setErrorMessage] = useState('');
-  const [successMessage, setSuccessMessage] = useState('');
-  const [showPassword, setShowPassword] = useState(false);
+  const [isLoading, setIsLoading] = useState(false)
+  const [errorMessage, setErrorMessage] = useState('')
+  const [successMessage, setSuccessMessage] = useState('')
+  const [showPassword, setShowPassword] = useState(false)
 
   const handleSelectRole = (role: UserRole) => {
-    setSelectedRole(role);
-    const roleInfo = ROLES_SISTEMA.find((r) => r.role === role);
+    setSelectedRole(role)
+    const roleInfo = ROLES_SISTEMA.find((r) => r.role === role)
     if (roleInfo) {
-      setEmail(roleInfo.defaultEmail);
-      setPassword(roleInfo.defaultPass);
+      setEmail(roleInfo.defaultEmail)
+      setPassword(roleInfo.defaultPass)
     }
-    setErrorMessage('');
-  };
+    setErrorMessage('')
+  }
 
   // Cargar credencial guardada si existe
   useEffect(() => {
-    const savedEmail = localStorage.getItem('last_user_email');
-    const savedRole = localStorage.getItem('last_user_role') as UserRole;
-    if (savedEmail) setEmail(savedEmail);
+    const savedEmail = localStorage.getItem('last_user_email')
+    const savedRole = localStorage.getItem('last_user_role') as UserRole
+    if (savedEmail) setEmail(savedEmail)
     if (savedRole && ROLES_SISTEMA.some((r) => r.role === savedRole)) {
-      setSelectedRole(savedRole);
+      setSelectedRole(savedRole)
     }
-  }, []);
+  }, [])
 
   const handleLoginSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setErrorMessage('');
-    setSuccessMessage('');
+    e.preventDefault()
+    setErrorMessage('')
+    setSuccessMessage('')
 
     if (!email || !password) {
-      setErrorMessage('Por favor ingresa tu correo electrónico y tu contraseña.');
-      return;
+      setErrorMessage('Por favor ingresa tu correo electrónico y tu contraseña.')
+      return
     }
 
-    setIsLoading(true);
+    setIsLoading(true)
 
     try {
-      let isSuccess = false;
-      let token = 'mock_jwt_token_' + Date.now();
+      let isSuccess = false
+      let token = 'mock_jwt_token_' + Date.now()
 
-      let actualRole: UserRole = selectedRole;
+      let actualRole: UserRole = selectedRole
 
       const res = await fetch('/api/auth/login', {
         method: 'POST',
@@ -141,71 +140,71 @@ export default function LoginPage() {
           password,
           rol: selectedRole
         })
-      });
+      })
 
-      const data = await res.json().catch(() => ({}));
+      const data = await res.json().catch(() => ({}))
 
       if (res.ok && data.token) {
-        token = data.token;
-        isSuccess = true;
+        token = data.token
+        isSuccess = true
         if (data.usuario?.rol) {
-          actualRole = data.usuario.rol as UserRole;
+          actualRole = data.usuario.rol as UserRole
         }
       } else {
-        const errorMsg = data.message || 'Credenciales inválidas. Por favor intente nuevamente.';
-        throw new Error(errorMsg);
+        const errorMsg = data.message || 'Credenciales inválidas. Por favor intente nuevamente.'
+        throw new Error(errorMsg)
       }
 
       if (isSuccess) {
         if (typeof window !== 'undefined') {
           // Guardar cookie accesible por el cliente/navegador
-          document.cookie = `auth_token=${token}; path=/; max-age=${60 * 60 * 8}; SameSite=Lax`;
+          document.cookie = `auth_token=${token}; path=/; max-age=${60 * 60 * 8}; SameSite=Lax`
 
-          localStorage.setItem('auth_token', token);
-          localStorage.setItem('user_role', actualRole);
+          localStorage.setItem('auth_token', token)
+          localStorage.setItem('user_role', actualRole)
           localStorage.setItem(
             'user_profile',
             JSON.stringify({
               email: email.trim(),
               nombre: data.usuario?.nombreUsuario || email.split('@')[0],
-              rolActivo: actualRole,
+              rolActivo: actualRole
             })
-          );
+          )
 
           if (rememberMe) {
-            localStorage.setItem('last_user_email', email.trim());
-            localStorage.setItem('last_user_role', actualRole);
+            localStorage.setItem('last_user_email', email.trim())
+            localStorage.setItem('last_user_role', actualRole)
           } else {
-            localStorage.removeItem('last_user_email');
-            localStorage.removeItem('last_user_role');
+            localStorage.removeItem('last_user_email')
+            localStorage.removeItem('last_user_role')
           }
         }
 
-        setSuccessMessage(`¡Autenticado como ${actualRole}! Redirigiendo...`);
+        setSuccessMessage(`¡Autenticado como ${actualRole}! Redirigiendo...`)
 
         setTimeout(() => {
-          const roleUpper = String(actualRole).toUpperCase();
+          const roleUpper = String(actualRole).toUpperCase()
           if (roleUpper === 'ADMINISTRADOR') {
-            router.push('/residentes');
+            router.push('/residentes')
           } else if (roleUpper === 'DIRECTORIO') {
-            router.push('/reportes');
+            router.push('/reportes')
           } else if (roleUpper === 'COPROPIETARIO') {
-            router.push('/mi-cuenta');
+            router.push('/mi-cuenta')
           } else {
-            router.push('/auditoria');
+            router.push('/auditoria')
           }
-        }, 500);
+        }, 500)
       }
     } catch (err: unknown) {
       if (err instanceof Error) {
-        setErrorMessage(err.message);
+        setErrorMessage(err.message)
       } else {
-        setErrorMessage('Ocurrió un error inesperado al conectar con el servidor.');
+        setErrorMessage('Ocurrió un error inesperado al conectar con el servidor.')
       }
     } finally {
-      setIsLoading(false);
+      setIsLoading(false)
     }
-  };
+  }
 
   return (
     <div className="min-h-screen w-full flex items-center justify-center p-4 sm:p-6 lg:p-8 font-sans relative overflow-hidden transition-colors duration-300 selection:bg-blue-600 selection:text-white">
@@ -292,7 +291,8 @@ export default function LoginPage() {
 
           <div className="relative z-10 pt-4 lg:pt-6 mt-4 lg:mt-6 border-t border-[#cec8bc] dark:border-slate-800 text-[11px] text-[#7d776f] dark:text-slate-400 hidden lg:flex justify-between items-center">
             <span className="flex items-center gap-1 font-medium">
-              <ShieldCheck className="w-3.5 h-3.5 text-emerald-700 dark:text-emerald-500" /> Cifrado JWT
+              <ShieldCheck className="w-3.5 h-3.5 text-emerald-700 dark:text-emerald-500" /> Cifrado
+              JWT
             </span>
             <span>Edificio XYZ © 2026</span>
           </div>
@@ -331,8 +331,8 @@ export default function LoginPage() {
               </label>
               <div className="grid grid-cols-2 gap-1.5 sm:gap-2">
                 {ROLES_SISTEMA.map((item) => {
-                  const isSelected = selectedRole === item.role;
-                  const IconComp = item.icon;
+                  const isSelected = selectedRole === item.role
+                  const IconComp = item.icon
                   return (
                     <button
                       key={item.role}
@@ -346,8 +346,12 @@ export default function LoginPage() {
                     >
                       <div className="flex items-center justify-between mb-0.5 sm:mb-1">
                         <span className="text-xs font-semibold flex items-center gap-1.5 truncate">
-                          <IconComp className={`w-3.5 h-3.5 shrink-0 ${isSelected ? 'text-blue-700 dark:text-indigo-400' : 'text-[#7d776f]'}`} />
-                          <span className={`truncate ${isSelected ? 'text-blue-900 dark:text-white font-bold' : 'text-[#2e2a27] dark:text-slate-300'}`}>
+                          <IconComp
+                            className={`w-3.5 h-3.5 shrink-0 ${isSelected ? 'text-blue-700 dark:text-indigo-400' : 'text-[#7d776f]'}`}
+                          />
+                          <span
+                            className={`truncate ${isSelected ? 'text-blue-900 dark:text-white font-bold' : 'text-[#2e2a27] dark:text-slate-300'}`}
+                          >
                             {item.title}
                           </span>
                         </span>
@@ -361,7 +365,7 @@ export default function LoginPage() {
                         {item.description}
                       </p>
                     </button>
-                  );
+                  )
                 })}
               </div>
             </div>
@@ -373,7 +377,10 @@ export default function LoginPage() {
               </label>
 
               <div>
-                <label className="block text-[11px] sm:text-xs text-[#5c5750] dark:text-slate-400 mb-1" htmlFor="email-input">
+                <label
+                  className="block text-[11px] sm:text-xs text-[#5c5750] dark:text-slate-400 mb-1"
+                  htmlFor="email-input"
+                >
                   Correo Electrónico
                 </label>
                 <div className="relative">
@@ -391,7 +398,10 @@ export default function LoginPage() {
               </div>
 
               <div>
-                <label className="block text-[11px] sm:text-xs text-[#5c5750] dark:text-slate-400 mb-1" htmlFor="password-input">
+                <label
+                  className="block text-[11px] sm:text-xs text-[#5c5750] dark:text-slate-400 mb-1"
+                  htmlFor="password-input"
+                >
                   Contraseña
                 </label>
                 <div className="relative">
@@ -428,7 +438,11 @@ export default function LoginPage() {
               </label>
               <button
                 type="button"
-                onClick={() => alert('Contacte a la administración del Edificio XYZ para la recuperación de su cuenta.')}
+                onClick={() =>
+                  alert(
+                    'Contacte a la administración del Edificio XYZ para la recuperación de su cuenta.'
+                  )
+                }
                 className="text-blue-700 hover:text-blue-800 dark:text-indigo-400 dark:hover:text-indigo-300 transition-colors"
               >
                 ¿Olvidaste tu contraseña?
@@ -456,5 +470,5 @@ export default function LoginPage() {
         </div>
       </div>
     </div>
-  );
+  )
 }
