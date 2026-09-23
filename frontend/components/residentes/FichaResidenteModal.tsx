@@ -1,14 +1,14 @@
 // frontend/components/residentes/FichaResidenteModal.tsx
-'use client'
+'use client';
 
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect } from 'react';
 
 interface FichaResidenteModalProps {
-  isOpen: boolean
-  onClose: () => void
-  personaId: number | null
-  onOcupacionUpdated?: () => void
-  canEdit?: boolean
+  isOpen: boolean;
+  onClose: () => void;
+  personaId: number | null;
+  onOcupacionUpdated?: () => void;
+  canEdit?: boolean;
 }
 
 export default function FichaResidenteModal({
@@ -16,88 +16,84 @@ export default function FichaResidenteModal({
   onClose,
   personaId,
   onOcupacionUpdated,
-  canEdit = true
+  canEdit = true,
 }: FichaResidenteModalProps) {
-  const [loading, setLoading] = useState(false)
-  const [persona, setPersona] = useState<any>(null)
-  const [historial, setHistorial] = useState<any[]>([])
-  const [errorMessage, setErrorMessage] = useState<string | null>(null)
-  const [finalizingId, setFinalizingId] = useState<number | null>(null)
+  const [loading, setLoading] = useState(false);
+  const [persona, setPersona] = useState<any>(null);
+  const [historial, setHistorial] = useState<any[]>([]);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [finalizingId, setFinalizingId] = useState<number | null>(null);
 
   useEffect(() => {
     if (isOpen && personaId) {
-      fetchFicha(personaId)
+      fetchFicha(personaId);
     } else {
-      setPersona(null)
-      setHistorial([])
-      setErrorMessage(null)
+      setPersona(null);
+      setHistorial([]);
+      setErrorMessage(null);
     }
-  }, [isOpen, personaId])
+  }, [isOpen, personaId]);
 
   const fetchFicha = async (id: number) => {
-    setLoading(true)
-    setErrorMessage(null)
+    setLoading(true);
+    setErrorMessage(null);
     try {
       // 1. Obtener datos detallados de la persona
-      const resPersona = await fetch(`/api/v1/personas/${id}`)
-      const dataPersona = await resPersona.json()
+      const resPersona = await fetch(`/api/v1/personas/${id}`);
+      const dataPersona = await resPersona.json();
 
       if (!resPersona.ok) {
-        throw new Error(dataPersona.message || 'Error al obtener datos de la persona')
+        throw new Error(dataPersona.message || 'Error al obtener datos de la persona');
       }
-      setPersona(dataPersona.data)
+      setPersona(dataPersona.data);
 
       // 2. Obtener historial de ocupaciones
-      const resHistorial = await fetch(`/api/v1/personas/${id}/historial`)
+      const resHistorial = await fetch(`/api/v1/personas/${id}/historial`);
       if (resHistorial.ok) {
-        const dataHistorial = await resHistorial.json()
-        setHistorial(dataHistorial.historialOcupaciones || [])
+        const dataHistorial = await resHistorial.json();
+        setHistorial(dataHistorial.historialOcupaciones || []);
       }
     } catch (err: any) {
-      setErrorMessage(err.message || 'Error al cargar la ficha del residente')
+      setErrorMessage(err.message || 'Error al cargar la ficha del residente');
+    } font: {
+      setLoading(false);
     }
-    font: {
-      setLoading(false)
-    }
-  }
+  };
 
   const handleFinalizarOcupacion = async (idOcupacion: number) => {
-    if (
-      !confirm(
-        '¿Está seguro de finalizar esta relación de ocupación? La fecha de fin se registrará con la fecha actual.'
-      )
-    ) {
-      return
+    if (!confirm('¿Está seguro de finalizar esta relación de ocupación? La fecha de fin se registrará con la fecha actual.')) {
+      return;
     }
 
-    setFinalizingId(idOcupacion)
+    setFinalizingId(idOcupacion);
     try {
       const res = await fetch(`/api/v1/personas/ocupaciones/${idOcupacion}/finalizar`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ fechaFin: new Date().toISOString().slice(0, 10) })
-      })
+        body: JSON.stringify({ fechaFin: new Date().toISOString().slice(0, 10) }),
+      });
 
-      const data = await res.json()
+      const data = await res.json();
       if (!res.ok) {
-        alert(data.message || 'No se pudo finalizar la ocupación')
-        return
+        alert(data.message || 'No se pudo finalizar la ocupación');
+        return;
       }
 
-      if (personaId) fetchFicha(personaId)
-      if (onOcupacionUpdated) onOcupacionUpdated()
+      if (personaId) fetchFicha(personaId);
+      if (onOcupacionUpdated) onOcupacionUpdated();
     } catch (err: any) {
-      alert(err.message || 'Error de conexión')
+      alert(err.message || 'Error de conexión');
     } finally {
-      setFinalizingId(null)
+      setFinalizingId(null);
     }
-  }
+  };
 
-  if (!isOpen) return null
+  if (!isOpen) return null;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
       <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 w-full max-w-2xl rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
+        
         {/* Header Modal */}
         <div className="px-6 py-5 border-b border-slate-200 dark:border-slate-800 flex justify-between items-center bg-slate-50/50 dark:bg-slate-850">
           <div>
@@ -245,7 +241,7 @@ export default function FichaResidenteModal({
                 ) : (
                   <div className="space-y-2.5">
                     {historial.map((ocu: any) => {
-                      const isVigente = !ocu.fechaFin
+                      const isVigente = !ocu.fechaFin;
                       return (
                         <div
                           key={ocu.idOcupacion}

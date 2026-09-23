@@ -1,4 +1,5 @@
-'use client'
+// frontend/app/(admin)/layout.tsx
+'use client';
 
 import React, { useState } from 'react'
 import Link from 'next/link'
