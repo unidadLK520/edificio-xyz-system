@@ -1,90 +1,90 @@
-'use client';
+'use client'
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react'
 
 export interface PersonaItem {
-  idPersona: number;
-  nombres: string;
-  apellidos: string;
-  ciNit: string;
-  telefono?: string | null;
-  correo?: string | null;
-  direccion?: string | null;
+  idPersona: number
+  nombres: string
+  apellidos: string
+  ciNit: string
+  telefono?: string | null
+  correo?: string | null
+  direccion?: string | null
 }
 
 export interface UsuarioItem {
-  idUsuario: number;
-  nombreUsuario: string;
-  correo: string;
-  activo: boolean;
-  intentosFallidos: number;
-  bloqueadoHasta: string | null;
-  fechaCreacion: string;
-  ultimoAcceso: string | null;
-  idPersona?: number | null;
+  idUsuario: number
+  nombreUsuario: string
+  correo: string
+  activo: boolean
+  intentosFallidos: number
+  bloqueadoHasta: string | null
+  fechaCreacion: string
+  ultimoAcceso: string | null
+  idPersona?: number | null
   rol: {
-    idRol: number;
-    nombre: string;
-    descripcion: string | null;
-  };
-  persona?: PersonaItem | null;
+    idRol: number
+    nombre: string
+    descripcion: string | null
+  }
+  persona?: PersonaItem | null
 }
 
 export default function UsuariosPage() {
-  const [usuarios, setUsuarios] = useState<UsuarioItem[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [searchTerm, setSearchTerm] = useState('');
-  const [filterRole, setFilterRole] = useState('TODOS');
-  const [errorMessage, setErrorMessage] = useState('');
-  const [successMessage, setSuccessMessage] = useState('');
+  const [usuarios, setUsuarios] = useState<UsuarioItem[]>([])
+  const [loading, setLoading] = useState(true)
+  const [searchTerm, setSearchTerm] = useState('')
+  const [filterRole, setFilterRole] = useState('TODOS')
+  const [errorMessage, setErrorMessage] = useState('')
+  const [successMessage, setSuccessMessage] = useState('')
 
   // Modal para Crear Usuario + Persona
-  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
-  
+  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false)
+
   // Campos de Persona
-  const [nombres, setNombres] = useState('');
-  const [apellidos, setApellidos] = useState('');
-  const [ciNit, setCiNit] = useState('');
-  const [telefono, setTelefono] = useState('');
-  const [direccion, setDireccion] = useState('');
+  const [nombres, setNombres] = useState('')
+  const [apellidos, setApellidos] = useState('')
+  const [ciNit, setCiNit] = useState('')
+  const [telefono, setTelefono] = useState('')
+  const [direccion, setDireccion] = useState('')
 
   // Campos de Usuario
-  const [nombreUsuario, setNombreUsuario] = useState('');
-  const [correo, setCorreo] = useState('');
-  const [password, setPassword] = useState('');
-  const [rol, setRol] = useState('ADMINISTRADOR');
-  const [activo, setActivo] = useState(true);
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [nombreUsuario, setNombreUsuario] = useState('')
+  const [correo, setCorreo] = useState('')
+  const [password, setPassword] = useState('')
+  const [rol, setRol] = useState('ADMINISTRADOR')
+  const [activo, setActivo] = useState(true)
+  const [isSubmitting, setIsSubmitting] = useState(false)
 
   // Cargar lista de usuarios
   const fetchUsuarios = async () => {
-    setLoading(true);
-    setErrorMessage('');
+    setLoading(true)
+    setErrorMessage('')
     try {
-      const res = await fetch('/api/v1/usuarios');
+      const res = await fetch('/api/v1/usuarios')
       if (res.ok) {
-        const data = await res.json();
-        setUsuarios(data);
+        const data = await res.json()
+        setUsuarios(data)
       } else {
-        const err = await res.json().catch(() => ({}));
-        setErrorMessage(err.message || 'No se pudo obtener la lista de usuarios');
+        const err = await res.json().catch(() => ({}))
+        setErrorMessage(err.message || 'No se pudo obtener la lista de usuarios')
       }
     } catch {
-      setErrorMessage('Error de conexión al cargar usuarios');
+      setErrorMessage('Error de conexión al cargar usuarios')
     } finally {
-      setLoading(false);
+      setLoading(false)
     }
-  };
+  }
 
   useEffect(() => {
-    fetchUsuarios();
-  }, []);
+    fetchUsuarios()
+  }, [])
 
   // Manejar creación conjunta de Persona + Usuario (CA09)
   const handleCreateUserAndPersona = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setErrorMessage('');
-    setSuccessMessage('');
+    e.preventDefault()
+    setErrorMessage('')
+    setSuccessMessage('')
 
     if (
       !nombres.trim() ||
@@ -94,11 +94,11 @@ export default function UsuariosPage() {
       !correo.trim() ||
       !password.trim()
     ) {
-      setErrorMessage('Por favor completa todos los campos requeridos (*)');
-      return;
+      setErrorMessage('Por favor completa todos los campos requeridos (*)')
+      return
     }
 
-    setIsSubmitting(true);
+    setIsSubmitting(true)
     try {
       const res = await fetch('/api/v1/usuarios', {
         method: 'POST',
@@ -115,63 +115,63 @@ export default function UsuariosPage() {
             ciNit: ciNit.trim(),
             telefono: telefono.trim() || null,
             direccion: direccion.trim() || null,
-            correo: correo.trim(),
-          },
-        }),
-      });
+            correo: correo.trim()
+          }
+        })
+      })
 
-      const data = await res.json().catch(() => ({}));
+      const data = await res.json().catch(() => ({}))
 
       if (res.ok) {
         setSuccessMessage(
           `¡Usuario '${data.nombreUsuario}' y Persona '${nombres} ${apellidos}' registrados correctamente con rol ${data.rol}!`
-        );
-        setIsCreateModalOpen(false);
+        )
+        setIsCreateModalOpen(false)
         // Limpiar formulario
-        setNombres('');
-        setApellidos('');
-        setCiNit('');
-        setTelefono('');
-        setDireccion('');
-        setNombreUsuario('');
-        setCorreo('');
-        setPassword('');
-        setRol('ADMINISTRADOR');
-        setActivo(true);
-        fetchUsuarios();
+        setNombres('')
+        setApellidos('')
+        setCiNit('')
+        setTelefono('')
+        setDireccion('')
+        setNombreUsuario('')
+        setCorreo('')
+        setPassword('')
+        setRol('ADMINISTRADOR')
+        setActivo(true)
+        fetchUsuarios()
       } else {
-        setErrorMessage(data.message || 'Error al registrar usuario y persona');
+        setErrorMessage(data.message || 'Error al registrar usuario y persona')
       }
     } catch {
-      setErrorMessage('Ocurrió un error inesperado al conectar con el servidor');
+      setErrorMessage('Ocurrió un error inesperado al conectar con el servidor')
     } finally {
-      setIsSubmitting(false);
+      setIsSubmitting(false)
     }
-  };
+  }
 
   // Alternar estado Activo/Inactivo (CA09)
   const handleToggleEstado = async (idUsuario: number, estadoActual: boolean) => {
-    const nuevoEstado = !estadoActual;
+    const nuevoEstado = !estadoActual
     try {
       const res = await fetch(`/api/v1/usuarios/${idUsuario}/estado`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ activo: nuevoEstado }),
-      });
+        body: JSON.stringify({ activo: nuevoEstado })
+      })
 
       if (res.ok) {
         setSuccessMessage(
           `Estado de usuario actualizado a ${nuevoEstado ? 'Habilitado (Activo)' : 'Inhabilitado (Inactivo)'}`
-        );
-        fetchUsuarios();
+        )
+        fetchUsuarios()
       } else {
-        const err = await res.json().catch(() => ({}));
-        setErrorMessage(err.message || 'Error al actualizar el estado del usuario');
+        const err = await res.json().catch(() => ({}))
+        setErrorMessage(err.message || 'Error al actualizar el estado del usuario')
       }
     } catch {
-      setErrorMessage('Error de conexión al cambiar el estado');
+      setErrorMessage('Error de conexión al cambiar el estado')
     }
-  };
+  }
 
   // Cambiar Rol de Usuario (CA09)
   const handleChangeRol = async (idUsuario: number, nuevoRol: string) => {
@@ -179,20 +179,20 @@ export default function UsuariosPage() {
       const res = await fetch(`/api/v1/usuarios/${idUsuario}/rol`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ rol: nuevoRol }),
-      });
+        body: JSON.stringify({ rol: nuevoRol })
+      })
 
       if (res.ok) {
-        setSuccessMessage(`Rol de usuario actualizado a ${nuevoRol}`);
-        fetchUsuarios();
+        setSuccessMessage(`Rol de usuario actualizado a ${nuevoRol}`)
+        fetchUsuarios()
       } else {
-        const err = await res.json().catch(() => ({}));
-        setErrorMessage(err.message || 'Error al cambiar el rol');
+        const err = await res.json().catch(() => ({}))
+        setErrorMessage(err.message || 'Error al cambiar el rol')
       }
     } catch {
-      setErrorMessage('Error de conexión al cambiar el rol');
+      setErrorMessage('Error de conexión al cambiar el rol')
     }
-  };
+  }
 
   // Filtrado de la lista
   const filteredUsuarios = usuarios.filter((u) => {
@@ -200,25 +200,21 @@ export default function UsuariosPage() {
       u.nombreUsuario.toLowerCase().includes(searchTerm.toLowerCase()) ||
       u.correo.toLowerCase().includes(searchTerm.toLowerCase()) ||
       (u.persona &&
-        (`${u.persona.nombres} ${u.persona.apellidos} ${u.persona.ciNit}`)
+        `${u.persona.nombres} ${u.persona.apellidos} ${u.persona.ciNit}`
           .toLowerCase()
-          .includes(searchTerm.toLowerCase()));
+          .includes(searchTerm.toLowerCase()))
     const matchRole =
-      filterRole === 'TODOS' ||
-      u.rol.nombre.toUpperCase() === filterRole.toUpperCase();
-    return matchSearch && matchRole;
-  });
+      filterRole === 'TODOS' || u.rol.nombre.toUpperCase() === filterRole.toUpperCase()
+    return matchSearch && matchRole
+  })
 
-  const totalUsuarios = usuarios.length;
-  const activos = usuarios.filter((u) => u.activo).length;
-  const inactivos = usuarios.filter((u) => !u.activo).length;
-  const admins = usuarios.filter(
-    (u) => u.rol.nombre.toUpperCase() === 'ADMINISTRADOR'
-  ).length;
+  const totalUsuarios = usuarios.length
+  const activos = usuarios.filter((u) => u.activo).length
+  const inactivos = usuarios.filter((u) => !u.activo).length
+  const admins = usuarios.filter((u) => u.rol.nombre.toUpperCase() === 'ADMINISTRADOR').length
 
   return (
     <div className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto space-y-6">
-      
       {/* HEADER DE LA PÁGINA */}
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
         <div>
@@ -229,7 +225,8 @@ export default function UsuariosPage() {
             Gestión de Usuarios y Personas
           </h1>
           <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
-            Solo el Administrador puede registrar datos personales (CI/NIT, Nombres, Teléfono) y crear la cuenta de usuario asociada.
+            Solo el Administrador puede registrar datos personales (CI/NIT, Nombres, Teléfono) y
+            crear la cuenta de usuario asociada.
           </p>
         </div>
 
@@ -239,7 +236,12 @@ export default function UsuariosPage() {
           className="inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-indigo-600 hover:bg-indigo-500 active:bg-indigo-700 text-white font-semibold text-sm rounded-xl shadow-lg shadow-indigo-600/20 transition-all cursor-pointer"
         >
           <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z" />
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth="2"
+              d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z"
+            />
           </svg>
           <span>Registrar Usuario y Persona</span>
         </button>
@@ -252,7 +254,12 @@ export default function UsuariosPage() {
             <span className="font-bold">⚠️ Error:</span>
             <span>{errorMessage}</span>
           </div>
-          <button onClick={() => setErrorMessage('')} className="text-rose-400 hover:text-rose-600 font-bold">✕</button>
+          <button
+            onClick={() => setErrorMessage('')}
+            className="text-rose-400 hover:text-rose-600 font-bold"
+          >
+            ✕
+          </button>
         </div>
       )}
 
@@ -262,26 +269,41 @@ export default function UsuariosPage() {
             <span className="font-bold">✅ Éxito:</span>
             <span>{successMessage}</span>
           </div>
-          <button onClick={() => setSuccessMessage('')} className="text-emerald-400 hover:text-emerald-600 font-bold">✕</button>
+          <button
+            onClick={() => setSuccessMessage('')}
+            className="text-emerald-400 hover:text-emerald-600 font-bold"
+          >
+            ✕
+          </button>
         </div>
       )}
 
       {/* METRIC CARDS */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <div className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm">
-          <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Total Cuentas</p>
+          <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
+            Total Cuentas
+          </p>
           <p className="text-2xl font-bold text-slate-900 dark:text-white mt-1">{totalUsuarios}</p>
         </div>
         <div className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm">
-          <p className="text-xs font-semibold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider">Habilitados (Activos)</p>
-          <p className="text-2xl font-bold text-emerald-600 dark:text-emerald-400 mt-1">{activos}</p>
+          <p className="text-xs font-semibold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider">
+            Habilitados (Activos)
+          </p>
+          <p className="text-2xl font-bold text-emerald-600 dark:text-emerald-400 mt-1">
+            {activos}
+          </p>
         </div>
         <div className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm">
-          <p className="text-xs font-semibold text-rose-500 uppercase tracking-wider">Inhabilitados (Inactivos)</p>
+          <p className="text-xs font-semibold text-rose-500 uppercase tracking-wider">
+            Inhabilitados (Inactivos)
+          </p>
           <p className="text-2xl font-bold text-rose-500 mt-1">{inactivos}</p>
         </div>
         <div className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm">
-          <p className="text-xs font-semibold text-indigo-500 uppercase tracking-wider">Administradores</p>
+          <p className="text-xs font-semibold text-indigo-500 uppercase tracking-wider">
+            Administradores
+          </p>
           <p className="text-2xl font-bold text-indigo-500 mt-1">{admins}</p>
         </div>
       </div>
@@ -296,13 +318,25 @@ export default function UsuariosPage() {
             onChange={(e) => setSearchTerm(e.target.value)}
             className="w-full pl-9 pr-4 py-2 text-sm rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500"
           />
-          <svg className="w-4 h-4 absolute left-3 top-3 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+          <svg
+            className="w-4 h-4 absolute left-3 top-3 text-slate-400"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth="2"
+              d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
+            />
           </svg>
         </div>
 
         <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
-          <label className="text-xs text-slate-500 dark:text-slate-400 font-medium">Filtrar por Rol:</label>
+          <label className="text-xs text-slate-500 dark:text-slate-400 font-medium">
+            Filtrar por Rol:
+          </label>
           <select
             value={filterRole}
             onChange={(e) => setFilterRole(e.target.value)}
@@ -327,7 +361,9 @@ export default function UsuariosPage() {
         ) : filteredUsuarios.length === 0 ? (
           <div className="p-12 text-center text-slate-500">
             <p className="text-base font-semibold">No se encontraron usuarios</p>
-            <p className="text-xs text-slate-400 mt-1">Prueba ajustando el término de búsqueda o el filtro de rol.</p>
+            <p className="text-xs text-slate-400 mt-1">
+              Prueba ajustando el término de búsqueda o el filtro de rol.
+            </p>
           </div>
         ) : (
           <div className="overflow-x-auto">
@@ -344,8 +380,10 @@ export default function UsuariosPage() {
               </thead>
               <tbody className="divide-y divide-slate-200 dark:divide-slate-800 text-sm">
                 {filteredUsuarios.map((user) => (
-                  <tr key={user.idUsuario} className="hover:bg-slate-50/80 dark:hover:bg-slate-800/40 transition-colors">
-                    
+                  <tr
+                    key={user.idUsuario}
+                    className="hover:bg-slate-50/80 dark:hover:bg-slate-800/40 transition-colors"
+                  >
                     {/* PERSONA */}
                     <td className="py-3.5 px-4">
                       <div className="flex items-center gap-3">
@@ -444,7 +482,6 @@ export default function UsuariosPage() {
       {isCreateModalOpen && (
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl max-w-2xl w-full p-6 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto">
-            
             <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-3">
               <div>
                 <h3 className="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
@@ -463,7 +500,6 @@ export default function UsuariosPage() {
             </div>
 
             <form onSubmit={handleCreateUserAndPersona} className="space-y-5">
-              
               {/* SECCIÓN 1: DATOS PERSONALES */}
               <div className="space-y-3">
                 <h4 className="text-xs font-bold uppercase tracking-wider text-indigo-600 dark:text-indigo-400 flex items-center gap-1.5 border-b border-indigo-500/10 pb-1">
@@ -619,7 +655,10 @@ export default function UsuariosPage() {
                     onChange={(e) => setActivo(e.target.checked)}
                     className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
                   />
-                  <label htmlFor="newActivoCheck" className="text-xs text-slate-700 dark:text-slate-300 select-none cursor-pointer font-medium">
+                  <label
+                    htmlFor="newActivoCheck"
+                    className="text-xs text-slate-700 dark:text-slate-300 select-none cursor-pointer font-medium"
+                  >
                     Habilitar inmediatamente la cuenta (Usuario Activo)
                   </label>
                 </div>
@@ -653,7 +692,6 @@ export default function UsuariosPage() {
           </div>
         </div>
       )}
-
     </div>
-  );
+  )
 }

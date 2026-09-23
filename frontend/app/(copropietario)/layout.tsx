@@ -1,14 +1,13 @@
 // frontend/app/(copropietario)/layout.tsx
 'use client';
 
-import React, { useState } from 'react';
-import Link from 'next/link';
-import Image from 'next/image';
-import { usePathname } from 'next/navigation';
-import ThemeToggle from '@/components/ThemeToggle';
-import edificioBg from '@/public/images/edificio_bg.jpg';
+import React, { useState } from 'react'
+import Link from 'next/link'
+import Image from 'next/image'
+import { usePathname } from 'next/navigation'
+import ThemeToggle from '@/components/ThemeToggle'
+import edificioBg from '@/public/images/edificio_bg.jpg'
 import {
-
   Building2,
   Receipt,
   CalendarCheck,
@@ -16,18 +15,18 @@ import {
   LogOut,
   Menu,
   X,
-  KeyRound,
-} from 'lucide-react';
+  KeyRound
+} from 'lucide-react'
 
 const COPROPIETARIO_LINKS = [
   { href: '/mi-cuenta', label: 'Mi Cuenta y Expensas', icon: Receipt },
   { href: '/reservas', label: 'Reserva de Áreas', icon: CalendarCheck },
-  { href: '/comunicados', label: 'Comunicados y Avisos', icon: Megaphone },
-];
+  { href: '/comunicados', label: 'Comunicados y Avisos', icon: Megaphone }
+]
 
 export default function CopropietarioLayout({ children }: { children: React.ReactNode }) {
-  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
-  const pathname = usePathname();
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
+  const pathname = usePathname()
 
   return (
     <div className="flex h-screen bg-[#e6e2da] dark:bg-slate-950 text-[#262422] dark:text-slate-100 font-sans overflow-hidden transition-colors duration-300 selection:bg-blue-600 selection:text-white">
@@ -69,8 +68,8 @@ export default function CopropietarioLayout({ children }: { children: React.Reac
 
         <nav className="flex-1 p-3 space-y-1.5 overflow-y-auto">
           {COPROPIETARIO_LINKS.map((link) => {
-            const IconComp = link.icon;
-            const isActive = pathname === link.href || pathname.startsWith(link.href + '/');
+            const IconComp = link.icon
+            const isActive = pathname === link.href || pathname.startsWith(link.href + '/')
             return (
               <Link
                 key={link.href}
@@ -82,10 +81,12 @@ export default function CopropietarioLayout({ children }: { children: React.Reac
                     : 'text-[#5c5750] hover:text-[#262422] hover:bg-[#e4dfd5] dark:text-slate-400 dark:hover:text-white dark:hover:bg-slate-800/60'
                 }`}
               >
-                <IconComp className={`w-4 h-4 ${isActive ? 'text-emerald-700 dark:text-emerald-400' : 'text-[#7d776f]'}`} />
+                <IconComp
+                  className={`w-4 h-4 ${isActive ? 'text-emerald-700 dark:text-emerald-400' : 'text-[#7d776f]'}`}
+                />
                 <span>{link.label}</span>
               </Link>
-            );
+            )
           })}
         </nav>
 
@@ -129,11 +130,9 @@ export default function CopropietarioLayout({ children }: { children: React.Reac
               className="object-cover object-center"
             />
           </div>
-          <div className="relative z-10">
-            {children}
-          </div>
+          <div className="relative z-10">{children}</div>
         </main>
       </div>
     </div>
-  );
+  )
 }
