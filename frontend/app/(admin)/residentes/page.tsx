@@ -1,3 +1,4 @@
+// frontend/app/(admin)/residentes/page.tsx
 'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
