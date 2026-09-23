@@ -1,7 +1,7 @@
 // frontend/app/(admin)/residentes/page.tsx
-'use client';
+'use client'
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback } from 'react'
 import {
   Users,
   UserPlus,
@@ -17,88 +17,92 @@ import {
   ChevronLeft,
   ChevronRight,
   UserCheck,
-  KeyRound,
-} from 'lucide-react';
-import ResidentesModal, { PersonaData } from '@/components/residentes/ResidentesModal';
-import FichaResidenteModal from '@/components/residentes/FichaResidenteModal';
-import AsignarUnidadModal from '@/components/residentes/AsignarUnidadModal';
+  KeyRound
+} from 'lucide-react'
+import ResidentesModal, { PersonaData } from '@/components/residentes/ResidentesModal'
+import FichaResidenteModal from '@/components/residentes/FichaResidenteModal'
+import AsignarUnidadModal from '@/components/residentes/AsignarUnidadModal'
 
 export default function ResidentesPage() {
-  const [personas, setPersonas] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [personas, setPersonas] = useState<any[]>([])
+  const [loading, setLoading] = useState(true)
+  const [errorMessage, setErrorMessage] = useState<string | null>(null)
 
   // Filtros y Paginación
-  const [searchTerm, setSearchTerm] = useState('');
-  const [tipoOcupanteFilter, setTipoOcupanteFilter] = useState('');
-  const [page, setPage] = useState(1);
-  const [limit] = useState(10);
-  const [total, setTotal] = useState(0);
-  const [totalPages, setTotalPages] = useState(1);
+  const [searchTerm, setSearchTerm] = useState('')
+  const [tipoOcupanteFilter, setTipoOcupanteFilter] = useState('')
+  const [page, setPage] = useState(1)
+  const [limit] = useState(10)
+  const [total, setTotal] = useState(0)
+  const [totalPages, setTotalPages] = useState(1)
 
   // Rol de usuario
-  const [userRole, setUserRole] = useState<string>('Administrador');
-  const isReadOnly = userRole === 'Consulta';
+  const [userRole, setUserRole] = useState<string>('Administrador')
+  const isReadOnly = userRole === 'Consulta'
 
   // Modales
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [personaToEdit, setPersonaToEdit] = useState<PersonaData | null>(null);
+  const [isModalOpen, setIsModalOpen] = useState(false)
+  const [personaToEdit, setPersonaToEdit] = useState<PersonaData | null>(null)
 
-  const [isFichaOpen, setIsFichaOpen] = useState(false);
-  const [selectedPersonaId, setSelectedPersonaId] = useState<number | null>(null);
+  const [isFichaOpen, setIsFichaOpen] = useState(false)
+  const [selectedPersonaId, setSelectedPersonaId] = useState<number | null>(null)
 
-  const [isAsignarOpen, setIsAsignarOpen] = useState(false);
-  const [personaToAssign, setPersonaToAssign] = useState<{ idPersona: number; nombres: string; apellidos: string } | null>(null);
+  const [isAsignarOpen, setIsAsignarOpen] = useState(false)
+  const [personaToAssign, setPersonaToAssign] = useState<{
+    idPersona: number
+    nombres: string
+    apellidos: string
+  } | null>(null)
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
-      const storedRole = localStorage.getItem('user_role') || 'Administrador';
-      setUserRole(storedRole);
+      const storedRole = localStorage.getItem('user_role') || 'Administrador'
+      setUserRole(storedRole)
     }
-  }, []);
+  }, [])
 
   const fetchPersonas = useCallback(async () => {
-    setLoading(true);
-    setErrorMessage(null);
+    setLoading(true)
+    setErrorMessage(null)
 
     try {
-      const queryParams = new URLSearchParams();
-      queryParams.set('page', String(page));
-      queryParams.set('limit', String(limit));
-      if (searchTerm.trim()) queryParams.set('buscar', searchTerm.trim());
-      if (tipoOcupanteFilter) queryParams.set('tipoOcupante', tipoOcupanteFilter);
+      const queryParams = new URLSearchParams()
+      queryParams.set('page', String(page))
+      queryParams.set('limit', String(limit))
+      if (searchTerm.trim()) queryParams.set('buscar', searchTerm.trim())
+      if (tipoOcupanteFilter) queryParams.set('tipoOcupante', tipoOcupanteFilter)
 
-      const res = await fetch(`/api/v1/personas?${queryParams.toString()}`);
-      const json = await res.json();
+      const res = await fetch(`/api/v1/personas?${queryParams.toString()}`)
+      const json = await res.json()
 
       if (!res.ok) {
-        throw new Error(json.message || 'Error al obtener la lista de personas');
+        throw new Error(json.message || 'Error al obtener la lista de personas')
       }
 
-      setPersonas(json.data || []);
+      setPersonas(json.data || [])
       if (json.meta) {
-        setTotal(json.meta.total || 0);
-        setTotalPages(json.meta.totalPages || 1);
+        setTotal(json.meta.total || 0)
+        setTotalPages(json.meta.totalPages || 1)
       }
     } catch (err: any) {
-      setErrorMessage(err.message || 'Error al conectar con la API de personas');
+      setErrorMessage(err.message || 'Error al conectar con la API de personas')
     } finally {
-      setLoading(false);
+      setLoading(false)
     }
-  }, [page, limit, searchTerm, tipoOcupanteFilter]);
+  }, [page, limit, searchTerm, tipoOcupanteFilter])
 
   useEffect(() => {
-    fetchPersonas();
-  }, [fetchPersonas]);
+    fetchPersonas()
+  }, [fetchPersonas])
 
   const handleOpenCreate = () => {
-    if (isReadOnly) return;
-    setPersonaToEdit(null);
-    setIsModalOpen(true);
-  };
+    if (isReadOnly) return
+    setPersonaToEdit(null)
+    setIsModalOpen(true)
+  }
 
   const handleOpenEdit = (p: any) => {
-    if (isReadOnly) return;
+    if (isReadOnly) return
     setPersonaToEdit({
       idPersona: p.idPersona,
       ciNit: p.ciNit,
@@ -106,33 +110,35 @@ export default function ResidentesPage() {
       apellidos: p.apellidos,
       telefono: p.telefono,
       correo: p.correo,
-      direccion: p.direccion,
-    });
-    setIsModalOpen(true);
-  };
+      direccion: p.direccion
+    })
+    setIsModalOpen(true)
+  }
 
   const handleOpenFicha = (idPersona: number) => {
-    setSelectedPersonaId(idPersona);
-    setIsFichaOpen(true);
-  };
+    setSelectedPersonaId(idPersona)
+    setIsFichaOpen(true)
+  }
 
   const handleOpenAsignar = (p: any) => {
-    if (isReadOnly) return;
+    if (isReadOnly) return
     setPersonaToAssign({
       idPersona: p.idPersona,
       nombres: p.nombres,
-      apellidos: p.apellidos,
-    });
-    setIsAsignarOpen(true);
-  };
+      apellidos: p.apellidos
+    })
+    setIsAsignarOpen(true)
+  }
 
   const totalPropietarios = personas.filter(
-    (p) => (p.departamentosPropios && p.departamentosPropios.length > 0) || p.ocupaciones?.some((o: any) => o.tipoOcupante === 'Propietario')
-  ).length;
+    (p) =>
+      (p.departamentosPropios && p.departamentosPropios.length > 0) ||
+      p.ocupaciones?.some((o: any) => o.tipoOcupante === 'Propietario')
+  ).length
 
-  const totalInquilinos = personas.filter(
-    (p) => p.ocupaciones?.some((o: any) => o.tipoOcupante === 'Inquilino')
-  ).length;
+  const totalInquilinos = personas.filter((p) =>
+    p.ocupaciones?.some((o: any) => o.tipoOcupante === 'Inquilino')
+  ).length
 
   return (
     <div className="p-4 sm:p-6 lg:p-8 space-y-6 max-w-7xl mx-auto">
@@ -172,7 +178,9 @@ export default function ResidentesPage() {
             <span className="text-xs font-semibold text-[#7d776f] dark:text-slate-400 uppercase tracking-wider block">
               Total Registrados
             </span>
-            <span className="text-2xl font-extrabold text-[#262422] dark:text-white">{total || personas.length}</span>
+            <span className="text-2xl font-extrabold text-[#262422] dark:text-white">
+              {total || personas.length}
+            </span>
           </div>
         </div>
 
@@ -184,7 +192,9 @@ export default function ResidentesPage() {
             <span className="text-xs font-semibold text-[#7d776f] dark:text-slate-400 uppercase tracking-wider block">
               Propietarios
             </span>
-            <span className="text-2xl font-extrabold text-[#262422] dark:text-white">{totalPropietarios}</span>
+            <span className="text-2xl font-extrabold text-[#262422] dark:text-white">
+              {totalPropietarios}
+            </span>
           </div>
         </div>
 
@@ -196,7 +206,9 @@ export default function ResidentesPage() {
             <span className="text-xs font-semibold text-[#7d776f] dark:text-slate-400 uppercase tracking-wider block">
               Inquilinos
             </span>
-            <span className="text-2xl font-extrabold text-[#262422] dark:text-white">{totalInquilinos}</span>
+            <span className="text-2xl font-extrabold text-[#262422] dark:text-white">
+              {totalInquilinos}
+            </span>
           </div>
         </div>
       </div>
@@ -209,8 +221,8 @@ export default function ResidentesPage() {
             type="text"
             value={searchTerm}
             onChange={(e) => {
-              setSearchTerm(e.target.value);
-              setPage(1);
+              setSearchTerm(e.target.value)
+              setPage(1)
             }}
             placeholder="Buscar por CI, Nombre o Apellido..."
             className="w-full pl-10 pr-4 py-2 bg-[#ded8cc] dark:bg-slate-800 border border-[#cec8bc] dark:border-slate-700 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-blue-600 text-[#262422] dark:text-slate-100 transition-colors"
@@ -224,8 +236,8 @@ export default function ResidentesPage() {
           <select
             value={tipoOcupanteFilter}
             onChange={(e) => {
-              setTipoOcupanteFilter(e.target.value);
-              setPage(1);
+              setTipoOcupanteFilter(e.target.value)
+              setPage(1)
             }}
             className="w-full sm:w-48 px-3 py-2 bg-[#ded8cc] dark:bg-slate-800 border border-[#cec8bc] dark:border-slate-700 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-blue-600 text-[#262422] dark:text-slate-100 transition-colors"
           >
@@ -267,16 +279,22 @@ export default function ResidentesPage() {
               ) : personas.length === 0 ? (
                 <tr>
                   <td colSpan={6} className="px-6 py-12 text-center text-[#7d776f]">
-                    No se encontraron registros de propietarios o inquilinos que coincidan con la búsqueda.
+                    No se encontraron registros de propietarios o inquilinos que coincidan con la
+                    búsqueda.
                   </td>
                 </tr>
               ) : (
                 personas.map((p) => {
-                  const tienePropios = p.departamentosPropios && p.departamentosPropios.length > 0;
-                  const tieneInquilino = p.ocupaciones?.some((o: any) => o.tipoOcupante === 'Inquilino');
+                  const tienePropios = p.departamentosPropios && p.departamentosPropios.length > 0
+                  const tieneInquilino = p.ocupaciones?.some(
+                    (o: any) => o.tipoOcupante === 'Inquilino'
+                  )
 
                   return (
-                    <tr key={p.idPersona} className="hover:bg-[#e4ded4]/60 dark:hover:bg-slate-800/40 transition-colors">
+                    <tr
+                      key={p.idPersona}
+                      className="hover:bg-[#e4ded4]/60 dark:hover:bg-slate-800/40 transition-colors"
+                    >
                       <td className="px-5 py-3.5 font-mono font-bold text-[#262422] dark:text-white whitespace-nowrap">
                         {p.ciNit}
                       </td>
@@ -285,7 +303,9 @@ export default function ResidentesPage() {
                       </td>
                       <td className="px-5 py-3.5 space-y-0.5">
                         {p.telefono && <div className="font-mono">{p.telefono}</div>}
-                        {p.correo && <div className="text-[#7d776f] dark:text-slate-400">{p.correo}</div>}
+                        {p.correo && (
+                          <div className="text-[#7d776f] dark:text-slate-400">{p.correo}</div>
+                        )}
                       </td>
                       <td className="px-5 py-3.5 whitespace-nowrap">
                         <div className="flex flex-wrap gap-1.5">
@@ -364,7 +384,7 @@ export default function ResidentesPage() {
                         </div>
                       </td>
                     </tr>
-                  );
+                  )
                 })
               )}
             </tbody>
@@ -374,8 +394,9 @@ export default function ResidentesPage() {
         {/* Paginación */}
         <div className="px-5 py-3 border-t border-[#cec8bc] dark:border-slate-800 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-[#7d776f] dark:text-slate-400">
           <div>
-            Mostrando página <strong className="text-[#262422] dark:text-slate-200">{page}</strong> de{' '}
-            <strong className="text-[#262422] dark:text-slate-200">{totalPages}</strong> (Total: {total} registros)
+            Mostrando página <strong className="text-[#262422] dark:text-slate-200">{page}</strong>{' '}
+            de <strong className="text-[#262422] dark:text-slate-200">{totalPages}</strong> (Total:{' '}
+            {total} registros)
           </div>
 
           <div className="flex items-center gap-2">
@@ -420,5 +441,5 @@ export default function ResidentesPage() {
         onSuccess={fetchPersonas}
       />
     </div>
-  );
+  )
 }

@@ -75,6 +75,254 @@ async function proxyRequest(
     )
 
     // Fallback inteligente para endpoints de desarrollo frontend
+    if (targetPath.startsWith('departamentos')) {
+      if (request.method === 'GET') {
+        return NextResponse.json({
+          data: [
+            {
+              idDepartamento: 1,
+              numero: '101',
+              piso: 1,
+              areaM2: 110.5,
+              alicuota: 4.16,
+              estado: 'Ocupado',
+              parqueo: 'P-01 (Subsuelo 1)',
+              baulera: 'B-01',
+              idPersonaPropietario: 1,
+              propietario: {
+                idPersona: 1,
+                nombres: 'Carlos',
+                apellidos: 'Mendoza Rojas',
+                ciNit: '4829103 CBBA',
+                telefono: '+591 71234567',
+                correo: 'carlos.mendoza@email.com'
+              },
+              ocupaciones: [
+                {
+                  idOcupacion: 1,
+                  tipoOcupante: 'Propietario',
+                  fechaInicio: '2023-01-15',
+                  persona: {
+                    nombres: 'Carlos',
+                    apellidos: 'Mendoza Rojas',
+                    telefono: '+591 71234567'
+                  }
+                }
+              ]
+            },
+            {
+              idDepartamento: 2,
+              numero: '102',
+              piso: 1,
+              areaM2: 85.0,
+              alicuota: 3.2,
+              estado: 'Ocupado',
+              parqueo: 'P-02 (Subsuelo 1)',
+              baulera: 'Sin baulera',
+              idPersonaPropietario: 2,
+              propietario: {
+                idPersona: 2,
+                nombres: 'Mariana',
+                apellidos: 'Flores Soliz',
+                ciNit: '5920144 SCZ',
+                telefono: '+591 79876543',
+                correo: 'mariana.flores@email.com'
+              },
+              ocupaciones: [
+                {
+                  idOcupacion: 2,
+                  tipoOcupante: 'Inquilino',
+                  fechaInicio: '2024-03-01',
+                  persona: { nombres: 'Roberto', apellidos: 'Gómez', telefono: '+591 70123456' }
+                }
+              ]
+            },
+            {
+              idDepartamento: 3,
+              numero: '201',
+              piso: 2,
+              areaM2: 125.0,
+              alicuota: 4.71,
+              estado: 'Ocupado',
+              parqueo: 'P-05 (Subsuelo 2)',
+              baulera: 'B-03',
+              idPersonaPropietario: 3,
+              propietario: {
+                idPersona: 3,
+                nombres: 'Alejandro',
+                apellidos: 'Vargas Morales',
+                ciNit: '3948120 LPZ',
+                telefono: '+591 67123980',
+                correo: 'alejandro.vargas@email.com'
+              },
+              ocupaciones: [
+                {
+                  idOcupacion: 3,
+                  tipoOcupante: 'Propietario',
+                  fechaInicio: '2022-06-10',
+                  persona: {
+                    nombres: 'Alejandro',
+                    apellidos: 'Vargas Morales',
+                    telefono: '+591 67123980'
+                  }
+                }
+              ]
+            },
+            {
+              idDepartamento: 4,
+              numero: '202',
+              piso: 2,
+              areaM2: 95.0,
+              alicuota: 3.58,
+              estado: 'Disponible',
+              parqueo: 'Sin parqueo',
+              baulera: 'B-04',
+              idPersonaPropietario: 4,
+              propietario: {
+                idPersona: 4,
+                nombres: 'Valeria',
+                apellidos: 'Torrico Camacho',
+                ciNit: '6129841 CBBA',
+                telefono: '+591 75432198',
+                correo: 'valeria.torrico@email.com'
+              },
+              ocupaciones: []
+            },
+            {
+              idDepartamento: 5,
+              numero: '301',
+              piso: 3,
+              areaM2: 140.0,
+              alicuota: 5.28,
+              estado: 'En Alquiler',
+              parqueo: 'P-08 (Subsuelo 1)',
+              baulera: 'B-07',
+              idPersonaPropietario: 5,
+              propietario: {
+                idPersona: 5,
+                nombres: 'Fernando',
+                apellidos: 'Castro Ortiz',
+                ciNit: '4918230 CBBA',
+                telefono: '+591 72198450',
+                correo: 'fernando.castro@email.com'
+              },
+              ocupaciones: []
+            },
+            {
+              idDepartamento: 6,
+              numero: '302',
+              piso: 3,
+              areaM2: 88.5,
+              alicuota: 3.34,
+              estado: 'Mantenimiento',
+              parqueo: 'Sin parqueo',
+              baulera: 'Sin baulera',
+              idPersonaPropietario: null,
+              propietario: null,
+              ocupaciones: []
+            }
+          ],
+          meta: {
+            total: 6,
+            page: 1,
+            limit: 10,
+            totalPages: 1
+          }
+        })
+      }
+
+      if (request.method === 'POST') {
+        let parsed: any = {}
+        try {
+          parsed = JSON.parse(body)
+        } catch {}
+        return NextResponse.json(
+          {
+            idDepartamento: Date.now(),
+            numero: parsed.numero || '100',
+            piso: parsed.piso || 1,
+            areaM2: parsed.areaM2 || 100,
+            alicuota: parsed.alicuota || 4.0,
+            estado: parsed.estado || 'Disponible',
+            parqueo: parsed.parqueo || 'Sin parqueo',
+            baulera: parsed.baulera || 'Sin baulera',
+            propietario: parsed.propietario || null
+          },
+          { status: 201 }
+        )
+      }
+
+      if (request.method === 'PATCH' || request.method === 'PUT') {
+        return NextResponse.json({
+          success: true,
+          message: 'Departamento actualizado exitosamente (modo local)'
+        })
+      }
+    }
+
+    if (targetPath.startsWith('personas')) {
+      return NextResponse.json({
+        data: [
+          {
+            idPersona: 1,
+            ciNit: '4829103 CBBA',
+            nombres: 'Carlos',
+            apellidos: 'Mendoza Rojas',
+            telefono: '+591 71234567',
+            correo: 'carlos.mendoza@email.com',
+            direccion: 'Av. Ballivián 1234',
+            departamentosPropios: [{ idDepartamento: 1, numero: '101' }],
+            ocupaciones: [
+              { idOcupacion: 1, tipoOcupante: 'Propietario', departamento: { numero: '101' } }
+            ]
+          },
+          {
+            idPersona: 2,
+            ciNit: '5920144 SCZ',
+            nombres: 'Mariana',
+            apellidos: 'Flores Soliz',
+            telefono: '+591 79876543',
+            correo: 'mariana.flores@email.com',
+            direccion: 'Calle Sucre 456',
+            departamentosPropios: [{ idDepartamento: 2, numero: '102' }],
+            ocupaciones: [
+              { idOcupacion: 2, tipoOcupante: 'Inquilino', departamento: { numero: '102' } }
+            ]
+          },
+          {
+            idPersona: 3,
+            ciNit: '3948120 LPZ',
+            nombres: 'Alejandro',
+            apellidos: 'Vargas Morales',
+            telefono: '+591 67123980',
+            correo: 'alejandro.vargas@email.com',
+            direccion: 'Calle España 789',
+            departamentosPropios: [{ idDepartamento: 3, numero: '201' }],
+            ocupaciones: [
+              { idOcupacion: 3, tipoOcupante: 'Propietario', departamento: { numero: '201' } }
+            ]
+          },
+          {
+            idPersona: 4,
+            ciNit: '6129841 CBBA',
+            nombres: 'Valeria',
+            apellidos: 'Torrico Camacho',
+            telefono: '+591 75432198',
+            correo: 'valeria.torrico@email.com',
+            direccion: 'Av. América 321',
+            departamentosPropios: [{ idDepartamento: 4, numero: '202' }],
+            ocupaciones: []
+          }
+        ],
+        meta: {
+          total: 4,
+          page: 1,
+          limit: 10,
+          totalPages: 1
+        }
+      })
+    }
+
     if (targetPath.startsWith('usuarios')) {
       if (request.method === 'GET') {
         return NextResponse.json([
