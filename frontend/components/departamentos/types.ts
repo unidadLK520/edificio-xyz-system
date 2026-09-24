@@ -1,5 +1,7 @@
 // frontend/components/departamentos/types.ts
-// Tipos e interfaces compartidas para el módulo de Departamentos y Catastro (HU 4)
+// Tipos e interfaces compartidas para el módulo de Departamentos, Parqueos y Bauleras (HU03)
+
+export type TipoUnidad = 'Departamento' | 'Parqueo' | 'Baulera'
 
 export interface PropietarioInfo {
   id?: number
@@ -15,36 +17,52 @@ export interface InquilinoInfo {
 }
 
 export interface HistorialOcupanteItem {
-  periodo: string
-  residente: string
-  tipo: 'Propietario' | 'Inquilino'
+  idHistorial?: number
+  periodo?: string
+  residente?: string
+  tipo?: string
+  fechaInicio?: string
+  fechaFin?: string
+  notas?: string
 }
 
-export interface DepartamentoItem {
+export interface UnidadItem {
   id: number
+  tipoUnidad: TipoUnidad
   numero: string
-  piso: number
-  areaM2: number
+  piso?: number | null
+  areaM2?: number | null
   alicuota?: number
-  estado: 'Ocupado' | 'Disponible' | 'En Alquiler' | 'Mantenimiento'
-  propietario: PropietarioInfo | null
+  estado: string
+  propietario?: PropietarioInfo | null
+  ocupanteActual?: PropietarioInfo | null
   inquilinoActual?: InquilinoInfo | null
-  parqueo: string
-  baulera: string
+  idDepartamento?: number | null
+  departamento?: { idDepartamento?: number; numero?: string } | null
+  idPersona?: number | null
+  persona?: { idPersona?: number; nombres?: string; apellidos?: string } | null
+  parqueos?: any[]
+  bauleras?: any[]
+  parqueo?: string
+  baulera?: string
   fechaRegistro?: string
   historialOcupantes?: HistorialOcupanteItem[]
 }
 
+export interface DepartamentoItem extends UnidadItem {}
+
 export interface DepartamentoFormData {
+  tipoUnidad?: TipoUnidad
   numero: string
   piso: number
   areaM2: number
-  alicuota: number
-  parqueo: string
-  baulera: string
-  propietarioNombre: string
-  propietarioCi: string
-  propietarioTel: string
-  propietarioCorreo: string
-  estado: 'Ocupado' | 'Disponible' | 'En Alquiler' | 'Mantenimiento'
+  alicuota?: number
+  parqueo?: string
+  baulera?: string
+  propietarioNombre?: string
+  propietarioCi?: string
+  propietarioTel?: string
+  propietarioCorreo?: string
+  estado: string
 }
+

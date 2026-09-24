@@ -28,9 +28,9 @@ export default function FichaTecnicaModal({ isOpen, depto, onClose }: FichaTecni
                 Ficha Técnica Inmobiliaria — Dpto {depto.numero}
               </h3>
               <p className="text-xs text-[#7d776f] dark:text-slate-400">
-                Piso {depto.piso} • {depto.areaM2} m² • Alícuota:{' '}
+                Piso {depto.piso || '-'} • {depto.areaM2 || 0} m² • Alícuota:{' '}
                 <span className="font-bold text-blue-700 dark:text-indigo-400">
-                  {depto.alicuota || ((depto.areaM2 / 2650) * 100).toFixed(2)}%
+                  {depto.alicuota || ((Number(depto.areaM2 || 0) / 2650) * 100).toFixed(2)}%
                 </span>
               </p>
             </div>
