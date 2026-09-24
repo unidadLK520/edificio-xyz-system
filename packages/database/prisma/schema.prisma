@@ -63,7 +63,10 @@ model Persona {
   departamentosPropios Departamento[]   @relation("PropietarioDepartamentos")
   ocupaciones          OcupanteDepartamento[]
   comunicadosEnvios    ComunicadoEnvio[]
-  usuarios   Usuario[]
+  usuarios             Usuario[]
+  parqueosAsignados    Parqueo[]
+  baulerasAsignadas    Baulera[]
+  historialAsignaciones HistorialAsignacionUnidad[]
 
   @@map("personas")
   @@schema("edificio")
@@ -85,6 +88,7 @@ model Departamento {
   pagos          Pago[]
   reservas       Reserva[]
   solicitudesMantenimiento SolicitudMantenimiento[]
+  historialAsignaciones HistorialAsignacionUnidad[]
 
   @@map("departamentos")
   @@schema("edificio")
@@ -93,8 +97,13 @@ model Departamento {
 model Parqueo {
   idParqueo      Int           @id @default(autoincrement()) @map("id_parqueo")
   numero         String        @unique @db.VarChar(10)
+  estado         String        @default("Disponible") @db.VarChar(20)
   idDepartamento Int?          @map("id_departamento")
+  idPersona      Int?          @map("id_persona")
+  fechaAsignacion DateTime?    @map("fecha_asignacion") @db.Timestamp(6)
+
   departamento   Departamento? @relation(fields: [idDepartamento], references: [idDepartamento])
+  persona        Persona?      @relation(fields: [idPersona], references: [idPersona])
 
   @@map("parqueos")
   @@schema("edificio")
@@ -103,8 +112,13 @@ model Parqueo {
 model Baulera {
   idBaulera      Int           @id @default(autoincrement()) @map("id_baulera")
   numero         String        @unique @db.VarChar(10)
+  estado         String        @default("Disponible") @db.VarChar(20)
   idDepartamento Int?          @map("id_departamento")
+  idPersona      Int?          @map("id_persona")
+  fechaAsignacion DateTime?    @map("fecha_asignacion") @db.Timestamp(6)
+
   departamento   Departamento? @relation(fields: [idDepartamento], references: [idDepartamento])
+  persona        Persona?      @relation(fields: [idPersona], references: [idPersona])
 
   @@map("bauleras")
   @@schema("edificio")
@@ -123,6 +137,26 @@ model OcupanteDepartamento {
 
   @@index([idDepartamento], map: "idx_ocupantes_departamento")
   @@map("ocupantes_departamento")
+  @@schema("edificio")
+}
+
+model HistorialAsignacionUnidad {
+  idHistorial    Int          @id @default(autoincrement()) @map("id_historial")
+  tipoUnidad     String       @map("tipo_unidad") @db.VarChar(20) // Departamento, Parqueo, Baulera
+  idUnidad       Int          @map("id_unidad")
+  numeroUnidad   String       @map("numero_unidad") @db.VarChar(20)
+  idPersona      Int?         @map("id_persona")
+  idDepartamento Int?         @map("id_departamento")
+  tipoRelacion   String       @map("tipo_relacion") @db.VarChar(30) // Propietario, Inquilino, Asignado
+  fechaInicio    DateTime     @default(now()) @map("fecha_inicio") @db.Timestamp(6)
+  fechaFin       DateTime?    @map("fecha_fin") @db.Timestamp(6)
+  notas          String?      @db.Text
+
+  persona        Persona?     @relation(fields: [idPersona], references: [idPersona])
+  departamento   Departamento? @relation(fields: [idDepartamento], references: [idDepartamento])
+
+  @@index([tipoUnidad, idUnidad], map: "idx_historial_unidad")
+  @@map("historial_asignacion_unidades")
   @@schema("edificio")
 }
 
