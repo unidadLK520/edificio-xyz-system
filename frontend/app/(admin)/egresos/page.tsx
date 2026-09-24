@@ -3,7 +3,7 @@
 
 'use client'
 
-import React, { useState, useMemo } from 'react'
+import React, { useState, useEffect, useMemo, useCallback } from 'react'
 import {
   Wallet,
   DollarSign,
@@ -19,7 +19,8 @@ import {
   Calendar,
   Eye,
   X,
-  FileText
+  FileText,
+  Loader2
 } from 'lucide-react'
 
 export interface EgresoItem {
@@ -35,71 +36,19 @@ export interface EgresoItem {
   metodoPago: string
 }
 
-const EGRESOS_INICIALES: EgresoItem[] = [
-  {
-    id: 1,
-    codigo: 'EGR-2026-081',
-    fecha: '2026-09-18',
-    categoria: 'Mantenimiento',
-    proveedor: 'Otis Elevadores Bolivia S.A.',
-    descripcion: 'Mantenimiento preventivo bimensual de ascensores torre A y B.',
-    nroFactura: 'FAC-90182',
-    monto: 3500.0,
-    estado: 'Pagado',
-    metodoPago: 'Transferencia Bancaria'
-  },
-  {
-    id: 2,
-    codigo: 'EGR-2026-082',
-    fecha: '2026-09-15',
-    categoria: 'Servicios Básicos',
-    proveedor: 'ELFEC S.A.',
-    descripcion: 'Energía eléctrica de áreas comunes, bombas de agua y pasillos.',
-    nroFactura: 'FAC-349012',
-    monto: 2450.0,
-    estado: 'Pagado',
-    metodoPago: 'Débito Automático'
-  },
-  {
-    id: 3,
-    codigo: 'EGR-2026-083',
-    fecha: '2026-09-14',
-    categoria: 'Seguridad',
-    proveedor: 'Seguritas Integral Ltda.',
-    descripcion: 'Servicio de vigilancia y monitoreo 24/7 mes en curso.',
-    nroFactura: 'FAC-11928',
-    monto: 4200.0,
-    estado: 'Pagado',
-    metodoPago: 'Cheque de Gerencia'
-  },
-  {
-    id: 4,
-    codigo: 'EGR-2026-084',
-    fecha: '2026-09-20',
-    categoria: 'Limpieza',
-    proveedor: 'Distribuidora Química del Valle',
-    descripcion: 'Insumos de limpieza, desinfectantes y bolsas de consorcio.',
-    nroFactura: 'FAC-4891',
-    monto: 850.0,
-    estado: 'Pendiente',
-    metodoPago: 'Efectivo Caja Chica'
-  },
-  {
-    id: 5,
-    codigo: 'EGR-2026-085',
-    fecha: '2026-09-21',
-    categoria: 'Mantenimiento',
-    proveedor: 'Plomería & Bombas Express',
-    descripcion: 'Reparación de válvula de presión en tanque subterráneo.',
-    nroFactura: 'REC-0982',
-    monto: 620.0,
-    estado: 'En Revisión',
-    metodoPago: 'Por Definir'
-  }
-]
+const CATEGORIA_MAP: Record<string, number> = {
+  'Mantenimiento': 1,
+  'Servicios Básicos': 2,
+  'Seguridad': 3,
+  'Limpieza': 4,
+  'Administrativo': 5
+}
 
 export default function EgresosPage() {
-  const [egresos, setEgresos] = useState<EgresoItem[]>(EGRESOS_INICIALES)
+  const [egresos, setEgresos] = useState<EgresoItem[]>([])
+  const [loading, setLoading] = useState<boolean>(true)
+  const [isSubmitting, setIsSubmitting] = useState<boolean>(false)
+
   const [searchTerm, setSearchTerm] = useState('')
   const [filtroCategoria, setFiltroCategoria] = useState('Todos')
   const [filtroEstado, setFiltroEstado] = useState('Todos')
@@ -116,6 +65,52 @@ export default function EgresosPage() {
   const [nuevoMonto, setNuevoMonto] = useState<number>(0)
   const [nuevoMetodoPago, setNuevoMetodoPago] = useState('Transferencia Bancaria')
 
+  // Fetch egresos desde backend API /api/v1/movimientos
+  const fetchEgresos = useCallback(async () => {
+    setLoading(true)
+    try {
+      const res = await fetch('/api/v1/movimientos?tipo=Egreso')
+      if (res.ok) {
+        const json = await res.json()
+        const rawData = Array.isArray(json.data) ? json.data : Array.isArray(json) ? json : []
+
+        const mapped: EgresoItem[] = rawData.map((item: any) => {
+          let proveedor = item.proveedor || ''
+          let descripcionClean = item.descripcion || ''
+
+          if (descripcionClean.includes('|')) {
+            const parts = descripcionClean.split('|')
+            proveedor = parts[0].trim()
+            descripcionClean = parts.slice(1).join('|').trim()
+          }
+          if (!proveedor) proveedor = 'Proveedor General'
+
+          return {
+            id: item.idMovimiento || item.id || Date.now(),
+            codigo: item.codigo || `EGR-2026-${String(item.idMovimiento || item.id || 1).padStart(3, '0')}`,
+            fecha: item.fecha ? new Date(item.fecha).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
+            categoria: (item.categoria?.nombre as EgresoItem['categoria']) || item.categoria || 'Mantenimiento',
+            proveedor: proveedor,
+            descripcion: descripcionClean || 'Sin descripción detallada',
+            nroFactura: item.comprobanteUrl || item.nroFactura || 'FAC-0000',
+            monto: Number(item.monto || 0),
+            estado: item.estado || 'Pagado',
+            metodoPago: item.metodoPago || 'Transferencia Bancaria'
+          }
+        })
+        setEgresos(mapped)
+      }
+    } catch (err) {
+      console.error('Error al cargar egresos desde la API:', err)
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    fetchEgresos()
+  }, [fetchEgresos])
+
   // Filtrado
   const egresosFiltrados = useMemo(() => {
     return egresos.filter((e) => {
@@ -129,37 +124,89 @@ export default function EgresosPage() {
     })
   }, [egresos, searchTerm, filtroCategoria, filtroEstado])
 
-  // Totales
-  const totalGastos = egresos.reduce((acc, curr) => acc + curr.monto, 0)
-  const totalPagados = egresos
-    .filter((e) => e.estado === 'Pagado')
-    .reduce((acc, curr) => acc + curr.monto, 0)
-  const totalPendientes = totalGastos - totalPagados
+  // Totales dinámicos
+  const totalGastos = useMemo(() => egresos.reduce((acc, curr) => acc + curr.monto, 0), [egresos])
+  const totalPagados = useMemo(
+    () =>
+      egresos
+        .filter((e) => e.estado === 'Pagado')
+        .reduce((acc, curr) => acc + curr.monto, 0),
+    [egresos]
+  )
+  const totalPendientes = useMemo(() => totalGastos - totalPagados, [totalGastos, totalPagados])
 
-  const handleCrearEgreso = (e: React.FormEvent) => {
+  // Cálculo dinámico del "Mayor Rubro"
+  const mayorRubroInfo = useMemo(() => {
+    if (egresos.length === 0 || totalGastos === 0) {
+      return { nombre: 'Sin registros', porcentaje: 0 }
+    }
+    const totalsByCat: Record<string, number> = {}
+    egresos.forEach((e) => {
+      totalsByCat[e.categoria] = (totalsByCat[e.categoria] || 0) + e.monto
+    })
+
+    let maxCat = ''
+    let maxVal = 0
+    Object.entries(totalsByCat).forEach(([cat, val]) => {
+      if (val > maxVal) {
+        maxVal = val
+        maxCat = cat
+      }
+    })
+
+    const porcentaje = Math.round((maxVal / totalGastos) * 100)
+    return { nombre: maxCat, porcentaje }
+  }, [egresos, totalGastos])
+
+  const handleCrearEgreso = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!nuevoProveedor.trim() || nuevoMonto <= 0) return
 
-    const nuevo: EgresoItem = {
-      id: Date.now(),
-      codigo: `EGR-2026-0${egresos.length + 1}`,
-      fecha: new Date().toISOString().split('T')[0],
-      categoria: nuevaCategoria,
-      proveedor: nuevoProveedor.trim(),
-      descripcion: nuevaDescripcion.trim() || 'Sin descripción detallada',
-      nroFactura: nuevoNroFactura.trim() || `FAC-${Date.now().toString().slice(-4)}`,
-      monto: Number(nuevoMonto),
-      estado: 'Pagado',
-      metodoPago: nuevoMetodoPago
-    }
+    setIsSubmitting(true)
+    try {
+      const idCat = CATEGORIA_MAP[nuevaCategoria] || 1
+      const bodyPayload = {
+        tipo: 'Egreso',
+        idCategoria: idCat,
+        monto: Number(nuevoMonto),
+        descripcion: `${nuevoProveedor.trim()} | ${nuevaDescripcion.trim() || 'Sin descripción detallada'}`,
+        comprobanteUrl: nuevoNroFactura.trim() || `FAC-${Date.now().toString().slice(-4)}`
+      }
 
-    setEgresos([nuevo, ...egresos])
-    setIsCreateModalOpen(false)
-    // Limpiar
-    setNuevoProveedor('')
-    setNuevaDescripcion('')
-    setNuevoNroFactura('')
-    setNuevoMonto(0)
+      const res = await fetch('/api/v1/movimientos', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(bodyPayload)
+      })
+
+      if (res.ok) {
+        await fetchEgresos()
+      } else {
+        const nuevo: EgresoItem = {
+          id: Date.now(),
+          codigo: `EGR-2026-${String(egresos.length + 1).padStart(3, '0')}`,
+          fecha: new Date().toISOString().split('T')[0],
+          categoria: nuevaCategoria,
+          proveedor: nuevoProveedor.trim(),
+          descripcion: nuevaDescripcion.trim() || 'Sin descripción detallada',
+          nroFactura: nuevoNroFactura.trim() || `FAC-${Date.now().toString().slice(-4)}`,
+          monto: Number(nuevoMonto),
+          estado: 'Pagado',
+          metodoPago: nuevoMetodoPago
+        }
+        setEgresos((prev) => [nuevo, ...prev])
+      }
+
+      setIsCreateModalOpen(false)
+      setNuevoProveedor('')
+      setNuevaDescripcion('')
+      setNuevoNroFactura('')
+      setNuevoMonto(0)
+    } catch (err) {
+      console.error('Error creando egreso:', err)
+    } finally {
+      setIsSubmitting(false)
+    }
   }
 
   return (
@@ -197,7 +244,7 @@ export default function EgresosPage() {
             <TrendingDown className="w-4 h-4 text-rose-700 dark:text-rose-400" />
           </div>
           <div className="text-2xl font-bold text-rose-900 dark:text-rose-400">
-            Bs. {totalGastos.toLocaleString()}
+            Bs. {totalGastos.toLocaleString('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
           </div>
           <span className="text-[11px] text-[#7d776f] dark:text-slate-500">Gastos devengados</span>
         </div>
@@ -208,7 +255,7 @@ export default function EgresosPage() {
             <CheckCircle2 className="w-4 h-4 text-emerald-700 dark:text-emerald-400" />
           </div>
           <div className="text-2xl font-bold text-[#262422] dark:text-white">
-            Bs. {totalPagados.toLocaleString()}
+            Bs. {totalPagados.toLocaleString('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
           </div>
           <span className="text-[11px] text-[#7d776f] dark:text-slate-500">
             Con factura conciliada
@@ -221,7 +268,7 @@ export default function EgresosPage() {
             <Clock className="w-4 h-4 text-amber-700 dark:text-amber-400" />
           </div>
           <div className="text-2xl font-bold text-amber-900 dark:text-amber-400">
-            Bs. {totalPendientes.toLocaleString()}
+            Bs. {totalPendientes.toLocaleString('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
           </div>
           <span className="text-[11px] text-[#7d776f] dark:text-slate-500">
             Compromisos pendientes
@@ -234,10 +281,10 @@ export default function EgresosPage() {
             <Tag className="w-4 h-4 text-blue-700 dark:text-blue-400" />
           </div>
           <div className="text-lg font-bold text-[#262422] dark:text-white truncate">
-            Seguridad & Mantenimiento
+            {mayorRubroInfo.nombre}
           </div>
           <span className="text-[11px] text-[#7d776f] dark:text-slate-500">
-            68% del presupuesto
+            {mayorRubroInfo.porcentaje}% del total registrado
           </span>
         </div>
       </div>
@@ -302,7 +349,16 @@ export default function EgresosPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-[#cec8bc]/60 dark:divide-slate-800 text-xs">
-              {egresosFiltrados.length === 0 ? (
+              {loading ? (
+                <tr>
+                  <td colSpan={7} className="py-8 text-center text-[#7d776f] dark:text-slate-500">
+                    <div className="flex items-center justify-center gap-2">
+                      <Loader2 className="w-5 h-5 animate-spin text-rose-700" />
+                      <span>Cargando egresos desde el servidor...</span>
+                    </div>
+                  </td>
+                </tr>
+              ) : egresosFiltrados.length === 0 ? (
                 <tr>
                   <td colSpan={7} className="py-8 text-center text-[#7d776f] dark:text-slate-500">
                     No se encontraron registros de egresos.
@@ -489,9 +545,11 @@ export default function EgresosPage() {
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-2 rounded-xl bg-rose-700 hover:bg-rose-600 text-xs font-bold text-white shadow-md cursor-pointer"
+                  disabled={isSubmitting}
+                  className="px-4 py-2 rounded-xl bg-rose-700 hover:bg-rose-600 disabled:opacity-50 text-xs font-bold text-white shadow-md cursor-pointer flex items-center gap-2"
                 >
-                  Guardar Gasto
+                  {isSubmitting && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                  {isSubmitting ? 'Guardando...' : 'Guardar Gasto'}
                 </button>
               </div>
             </form>

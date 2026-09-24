@@ -564,6 +564,96 @@ async function proxyRequest(
       ])
     }
 
+    if (targetPath.startsWith('movimientos')) {
+      if (request.method === 'GET') {
+        return NextResponse.json({
+          data: [
+            {
+              idMovimiento: 1,
+              tipo: 'Egreso',
+              idCategoria: 1,
+              monto: 3500.0,
+              descripcion: 'Otis Elevadores Bolivia S.A. | Mantenimiento preventivo bimensual de ascensores torre A y B.',
+              fecha: '2026-09-18T00:00:00.000Z',
+              comprobanteUrl: 'FAC-90182',
+              categoria: { idCategoria: 1, nombre: 'Mantenimiento', tipo: 'Egreso' },
+              usuarioRegistro: { nombreUsuario: 'admin' }
+            },
+            {
+              idMovimiento: 2,
+              tipo: 'Egreso',
+              idCategoria: 2,
+              monto: 2450.0,
+              descripcion: 'ELFEC S.A. | Energía eléctrica de áreas comunes, bombas de agua y pasillos.',
+              fecha: '2026-09-15T00:00:00.000Z',
+              comprobanteUrl: 'FAC-349012',
+              categoria: { idCategoria: 2, nombre: 'Servicios Básicos', tipo: 'Egreso' },
+              usuarioRegistro: { nombreUsuario: 'admin' }
+            },
+            {
+              idMovimiento: 3,
+              tipo: 'Egreso',
+              idCategoria: 3,
+              monto: 4200.0,
+              descripcion: 'Seguritas Integral Ltda. | Servicio de vigilancia y monitoreo 24/7 mes en curso.',
+              fecha: '2026-09-14T00:00:00.000Z',
+              comprobanteUrl: 'FAC-11928',
+              categoria: { idCategoria: 3, nombre: 'Seguridad', tipo: 'Egreso' },
+              usuarioRegistro: { nombreUsuario: 'admin' }
+            },
+            {
+              idMovimiento: 4,
+              tipo: 'Egreso',
+              idCategoria: 4,
+              monto: 850.0,
+              descripcion: 'Distribuidora Química del Valle | Insumos de limpieza, desinfectantes y bolsas de consorcio.',
+              fecha: '2026-09-20T00:00:00.000Z',
+              comprobanteUrl: 'FAC-4891',
+              categoria: { idCategoria: 4, nombre: 'Limpieza', tipo: 'Egreso' },
+              usuarioRegistro: { nombreUsuario: 'admin' }
+            },
+            {
+              idMovimiento: 5,
+              tipo: 'Egreso',
+              idCategoria: 1,
+              monto: 620.0,
+              descripcion: 'Plomería & Bombas Express | Reparación de válvula de presión en tanque subterráneo.',
+              fecha: '2026-09-21T00:00:00.000Z',
+              comprobanteUrl: 'REC-0982',
+              categoria: { idCategoria: 1, nombre: 'Mantenimiento', tipo: 'Egreso' },
+              usuarioRegistro: { nombreUsuario: 'admin' }
+            }
+          ],
+          meta: {
+            total: 5,
+            page: 1,
+            limit: 20,
+            totalPages: 1
+          }
+        })
+      }
+
+      if (request.method === 'POST') {
+        let parsed: any = {}
+        try {
+          parsed = JSON.parse(body)
+        } catch {}
+        return NextResponse.json(
+          {
+            idMovimiento: Date.now(),
+            tipo: parsed.tipo || 'Egreso',
+            idCategoria: parsed.idCategoria || 1,
+            monto: parsed.monto || 0,
+            descripcion: parsed.descripcion || 'Sin descripción',
+            fecha: new Date().toISOString(),
+            comprobanteUrl: parsed.comprobanteUrl || null,
+            categoria: { idCategoria: parsed.idCategoria || 1, nombre: 'General', tipo: 'Egreso' }
+          },
+          { status: 201 }
+        )
+      }
+    }
+
     if (targetPath.startsWith('health')) {
       return NextResponse.json({
         status: 'OK',
