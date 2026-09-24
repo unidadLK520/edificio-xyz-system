@@ -2,6 +2,7 @@
 'use client'
 
 import React from 'react'
+import { Phone } from 'lucide-react'
 import { UsuarioItem } from './types'
 
 interface UsuariosTableProps {
@@ -71,8 +72,9 @@ export const UsuariosTable: React.FC<UsuariosTableProps> = ({
                         : user.nombreUsuario}
                     </span>
                     {user.persona?.telefono && (
-                      <span className="text-xs text-slate-500 block">
-                        📞 {user.persona.telefono}
+                      <span className="text-xs text-slate-500 flex items-center gap-1 mt-0.5">
+                        <Phone className="w-3 h-3 text-slate-400 shrink-0" />
+                        {user.persona.telefono}
                       </span>
                     )}
                   </div>

@@ -2,6 +2,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import { User, AlertTriangle, Home, Key, Building2, History } from 'lucide-react';
 
 interface FichaResidenteModalProps {
   isOpen: boolean;
@@ -98,7 +99,7 @@ export default function FichaResidenteModal({
         <div className="px-6 py-5 border-b border-slate-200 dark:border-slate-800 flex justify-between items-center bg-slate-50/50 dark:bg-slate-850">
           <div>
             <h3 className="font-bold text-lg text-slate-900 dark:text-white flex items-center gap-2">
-              <span>👤</span> Ficha del Residente
+              <User className="w-5 h-5 text-indigo-500 shrink-0" /> Ficha del Residente
             </h3>
             <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
               Información personal, contacto y relación histórica con las unidades del edificio.
@@ -137,8 +138,9 @@ export default function FichaResidenteModal({
               <span className="text-sm font-medium">Cargando datos del residente...</span>
             </div>
           ) : errorMessage ? (
-            <div className="p-4 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900/60 rounded-xl text-rose-700 dark:text-rose-300 text-sm">
-              ⚠️ {errorMessage}
+            <div className="p-4 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900/60 rounded-xl text-rose-700 dark:text-rose-300 text-sm flex items-center gap-2">
+              <AlertTriangle className="w-4 h-4 shrink-0 text-rose-500" />
+              <span>{errorMessage}</span>
             </div>
           ) : persona ? (
             <>
@@ -158,15 +160,15 @@ export default function FichaResidenteModal({
                   </div>
                   <div className="flex items-center gap-2">
                     {persona.departamentosPropios?.length > 0 && (
-                      <span className="px-2.5 py-1 text-xs font-semibold bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300 rounded-full border border-emerald-300 dark:border-emerald-800/60">
-                        🏠 Propietario ({persona.departamentosPropios.length})
+                      <span className="px-2.5 py-1 text-xs font-semibold bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300 rounded-full border border-emerald-300 dark:border-emerald-800/60 flex items-center gap-1">
+                        <Home className="w-3.5 h-3.5" /> Propietario ({persona.departamentosPropios.length})
                       </span>
                     )}
                     {persona.ocupaciones?.some(
                       (o: any) => o.tipoOcupante === 'Inquilino' && !o.fechaFin
                     ) && (
-                      <span className="px-2.5 py-1 text-xs font-semibold bg-blue-100 text-blue-800 dark:bg-blue-950/60 dark:text-blue-300 rounded-full border border-blue-300 dark:border-blue-800/60">
-                        🔑 Inquilino Activo
+                      <span className="px-2.5 py-1 text-xs font-semibold bg-blue-100 text-blue-800 dark:bg-blue-950/60 dark:text-blue-300 rounded-full border border-blue-300 dark:border-blue-800/60 flex items-center gap-1">
+                        <Key className="w-3.5 h-3.5" /> Inquilino Activo
                       </span>
                     )}
                   </div>
@@ -203,7 +205,7 @@ export default function FichaResidenteModal({
               {/* Seccion 1: Departamentos Propios (CA8) */}
               <div>
                 <h5 className="text-xs uppercase tracking-wider font-bold text-slate-500 dark:text-slate-400 mb-2 flex items-center gap-1.5">
-                  <span>🏢</span> Unidades de Titularidad Directa
+                  <Building2 className="w-4 h-4 text-indigo-500 shrink-0" /> Unidades de Titularidad Directa
                 </h5>
                 {persona.departamentosPropios?.length === 0 ? (
                   <div className="p-3.5 bg-slate-50 dark:bg-slate-950/40 border border-slate-200 dark:border-slate-800/60 rounded-xl text-slate-500 text-xs text-center">
@@ -232,7 +234,7 @@ export default function FichaResidenteModal({
               {/* Seccion 2: Ocupaciones e Historial (CA6, CA7) */}
               <div>
                 <h5 className="text-xs uppercase tracking-wider font-bold text-slate-500 dark:text-slate-400 mb-2 flex items-center gap-1.5">
-                  <span>📜</span> Historial de Ocupaciones y Alquileres
+                  <History className="w-4 h-4 text-indigo-500 shrink-0" /> Historial de Ocupaciones y Alquileres
                 </h5>
                 {historial.length === 0 ? (
                   <div className="p-3.5 bg-slate-50 dark:bg-slate-950/40 border border-slate-200 dark:border-slate-800/60 rounded-xl text-slate-500 text-xs text-center">

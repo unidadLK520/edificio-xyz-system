@@ -2,6 +2,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import { Home, AlertTriangle, Key } from 'lucide-react';
 
 interface AsignarUnidadModalProps {
   isOpen: boolean;
@@ -114,7 +115,8 @@ export default function AsignarUnidadModal({
         <div className="px-6 py-5 border-b border-slate-200 dark:border-slate-800 flex justify-between items-center bg-slate-50/50 dark:bg-slate-850">
           <div>
             <h3 className="font-bold text-lg text-slate-900 dark:text-white flex items-center gap-2">
-              <span>🏠</span> Asignar Unidad Habitacional
+              <Home className="w-5 h-5 text-indigo-500 shrink-0" />
+              Asignar Unidad Habitacional
             </h3>
             <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
               Asociar a <strong className="text-slate-800 dark:text-slate-200">{persona.nombres} {persona.apellidos}</strong> con un departamento.
@@ -133,7 +135,7 @@ export default function AsignarUnidadModal({
         {/* Alerta de Error */}
         {errorMessage && (
           <div className="mx-6 mt-4 p-3.5 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900/60 rounded-xl text-rose-700 dark:text-rose-300 text-xs flex items-start gap-2.5">
-            <span className="text-base shrink-0">⚠️</span>
+            <AlertTriangle className="w-4 h-4 shrink-0 text-rose-500 mt-0.5" />
             <div className="flex-1 font-medium">{errorMessage}</div>
           </div>
         )}
@@ -188,7 +190,7 @@ export default function AsignarUnidadModal({
                   }}
                   className="sr-only"
                 />
-                <span>🏠 Propietario</span>
+                <span className="flex items-center gap-1.5"><Home className="w-4 h-4" /> Propietario</span>
               </label>
 
               <label
@@ -209,7 +211,7 @@ export default function AsignarUnidadModal({
                   }}
                   className="sr-only"
                 />
-                <span>🔑 Inquilino</span>
+                <span className="flex items-center gap-1.5"><Key className="w-4 h-4" /> Inquilino</span>
               </label>
             </div>
           </div>
