@@ -1,3 +1,4 @@
+//-----------------------------Giovani Quiroz------------------------
 // backend/src/modules/auditoria/auditoria.service.ts
 // Lógica de negocio para registro y consulta de auditoría de eventos (CA08, CA10)
 
