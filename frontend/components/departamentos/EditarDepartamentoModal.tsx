@@ -55,7 +55,7 @@ export default function EditarDepartamentoModal({
                 type="number"
                 step="0.5"
                 required
-                value={depto.areaM2}
+                value={depto.areaM2 ?? ''}
                 onChange={(e) => onChange({ ...depto, areaM2: Number(e.target.value) })}
                 className="w-full px-3 py-2 rounded-xl bg-[#ded8cc] dark:bg-slate-800 border border-[#cec8bc] dark:border-slate-700 text-xs text-[#262422] dark:text-white font-mono font-bold focus:outline-none focus:ring-2 focus:ring-blue-600"
               />
