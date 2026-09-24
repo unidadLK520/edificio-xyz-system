@@ -1,5 +1,8 @@
+//-----------------------------Giovani Quiroz------------------------
 // backend/src/modules/auditoria/auditoria.types.ts
 // Tipos y catálogo de eventos de auditoría (CA08, CA10)
+
+import { Prisma } from '@edificio-xyz/database';
 
 export enum TipoEventoAuditoria {
   LOGIN_EXITOSO = 'LOGIN_EXITOSO',
@@ -25,4 +28,6 @@ export interface RegistrarAuditoriaParams {
   datosAnteriores?: Record<string, any> | null;
   datosNuevos?: Record<string, any> | null;
   idUsuario?: number | null;
+  tx?: Prisma.TransactionClient;
 }
+
