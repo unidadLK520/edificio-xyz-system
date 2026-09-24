@@ -2,6 +2,7 @@
 'use client'
 
 import React, { useState, useEffect } from 'react'
+import { ShieldCheck, AlertTriangle, CheckCircle2, X } from 'lucide-react'
 import { PersonaItem, UsuarioItem } from '@/components/usuarios/types'
 import { UsuariosTable } from '@/components/usuarios/UsuariosTable'
 import { CreateUsuarioModal } from '@/components/usuarios/CreateUsuarioModal'
@@ -107,7 +108,7 @@ export default function UsuariosPage() {
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
         <div>
           <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-indigo-500/10 border border-indigo-500/20 text-indigo-600 dark:text-indigo-400 text-xs font-semibold mb-2">
-            <span>🛡️</span> Registro Unificado: Personas & Usuarios
+            <ShieldCheck className="w-3.5 h-3.5 text-indigo-500" /> Registro Unificado: Personas & Usuarios
           </div>
           <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-slate-900 dark:text-white">
             Gestión de Usuarios y Personas
@@ -139,14 +140,15 @@ export default function UsuariosPage() {
       {errorMessage && (
         <div className="p-4 rounded-2xl bg-rose-500/10 border border-rose-500/30 text-rose-600 dark:text-rose-400 text-sm flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <span className="font-bold">⚠️ Error:</span>
+            <AlertTriangle className="w-4 h-4 text-rose-500 shrink-0" />
+            <span className="font-bold">Error:</span>
             <span>{errorMessage}</span>
           </div>
           <button
             onClick={() => setErrorMessage('')}
-            className="text-rose-400 hover:text-rose-600 font-bold cursor-pointer"
+            className="text-rose-400 hover:text-rose-600 cursor-pointer p-1 rounded-lg hover:bg-rose-500/10 transition-colors"
           >
-            ✕
+            <X className="w-4 h-4" />
           </button>
         </div>
       )}
@@ -154,14 +156,15 @@ export default function UsuariosPage() {
       {successMessage && (
         <div className="p-4 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-600 dark:text-emerald-400 text-sm flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <span className="font-bold">✅ Éxito:</span>
+            <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" />
+            <span className="font-bold">Éxito:</span>
             <span>{successMessage}</span>
           </div>
           <button
             onClick={() => setSuccessMessage('')}
-            className="text-emerald-400 hover:text-emerald-600 font-bold cursor-pointer"
+            className="text-emerald-400 hover:text-emerald-600 cursor-pointer p-1 rounded-lg hover:bg-emerald-500/10 transition-colors"
           >
-            ✕
+            <X className="w-4 h-4" />
           </button>
         </div>
       )}
