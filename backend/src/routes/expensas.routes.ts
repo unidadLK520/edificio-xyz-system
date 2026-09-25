@@ -2,10 +2,11 @@
 // HU04 — Gestión de Expensas, Generación Masiva, Pagos, Mora, Morosos, Estado de Cuenta y Auditoría
 
 import { Router, Response, NextFunction, IRouter } from 'express';
-import { prisma } from '@edificio-xyz/database';
+import { prisma, Prisma } from '@edificio-xyz/database';
 import { z } from 'zod';
 import { authMiddleware, AuthRequest } from '../middlewares/auth.middleware';
 import { authorizeRoles } from '../middlewares/role.middleware';
+import { auditoriaService } from '../modules/auditoria';
 
 export const expensasRouter: IRouter = Router();
 expensasRouter.use(authMiddleware);
@@ -62,6 +63,14 @@ const pagoSchema = z.object({
   esAnticipado: z.boolean().default(false),
   idCuenta: z.number().int().positive().optional(),
   comprobanteUrl: z.string().optional(),
+});
+
+const anularPagoSchema = z.object({
+  motivo: z.string().min(1, 'El motivo de anulación es obligatorio'),
+});
+
+const corregirPagoSchema = pagoSchema.extend({
+  motivo: z.string().min(1, 'El motivo de corrección es obligatorio'),
 });
 
 // ── GET /api/v1/expensas ─────────────────────────────────────────────────────
@@ -602,8 +611,119 @@ expensasRouter.post(
   }
 );
 
+// ── Helpers internos para Anulación y Recálculo de Pagos ────────────────────
+async function recalcularSaldoExpensa(
+  tx: Prisma.TransactionClient,
+  idExpensa: number
+) {
+  const expensa = await tx.expensa.findUnique({
+    where: { idExpensa },
+  });
+
+  if (!expensa) return null;
+
+  const pagosActivos = await tx.pago.findMany({
+    where: {
+      idExpensa,
+      anulado: false,
+    },
+  });
+
+  const totalPagado = pagosActivos.reduce((acc, p) => acc + Number(p.montoPagado), 0);
+  const totalObligacion = Number(expensa.monto) + Number(expensa.montoMora);
+  const nuevoSaldo = Math.max(0, Math.round((totalObligacion - totalPagado) * 100) / 100);
+
+  let nuevoEstado = 'Pendiente';
+  if (nuevoSaldo === 0) {
+    nuevoEstado = 'Pagado';
+  } else if (totalPagado > 0) {
+    nuevoEstado = 'Parcial';
+  } else if (Number(expensa.montoMora) > 0) {
+    nuevoEstado = 'Moroso';
+  } else {
+    nuevoEstado = 'Pendiente';
+  }
+
+  return await tx.expensa.update({
+    where: { idExpensa },
+    data: {
+      saldoPendiente: nuevoSaldo,
+      estado: nuevoEstado,
+    },
+  });
+}
+
+interface AnulacionPagoResult {
+  pagoAnulado: any;
+  expensaActualizada: any;
+}
+
+async function anularPagoInterno(
+  tx: Prisma.TransactionClient,
+  idPago: number,
+  idUsuario: number | null | undefined,
+  motivo: string
+): Promise<AnulacionPagoResult> {
+  const pagoExistente = await tx.pago.findUnique({
+    where: { idPago },
+    include: { expensa: true },
+  });
+
+  if (!pagoExistente) {
+    const error: any = new Error('Pago no encontrado');
+    error.statusCode = 404;
+    error.code = 'PAGO_NO_ENCONTRADO';
+    throw error;
+  }
+
+  if (pagoExistente.anulado) {
+    const error: any = new Error('El pago ya se encuentra anulado');
+    error.statusCode = 409;
+    error.code = 'PAGO_YA_ANULADO';
+    throw error;
+  }
+
+  const pagoAnulado = await tx.pago.update({
+    where: { idPago },
+    data: {
+      anulado: true,
+      fechaAnulacion: new Date(),
+      idUsuarioAnulacion: idUsuario || null,
+      motivoAnulacion: motivo,
+    },
+  });
+
+  const expensaActualizada = pagoExistente.idExpensa
+    ? await recalcularSaldoExpensa(tx, pagoExistente.idExpensa)
+    : null;
+
+  // CA10: Auditoría oficial dentro de la misma transacción
+  await auditoriaService.registrarEvento({
+    tablaAfectada: 'pagos',
+    idRegistro: String(idPago),
+    accion: 'ANULACION_PAGO',
+    resultado: 'EXITO',
+    datosAnteriores: {
+      anulado: pagoExistente.anulado,
+      montoPagado: Number(pagoExistente.montoPagado),
+      idExpensa: pagoExistente.idExpensa,
+      saldoPendienteExpensa: pagoExistente.expensa ? Number(pagoExistente.expensa.saldoPendiente) : null,
+    },
+    datosNuevos: {
+      anulado: true,
+      motivoAnulacion: motivo,
+      idUsuarioAnulacion: idUsuario || null,
+      saldoPendienteExpensa: expensaActualizada ? Number(expensaActualizada.saldoPendiente) : null,
+    },
+    idUsuario: idUsuario || null,
+    tx,
+  });
+
+  return { pagoAnulado, expensaActualizada };
+}
+
 // ── DELETE /api/v1/expensas/pagos/:idPago ────────────────────────────────────
-// CA09, CA10: Corregir / Anular pago con recálculo de saldo y auditoría
+// CA09, CA10: Anular pago con soft-delete, recálculo de saldo y auditoría
 expensasRouter.delete(
   '/pagos/:idPago',
   authorizeRoles('Administrador', 'Directorio'),
@@ -615,51 +735,128 @@ expensasRouter.delete(
         return;
       }
 
-      const pagoExistente = await prisma.pago.findUnique({
-        where: { idPago },
-        include: { expensa: true },
-      });
-
-      if (!pagoExistente) {
-        res.status(404).json({ error: 'Not Found', message: 'Pago no encontrado' });
+      const result = anularPagoSchema.safeParse(req.body);
+      if (!result.success) {
+        res.status(400).json({
+          error: 'Validation Error',
+          message: 'Datos de anulación inválidos',
+          details: result.error.flatten().fieldErrors,
+        });
         return;
       }
 
-      const montoARestablecer = Number(pagoExistente.montoPagado);
+      const { motivo } = result.data;
+      const idUsuario = req.user?.idUsuario;
 
-      // Eliminar el pago y restaurar el saldo de la expensa si corresponde
-      await prisma.pago.delete({ where: { idPago } });
-
-      let expensaRestablecida = null;
-      if (pagoExistente.idExpensa && pagoExistente.expensa) {
-        const nuevoSaldo = Number(pagoExistente.expensa.saldoPendiente) + montoARestablecer;
-        const nuevoEstado = nuevoSaldo >= Number(pagoExistente.expensa.monto) ? 'Pendiente' : 'Parcial';
-
-        expensaRestablecida = await prisma.expensa.update({
-          where: { idExpensa: pagoExistente.idExpensa },
-          data: {
-            saldoPendiente: nuevoSaldo,
-            estado: nuevoEstado,
-          },
-        });
-      }
-
-      // CA10: Auditoría
-      await registrarAuditoria(
-        req,
-        'ANULACION_PAGO_EXPENSA',
-        'pagos',
-        String(idPago),
-        pagoExistente,
-        { estado: 'Anulado', expensaRestablecida }
-      );
+      const { pagoAnulado, expensaActualizada } = await prisma.$transaction(async (tx) => {
+        return await anularPagoInterno(tx, idPago, idUsuario, motivo);
+      });
 
       res.json({
         message: 'Pago anulado exitosamente y saldo recalculado',
-        pagoAnulado: pagoExistente,
-        expensa: expensaRestablecida,
+        pagoAnulado,
+        expensa: expensaActualizada,
       });
-    } catch (err) {
+    } catch (err: any) {
+      if (err.statusCode) {
+        res.status(err.statusCode).json({
+          error: err.code || 'Error',
+          code: err.code,
+          message: err.message,
+        });
+        return;
+      }
+      next(err);
+    }
+  }
+);
+
+// ── PATCH /api/v1/expensas/pagos/:idPago/corregir ────────────────────────────
+// CA09, CA10: Corregir pago (anulación del original y registro del nuevo corregido)
+expensasRouter.patch(
+  '/pagos/:idPago/corregir',
+  authorizeRoles('Administrador', 'Directorio'),
+  async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const idPago = parseInt(req.params.idPago);
+      if (isNaN(idPago)) {
+        res.status(400).json({ error: 'Bad Request', message: 'ID de pago inválido' });
+        return;
+      }
+
+      const result = corregirPagoSchema.safeParse(req.body);
+      if (!result.success) {
+        res.status(400).json({
+          error: 'Validation Error',
+          message: 'Datos de corrección inválidos',
+          details: result.error.flatten().fieldErrors,
+        });
+        return;
+      }
+
+      const { motivo, montoPagado, interesPagado, metodoPago, esAnticipado, idCuenta, comprobanteUrl } = result.data;
+      const idUsuario = req.user?.idUsuario;
+
+      const { pagoAnulado, nuevoPago, expensaFinal } = await prisma.$transaction(async (tx) => {
+        // 1. Anular el pago original reutilizando la lógica interna
+        const { pagoAnulado } = await anularPagoInterno(tx, idPago, idUsuario, motivo);
+
+        // 2. Crear el nuevo pago vinculado al original
+        const nuevoPago = await tx.pago.create({
+          data: {
+            idExpensa: pagoAnulado.idExpensa,
+            idDepartamento: pagoAnulado.idDepartamento,
+            montoPagado,
+            interesPagado: interesPagado ?? 0,
+            metodoPago: metodoPago || 'Efectivo',
+            esAnticipado: esAnticipado ?? false,
+            idCuenta: idCuenta || null,
+            comprobanteUrl: comprobanteUrl || null,
+            idUsuarioRegistro: idUsuario || null,
+            idPagoOriginal: pagoAnulado.idPago,
+          },
+        });
+
+        // 3. Recalcular saldo de la expensa con el nuevo pago incluido
+        const expensaFinal = pagoAnulado.idExpensa
+          ? await recalcularSaldoExpensa(tx, pagoAnulado.idExpensa)
+          : null;
+
+        // 4. Registrar auditoría del pago corregido
+        await auditoriaService.registrarEvento({
+          tablaAfectada: 'pagos',
+          idRegistro: String(nuevoPago.idPago),
+          accion: 'CORRECCION_PAGO',
+          resultado: 'EXITO',
+          datosAnteriores: { idPagoOriginal: pagoAnulado.idPago },
+          datosNuevos: {
+            idPago: nuevoPago.idPago,
+            montoPagado,
+            idExpensa: nuevoPago.idExpensa,
+            saldoPendienteExpensa: expensaFinal ? Number(expensaFinal.saldoPendiente) : null,
+          },
+          idUsuario: idUsuario || null,
+          tx,
+        });
+
+        return { pagoAnulado, nuevoPago, expensaFinal };
+      });
+
+      res.json({
+        message: 'Pago corregido exitosamente',
+        pagoAnulado,
+        nuevoPago,
+        expensa: expensaFinal,
+      });
+    } catch (err: any) {
+      if (err.statusCode) {
+        res.status(err.statusCode).json({
+          error: err.code || 'Error',
+          code: err.code,
+          message: err.message,
+        });
+        return;
+      }
       next(err);
     }
   }

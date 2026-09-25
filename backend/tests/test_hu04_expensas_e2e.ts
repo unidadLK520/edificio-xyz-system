@@ -302,36 +302,136 @@ async function main() {
       console.error('❌ CA08 FAIL:', jsonEstadoCuenta);
     }
 
-    // ── CA09: Corrección / Anulación de Pago con Recálculo de Saldo ──────────
-    console.log('\n--- CA09: Anular Pago y Recalcular Saldo ---');
-    if (pagoId) {
-      const resAnular = await fetch(`${baseUrl}/pagos/${pagoId}`, {
-        method: 'DELETE',
-        headers: { Authorization: `Bearer ${adminToken}` },
-      });
-      const jsonAnular = await resAnular.json();
-      console.log('Status Anular:', resAnular.status, 'Message:', jsonAnular.message);
-      if (resAnular.status === 200 && jsonAnular.pagoAnulado) {
-        console.log('✅ CA09 PASS: Pago anulado exitosamente y saldo recalculado en el departamento.');
-      } else {
-        console.error('❌ CA09 FAIL:', jsonAnular);
-      }
+    // ── CA09: Corrección / Anulación de Pago con Recálculo de Saldo y Soft-Delete ──
+    console.log('\n--- CA09-1: Anular un Pago y Verificar que el Saldo Vuelve Exactamente al Valor Previo ---');
+    // Obtenemos saldo previo de expensa1 antes de crear un nuevo pago para probar anulación pura
+    const resExpPre = await fetch(`${baseUrl}/${expensa1Id}`, {
+      headers: { Authorization: `Bearer ${adminToken}` },
+    });
+    const expPreJson = await resExpPre.json();
+    const saldoAntesAnulacion = Number(expPreJson.saldoPendiente);
+
+    // Registramos un pago de prueba de 150
+    const resPagoPrueba = await fetch(`${baseUrl}/${expensa1Id}/pagos`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${adminToken}` },
+      body: JSON.stringify({
+        montoPagado: 150,
+        metodoPago: 'Efectivo',
+      }),
+    });
+    const jsonPagoPrueba = await resPagoPrueba.json();
+    const pagoPruebaId = jsonPagoPrueba.pago?.idPago;
+
+    // Anulamos el pago con motivo obligatorio
+    const resAnular = await fetch(`${baseUrl}/pagos/${pagoPruebaId}`, {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${adminToken}` },
+      body: JSON.stringify({ motivo: 'Error en digitación de comprobante de caja' }),
+    });
+    const jsonAnular = await resAnular.json();
+    console.log('Status Anular:', resAnular.status, 'Message:', jsonAnular.message);
+
+    // Verificar que el saldo volvió exactamente al valor previo
+    const resExpPost = await fetch(`${baseUrl}/${expensa1Id}`, {
+      headers: { Authorization: `Bearer ${adminToken}` },
+    });
+    const expPostJson = await resExpPost.json();
+    const saldoDespuesAnulacion = Number(expPostJson.saldoPendiente);
+
+    if (
+      resAnular.status === 200 &&
+      jsonAnular.pagoAnulado?.anulado === true &&
+      jsonAnular.pagoAnulado?.motivoAnulacion === 'Error en digitación de comprobante de caja' &&
+      saldoDespuesAnulacion === saldoAntesAnulacion
+    ) {
+      console.log(`✅ CA09-1 PASS: Pago anulado (soft-delete) y saldo restaurado exactamente a ${saldoDespuesAnulacion}.`);
+    } else {
+      console.error('❌ CA09-1 FAIL: Error al anular pago y restaurar saldo:', { jsonAnular, saldoAntesAnulacion, saldoDespuesAnulacion });
     }
 
-    // ── CA10: Trazabilidad y Registro de Auditoría ────────────────────────────
-    console.log('\n--- CA10: Verificar Registro de Auditoría ---');
-    const auditoriaRegistros = await prisma.auditoria.findMany({
+    console.log('\n--- CA09-2: Intentar Anular el Mismo Pago Dos Veces (Debe responder 409) ---');
+    const resReAnular = await fetch(`${baseUrl}/pagos/${pagoPruebaId}`, {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${adminToken}` },
+      body: JSON.stringify({ motivo: 'Intento duplicado de anulación' }),
+    });
+    const jsonReAnular = await resReAnular.json();
+    console.log('Status Re-Anular:', resReAnular.status, 'Error Code:', jsonReAnular.code || jsonReAnular.error);
+    if (resReAnular.status === 409 && (jsonReAnular.code === 'PAGO_YA_ANULADO' || jsonReAnular.error === 'PAGO_YA_ANULADO')) {
+      console.log('✅ CA09-2 PASS: Intento de doble anulación rechazado con 409 (PAGO_YA_ANULADO).');
+    } else {
+      console.error('❌ CA09-2 FAIL: Se esperaba 409 PAGO_YA_ANULADO pero se obtuvo', resReAnular.status, jsonReAnular);
+    }
+
+    console.log('\n--- CA09-3: Corregir un Pago (PATCH /pagos/:idPago/corregir) ---');
+    // Creamos un pago original de 100
+    const resPagoOriginal = await fetch(`${baseUrl}/${expensa1Id}/pagos`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${adminToken}` },
+      body: JSON.stringify({
+        montoPagado: 100,
+        metodoPago: 'Efectivo',
+      }),
+    });
+    const jsonPagoOriginal = await resPagoOriginal.json();
+    const idOriginal = jsonPagoOriginal.pago?.idPago;
+
+    // Al corregir con 180, el pago original (100) se anula y se crea uno nuevo de 180
+    const resCorregir = await fetch(`${baseUrl}/pagos/${idOriginal}/corregir`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${adminToken}` },
+      body: JSON.stringify({
+        montoPagado: 180,
+        metodoPago: 'Transferencia',
+        motivo: 'Monto real era 180 según voucher bancario',
+      }),
+    });
+    const jsonCorregir = await resCorregir.json();
+    console.log('Status Corregir:', resCorregir.status, 'Message:', jsonCorregir.message);
+
+    // Consultamos ambos pagos en la base de datos para verificar vínculos y anulado
+    const pagoOriginalDb = await prisma.pago.findUnique({ where: { idPago: idOriginal } });
+    const pagoNuevoDb = jsonCorregir.nuevoPago?.idPago
+      ? await prisma.pago.findUnique({ where: { idPago: jsonCorregir.nuevoPago.idPago } })
+      : null;
+
+    const pagoOriginalOk = pagoOriginalDb?.anulado === true && pagoOriginalDb?.idPagoOriginal === null;
+    const pagoNuevoOk = pagoNuevoDb?.anulado === false && pagoNuevoDb?.idPagoOriginal === idOriginal;
+
+    if (resCorregir.status === 200 && pagoOriginalOk && pagoNuevoOk) {
+      console.log('✅ CA09-3 PASS: Pago corregido exitosamente. Original anulado (idPagoOriginal=null), nuevo pago apunta al anulado y expensa refleja solo el pago nuevo.');
+    } else {
+      console.error('❌ CA09-3 FAIL: Error en corrección de pago:', {
+        status: resCorregir.status,
+        pagoOriginalOk,
+        pagoNuevoOk,
+        pagoOriginalDb,
+        pagoNuevoDb,
+      });
+    }
+
+    // ── CA10: Trazabilidad y Registro de Auditoría (ANULACION_PAGO) ────────────
+    console.log('\n--- CA10: Verificar Registro de Auditoría de Tipo ANULACION_PAGO ---');
+    const auditoriaAnulaciones = await prisma.auditoria.findMany({
       where: {
-        tablaAfectada: { in: ['expensas', 'pagos'] },
+        tablaAfectada: 'pagos',
+        accion: 'ANULACION_PAGO',
       },
-      take: 5,
       orderBy: { fechaHora: 'desc' },
     });
 
-    if (auditoriaRegistros.length > 0) {
-      console.log(`✅ CA10 PASS: Se encontraron ${auditoriaRegistros.length} registros de auditoría para operaciones de expensas.`);
+    const tieneAnulacionDirecta = auditoriaAnulaciones.some((a) => a.idRegistro === String(pagoPruebaId));
+    const tieneAnulacionCorregir = auditoriaAnulaciones.some((a) => a.idRegistro === String(idOriginal));
+
+    if (auditoriaAnulaciones.length >= 2 && tieneAnulacionDirecta && tieneAnulacionCorregir) {
+      console.log(`✅ CA10 PASS: Se verificaron registros de auditoría ANULACION_PAGO para anulación directa (Pago ${pagoPruebaId}) y por corrección (Pago ${idOriginal}).`);
     } else {
-      console.error('❌ CA10 FAIL: No se registraron datos de auditoría.');
+      console.error('❌ CA10 FAIL: No se encontraron todos los registros de auditoría ANULACION_PAGO:', {
+        total: auditoriaAnulaciones.length,
+        tieneAnulacionDirecta,
+        tieneAnulacionCorregir,
+      });
     }
 
     // ── RBAC / Control de Acceso: Copropietario y Regresión Administrador ─────
@@ -390,6 +490,10 @@ async function main() {
       await prisma.ocupanteDepartamento.deleteMany({ where: { idPersona: { in: [personaId, persona2Id].filter(Boolean) as number[] } } });
     }
     if (depto1Id || depto2Id) {
+      await prisma.pago.updateMany({
+        where: { idDepartamento: { in: [depto1Id!, depto2Id!].filter(Boolean) } },
+        data: { idPagoOriginal: null },
+      });
       await prisma.pago.deleteMany({ where: { idDepartamento: { in: [depto1Id!, depto2Id!].filter(Boolean) } } });
       await prisma.expensa.deleteMany({ where: { idDepartamento: { in: [depto1Id!, depto2Id!].filter(Boolean) } } });
       await prisma.departamento.deleteMany({ where: { idDepartamento: { in: [depto1Id!, depto2Id!].filter(Boolean) } } });
