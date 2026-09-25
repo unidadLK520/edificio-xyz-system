@@ -68,6 +68,7 @@ const pagoSchema = z.object({
 // CA05: Listar expensas con filtros por estado, departamento y período
 expensasRouter.get(
   '/',
+  authorizeRoles('Administrador', 'Directorio'),
   async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
     try {
       const { estado, idDepartamento, periodo, page = '1', limit = '50' } = req.query;
@@ -122,6 +123,7 @@ expensasRouter.get(
 // CA07: Listado de morosos y deudas vencidas por departamento
 expensasRouter.get(
   '/morosos',
+  authorizeRoles('Administrador', 'Directorio'),
   async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
     try {
       const ahora = new Date();
@@ -193,12 +195,47 @@ expensasRouter.get(
 // CA08: Estado de cuenta completo y ordenado por departamento
 expensasRouter.get(
   '/estado-cuenta/:idDepartamento',
+  authorizeRoles('Administrador', 'Directorio', 'Copropietario'),
   async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
     try {
       const idDepartamento = parseInt(req.params.idDepartamento);
       if (isNaN(idDepartamento)) {
         res.status(400).json({ error: 'Bad Request', message: 'ID de departamento inválido' });
         return;
+      }
+
+      // Si el rol es Copropietario, solo puede consultar su departamento con asignación activa vigente (uq_ocupante_activo)
+      const userRole = req.user?.rol?.toUpperCase();
+      if (userRole === 'COPROPIETARIO') {
+        let tieneAsignacionActiva = false;
+        if (req.user?.idUsuario) {
+          const usuario = await prisma.usuario.findUnique({
+            where: { idUsuario: req.user.idUsuario },
+            select: { idPersona: true },
+          });
+
+          if (usuario?.idPersona) {
+            const ocupacionActiva = await prisma.ocupanteDepartamento.findFirst({
+              where: {
+                idDepartamento,
+                idPersona: usuario.idPersona,
+                fechaFin: null,
+              },
+            });
+
+            if (ocupacionActiva) {
+              tieneAsignacionActiva = true;
+            }
+          }
+        }
+
+        if (!tieneAsignacionActiva) {
+          res.status(403).json({
+            error: 'Forbidden',
+            message: 'No tiene permisos para consultar el estado de cuenta de este departamento',
+          });
+          return;
+        }
       }
 
       const departamento = await prisma.departamento.findUnique({
@@ -256,6 +293,7 @@ expensasRouter.get(
 // CA05: Detalle de una expensa específica con sus pagos y saldos
 expensasRouter.get(
   '/:id',
+  authorizeRoles('Administrador', 'Directorio'),
   async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
     try {
       const id = parseInt(req.params.id);

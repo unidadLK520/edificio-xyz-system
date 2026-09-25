@@ -59,11 +59,14 @@ async function main() {
   const numDepto2 = `E4-${ts}`;
 
   let personaId: number | null = null;
+  let persona2Id: number | null = null;
   let depto1Id: number | null = null;
   let depto2Id: number | null = null;
   let expensa1Id: number | null = null;
   let expensa2Id: number | null = null;
   let pagoId: number | null = null;
+  let usuarioCopropietarioId: number | null = null;
+  let copropietarioToken: string = '';
 
   try {
     // Crear persona y departamentos de prueba
@@ -77,6 +80,17 @@ async function main() {
       },
     });
     personaId = nuevaPersona.idPersona;
+
+    const nuevaPersona2 = await prisma.persona.create({
+      data: {
+        nombres: 'Vecino Ajeno Test',
+        apellidos: 'HU04',
+        ciNit: `CI-AJENO-${ts}`,
+        telefono: '77998877',
+        correo: `ajeno.hu4.${ts}@email.com`,
+      },
+    });
+    persona2Id = nuevaPersona2.idPersona;
 
     const d1 = await prisma.departamento.create({
       data: {
@@ -94,11 +108,56 @@ async function main() {
         numero: numDepto2,
         piso: 4,
         areaM2: 80.0,
-        idPropietario: personaId,
+        idPropietario: persona2Id,
         estado: 'Ocupado',
       },
     });
     depto2Id = d2.idDepartamento;
+
+    // Asignar personaId a d1 como ocupante activo
+    await prisma.ocupanteDepartamento.create({
+      data: {
+        idDepartamento: depto1Id,
+        idPersona: personaId,
+        tipoOcupante: 'Propietario',
+        fechaInicio: new Date(),
+        fechaFin: null,
+      },
+    });
+
+    // Asignar persona2Id a d2 como ocupante activo
+    await prisma.ocupanteDepartamento.create({
+      data: {
+        idDepartamento: depto2Id,
+        idPersona: persona2Id,
+        tipoOcupante: 'Propietario',
+        fechaInicio: new Date(),
+        fechaFin: null,
+      },
+    });
+
+    // Obtener rol Copropietario o ID por defecto
+    const rolCopropietario = await prisma.rol.findFirst({
+      where: { nombre: 'Copropietario' },
+    });
+
+    const usuarioCopropietario = await prisma.usuario.create({
+      data: {
+        nombreUsuario: `copropietario_${ts}`,
+        correo: `copropietario_${ts}@edificioxyz.com`,
+        passwordHash: '$2a$10$abcdefghijklmnopqrstuv',
+        idRol: rolCopropietario ? rolCopropietario.idRol : 3,
+        idPersona: personaId,
+        activo: true,
+      },
+    });
+    usuarioCopropietarioId = usuarioCopropietario.idUsuario;
+
+    copropietarioToken = await generarToken(
+      usuarioCopropietario.idUsuario,
+      usuarioCopropietario.correo,
+      'Copropietario'
+    );
 
     console.log(`🏢 Departamentos creados (${numDepto1} ID: ${depto1Id}, ${numDepto2} ID: ${depto2Id})`);
 
@@ -275,15 +334,68 @@ async function main() {
       console.error('❌ CA10 FAIL: No se registraron datos de auditoría.');
     }
 
+    // ── RBAC / Control de Acceso: Copropietario y Regresión Administrador ─────
+    console.log('\n--- RBAC: Copropietario de Depto A pide estado de cuenta de Depto B ---');
+    const resAjeno = await fetch(`${baseUrl}/estado-cuenta/${depto2Id}`, {
+      headers: { Authorization: `Bearer ${copropietarioToken}` },
+    });
+    console.log('Status Ajeno:', resAjeno.status);
+    if (resAjeno.status === 403) {
+      console.log('✅ RBAC PASS: Copropietario del departamento A bloqueado con 403 al solicitar departamento B.');
+    } else {
+      console.error('❌ RBAC FAIL: Se esperaba 403 pero se obtuvo', resAjeno.status);
+    }
+
+    console.log('\n--- RBAC: Copropietario de Depto A pide estado de cuenta de su propio Depto A ---');
+    const resPropio = await fetch(`${baseUrl}/estado-cuenta/${depto1Id}`, {
+      headers: { Authorization: `Bearer ${copropietarioToken}` },
+    });
+    console.log('Status Propio:', resPropio.status);
+    if (resPropio.status === 200) {
+      console.log('✅ RBAC PASS: Copropietario del departamento A accede con 200 a su propio estado de cuenta.');
+    } else {
+      console.error('❌ RBAC FAIL: Se esperaba 200 pero se obtuvo', resPropio.status);
+    }
+
+    console.log('\n--- Regresión RBAC: Administrador accede sin restricción a los 4 endpoints GET ---');
+    const [resAdminList, resAdminMorosos, resAdminDetalle, resAdminEstado] = await Promise.all([
+      fetch(`${baseUrl}`, { headers: { Authorization: `Bearer ${adminToken}` } }),
+      fetch(`${baseUrl}/morosos`, { headers: { Authorization: `Bearer ${adminToken}` } }),
+      fetch(`${baseUrl}/${expensa1Id}`, { headers: { Authorization: `Bearer ${adminToken}` } }),
+      fetch(`${baseUrl}/estado-cuenta/${depto1Id}`, { headers: { Authorization: `Bearer ${adminToken}` } }),
+    ]);
+
+    if (
+      resAdminList.status === 200 &&
+      resAdminMorosos.status === 200 &&
+      resAdminDetalle.status === 200 &&
+      resAdminEstado.status === 200
+    ) {
+      console.log('✅ Regresión PASS: Administrador accede exitosamente con 200 a los 4 endpoints GET.');
+    } else {
+      console.error('❌ Regresión FAIL: Acceso de administrador denegado en endpoints GET:', {
+        list: resAdminList.status,
+        morosos: resAdminMorosos.status,
+        detalle: resAdminDetalle.status,
+        estado: resAdminEstado.status,
+      });
+    }
+
   } finally {
     // Limpieza de datos de prueba
+    if (usuarioCopropietarioId) {
+      await prisma.usuario.deleteMany({ where: { idUsuario: usuarioCopropietarioId } });
+    }
+    if (personaId || persona2Id) {
+      await prisma.ocupanteDepartamento.deleteMany({ where: { idPersona: { in: [personaId, persona2Id].filter(Boolean) as number[] } } });
+    }
     if (depto1Id || depto2Id) {
       await prisma.pago.deleteMany({ where: { idDepartamento: { in: [depto1Id!, depto2Id!].filter(Boolean) } } });
       await prisma.expensa.deleteMany({ where: { idDepartamento: { in: [depto1Id!, depto2Id!].filter(Boolean) } } });
       await prisma.departamento.deleteMany({ where: { idDepartamento: { in: [depto1Id!, depto2Id!].filter(Boolean) } } });
     }
-    if (personaId) {
-      await prisma.persona.deleteMany({ where: { idPersona: personaId } });
+    if (personaId || persona2Id) {
+      await prisma.persona.deleteMany({ where: { idPersona: { in: [personaId, persona2Id].filter(Boolean) as number[] } } });
     }
 
     server.close();
