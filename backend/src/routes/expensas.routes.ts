@@ -435,7 +435,7 @@ expensasRouter.post(
 );
 
 // ── POST /api/v1/expensas/calcular-mora ──────────────────────────────────────
-// CA6, CA10: Cálculo e interés por mora sobre expensas vencidas con auditoría
+// CA6, CA10: Cálculo idempotente de mora sobre expensas vencidas con auditoría transaccional
 expensasRouter.post(
   '/calcular-mora',
   authorizeRoles('Administrador', 'Directorio'),
@@ -443,40 +443,59 @@ expensasRouter.post(
     try {
       const ahora = new Date();
 
-      // Buscar expensas vencidas con saldo pendiente > 0
-      const expensasVencidas = await prisma.expensa.findMany({
-        where: {
-          fechaVencimiento: { lt: ahora },
-          saldoPendiente: { gt: 0 },
-        },
-      });
-
-      let actualizadasCount = 0;
-
-      for (const exp of expensasVencidas) {
-        const tasa = Number(exp.tasaInteresMora) > 0 ? Number(exp.tasaInteresMora) : 5; // 5% por defecto si no está especificada
-        const montoMora = Math.round((Number(exp.saldoPendiente) * (tasa / 100)) * 100) / 100;
-        const nuevoSaldo = Number(exp.saldoPendiente) + montoMora;
-
-        await prisma.expensa.update({
-          where: { idExpensa: exp.idExpensa },
-          data: {
-            saldoPendiente: nuevoSaldo,
-            estado: 'Moroso',
+      const { actualizadasCount } = await prisma.$transaction(async (tx) => {
+        // Buscar expensas vencidas con saldo pendiente > 0 y que no estén pagadas
+        const expensasVencidas = await tx.expensa.findMany({
+          where: {
+            fechaVencimiento: { lt: ahora },
+            saldoPendiente: { gt: 0 },
+            estado: { not: 'Pagado' },
+          },
+          include: {
+            pagos: {
+              where: { anulado: false },
+            },
           },
         });
-        actualizadasCount++;
-      }
 
-      // CA10: Auditoría
-      await registrarAuditoria(
-        req,
-        'CALCULO_MORA_EXPENSAS',
-        'expensas',
-        `MORA-${ahora.toISOString().split('T')[0]}`,
-        null,
-        { actualizadasCount }
-      );
+        let count = 0;
+
+        for (const exp of expensasVencidas) {
+          const totalPagosValidos = exp.pagos.reduce((acc, p) => acc + Number(p.montoPagado), 0);
+          const tasa = Number(exp.tasaInteresMora) > 0 ? Number(exp.tasaInteresMora) : 5;
+          const baseParaMora = Math.max(0, Number(exp.monto) - totalPagosValidos);
+          const montoMora = Math.round((baseParaMora * (tasa / 100)) * 100) / 100;
+          const nuevoSaldo = Math.max(0, Math.round((Number(exp.monto) + montoMora - totalPagosValidos) * 100) / 100);
+          const nuevoEstado = (exp.fechaVencimiento < ahora && nuevoSaldo > 0) ? 'Moroso' : (nuevoSaldo === 0 ? 'Pagado' : 'Pendiente');
+
+          await tx.expensa.update({
+            where: { idExpensa: exp.idExpensa },
+            data: {
+              montoMora,
+              saldoPendiente: nuevoSaldo,
+              estado: nuevoEstado,
+            },
+          });
+
+          count++;
+        }
+
+        // CA10: Auditoría oficial dentro de la misma transacción
+        await auditoriaService.registrarEvento({
+          tablaAfectada: 'expensas',
+          idRegistro: `MORA-${ahora.toISOString().split('T')[0]}`,
+          accion: 'CALCULO_MORA_EXPENSAS',
+          resultado: 'EXITO',
+          datosNuevos: {
+            actualizadasCount: count,
+            fechaEjecucion: ahora.toISOString(),
+          },
+          idUsuario: req.user?.idUsuario || null,
+          tx,
+        });
+
+        return { actualizadasCount: count };
+      }, { timeout: 30000, maxWait: 15000 });
 
       res.json({
         message: `Se aplicó el recargo de mora a ${actualizadasCount} expensas vencidas`,
@@ -750,7 +769,7 @@ expensasRouter.delete(
 
       const { pagoAnulado, expensaActualizada } = await prisma.$transaction(async (tx) => {
         return await anularPagoInterno(tx, idPago, idUsuario, motivo);
-      });
+      }, { timeout: 30000, maxWait: 15000 });
 
       res.json({
         message: 'Pago anulado exitosamente y saldo recalculado',
@@ -840,7 +859,7 @@ expensasRouter.patch(
         });
 
         return { pagoAnulado, nuevoPago, expensaFinal };
-      });
+      }, { timeout: 30000, maxWait: 15000 });
 
       res.json({
         message: 'Pago corregido exitosamente',

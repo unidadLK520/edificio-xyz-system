@@ -250,8 +250,8 @@ async function main() {
       }
     }
 
-    // ── CA6: Recálculo e Interés por Mora ─────────────────────────────────────
-    console.log('\n--- CA6: Cálculo de Recargo e Interés por Mora ---');
+    // ── CA6: Cálculo Idempotente de Recargo e Interés por Mora ────────────────
+    console.log('\n--- CA6-1: Cálculo Idempotente de Mora (2 corridas consecutivas sin duplicar recargo) ---');
     // Crear una expensa vencida manualmente para probar mora
     const expVencida = await prisma.expensa.create({
       data: {
@@ -266,16 +266,105 @@ async function main() {
     });
     expensa2Id = expVencida.idExpensa;
 
-    const resMora = await fetch(`${baseUrl}/calcular-mora`, {
+    // Crear una expensa vencida pero ya pagada (saldo = 0, estado = 'Pagado')
+    const expPagadaVencida = await prisma.expensa.create({
+      data: {
+        idDepartamento: depto2Id!,
+        periodo: new Date('2026-07-01'),
+        monto: 250,
+        saldoPendiente: 0,
+        tasaInteresMora: 10,
+        fechaVencimiento: new Date('2026-07-15'), // fecha pasada
+        estado: 'Pagado',
+      },
+    });
+
+    // 1ra corrida de cálculo de mora
+    const resMora1 = await fetch(`${baseUrl}/calcular-mora`, {
       method: 'POST',
       headers: { Authorization: `Bearer ${adminToken}` },
     });
-    const jsonMora = await resMora.json();
-    console.log('Status Mora:', resMora.status, 'Actualizadas:', jsonMora.actualizadasCount);
-    if (resMora.status === 200 && jsonMora.actualizadasCount > 0) {
-      console.log('✅ CA6 PASS: Recargo de mora aplicado a expensas vencidas.');
+    const jsonMora1 = await resMora1.json();
+    console.log('Status Mora 1:', resMora1.status, 'Actualizadas:', jsonMora1.actualizadasCount);
+
+    const expVencida1 = await prisma.expensa.findUnique({ where: { idExpensa: expensa2Id } });
+    const montoMora1 = Number(expVencida1?.montoMora);
+    const saldo1 = Number(expVencida1?.saldoPendiente);
+
+    // 2da corrida de cálculo de mora consecutiva
+    const resMora2 = await fetch(`${baseUrl}/calcular-mora`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${adminToken}` },
+    });
+    const jsonMora2 = await resMora2.json();
+    console.log('Status Mora 2:', resMora2.status, 'Actualizadas:', jsonMora2.actualizadasCount);
+
+    const expVencida2 = await prisma.expensa.findUnique({ where: { idExpensa: expensa2Id } });
+    const montoMora2 = Number(expVencida2?.montoMora);
+    const saldo2 = Number(expVencida2?.saldoPendiente);
+
+    if (
+      resMora1.status === 200 &&
+      resMora2.status === 200 &&
+      montoMora1 === 30 &&
+      montoMora2 === 30 &&
+      saldo1 === 330 &&
+      saldo2 === 330 &&
+      expVencida2?.estado === 'Moroso'
+    ) {
+      console.log(`✅ CA6-1 PASS: Mora idempotente verificada (MontoMora: ${montoMora2}, Saldo: ${saldo2}, Estado: Moroso en ambas corridas).`);
     } else {
-      console.error('❌ CA6 FAIL:', jsonMora);
+      console.error('❌ CA6-1 FAIL: La mora no fue idempotente:', { montoMora1, montoMora2, saldo1, saldo2 });
+    }
+
+    console.log('\n--- CA6-2: Expensa ya pagada no recibe mora ni cambia a Moroso ---');
+    const expPagadaCheck = await prisma.expensa.findUnique({ where: { idExpensa: expPagadaVencida.idExpensa } });
+    if (
+      Number(expPagadaCheck?.montoMora) === 0 &&
+      Number(expPagadaCheck?.saldoPendiente) === 0 &&
+      expPagadaCheck?.estado === 'Pagado'
+    ) {
+      console.log('✅ CA6-2 PASS: Expensa con saldo 0 no fue afectada por cálculo de mora (montoMora=0, estado=Pagado).');
+    } else {
+      console.error('❌ CA6-2 FAIL: Expensa pagada fue alterada por cálculo de mora:', expPagadaCheck);
+    }
+
+    console.log('\n--- CA6-3: Anulación de Pago en Expensa con Mora recalcula saldo incluyendo mora vigente ---');
+    // Registrar un pago parcial de 100 sobre la expensa en mora (saldo era 330: 300 base + 30 mora)
+    const resPagoMora = await fetch(`${baseUrl}/${expensa2Id}/pagos`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${adminToken}` },
+      body: JSON.stringify({
+        montoPagado: 100,
+        metodoPago: 'Efectivo',
+      }),
+    });
+    const jsonPagoMora = await resPagoMora.json();
+    const pagoMoraId = jsonPagoMora.pago?.idPago;
+
+    // Anular el pago de 100
+    const resAnularPagoMora = await fetch(`${baseUrl}/pagos/${pagoMoraId}`, {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${adminToken}` },
+      body: JSON.stringify({ motivo: 'Error en pago sobre expensa con mora' }),
+    });
+    const jsonAnularPagoMora = await resAnularPagoMora.json();
+
+    const expVencidaTrasAnulacion = await prisma.expensa.findUnique({ where: { idExpensa: expensa2Id } });
+    const saldoTrasAnulacion = Number(expVencidaTrasAnulacion?.saldoPendiente);
+
+    if (
+      resAnularPagoMora.status === 200 &&
+      saldoTrasAnulacion === 330 &&
+      expVencidaTrasAnulacion?.estado === 'Moroso'
+    ) {
+      console.log(`✅ CA6-3 PASS: Tras anulación, el saldo de la expensa vuelve exactamente a ${saldoTrasAnulacion} conservando la mora y estado Moroso.`);
+    } else {
+      console.error('❌ CA6-3 FAIL: Saldo o estado incorrecto tras anulación en expensa con mora:', {
+        status: resAnularPagoMora.status,
+        saldoTrasAnulacion,
+        expensa: expVencidaTrasAnulacion,
+      });
     }
 
     // ── CA07: Listado de Morosos ──────────────────────────────────────────────
