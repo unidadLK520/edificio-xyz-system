@@ -565,69 +565,176 @@ async function proxyRequest(
     }
 
     if (targetPath.startsWith('movimientos')) {
-      if (request.method === 'GET') {
+      const CATEGORIAS_MOCK = [
+        { idCategoria: 1, nombre: 'Mantenimiento y Reparaciones', tipo: 'Egreso' },
+        { idCategoria: 2, nombre: 'Servicios Básicos (Luz/Agua)', tipo: 'Egreso' },
+        { idCategoria: 3, nombre: 'Seguridad y Vigilancia', tipo: 'Egreso' },
+        { idCategoria: 4, nombre: 'Limpieza y Desinfección', tipo: 'Egreso' },
+        { idCategoria: 5, nombre: 'Administrativo y Legal', tipo: 'Egreso' },
+        { idCategoria: 6, nombre: 'Ingreso Extraordinario', tipo: 'Ingreso' },
+        { idCategoria: 7, nombre: 'Alquiler Áreas Comunes / Salón', tipo: 'Ingreso' },
+        { idCategoria: 8, nombre: 'Multas y Penalidades', tipo: 'Ingreso' },
+        { idCategoria: 9, nombre: 'Donación o Aporte Voluntario', tipo: 'Ingreso' },
+        { idCategoria: 10, nombre: 'Intereses y Rendimientos', tipo: 'Ingreso' },
+      ]
+
+      if (targetPath === 'movimientos/categorias') {
+        const tipoQuery = request.nextUrl.searchParams.get('tipo')
+        const filtered = tipoQuery
+          ? CATEGORIAS_MOCK.filter((c) => c.tipo === tipoQuery)
+          : CATEGORIAS_MOCK
+        return NextResponse.json(filtered)
+      }
+
+      if (targetPath === 'movimientos/resumen') {
         return NextResponse.json({
-          data: [
-            {
-              idMovimiento: 1,
-              tipo: 'Egreso',
-              idCategoria: 1,
-              monto: 3500.0,
-              descripcion: 'Otis Elevadores Bolivia S.A. | Mantenimiento preventivo bimensual de ascensores torre A y B.',
-              fecha: '2026-09-18T00:00:00.000Z',
-              comprobanteUrl: 'FAC-90182',
-              categoria: { idCategoria: 1, nombre: 'Mantenimiento', tipo: 'Egreso' },
-              usuarioRegistro: { nombreUsuario: 'admin' }
-            },
-            {
-              idMovimiento: 2,
-              tipo: 'Egreso',
-              idCategoria: 2,
-              monto: 2450.0,
-              descripcion: 'ELFEC S.A. | Energía eléctrica de áreas comunes, bombas de agua y pasillos.',
-              fecha: '2026-09-15T00:00:00.000Z',
-              comprobanteUrl: 'FAC-349012',
-              categoria: { idCategoria: 2, nombre: 'Servicios Básicos', tipo: 'Egreso' },
-              usuarioRegistro: { nombreUsuario: 'admin' }
-            },
-            {
-              idMovimiento: 3,
-              tipo: 'Egreso',
-              idCategoria: 3,
-              monto: 4200.0,
-              descripcion: 'Seguritas Integral Ltda. | Servicio de vigilancia y monitoreo 24/7 mes en curso.',
-              fecha: '2026-09-14T00:00:00.000Z',
-              comprobanteUrl: 'FAC-11928',
-              categoria: { idCategoria: 3, nombre: 'Seguridad', tipo: 'Egreso' },
-              usuarioRegistro: { nombreUsuario: 'admin' }
-            },
-            {
-              idMovimiento: 4,
-              tipo: 'Egreso',
-              idCategoria: 4,
-              monto: 850.0,
-              descripcion: 'Distribuidora Química del Valle | Insumos de limpieza, desinfectantes y bolsas de consorcio.',
-              fecha: '2026-09-20T00:00:00.000Z',
-              comprobanteUrl: 'FAC-4891',
-              categoria: { idCategoria: 4, nombre: 'Limpieza', tipo: 'Egreso' },
-              usuarioRegistro: { nombreUsuario: 'admin' }
-            },
-            {
-              idMovimiento: 5,
-              tipo: 'Egreso',
-              idCategoria: 1,
-              monto: 620.0,
-              descripcion: 'Plomería & Bombas Express | Reparación de válvula de presión en tanque subterráneo.',
-              fecha: '2026-09-21T00:00:00.000Z',
-              comprobanteUrl: 'REC-0982',
-              categoria: { idCategoria: 1, nombre: 'Mantenimiento', tipo: 'Egreso' },
-              usuarioRegistro: { nombreUsuario: 'admin' }
-            }
-          ],
+          periodo: { mes: 'todos', anio: 'todos' },
+          totalIngresos: 9350.0,
+          totalEgresos: 11620.0,
+          balance: -2270.0,
+          cantidadIngresos: 4,
+          cantidadEgresos: 5,
+          porCategoria: [
+            { idCategoria: 1, tipo: 'Egreso', _sum: { monto: 4120.0 }, _count: 2 },
+            { idCategoria: 2, tipo: 'Egreso', _sum: { monto: 2450.0 }, _count: 1 },
+            { idCategoria: 3, tipo: 'Egreso', _sum: { monto: 4200.0 }, _count: 1 },
+            { idCategoria: 4, tipo: 'Egreso', _sum: { monto: 850.0 }, _count: 1 },
+            { idCategoria: 6, tipo: 'Ingreso', _sum: { monto: 5000.0 }, _count: 1 },
+            { idCategoria: 7, tipo: 'Ingreso', _sum: { monto: 1800.0 }, _count: 1 },
+            { idCategoria: 8, tipo: 'Ingreso', _sum: { monto: 750.0 }, _count: 1 },
+            { idCategoria: 10, tipo: 'Ingreso', _sum: { monto: 1800.0 }, _count: 1 },
+          ]
+        })
+      }
+
+      if (request.method === 'GET') {
+        const tipoParam = request.nextUrl.searchParams.get('tipo')
+        const catParam = request.nextUrl.searchParams.get('idCategoria')
+        const qParam = request.nextUrl.searchParams.get('q')
+
+        let sampleMovimientos = [
+          {
+            idMovimiento: 1,
+            tipo: 'Egreso',
+            idCategoria: 1,
+            monto: 3500.0,
+            descripcion: 'Otis Elevadores Bolivia S.A. | Mantenimiento preventivo bimensual de ascensores torre A y B.',
+            fecha: '2026-09-18T00:00:00.000Z',
+            comprobanteUrl: 'FAC-90182',
+            categoria: { idCategoria: 1, nombre: 'Mantenimiento y Reparaciones', tipo: 'Egreso' },
+            usuarioRegistro: { idUsuario: 1, nombreUsuario: 'admin' }
+          },
+          {
+            idMovimiento: 2,
+            tipo: 'Egreso',
+            idCategoria: 2,
+            monto: 2450.0,
+            descripcion: 'ELFEC S.A. | Energía eléctrica de áreas comunes, bombas de agua y pasillos.',
+            fecha: '2026-09-15T00:00:00.000Z',
+            comprobanteUrl: 'FAC-349012',
+            categoria: { idCategoria: 2, nombre: 'Servicios Básicos (Luz/Agua)', tipo: 'Egreso' },
+            usuarioRegistro: { idUsuario: 1, nombreUsuario: 'admin' }
+          },
+          {
+            idMovimiento: 3,
+            tipo: 'Egreso',
+            idCategoria: 3,
+            monto: 4200.0,
+            descripcion: 'Seguritas Integral Ltda. | Servicio de vigilancia y monitoreo 24/7 mes en curso.',
+            fecha: '2026-09-14T00:00:00.000Z',
+            comprobanteUrl: 'FAC-11928',
+            categoria: { idCategoria: 3, nombre: 'Seguridad y Vigilancia', tipo: 'Egreso' },
+            usuarioRegistro: { idUsuario: 1, nombreUsuario: 'admin' }
+          },
+          {
+            idMovimiento: 4,
+            tipo: 'Egreso',
+            idCategoria: 4,
+            monto: 850.0,
+            descripcion: 'Distribuidora Química del Valle | Insumos de limpieza, desinfectantes y bolsas de consorcio.',
+            fecha: '2026-09-20T00:00:00.000Z',
+            comprobanteUrl: 'FAC-4891',
+            categoria: { idCategoria: 4, nombre: 'Limpieza y Desinfección', tipo: 'Egreso' },
+            usuarioRegistro: { idUsuario: 1, nombreUsuario: 'admin' }
+          },
+          {
+            idMovimiento: 5,
+            tipo: 'Egreso',
+            idCategoria: 1,
+            monto: 620.0,
+            descripcion: 'Plomería & Bombas Express | Reparación de válvula de presión en tanque subterráneo.',
+            fecha: '2026-09-21T00:00:00.000Z',
+            comprobanteUrl: 'REC-0982',
+            categoria: { idCategoria: 1, nombre: 'Mantenimiento y Reparaciones', tipo: 'Egreso' },
+            usuarioRegistro: { idUsuario: 1, nombreUsuario: 'admin' }
+          },
+          {
+            idMovimiento: 6,
+            tipo: 'Ingreso',
+            idCategoria: 6,
+            monto: 5000.0,
+            descripcion: 'Comunidad de Copropietarios | Cuota extraordinaria para impermeabilización de azotea.',
+            fecha: '2026-09-19T00:00:00.000Z',
+            comprobanteUrl: 'REC-EXT-001',
+            categoria: { idCategoria: 6, nombre: 'Ingreso Extraordinario', tipo: 'Ingreso' },
+            usuarioRegistro: { idUsuario: 1, nombreUsuario: 'admin' }
+          },
+          {
+            idMovimiento: 7,
+            tipo: 'Ingreso',
+            idCategoria: 7,
+            monto: 1800.0,
+            descripcion: 'Sra. Mariana Flores (Dpto 302) | Alquiler del Salón de Eventos y Churrasquera fin de semana.',
+            fecha: '2026-09-16T00:00:00.000Z',
+            comprobanteUrl: 'REC-SALON-44',
+            categoria: { idCategoria: 7, nombre: 'Alquiler Áreas Comunes / Salón', tipo: 'Ingreso' },
+            usuarioRegistro: { idUsuario: 1, nombreUsuario: 'admin' }
+          },
+          {
+            idMovimiento: 8,
+            tipo: 'Ingreso',
+            idCategoria: 8,
+            monto: 750.0,
+            descripcion: 'Dpto 204 | Cobro de multa por ruidos molestos reiterados fuera de horario reglamentario.',
+            fecha: '2026-09-12T00:00:00.000Z',
+            comprobanteUrl: 'BOL-MULTA-12',
+            categoria: { idCategoria: 8, nombre: 'Multas y Penalidades', tipo: 'Ingreso' },
+            usuarioRegistro: { idUsuario: 1, nombreUsuario: 'admin' }
+          },
+          {
+            idMovimiento: 9,
+            tipo: 'Ingreso',
+            idCategoria: 10,
+            monto: 1800.0,
+            descripcion: 'Banco Mercantil Santa Cruz | Rendimiento por intereses de depósito a plazo fijo fondo de reserva.',
+            fecha: '2026-09-10T00:00:00.000Z',
+            comprobanteUrl: 'BMSC-INT-0926',
+            categoria: { idCategoria: 10, nombre: 'Intereses y Rendimientos', tipo: 'Ingreso' },
+            usuarioRegistro: { idUsuario: 1, nombreUsuario: 'admin' }
+          }
+        ]
+
+        if (tipoParam && tipoParam !== 'Todos') {
+          sampleMovimientos = sampleMovimientos.filter((m) => m.tipo === tipoParam)
+        }
+        if (catParam && catParam !== 'Todos') {
+          sampleMovimientos = sampleMovimientos.filter((m) => m.idCategoria === parseInt(catParam))
+        }
+        if (qParam) {
+          const qLower = qParam.toLowerCase()
+          sampleMovimientos = sampleMovimientos.filter(
+            (m) =>
+              m.descripcion.toLowerCase().includes(qLower) ||
+              (m.comprobanteUrl && m.comprobanteUrl.toLowerCase().includes(qLower))
+          )
+        }
+
+        return NextResponse.json({
+          data: sampleMovimientos,
           meta: {
-            total: 5,
+            total: sampleMovimientos.length,
             page: 1,
-            limit: 20,
+            limit: 50,
             totalPages: 1
           }
         })
@@ -638,19 +745,48 @@ async function proxyRequest(
         try {
           parsed = JSON.parse(body)
         } catch {}
+        const catId = Number(parsed.idCategoria) || (parsed.tipo === 'Ingreso' ? 6 : 1)
+        const matchedCat = CATEGORIAS_MOCK.find((c) => c.idCategoria === catId) || {
+          idCategoria: catId,
+          nombre: parsed.tipo === 'Ingreso' ? 'Ingreso General' : 'Gasto General',
+          tipo: parsed.tipo || 'Egreso'
+        }
+
         return NextResponse.json(
           {
             idMovimiento: Date.now(),
             tipo: parsed.tipo || 'Egreso',
-            idCategoria: parsed.idCategoria || 1,
-            monto: parsed.monto || 0,
+            idCategoria: catId,
+            monto: Number(parsed.monto) || 0,
             descripcion: parsed.descripcion || 'Sin descripción',
-            fecha: new Date().toISOString(),
+            fecha: parsed.fecha ? new Date(parsed.fecha).toISOString() : new Date().toISOString(),
             comprobanteUrl: parsed.comprobanteUrl || null,
-            categoria: { idCategoria: parsed.idCategoria || 1, nombre: 'General', tipo: 'Egreso' }
+            categoria: matchedCat,
+            usuarioRegistro: { idUsuario: 1, nombreUsuario: 'admin' }
           },
           { status: 201 }
         )
+      }
+
+      if (request.method === 'PUT' || request.method === 'PATCH') {
+        let parsed: any = {}
+        try {
+          parsed = JSON.parse(body)
+        } catch {}
+        const catId = parsed.idCategoria ? Number(parsed.idCategoria) : 1
+        const matchedCat = CATEGORIAS_MOCK.find((c) => c.idCategoria === catId)
+
+        return NextResponse.json({
+          idMovimiento: Date.now(),
+          ...parsed,
+          monto: Number(parsed.monto || 0),
+          categoria: matchedCat || { idCategoria: catId, nombre: 'Categoría', tipo: parsed.tipo || 'Egreso' },
+          usuarioRegistro: { idUsuario: 1, nombreUsuario: 'admin' }
+        })
+      }
+
+      if (request.method === 'DELETE') {
+        return NextResponse.json({ success: true, message: 'Eliminado correctamente (modo local)' })
       }
     }
 
