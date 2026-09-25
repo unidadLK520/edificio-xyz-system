@@ -1,80 +1,167 @@
 // frontend/app/api/v1/[...path]/route.ts
 // Proxy dinámico para todas las peticiones a la API v1 del backend Express
 
-import { NextResponse, type NextRequest } from 'next/server'
+import { NextResponse, type NextRequest } from 'next/server';
 
-const BACKEND_URL = process.env.BACKEND_URL || 'http://localhost:4000/api/v1'
+const BACKEND_URL = process.env.BACKEND_URL || 'http://localhost:4000/api/v1';
 
 async function proxyRequest(
   request: NextRequest,
   { params }: { params: Promise<{ path: string[] }> }
 ) {
-  let targetPath = ''
-  let targetUrl = ''
-  let body: any = null
+  let targetPath = '';
+  let targetUrl = '';
+  let body: any = null;
 
   try {
-    const resolvedParams = await params
-    const pathSegments = resolvedParams.path || []
-    targetPath = pathSegments.join('/')
-    targetUrl = `${BACKEND_URL}/${targetPath}${request.nextUrl.search}`
+    const resolvedParams = await params;
+    const pathSegments = resolvedParams.path || [];
+    targetPath = pathSegments.join('/');
+    targetUrl = `${BACKEND_URL}/${targetPath}${request.nextUrl.search}`;
 
     // Extraer token de autorización (cookie o header Bearer)
-    let token = request.cookies.get('auth_token')?.value
-    const authHeader = request.headers.get('authorization')
+    let token = request.cookies.get('auth_token')?.value;
+    const authHeader = request.headers.get('authorization');
     if (authHeader && authHeader.startsWith('Bearer ')) {
-      token = authHeader.substring(7)
+      token = authHeader.substring(7);
     }
 
-    const headers: Record<string, string> = {}
+    const headers: Record<string, string> = {};
     if (token) {
-      headers['Authorization'] = `Bearer ${token}`
+      headers['Authorization'] = `Bearer ${token}`;
     }
 
     const clientIp =
-      request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip') || ''
-    if (clientIp) headers['x-forwarded-for'] = clientIp
+      request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip') || '';
+    if (clientIp) headers['x-forwarded-for'] = clientIp;
 
-    const userAgent = request.headers.get('user-agent') || ''
-    if (userAgent) headers['user-agent'] = userAgent
+    const userAgent = request.headers.get('user-agent') || '';
+    if (userAgent) headers['user-agent'] = userAgent;
 
-    const contentType = request.headers.get('content-type')
-    if (contentType) headers['Content-Type'] = contentType
+    const contentType = request.headers.get('content-type');
+    if (contentType) headers['Content-Type'] = contentType;
 
-    let body: any = null
+    let body: any = null;
     if (request.method !== 'GET' && request.method !== 'HEAD') {
-      body = await request.text()
+      body = await request.text();
     }
 
     const backendRes = await fetch(targetUrl, {
       method: request.method,
       headers,
-      body: body || undefined
-    })
+      body: body || undefined,
+    });
 
-    const data = await backendRes.text()
-    let jsonOrText: any
+    const data = await backendRes.text();
+    let jsonOrText: any;
     try {
-      jsonOrText = JSON.parse(data)
+      jsonOrText = JSON.parse(data);
     } catch {
-      jsonOrText = data
+      jsonOrText = data;
     }
 
     if (typeof jsonOrText === 'string') {
       return new NextResponse(jsonOrText, {
         status: backendRes.status,
-        headers: { 'Content-Type': 'text/plain' }
-      })
+        headers: { 'Content-Type': 'text/plain' },
+      });
     }
 
-    return NextResponse.json(jsonOrText, { status: backendRes.status })
+    return NextResponse.json(jsonOrText, { status: backendRes.status });
   } catch (err: any) {
     console.warn(
       `[Proxy API v1] Backend no disponible en ${targetUrl}. Ejecutando fallback local:`,
       err.message
-    )
+    );
 
     // Fallback inteligente para endpoints de desarrollo frontend
+    if (targetPath.startsWith('egresos') || targetPath.startsWith('movimientos')) {
+      if (request.method === 'GET') {
+        return NextResponse.json({
+          data: [
+            {
+              id: 1,
+              codigo: 'EGR-2026-081',
+              fecha: '2026-09-18',
+              categoria: 'Mantenimiento',
+              proveedor: 'Otis Elevadores Bolivia S.A.',
+              descripcion: 'Mantenimiento preventivo bimensual de ascensores torre A y B.',
+              nroFactura: 'FAC-90182',
+              monto: 3500.0,
+              estado: 'Pagado',
+              metodoPago: 'Transferencia Bancaria (BNB)',
+            },
+            {
+              id: 2,
+              codigo: 'EGR-2026-082',
+              fecha: '2026-09-15',
+              categoria: 'Servicios Básicos',
+              proveedor: 'ELFEC S.A.',
+              descripcion: 'Energía eléctrica de áreas comunes, bombas de agua y pasillos.',
+              nroFactura: 'FAC-349012',
+              monto: 2450.0,
+              estado: 'Pagado',
+              metodoPago: 'Débito Automático',
+            },
+            {
+              id: 3,
+              codigo: 'EGR-2026-083',
+              fecha: '2026-09-14',
+              categoria: 'Seguridad',
+              proveedor: 'Seguritas Integral Ltda.',
+              descripcion: 'Servicio de vigilancia y monitoreo 24/7 mes en curso.',
+              nroFactura: 'FAC-11928',
+              monto: 4200.0,
+              estado: 'Pagado',
+              metodoPago: 'Cheque de Gerencia',
+            },
+            {
+              id: 4,
+              codigo: 'EGR-2026-084',
+              fecha: '2026-09-20',
+              categoria: 'Limpieza',
+              proveedor: 'Distribuidora Química del Valle',
+              descripcion: 'Insumos de limpieza, desinfectantes y bolsas de consorcio.',
+              nroFactura: 'FAC-4891',
+              monto: 850.0,
+              estado: 'Pendiente',
+              metodoPago: 'Efectivo Caja Chica',
+            },
+            {
+              id: 5,
+              codigo: 'EGR-2026-085',
+              fecha: '2026-09-21',
+              categoria: 'Mantenimiento',
+              proveedor: 'Plomería & Bombas Express',
+              descripcion: 'Reparación de válvula de presión en tanque subterráneo.',
+              nroFactura: 'REC-0982',
+              monto: 620.0,
+              estado: 'En Revisión',
+              metodoPago: 'Transferencia Bancaria',
+            },
+          ],
+          meta: { total: 5, page: 1, limit: 10, totalPages: 1 },
+        });
+      }
+
+      if (request.method === 'POST') {
+        let parsed: any = {};
+        try { parsed = JSON.parse(body); } catch {}
+        return NextResponse.json({
+          id: Date.now(),
+          codigo: `EGR-2026-0${Math.floor(100 + Math.random() * 900)}`,
+          fecha: parsed.fecha || new Date().toISOString().split('T')[0],
+          categoria: parsed.categoria || 'Mantenimiento',
+          proveedor: parsed.proveedor || 'Proveedor General',
+          descripcion: parsed.descripcion || 'Registro de egreso',
+          nroFactura: parsed.nroFactura || 'FAC-000',
+          monto: Number(parsed.monto) || 0,
+          estado: parsed.estado || 'Pagado',
+          metodoPago: parsed.metodoPago || 'Transferencia Bancaria',
+        }, { status: 201 });
+      }
+    }
+
     if (targetPath.startsWith('departamentos')) {
       if (request.method === 'GET') {
         return NextResponse.json({
@@ -95,27 +182,23 @@ async function proxyRequest(
                 apellidos: 'Mendoza Rojas',
                 ciNit: '4829103 CBBA',
                 telefono: '+591 71234567',
-                correo: 'carlos.mendoza@email.com'
+                correo: 'carlos.mendoza@email.com',
               },
               ocupaciones: [
                 {
                   idOcupacion: 1,
                   tipoOcupante: 'Propietario',
                   fechaInicio: '2023-01-15',
-                  persona: {
-                    nombres: 'Carlos',
-                    apellidos: 'Mendoza Rojas',
-                    telefono: '+591 71234567'
-                  }
-                }
-              ]
+                  persona: { nombres: 'Carlos', apellidos: 'Mendoza Rojas', telefono: '+591 71234567' },
+                },
+              ],
             },
             {
               idDepartamento: 2,
               numero: '102',
               piso: 1,
               areaM2: 85.0,
-              alicuota: 3.2,
+              alicuota: 3.20,
               estado: 'Ocupado',
               parqueo: 'P-02 (Subsuelo 1)',
               baulera: 'Sin baulera',
@@ -126,16 +209,16 @@ async function proxyRequest(
                 apellidos: 'Flores Soliz',
                 ciNit: '5920144 SCZ',
                 telefono: '+591 79876543',
-                correo: 'mariana.flores@email.com'
+                correo: 'mariana.flores@email.com',
               },
               ocupaciones: [
                 {
                   idOcupacion: 2,
                   tipoOcupante: 'Inquilino',
                   fechaInicio: '2024-03-01',
-                  persona: { nombres: 'Roberto', apellidos: 'Gómez', telefono: '+591 70123456' }
-                }
-              ]
+                  persona: { nombres: 'Roberto', apellidos: 'Gómez', telefono: '+591 70123456' },
+                },
+              ],
             },
             {
               idDepartamento: 3,
@@ -153,20 +236,16 @@ async function proxyRequest(
                 apellidos: 'Vargas Morales',
                 ciNit: '3948120 LPZ',
                 telefono: '+591 67123980',
-                correo: 'alejandro.vargas@email.com'
+                correo: 'alejandro.vargas@email.com',
               },
               ocupaciones: [
                 {
                   idOcupacion: 3,
                   tipoOcupante: 'Propietario',
                   fechaInicio: '2022-06-10',
-                  persona: {
-                    nombres: 'Alejandro',
-                    apellidos: 'Vargas Morales',
-                    telefono: '+591 67123980'
-                  }
-                }
-              ]
+                  persona: { nombres: 'Alejandro', apellidos: 'Vargas Morales', telefono: '+591 67123980' },
+                },
+              ],
             },
             {
               idDepartamento: 4,
@@ -184,9 +263,9 @@ async function proxyRequest(
                 apellidos: 'Torrico Camacho',
                 ciNit: '6129841 CBBA',
                 telefono: '+591 75432198',
-                correo: 'valeria.torrico@email.com'
+                correo: 'valeria.torrico@email.com',
               },
-              ocupaciones: []
+              ocupaciones: [],
             },
             {
               idDepartamento: 5,
@@ -204,9 +283,9 @@ async function proxyRequest(
                 apellidos: 'Castro Ortiz',
                 ciNit: '4918230 CBBA',
                 telefono: '+591 72198450',
-                correo: 'fernando.castro@email.com'
+                correo: 'fernando.castro@email.com',
               },
-              ocupaciones: []
+              ocupaciones: [],
             },
             {
               idDepartamento: 6,
@@ -219,44 +298,36 @@ async function proxyRequest(
               baulera: 'Sin baulera',
               idPersonaPropietario: null,
               propietario: null,
-              ocupaciones: []
-            }
+              ocupaciones: [],
+            },
           ],
           meta: {
             total: 6,
             page: 1,
             limit: 10,
-            totalPages: 1
-          }
-        })
+            totalPages: 1,
+          },
+        });
       }
 
       if (request.method === 'POST') {
-        let parsed: any = {}
-        try {
-          parsed = JSON.parse(body)
-        } catch {}
-        return NextResponse.json(
-          {
-            idDepartamento: Date.now(),
-            numero: parsed.numero || '100',
-            piso: parsed.piso || 1,
-            areaM2: parsed.areaM2 || 100,
-            alicuota: parsed.alicuota || 4.0,
-            estado: parsed.estado || 'Disponible',
-            parqueo: parsed.parqueo || 'Sin parqueo',
-            baulera: parsed.baulera || 'Sin baulera',
-            propietario: parsed.propietario || null
-          },
-          { status: 201 }
-        )
+        let parsed: any = {};
+        try { parsed = JSON.parse(body); } catch {}
+        return NextResponse.json({
+          idDepartamento: Date.now(),
+          numero: parsed.numero || '100',
+          piso: parsed.piso || 1,
+          areaM2: parsed.areaM2 || 100,
+          alicuota: parsed.alicuota || 4.0,
+          estado: parsed.estado || 'Disponible',
+          parqueo: parsed.parqueo || 'Sin parqueo',
+          baulera: parsed.baulera || 'Sin baulera',
+          propietario: parsed.propietario || null,
+        }, { status: 201 });
       }
 
       if (request.method === 'PATCH' || request.method === 'PUT') {
-        return NextResponse.json({
-          success: true,
-          message: 'Departamento actualizado exitosamente (modo local)'
-        })
+        return NextResponse.json({ success: true, message: 'Departamento actualizado exitosamente (modo local)' });
       }
     }
 
@@ -272,9 +343,7 @@ async function proxyRequest(
             correo: 'carlos.mendoza@email.com',
             direccion: 'Av. Ballivián 1234',
             departamentosPropios: [{ idDepartamento: 1, numero: '101' }],
-            ocupaciones: [
-              { idOcupacion: 1, tipoOcupante: 'Propietario', departamento: { numero: '101' } }
-            ]
+            ocupaciones: [{ idOcupacion: 1, tipoOcupante: 'Propietario', departamento: { numero: '101' } }],
           },
           {
             idPersona: 2,
@@ -285,9 +354,7 @@ async function proxyRequest(
             correo: 'mariana.flores@email.com',
             direccion: 'Calle Sucre 456',
             departamentosPropios: [{ idDepartamento: 2, numero: '102' }],
-            ocupaciones: [
-              { idOcupacion: 2, tipoOcupante: 'Inquilino', departamento: { numero: '102' } }
-            ]
+            ocupaciones: [{ idOcupacion: 2, tipoOcupante: 'Inquilino', departamento: { numero: '102' } }],
           },
           {
             idPersona: 3,
@@ -298,9 +365,7 @@ async function proxyRequest(
             correo: 'alejandro.vargas@email.com',
             direccion: 'Calle España 789',
             departamentosPropios: [{ idDepartamento: 3, numero: '201' }],
-            ocupaciones: [
-              { idOcupacion: 3, tipoOcupante: 'Propietario', departamento: { numero: '201' } }
-            ]
+            ocupaciones: [{ idOcupacion: 3, tipoOcupante: 'Propietario', departamento: { numero: '201' } }],
           },
           {
             idPersona: 4,
@@ -311,16 +376,16 @@ async function proxyRequest(
             correo: 'valeria.torrico@email.com',
             direccion: 'Av. América 321',
             departamentosPropios: [{ idDepartamento: 4, numero: '202' }],
-            ocupaciones: []
-          }
+            ocupaciones: [],
+          },
         ],
         meta: {
           total: 4,
           page: 1,
           limit: 10,
-          totalPages: 1
-        }
-      })
+          totalPages: 1,
+        },
+      });
     }
 
     if (targetPath.startsWith('usuarios')) {
@@ -344,8 +409,8 @@ async function proxyRequest(
               ciNit: '4829104-LP',
               telefono: '+591 71234567',
               correo: 'admin@edificioxyz.com',
-              direccion: 'Av. Ballivián 1234, Edificio XYZ, Piso 8'
-            }
+              direccion: 'Av. Ballivián 1234, Edificio XYZ, Piso 8',
+            },
           },
           {
             idUsuario: 2,
@@ -365,8 +430,8 @@ async function proxyRequest(
               ciNit: '3920194-CB',
               telefono: '+591 79876543',
               correo: 'directorio@edificioxyz.com',
-              direccion: 'Calle Jordan 456'
-            }
+              direccion: 'Calle Jordan 456',
+            },
           },
           {
             idUsuario: 3,
@@ -386,8 +451,8 @@ async function proxyRequest(
               ciNit: '6192834-SC',
               telefono: '+591 60123987',
               correo: 'residente@edificioxyz.com',
-              direccion: 'Dpto 4B, Edificio XYZ'
-            }
+              direccion: 'Dpto 4B, Edificio XYZ',
+            },
           },
           {
             idUsuario: 4,
@@ -407,16 +472,16 @@ async function proxyRequest(
               ciNit: '5192843-LP',
               telefono: '+591 77334455',
               correo: 'consulta@edificioxyz.com',
-              direccion: 'Zona Sur, Calle 21'
-            }
-          }
-        ])
+              direccion: 'Zona Sur, Calle 21',
+            },
+          },
+        ]);
       }
 
       if (request.method === 'POST') {
-        let parsed: any = {}
+        let parsed: any = {};
         try {
-          parsed = JSON.parse(body)
+          parsed = JSON.parse(body);
         } catch {}
         return NextResponse.json(
           {
@@ -425,17 +490,17 @@ async function proxyRequest(
             correo: parsed.correo || 'nuevo@edificioxyz.com',
             rol: parsed.rol || 'ADMINISTRADOR',
             activo: parsed.activo ?? true,
-            persona: parsed.persona || null
+            persona: parsed.persona || null,
           },
           { status: 201 }
-        )
+        );
       }
 
       if (request.method === 'PATCH') {
         return NextResponse.json({
           success: true,
-          message: 'Actualizado exitosamente (modo local)'
-        })
+          message: 'Actualizado exitosamente (modo local)',
+        });
       }
     }
 
@@ -459,9 +524,9 @@ async function proxyRequest(
               { campo: 'Nombre', antes: '— (Nuevo)', despues: 'Gabriel Romero Soria' },
               { campo: 'Departamento', antes: '—', despues: 'Dpto 301 (Piso 3)' },
               { campo: 'Parqueo', antes: '—', despues: 'P-08' },
-              { campo: 'Estado', antes: '—', despues: 'Activo' }
-            ]
-          }
+              { campo: 'Estado', antes: '—', despues: 'Activo' },
+            ],
+          },
         },
         {
           id: 'AUD-9020',
@@ -480,9 +545,9 @@ async function proxyRequest(
             camposModificados: [
               { campo: 'Estado Conciliación', antes: 'Pendiente', despues: 'Aprobado' },
               { campo: 'Monto Aprobado', antes: 'Bs. 0.00', despues: 'Bs. 3,500.00' },
-              { campo: 'Aprobado Por', antes: 'Ninguno', despues: 'Directorio Finanzas' }
-            ]
-          }
+              { campo: 'Aprobado Por', antes: 'Ninguno', despues: 'Directorio Finanzas' },
+            ],
+          },
         },
         {
           id: 'AUD-9019',
@@ -500,9 +565,9 @@ async function proxyRequest(
             idRegistro: 'EXP-2026-09',
             camposModificados: [
               { campo: 'Total Unidades Emitidas', antes: '0', despues: '24 Departamentos' },
-              { campo: 'Total Facturación', antes: 'Bs. 0.00', despues: 'Bs. 12,480.00' }
-            ]
-          }
+              { campo: 'Total Facturación', antes: 'Bs. 0.00', despues: 'Bs. 12,480.00' },
+            ],
+          },
         },
         {
           id: 'AUD-9018',
@@ -514,7 +579,7 @@ async function proxyRequest(
           accion: 'LOGIN',
           severidad: 'INFO',
           descripcion: 'Inicio de sesión exitoso mediante credenciales JWT.',
-          ip: '192.168.1.45 (Cochabamba, BO)'
+          ip: '192.168.1.45 (Cochabamba, BO)',
         },
         {
           id: 'AUD-9017',
@@ -526,9 +591,9 @@ async function proxyRequest(
           accion: 'LOGIN',
           severidad: 'CRITICO',
           descripcion: 'Intento fallido de autenticación. Contraseña incorrecta rechazada.',
-          ip: '185.220.101.5 (IP Bloqueada preventivamente)'
-        }
-      ])
+          ip: '185.220.101.5 (IP Bloqueada preventivamente)',
+        },
+      ]);
     }
 
     if (targetPath.startsWith('copropietarios') || targetPath.startsWith('residentes')) {
@@ -545,7 +610,7 @@ async function proxyRequest(
           telefono: '+591 71234567',
           correo: 'carlos.mendoza@email.com',
           fechaIngreso: '2023-01-15',
-          estado: 'Activo'
+          estado: 'Activo',
         },
         {
           id: 2,
@@ -559,41 +624,41 @@ async function proxyRequest(
           telefono: '+591 79876543',
           correo: 'mariana.flores@email.com',
           fechaIngreso: '2024-03-01',
-          estado: 'Activo'
-        }
-      ])
+          estado: 'Activo',
+        },
+      ]);
     }
 
     if (targetPath.startsWith('health')) {
       return NextResponse.json({
         status: 'OK',
-        message: 'API Next.js Activa (Modo Local Frontend)'
-      })
+        message: 'API Next.js Activa (Modo Local Frontend)',
+      });
     }
 
     return NextResponse.json(
       { error: 'Backend Connection Error', message: err.message },
       { status: 502 }
-    )
+    );
   }
 }
 
 export async function GET(req: NextRequest, ctx: { params: Promise<{ path: string[] }> }) {
-  return proxyRequest(req, ctx)
+  return proxyRequest(req, ctx);
 }
 
 export async function POST(req: NextRequest, ctx: { params: Promise<{ path: string[] }> }) {
-  return proxyRequest(req, ctx)
+  return proxyRequest(req, ctx);
 }
 
 export async function PUT(req: NextRequest, ctx: { params: Promise<{ path: string[] }> }) {
-  return proxyRequest(req, ctx)
+  return proxyRequest(req, ctx);
 }
 
 export async function PATCH(req: NextRequest, ctx: { params: Promise<{ path: string[] }> }) {
-  return proxyRequest(req, ctx)
+  return proxyRequest(req, ctx);
 }
 
 export async function DELETE(req: NextRequest, ctx: { params: Promise<{ path: string[] }> }) {
-  return proxyRequest(req, ctx)
+  return proxyRequest(req, ctx);
 }
