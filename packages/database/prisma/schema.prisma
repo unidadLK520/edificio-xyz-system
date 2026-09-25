@@ -161,18 +161,20 @@ model HistorialAsignacionUnidad {
 }
 
 model Expensa {
-  idExpensa        Int          @id @default(autoincrement()) @map("id_expensa")
-  idDepartamento   Int          @map("id_departamento")
-  periodo          DateTime     @db.Date
-  monto            Decimal      @db.Decimal(10, 2)
-  tasaInteresMora  Decimal      @default(0) @map("tasa_interes_mora") @db.Decimal(5, 2)
-  fechaVencimiento DateTime     @map("fecha_vencimiento") @db.Date
-  saldoPendiente   Decimal      @map("saldo_pendiente") @db.Decimal(10, 2)
-  estado           String       @default("Pendiente") @db.VarChar(20) // Pendiente, Pagado, Parcial, Moroso
-  fechaCreacion    DateTime     @default(now()) @map("fecha_creacion") @db.Timestamp(6)
+  idExpensa            Int                  @id @default(autoincrement()) @map("id_expensa")
+  idDepartamento       Int                  @map("id_departamento")
+  periodo              DateTime             @db.Date
+  monto                Decimal              @db.Decimal(10, 2)
+  montoMora            Decimal              @default(0) @map("monto_mora") @db.Decimal(10, 2)
+  tasaInteresMora      Decimal              @default(0) @map("tasa_interes_mora") @db.Decimal(5, 2)
+  fechaVencimiento     DateTime             @map("fecha_vencimiento") @db.Date
+  saldoPendiente       Decimal              @map("saldo_pendiente") @db.Decimal(10, 2)
+  estado               String               @default("Pendiente") @db.VarChar(20) // Pendiente, Pagado, Parcial, Moroso
+  fechaCreacion        DateTime             @default(now()) @map("fecha_creacion") @db.Timestamp(6)
   
-  departamento     Departamento @relation(fields: [idDepartamento], references: [idDepartamento])
-  pagos            Pago[]
+  departamento          Departamento         @relation(fields: [idDepartamento], references: [idDepartamento])
+  pagos                 Pago[]
+  aplicacionesAnticipos AplicacionAnticipo[]
 
   @@unique([idDepartamento, periodo])
   @@index([idDepartamento], map: "idx_expensas_departamento")
@@ -211,30 +213,56 @@ model Caja {
 }
 
 model Pago {
-  idPago              Int             @id @default(autoincrement()) @map("id_pago")
-  idExpensa           Int?            @map("id_expensa")
-  idDepartamento      Int             @map("id_departamento")
-  montoPagado         Decimal         @map("monto_pagado") @db.Decimal(10, 2)
-  interesPagado       Decimal         @default(0) @map("interes_pagado") @db.Decimal(10, 2)
-  fechaPago           DateTime        @default(now()) @map("fecha_pago") @db.Timestamp(6)
-  metodoPago          String?         @map("metodo_pago") @db.VarChar(30)
-  esAnticipado        Boolean         @default(false) @map("es_anticipado")
-  idUsuarioRegistro   Int?            @map("id_usuario_registro")
-  comprobanteUrl      String?         @map("comprobante_url") @db.Text
-  idCuenta            Int?            @map("id_cuenta")
-  idMovimientoCaja    Int?            @map("id_movimiento_caja")
-  referenciaQr        String?         @map("referencia_qr") @db.VarChar(100)
+  idPago              Int                  @id @default(autoincrement()) @map("id_pago")
+  idExpensa           Int?                 @map("id_expensa")
+  idDepartamento      Int                  @map("id_departamento")
+  montoPagado         Decimal              @map("monto_pagado") @db.Decimal(10, 2)
+  interesPagado       Decimal              @default(0) @map("interes_pagado") @db.Decimal(10, 2)
+  fechaPago           DateTime             @default(now()) @map("fecha_pago") @db.Timestamp(6)
+  metodoPago          String?              @map("metodo_pago") @db.VarChar(30)
+  esAnticipado        Boolean              @default(false) @map("es_anticipado")
+  anulado             Boolean              @default(false)
+  fechaAnulacion      DateTime?            @map("fecha_anulacion") @db.Timestamp(6)
+  idUsuarioAnulacion  Int?                 @map("id_usuario_anulacion")
+  motivoAnulacion     String?              @map("motivo_anulacion") @db.Text
+  idPagoOriginal      Int?                 @map("id_pago_original")
+  idUsuarioRegistro   Int?                 @map("id_usuario_registro")
+  comprobanteUrl      String?              @map("comprobante_url") @db.Text
+  idCuenta            Int?                 @map("id_cuenta")
+  idMovimientoCaja    Int?                 @map("id_movimiento_caja")
+  referenciaQr        String?              @map("referencia_qr") @db.VarChar(100)
   
-  expensa             Expensa?        @relation(fields: [idExpensa], references: [idExpensa])
-  departamento        Departamento    @relation(fields: [idDepartamento], references: [idDepartamento])
-  usuarioRegistro     Usuario?        @relation(fields: [idUsuarioRegistro], references: [idUsuario])
-  cuentaBancaria      CuentaBancaria? @relation(fields: [idCuenta], references: [idCuenta])
-  cajaMovimiento      Caja?           @relation(fields: [idMovimientoCaja], references: [idMovimientoCaja])
+  expensa              Expensa?             @relation(fields: [idExpensa], references: [idExpensa])
+  departamento         Departamento         @relation(fields: [idDepartamento], references: [idDepartamento])
+  usuarioRegistro      Usuario?             @relation(fields: [idUsuarioRegistro], references: [idUsuario])
+  cuentaBancaria       CuentaBancaria?      @relation(fields: [idCuenta], references: [idCuenta])
+  cajaMovimiento       Caja?                @relation(fields: [idMovimientoCaja], references: [idMovimientoCaja])
+  pagoOriginal         Pago?                @relation("CorreccionPago", fields: [idPagoOriginal], references: [idPago])
+  pagosCorreccion      Pago[]               @relation("CorreccionPago")
+  aplicacionesAnticipo AplicacionAnticipo[]
 
   @@index([idDepartamento], map: "idx_pagos_departamento")
   @@index([idCuenta], map: "idx_pagos_cuenta")
   @@index([idMovimientoCaja], map: "idx_pagos_movimiento_caja")
+  @@index([idPagoOriginal], map: "idx_pagos_pago_original")
   @@map("pagos")
+  @@schema("edificio")
+}
+
+model AplicacionAnticipo {
+  idAplicacion      Int       @id @default(autoincrement()) @map("id_aplicacion")
+  idPago            Int       @map("id_pago")
+  idExpensa         Int       @map("id_expensa")
+  monto             Decimal   @db.Decimal(10, 2)
+  fecha             DateTime  @default(now()) @db.Timestamp(6)
+  idUsuarioRegistro Int?      @map("id_usuario_registro")
+
+  pago              Pago      @relation(fields: [idPago], references: [idPago])
+  expensa           Expensa   @relation(fields: [idExpensa], references: [idExpensa])
+
+  @@index([idPago], map: "idx_aplicacion_anticipo_pago")
+  @@index([idExpensa], map: "idx_aplicacion_anticipo_expensa")
+  @@map("aplicaciones_anticipos")
   @@schema("edificio")
 }
 
