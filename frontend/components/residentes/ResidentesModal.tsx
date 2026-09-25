@@ -1,78 +1,81 @@
 // frontend/components/residentes/ResidentesModal.tsx
-'use client'
+'use client';
 
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect } from 'react';
+import { AlertTriangle } from 'lucide-react';
 
 export interface PersonaData {
-  idPersona?: number
-  ciNit: string
-  nombres: string
-  apellidos: string
-  telefono?: string | null
-  correo?: string | null
-  direccion?: string | null
+  idPersona?: number;
+  ciNit: string;
+  nombres: string;
+  apellidos: string;
+  telefono?: string | null;
+  correo?: string | null;
+  direccion?: string | null;
 }
 
 interface ResidentesModalProps {
-  isOpen: boolean
-  onClose: () => void
-  onSuccess: () => void
-  personaToEdit?: PersonaData | null
+  isOpen: boolean;
+  onClose: () => void;
+  onSuccess: () => void;
+  personaToEdit?: PersonaData | null;
 }
 
 export default function ResidentesModal({
   isOpen,
   onClose,
   onSuccess,
-  personaToEdit
+  personaToEdit,
 }: ResidentesModalProps) {
-  const [ciNit, setCiNit] = useState('')
-  const [nombres, setNombres] = useState('')
-  const [apellidos, setApellidos] = useState('')
-  const [telefono, setTelefono] = useState('')
-  const [correo, setCorreo] = useState('')
-  const [direccion, setDireccion] = useState('')
+  const [ciNit, setCiNit] = useState('');
+  const [nombres, setNombres] = useState('');
+  const [apellidos, setApellidos] = useState('');
+  const [telefono, setTelefono] = useState('');
+  const [correo, setCorreo] = useState('');
+  const [direccion, setDireccion] = useState('');
 
-  const [loading, setLoading] = useState(false)
-  const [errorMessage, setErrorMessage] = useState<string | null>(null)
+  const [loading, setLoading] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  const isEditing = Boolean(personaToEdit && personaToEdit.idPersona)
+  const isEditing = Boolean(personaToEdit && personaToEdit.idPersona);
 
   useEffect(() => {
     if (personaToEdit) {
-      setCiNit(personaToEdit.ciNit || '')
-      setNombres(personaToEdit.nombres || '')
-      setApellidos(personaToEdit.apellidos || '')
-      setTelefono(personaToEdit.telefono || '')
-      setCorreo(personaToEdit.correo || '')
-      setDireccion(personaToEdit.direccion || '')
+      setCiNit(personaToEdit.ciNit || '');
+      setNombres(personaToEdit.nombres || '');
+      setApellidos(personaToEdit.apellidos || '');
+      setTelefono(personaToEdit.telefono || '');
+      setCorreo(personaToEdit.correo || '');
+      setDireccion(personaToEdit.direccion || '');
     } else {
-      setCiNit('')
-      setNombres('')
-      setApellidos('')
-      setTelefono('')
-      setCorreo('')
-      setDireccion('')
+      setCiNit('');
+      setNombres('');
+      setApellidos('');
+      setTelefono('');
+      setCorreo('');
+      setDireccion('');
     }
-    setErrorMessage(null)
-  }, [personaToEdit, isOpen])
+    setErrorMessage(null);
+  }, [personaToEdit, isOpen]);
 
-  if (!isOpen) return null
+  if (!isOpen) return null;
 
   const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setErrorMessage(null)
+    e.preventDefault();
+    setErrorMessage(null);
 
     if (!ciNit.trim() || !nombres.trim() || !apellidos.trim()) {
-      setErrorMessage('Los campos CI/NIT, Nombres y Apellidos son obligatorios.')
-      return
+      setErrorMessage('Los campos CI/NIT, Nombres y Apellidos son obligatorios.');
+      return;
     }
 
-    setLoading(true)
+    setLoading(true);
 
     try {
-      const url = isEditing ? `/api/v1/personas/${personaToEdit!.idPersona}` : '/api/v1/personas'
-      const method = isEditing ? 'PUT' : 'POST'
+      const url = isEditing
+        ? `/api/v1/personas/${personaToEdit!.idPersona}`
+        : '/api/v1/personas';
+      const method = isEditing ? 'PUT' : 'POST';
 
       const payload = {
         ciNit: ciNit.trim(),
@@ -80,46 +83,45 @@ export default function ResidentesModal({
         apellidos: apellidos.trim(),
         telefono: telefono.trim() || null,
         correo: correo.trim() || null,
-        direccion: direccion.trim() || null
-      }
+        direccion: direccion.trim() || null,
+      };
 
       const res = await fetch(url, {
         method,
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-      })
+        body: JSON.stringify(payload),
+      });
 
-      const data = await res.json()
+      const data = await res.json();
 
       if (!res.ok) {
         if (res.status === 409 || data.error === 'PERSONA_DUPLICADA_CI') {
           setErrorMessage(
             data.message || `Ya existe una persona registrada con el CI/NIT '${ciNit}'`
-          )
+          );
         } else if (data.details) {
-          const firstErr = Object.values(data.details).flat()[0]
-          setErrorMessage(
-            typeof firstErr === 'string' ? firstErr : data.message || 'Error de validación'
-          )
+          const firstErr = Object.values(data.details).flat()[0];
+          setErrorMessage(typeof firstErr === 'string' ? firstErr : data.message || 'Error de validación');
         } else {
-          setErrorMessage(data.message || 'Ocurrió un error al procesar la solicitud')
+          setErrorMessage(data.message || 'Ocurrió un error al procesar la solicitud');
         }
-        setLoading(false)
-        return
+        setLoading(false);
+        return;
       }
 
-      onSuccess()
-      onClose()
+      onSuccess();
+      onClose();
     } catch (err: any) {
-      setErrorMessage(err.message || 'Error de conexión con el servidor')
+      setErrorMessage(err.message || 'Error de conexión con el servidor');
     } finally {
-      setLoading(false)
+      setLoading(false);
     }
-  }
+  };
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
       <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 w-full max-w-lg rounded-2xl shadow-2xl overflow-hidden transition-all transform animate-in fade-in zoom-in-95 duration-200">
+        
         {/* Header Modal */}
         <div className="px-6 py-5 border-b border-slate-200 dark:border-slate-800 flex justify-between items-center bg-slate-50/50 dark:bg-slate-850">
           <div>
@@ -137,12 +139,7 @@ export default function ResidentesModal({
             className="text-slate-400 hover:text-slate-600 dark:hover:text-white transition-colors p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800"
           >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth="2"
-                d="M6 18L18 6M6 6l12 12"
-              />
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
             </svg>
           </button>
         </div>
@@ -150,7 +147,7 @@ export default function ResidentesModal({
         {/* Mensaje de error / Alerta CA4 */}
         {errorMessage && (
           <div className="mx-6 mt-4 p-3.5 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900/60 rounded-xl text-rose-700 dark:text-rose-300 text-xs flex items-start gap-2.5">
-            <span className="text-base shrink-0">⚠️</span>
+            <AlertTriangle className="w-4 h-4 shrink-0 text-rose-500 mt-0.5" />
             <div className="flex-1 font-medium">{errorMessage}</div>
           </div>
         )}
@@ -158,6 +155,7 @@ export default function ResidentesModal({
         {/* Formulario */}
         <form onSubmit={handleSubmit} className="p-6 space-y-4">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            
             {/* CI / NIT (CA4 Check) */}
             <div className="sm:col-span-2">
               <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
@@ -244,6 +242,7 @@ export default function ResidentesModal({
                 className="w-full px-3.5 py-2 bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/50 dark:focus:ring-indigo-400/50 dark:text-white transition-colors"
               />
             </div>
+
           </div>
 
           {/* Botones del Formulario */}
@@ -262,14 +261,7 @@ export default function ResidentesModal({
             >
               {loading && (
                 <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
-                  <circle
-                    className="opacity-25"
-                    cx="12"
-                    cy="12"
-                    r="10"
-                    stroke="currentColor"
-                    strokeWidth="4"
-                  />
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                   <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
                 </svg>
               )}
@@ -279,5 +271,5 @@ export default function ResidentesModal({
         </form>
       </div>
     </div>
-  )
+  );
 }

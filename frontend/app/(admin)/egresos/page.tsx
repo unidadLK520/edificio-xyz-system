@@ -1,9 +1,9 @@
 // frontend/app/(admin)/egresos/page.tsx
 // Módulo de Gestión de Egresos, Gastos Operativos y Facturas (HU 5)
 
-'use client'
+'use client';
 
-import React, { useState, useEffect, useMemo } from 'react'
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import {
   Wallet,
   Plus,
@@ -12,12 +12,12 @@ import {
   Building,
   Eye,
   RefreshCw,
-  FileSpreadsheet
-} from 'lucide-react'
-import { EgresoItem, EgresoFormData } from '@/components/egresos/types'
-import EgresosKpis from '@/components/egresos/EgresosKpis'
-import RegistrarEgresoModal from '@/components/egresos/RegistrarEgresoModal'
-import DetalleEgresoModal from '@/components/egresos/DetalleEgresoModal'
+  Loader2,
+} from 'lucide-react';
+import { EgresoItem, EgresoFormData } from '@/components/egresos/types';
+import EgresosKpis from '@/components/egresos/EgresosKpis';
+import RegistrarEgresoModal from '@/components/egresos/RegistrarEgresoModal';
+import DetalleEgresoModal from '@/components/egresos/DetalleEgresoModal';
 
 const EGRESOS_FALLBACK: EgresoItem[] = [
   {
@@ -30,7 +30,7 @@ const EGRESOS_FALLBACK: EgresoItem[] = [
     nroFactura: 'FAC-90182',
     monto: 3500.0,
     estado: 'Pagado',
-    metodoPago: 'Transferencia Bancaria (BNB)'
+    metodoPago: 'Transferencia Bancaria (BNB)',
   },
   {
     id: 2,
@@ -42,7 +42,7 @@ const EGRESOS_FALLBACK: EgresoItem[] = [
     nroFactura: 'FAC-349012',
     monto: 2450.0,
     estado: 'Pagado',
-    metodoPago: 'Débito Automático'
+    metodoPago: 'Débito Automático',
   },
   {
     id: 3,
@@ -54,7 +54,7 @@ const EGRESOS_FALLBACK: EgresoItem[] = [
     nroFactura: 'FAC-11928',
     monto: 4200.0,
     estado: 'Pagado',
-    metodoPago: 'Cheque de Gerencia'
+    metodoPago: 'Cheque de Gerencia',
   },
   {
     id: 4,
@@ -66,7 +66,7 @@ const EGRESOS_FALLBACK: EgresoItem[] = [
     nroFactura: 'FAC-4891',
     monto: 850.0,
     estado: 'Pendiente',
-    metodoPago: 'Efectivo Caja Chica'
+    metodoPago: 'Efectivo Caja Chica',
   },
   {
     id: 5,
@@ -78,42 +78,90 @@ const EGRESOS_FALLBACK: EgresoItem[] = [
     nroFactura: 'REC-0982',
     monto: 620.0,
     estado: 'En Revisión',
-    metodoPago: 'Transferencia Bancaria (BMSC)'
-  }
-]
+    metodoPago: 'Transferencia Bancaria (BMSC)',
+  },
+];
 
 export default function EgresosPage() {
-  const [egresos, setEgresos] = useState<EgresoItem[]>(EGRESOS_FALLBACK)
-  const [isLoading, setIsLoading] = useState(false)
-  const [searchTerm, setSearchTerm] = useState('')
-  const [filtroCategoria, setFiltroCategoria] = useState('Todos')
-  const [filtroEstado, setFiltroEstado] = useState('Todos')
+  const [egresos, setEgresos] = useState<EgresoItem[]>(EGRESOS_FALLBACK);
+  const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [filtroCategoria, setFiltroCategoria] = useState('Todos');
+  const [filtroEstado, setFiltroEstado] = useState('Todos');
 
   // Modales
-  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false)
-  const [selectedEgreso, setSelectedEgreso] = useState<EgresoItem | null>(null)
+  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  const [selectedEgreso, setSelectedEgreso] = useState<EgresoItem | null>(null);
 
-  // Carga inicial
-  const cargarEgresos = async () => {
-    setIsLoading(true)
+  // Carga desde API /api/v1/movimientos?tipo=Egreso o /api/v1/egresos
+  const fetchEgresos = useCallback(async () => {
+    setIsLoading(true);
     try {
-      const res = await fetch('/api/v1/egresos')
+      const res = await fetch('/api/v1/movimientos?tipo=Egreso');
       if (res.ok) {
-        const data = await res.json()
+        const json = await res.json();
+        const rawData = Array.isArray(json.data)
+          ? json.data
+          : Array.isArray(json)
+            ? json
+            : [];
+
+        if (rawData.length > 0) {
+          const mapped: EgresoItem[] = rawData.map((item: any) => {
+            let proveedor = item.proveedor || '';
+            let descripcionClean = item.descripcion || '';
+
+            if (descripcionClean.includes('|')) {
+              const parts = descripcionClean.split('|');
+              proveedor = parts[0].trim();
+              descripcionClean = parts.slice(1).join('|').trim();
+            }
+            if (!proveedor) proveedor = 'Proveedor General';
+
+            return {
+              id: item.idMovimiento || item.id || Date.now(),
+              codigo:
+                item.codigo ||
+                `EGR-2026-${String(item.idMovimiento || item.id || 1).padStart(3, '0')}`,
+              fecha: item.fecha
+                ? new Date(item.fecha).toISOString().split('T')[0]
+                : new Date().toISOString().split('T')[0],
+              categoria:
+                (item.categoria?.nombre as EgresoItem['categoria']) ||
+                item.categoria ||
+                'Mantenimiento',
+              proveedor: proveedor,
+              descripcion: descripcionClean || 'Sin descripción detallada',
+              nroFactura: item.comprobanteUrl || item.nroFactura || 'FAC-0000',
+              monto: Number(item.monto || 0),
+              estado: item.estado || 'Pagado',
+              metodoPago: item.metodoPago || 'Transferencia Bancaria (BNB)',
+            };
+          });
+          setEgresos(mapped);
+          return;
+        }
+      }
+
+      // Fallback secundario directo a /api/v1/egresos
+      const resEgresos = await fetch('/api/v1/egresos');
+      if (resEgresos.ok) {
+        const data = await resEgresos.json();
         if (Array.isArray(data) && data.length > 0) {
-          setEgresos(data)
+          setEgresos(data);
+          return;
         }
       }
     } catch (err) {
-      console.warn('Usando datos de respaldo para egresos:', err)
+      console.warn('Usando datos de respaldo para egresos:', err);
     } finally {
-      setIsLoading(false)
+      setIsLoading(false);
     }
-  }
+  }, []);
 
   useEffect(() => {
-    cargarEgresos()
-  }, [])
+    fetchEgresos();
+  }, [fetchEgresos]);
 
   // Filtrado reactivo
   const egresosFiltrados = useMemo(() => {
@@ -122,20 +170,26 @@ export default function EgresosPage() {
         e.proveedor.toLowerCase().includes(searchTerm.toLowerCase()) ||
         e.descripcion.toLowerCase().includes(searchTerm.toLowerCase()) ||
         e.nroFactura.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        e.codigo.toLowerCase().includes(searchTerm.toLowerCase())
-      const matchCat = filtroCategoria === 'Todos' || e.categoria === filtroCategoria
-      const matchEst = filtroEstado === 'Todos' || e.estado === filtroEstado
-      return matchSearch && matchCat && matchEst
-    })
-  }, [egresos, searchTerm, filtroCategoria, filtroEstado])
+        e.codigo.toLowerCase().includes(searchTerm.toLowerCase());
+      const matchCat = filtroCategoria === 'Todos' || e.categoria === filtroCategoria;
+      const matchEst = filtroEstado === 'Todos' || e.estado === filtroEstado;
+      return matchSearch && matchCat && matchEst;
+    });
+  }, [egresos, searchTerm, filtroCategoria, filtroEstado]);
 
   // Cálculos financieros
-  const totalGastos = useMemo(() => egresos.reduce((acc, curr) => acc + curr.monto, 0), [egresos])
-  const totalPagados = useMemo(
-    () => egresos.filter((e) => e.estado === 'Pagado').reduce((acc, curr) => acc + curr.monto, 0),
+  const totalGastos = useMemo(
+    () => egresos.reduce((acc, curr) => acc + curr.monto, 0),
     [egresos]
-  )
-  const totalPendientes = totalGastos - totalPagados
+  );
+  const totalPagados = useMemo(
+    () =>
+      egresos
+        .filter((e) => e.estado === 'Pagado')
+        .reduce((acc, curr) => acc + curr.monto, 0),
+    [egresos]
+  );
+  const totalPendientes = totalGastos - totalPagados;
 
   const handleCrearEgreso = async (formData: EgresoFormData) => {
     const nuevo: EgresoItem = {
@@ -148,23 +202,31 @@ export default function EgresosPage() {
       nroFactura: formData.nroFactura.trim() || `FAC-${Date.now().toString().slice(-4)}`,
       monto: Number(formData.monto),
       estado: formData.estado || 'Pagado',
-      metodoPago: formData.metodoPago || 'Transferencia Bancaria (BNB)'
-    }
+      metodoPago: formData.metodoPago || 'Transferencia Bancaria (BNB)',
+    };
 
-    setEgresos((prev) => [nuevo, ...prev])
-    setIsCreateModalOpen(false)
+    setEgresos((prev) => [nuevo, ...prev]);
+    setIsCreateModalOpen(false);
 
-    // Intentar persistir en API
+    // Intentar persistir en API backend
     try {
-      await fetch('/api/v1/egresos', {
+      await fetch('/api/v1/movimientos', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(nuevo)
-      })
+        body: JSON.stringify({
+          tipo: 'Egreso',
+          monto: nuevo.monto,
+          descripcion: `${nuevo.proveedor} | ${nuevo.descripcion}`,
+          comprobanteUrl: nuevo.nroFactura,
+          fecha: nuevo.fecha,
+          idCategoria: 1,
+          idCaja: 1,
+        }),
+      });
     } catch (err) {
-      console.warn('Registro local guardado:', err)
+      console.warn('Registro local guardado con fallback:', err);
     }
-  }
+  };
 
   return (
     <div className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto space-y-6">
@@ -179,14 +241,13 @@ export default function EgresosPage() {
             Egresos, Facturas y Proveedores
           </h1>
           <p className="text-xs sm:text-sm text-[#7d776f] dark:text-slate-400 mt-1">
-            Registro y conciliación de desembolsos a proveedores, servicios básicos y compras
-            operativas.
+            Registro y conciliación de desembolsos a proveedores, servicios básicos y compras operativas.
           </p>
         </div>
 
         <div className="flex items-center gap-2">
           <button
-            onClick={cargarEgresos}
+            onClick={fetchEgresos}
             disabled={isLoading}
             className="p-2.5 rounded-xl border border-[#cec8bc] dark:border-slate-700 bg-[#ede9e1] dark:bg-slate-800 text-[#5c5750] dark:text-slate-300 hover:bg-[#ded8cc] transition-colors cursor-pointer"
             title="Recargar egresos"
@@ -274,7 +335,14 @@ export default function EgresosPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-[#cec8bc]/60 dark:divide-slate-800/80 text-xs">
-              {egresosFiltrados.length === 0 ? (
+              {isLoading && egresos.length === 0 ? (
+                <tr>
+                  <td colSpan={7} className="py-12 text-center text-[#7d776f] dark:text-slate-500">
+                    <Loader2 className="w-6 h-6 animate-spin mx-auto mb-2 text-rose-700" />
+                    Cargando egresos del sistema...
+                  </td>
+                </tr>
+              ) : egresosFiltrados.length === 0 ? (
                 <tr>
                   <td colSpan={7} className="py-12 text-center text-[#7d776f] dark:text-slate-500">
                     No se encontraron registros de egresos con los filtros aplicados.
@@ -352,7 +420,10 @@ export default function EgresosPage() {
       />
 
       {/* MODAL DETALLE DE COMPROBANTE */}
-      <DetalleEgresoModal egreso={selectedEgreso} onClose={() => setSelectedEgreso(null)} />
+      <DetalleEgresoModal
+        egreso={selectedEgreso}
+        onClose={() => setSelectedEgreso(null)}
+      />
     </div>
-  )
+  );
 }

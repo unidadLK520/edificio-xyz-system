@@ -1,14 +1,15 @@
 // frontend/components/residentes/FichaResidenteModal.tsx
-'use client'
+'use client';
 
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect } from 'react';
+import { User, AlertTriangle, Home, Key, Building2, History } from 'lucide-react';
 
 interface FichaResidenteModalProps {
-  isOpen: boolean
-  onClose: () => void
-  personaId: number | null
-  onOcupacionUpdated?: () => void
-  canEdit?: boolean
+  isOpen: boolean;
+  onClose: () => void;
+  personaId: number | null;
+  onOcupacionUpdated?: () => void;
+  canEdit?: boolean;
 }
 
 export default function FichaResidenteModal({
@@ -16,93 +17,89 @@ export default function FichaResidenteModal({
   onClose,
   personaId,
   onOcupacionUpdated,
-  canEdit = true
+  canEdit = true,
 }: FichaResidenteModalProps) {
-  const [loading, setLoading] = useState(false)
-  const [persona, setPersona] = useState<any>(null)
-  const [historial, setHistorial] = useState<any[]>([])
-  const [errorMessage, setErrorMessage] = useState<string | null>(null)
-  const [finalizingId, setFinalizingId] = useState<number | null>(null)
+  const [loading, setLoading] = useState(false);
+  const [persona, setPersona] = useState<any>(null);
+  const [historial, setHistorial] = useState<any[]>([]);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [finalizingId, setFinalizingId] = useState<number | null>(null);
 
   useEffect(() => {
     if (isOpen && personaId) {
-      fetchFicha(personaId)
+      fetchFicha(personaId);
     } else {
-      setPersona(null)
-      setHistorial([])
-      setErrorMessage(null)
+      setPersona(null);
+      setHistorial([]);
+      setErrorMessage(null);
     }
-  }, [isOpen, personaId])
+  }, [isOpen, personaId]);
 
   const fetchFicha = async (id: number) => {
-    setLoading(true)
-    setErrorMessage(null)
+    setLoading(true);
+    setErrorMessage(null);
     try {
       // 1. Obtener datos detallados de la persona
-      const resPersona = await fetch(`/api/v1/personas/${id}`)
-      const dataPersona = await resPersona.json()
+      const resPersona = await fetch(`/api/v1/personas/${id}`);
+      const dataPersona = await resPersona.json();
 
       if (!resPersona.ok) {
-        throw new Error(dataPersona.message || 'Error al obtener datos de la persona')
+        throw new Error(dataPersona.message || 'Error al obtener datos de la persona');
       }
-      setPersona(dataPersona.data)
+      setPersona(dataPersona.data);
 
       // 2. Obtener historial de ocupaciones
-      const resHistorial = await fetch(`/api/v1/personas/${id}/historial`)
+      const resHistorial = await fetch(`/api/v1/personas/${id}/historial`);
       if (resHistorial.ok) {
-        const dataHistorial = await resHistorial.json()
-        setHistorial(dataHistorial.historialOcupaciones || [])
+        const dataHistorial = await resHistorial.json();
+        setHistorial(dataHistorial.historialOcupaciones || []);
       }
     } catch (err: any) {
-      setErrorMessage(err.message || 'Error al cargar la ficha del residente')
+      setErrorMessage(err.message || 'Error al cargar la ficha del residente');
+    } font: {
+      setLoading(false);
     }
-    font: {
-      setLoading(false)
-    }
-  }
+  };
 
   const handleFinalizarOcupacion = async (idOcupacion: number) => {
-    if (
-      !confirm(
-        '¿Está seguro de finalizar esta relación de ocupación? La fecha de fin se registrará con la fecha actual.'
-      )
-    ) {
-      return
+    if (!confirm('¿Está seguro de finalizar esta relación de ocupación? La fecha de fin se registrará con la fecha actual.')) {
+      return;
     }
 
-    setFinalizingId(idOcupacion)
+    setFinalizingId(idOcupacion);
     try {
       const res = await fetch(`/api/v1/personas/ocupaciones/${idOcupacion}/finalizar`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ fechaFin: new Date().toISOString().slice(0, 10) })
-      })
+        body: JSON.stringify({ fechaFin: new Date().toISOString().slice(0, 10) }),
+      });
 
-      const data = await res.json()
+      const data = await res.json();
       if (!res.ok) {
-        alert(data.message || 'No se pudo finalizar la ocupación')
-        return
+        alert(data.message || 'No se pudo finalizar la ocupación');
+        return;
       }
 
-      if (personaId) fetchFicha(personaId)
-      if (onOcupacionUpdated) onOcupacionUpdated()
+      if (personaId) fetchFicha(personaId);
+      if (onOcupacionUpdated) onOcupacionUpdated();
     } catch (err: any) {
-      alert(err.message || 'Error de conexión')
+      alert(err.message || 'Error de conexión');
     } finally {
-      setFinalizingId(null)
+      setFinalizingId(null);
     }
-  }
+  };
 
-  if (!isOpen) return null
+  if (!isOpen) return null;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
       <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 w-full max-w-2xl rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
+        
         {/* Header Modal */}
         <div className="px-6 py-5 border-b border-slate-200 dark:border-slate-800 flex justify-between items-center bg-slate-50/50 dark:bg-slate-850">
           <div>
             <h3 className="font-bold text-lg text-slate-900 dark:text-white flex items-center gap-2">
-              <span>👤</span> Ficha del Residente
+              <User className="w-5 h-5 text-indigo-500 shrink-0" /> Ficha del Residente
             </h3>
             <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
               Información personal, contacto y relación histórica con las unidades del edificio.
@@ -141,8 +138,9 @@ export default function FichaResidenteModal({
               <span className="text-sm font-medium">Cargando datos del residente...</span>
             </div>
           ) : errorMessage ? (
-            <div className="p-4 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900/60 rounded-xl text-rose-700 dark:text-rose-300 text-sm">
-              ⚠️ {errorMessage}
+            <div className="p-4 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900/60 rounded-xl text-rose-700 dark:text-rose-300 text-sm flex items-center gap-2">
+              <AlertTriangle className="w-4 h-4 shrink-0 text-rose-500" />
+              <span>{errorMessage}</span>
             </div>
           ) : persona ? (
             <>
@@ -162,15 +160,15 @@ export default function FichaResidenteModal({
                   </div>
                   <div className="flex items-center gap-2">
                     {persona.departamentosPropios?.length > 0 && (
-                      <span className="px-2.5 py-1 text-xs font-semibold bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300 rounded-full border border-emerald-300 dark:border-emerald-800/60">
-                        🏠 Propietario ({persona.departamentosPropios.length})
+                      <span className="px-2.5 py-1 text-xs font-semibold bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300 rounded-full border border-emerald-300 dark:border-emerald-800/60 flex items-center gap-1">
+                        <Home className="w-3.5 h-3.5" /> Propietario ({persona.departamentosPropios.length})
                       </span>
                     )}
                     {persona.ocupaciones?.some(
                       (o: any) => o.tipoOcupante === 'Inquilino' && !o.fechaFin
                     ) && (
-                      <span className="px-2.5 py-1 text-xs font-semibold bg-blue-100 text-blue-800 dark:bg-blue-950/60 dark:text-blue-300 rounded-full border border-blue-300 dark:border-blue-800/60">
-                        🔑 Inquilino Activo
+                      <span className="px-2.5 py-1 text-xs font-semibold bg-blue-100 text-blue-800 dark:bg-blue-950/60 dark:text-blue-300 rounded-full border border-blue-300 dark:border-blue-800/60 flex items-center gap-1">
+                        <Key className="w-3.5 h-3.5" /> Inquilino Activo
                       </span>
                     )}
                   </div>
@@ -207,7 +205,7 @@ export default function FichaResidenteModal({
               {/* Seccion 1: Departamentos Propios (CA8) */}
               <div>
                 <h5 className="text-xs uppercase tracking-wider font-bold text-slate-500 dark:text-slate-400 mb-2 flex items-center gap-1.5">
-                  <span>🏢</span> Unidades de Titularidad Directa
+                  <Building2 className="w-4 h-4 text-indigo-500 shrink-0" /> Unidades de Titularidad Directa
                 </h5>
                 {persona.departamentosPropios?.length === 0 ? (
                   <div className="p-3.5 bg-slate-50 dark:bg-slate-950/40 border border-slate-200 dark:border-slate-800/60 rounded-xl text-slate-500 text-xs text-center">
@@ -236,7 +234,7 @@ export default function FichaResidenteModal({
               {/* Seccion 2: Ocupaciones e Historial (CA6, CA7) */}
               <div>
                 <h5 className="text-xs uppercase tracking-wider font-bold text-slate-500 dark:text-slate-400 mb-2 flex items-center gap-1.5">
-                  <span>📜</span> Historial de Ocupaciones y Alquileres
+                  <History className="w-4 h-4 text-indigo-500 shrink-0" /> Historial de Ocupaciones y Alquileres
                 </h5>
                 {historial.length === 0 ? (
                   <div className="p-3.5 bg-slate-50 dark:bg-slate-950/40 border border-slate-200 dark:border-slate-800/60 rounded-xl text-slate-500 text-xs text-center">
@@ -245,7 +243,7 @@ export default function FichaResidenteModal({
                 ) : (
                   <div className="space-y-2.5">
                     {historial.map((ocu: any) => {
-                      const isVigente = !ocu.fechaFin
+                      const isVigente = !ocu.fechaFin;
                       return (
                         <div
                           key={ocu.idOcupacion}

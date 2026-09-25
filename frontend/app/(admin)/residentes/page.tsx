@@ -17,7 +17,9 @@ import {
   ChevronLeft,
   ChevronRight,
   UserCheck,
-  KeyRound
+  KeyRound,
+  Key,
+  AlertTriangle
 } from 'lucide-react'
 import ResidentesModal, { PersonaData } from '@/components/residentes/ResidentesModal'
 import FichaResidenteModal from '@/components/residentes/FichaResidenteModal'
@@ -140,6 +142,7 @@ export default function ResidentesPage() {
     p.ocupaciones?.some((o: any) => o.tipoOcupante === 'Inquilino')
   ).length
 
+
   return (
     <div className="p-4 sm:p-6 lg:p-8 space-y-6 max-w-7xl mx-auto">
       {/* Header */}
@@ -250,30 +253,37 @@ export default function ResidentesPage() {
 
       {/* Mensaje de Error */}
       {errorMessage && (
-        <div className="p-4 bg-rose-100 dark:bg-rose-950/40 border border-rose-300 dark:border-rose-900/60 rounded-xl text-rose-800 dark:text-rose-300 text-xs">
-          ⚠️ {errorMessage}
+        <div className="p-4 bg-rose-100 dark:bg-rose-950/40 border border-rose-300 dark:border-rose-900/60 rounded-xl text-rose-800 dark:text-rose-300 text-xs flex items-center gap-2">
+          <AlertTriangle className="w-4 h-4 text-rose-500 shrink-0" />
+          <span>{errorMessage}</span>
         </div>
       )}
 
       {/* Tabla de Personas/Residentes */}
-      <div className="bg-[#ede9e1]/80 dark:bg-slate-900/80 border border-[#cec8bc] dark:border-slate-800 rounded-2xl shadow-xs overflow-hidden">
+      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-sm overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs">
-            <thead className="bg-[#dfd9ce]/70 dark:bg-slate-800/70 text-[#7d776f] dark:text-slate-400 uppercase text-[11px] font-bold tracking-wider border-b border-[#cec8bc] dark:border-slate-800">
+          <table className="w-full text-left text-sm">
+            <thead className="bg-slate-50 dark:bg-slate-850 text-slate-500 dark:text-slate-400 uppercase text-xs font-semibold tracking-wider border-b border-slate-200 dark:border-slate-800">
               <tr>
-                <th className="px-5 py-3.5">CI / NIT</th>
-                <th className="px-5 py-3.5">Nombre Completo</th>
-                <th className="px-5 py-3.5">Contacto</th>
-                <th className="px-5 py-3.5">Tipo / Rol</th>
-                <th className="px-5 py-3.5">Unidades Asociadas</th>
-                <th className="px-5 py-3.5 text-right">Acciones</th>
+                <th className="px-6 py-4">CI / NIT</th>
+                <th className="px-6 py-4">Nombre Completo</th>
+                <th className="px-6 py-4">Contacto</th>
+                <th className="px-6 py-4">Tipo / Rol</th>
+                <th className="px-6 py-4">Unidades Asociadas</th>
+                <th className="px-6 py-4 text-right">Acciones</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-[#cec8bc]/50 dark:divide-slate-800/60 text-[#262422] dark:text-slate-200">
+            <tbody className="divide-y divide-slate-200 dark:divide-slate-800 text-slate-800 dark:text-slate-200">
               {loading ? (
                 <tr>
-                  <td colSpan={6} className="px-6 py-12 text-center text-[#7d776f]">
-                    <span>Cargando padrón de personas...</span>
+                  <td colSpan={6} className="px-6 py-12 text-center text-slate-500">
+                    <div className="flex justify-center items-center gap-2">
+                      <svg className="w-5 h-5 animate-spin text-indigo-600" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+                      </svg>
+                      <span>Cargando padrón de personas...</span>
+                    </div>
                   </td>
                 </tr>
               ) : personas.length === 0 ? (
@@ -331,19 +341,19 @@ export default function ResidentesPage() {
                           {p.departamentosPropios?.map((dep: any) => (
                             <span
                               key={`prop-${dep.idDepartamento}`}
-                              className="px-2 py-0.5 font-semibold bg-[#ded8cc] dark:bg-slate-800 text-[#262422] dark:text-slate-300 rounded-md border border-[#cec8bc] dark:border-slate-700"
+                              className="px-2 py-0.5 font-semibold bg-[#ded8cc] dark:bg-slate-800 text-[#262422] dark:text-slate-300 rounded-md border border-[#cec8bc] dark:border-slate-700 inline-flex items-center gap-1"
                               title="Propiedad directa"
                             >
-                              🏠 #{dep.numero}
+                              <Home className="w-3 h-3 text-slate-600 dark:text-slate-400" /> #{dep.numero}
                             </span>
                           ))}
                           {p.ocupaciones?.map((ocu: any) => (
                             <span
                               key={`ocu-${ocu.idOcupacion}`}
-                              className="px-2 py-0.5 font-semibold bg-blue-100/70 dark:bg-blue-950/50 text-blue-800 dark:text-blue-300 rounded-md border border-blue-200 dark:border-blue-800/50"
+                              className="px-2 py-0.5 font-semibold bg-blue-100/70 dark:bg-blue-950/50 text-blue-800 dark:text-blue-300 rounded-md border border-blue-200 dark:border-blue-800/50 inline-flex items-center gap-1"
                               title={`Ocupante: ${ocu.tipoOcupante}`}
                             >
-                              🔑 #{ocu.departamento?.numero || 'N/D'}
+                              <Key className="w-3 h-3 text-blue-500" /> #{ocu.departamento?.numero || 'N/D'}
                             </span>
                           ))}
                           {(!p.departamentosPropios || p.departamentosPropios.length === 0) &&
@@ -418,7 +428,7 @@ export default function ResidentesPage() {
         </div>
       </div>
 
-      {/* Modales */}
+      {/* Modales de Operación */}
       <ResidentesModal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}

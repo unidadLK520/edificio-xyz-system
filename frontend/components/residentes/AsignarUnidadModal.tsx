@@ -1,78 +1,79 @@
 // frontend/components/residentes/AsignarUnidadModal.tsx
-'use client'
+'use client';
 
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect } from 'react';
+import { Home, AlertTriangle, Key } from 'lucide-react';
 
 interface AsignarUnidadModalProps {
-  isOpen: boolean
-  onClose: () => void
-  persona: { idPersona: number; nombres: string; apellidos: string } | null
-  onSuccess: () => void
+  isOpen: boolean;
+  onClose: () => void;
+  persona: { idPersona: number; nombres: string; apellidos: string } | null;
+  onSuccess: () => void;
 }
 
 export default function AsignarUnidadModal({
   isOpen,
   onClose,
   persona,
-  onSuccess
+  onSuccess,
 }: AsignarUnidadModalProps) {
-  const [departamentos, setDepartamentos] = useState<any[]>([])
-  const [idDepartamento, setIdDepartamento] = useState<string>('')
-  const [tipoOcupante, setTipoOcupante] = useState<'Propietario' | 'Inquilino'>('Propietario')
-  const [fechaInicio, setFechaInicio] = useState<string>(new Date().toISOString().slice(0, 10))
-  const [fechaFin, setFechaFin] = useState<string>('')
-  const [esPropietarioDirecto, setEsPropietarioDirecto] = useState<boolean>(true)
+  const [departamentos, setDepartamentos] = useState<any[]>([]);
+  const [idDepartamento, setIdDepartamento] = useState<string>('');
+  const [tipoOcupante, setTipoOcupante] = useState<'Propietario' | 'Inquilino'>('Propietario');
+  const [fechaInicio, setFechaInicio] = useState<string>(new Date().toISOString().slice(0, 10));
+  const [fechaFin, setFechaFin] = useState<string>('');
+  const [esPropietarioDirecto, setEsPropietarioDirecto] = useState<boolean>(true);
 
-  const [loadingDepartamentos, setLoadingDepartamentos] = useState(false)
-  const [submitting, setSubmitting] = useState(false)
-  const [errorMessage, setErrorMessage] = useState<string | null>(null)
+  const [loadingDepartamentos, setLoadingDepartamentos] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   useEffect(() => {
     if (isOpen) {
-      fetchDepartamentos()
-      setFechaInicio(new Date().toISOString().slice(0, 10))
-      setFechaFin('')
-      setErrorMessage(null)
-      setTipoOcupante('Propietario')
-      setEsPropietarioDirecto(true)
+      fetchDepartamentos();
+      setFechaInicio(new Date().toISOString().slice(0, 10));
+      setFechaFin('');
+      setErrorMessage(null);
+      setTipoOcupante('Propietario');
+      setEsPropietarioDirecto(true);
     }
-  }, [isOpen])
+  }, [isOpen]);
 
   const fetchDepartamentos = async () => {
-    setLoadingDepartamentos(true)
+    setLoadingDepartamentos(true);
     try {
-      const res = await fetch('/api/v1/departamentos?limit=100')
+      const res = await fetch('/api/v1/departamentos?limit=100');
       if (res.ok) {
-        const json = await res.json()
-        setDepartamentos(json.data || [])
+        const json = await res.json();
+        setDepartamentos(json.data || []);
         if (json.data && json.data.length > 0) {
-          setIdDepartamento(String(json.data[0].idDepartamento))
+          setIdDepartamento(String(json.data[0].idDepartamento));
         }
       }
     } catch (err: any) {
-      console.error('Error al cargar lista de departamentos:', err)
+      console.error('Error al cargar lista de departamentos:', err);
     } finally {
-      setLoadingDepartamentos(false)
+      setLoadingDepartamentos(false);
     }
-  }
+  };
 
-  if (!isOpen || !persona) return null
+  if (!isOpen || !persona) return null;
 
   const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setErrorMessage(null)
+    e.preventDefault();
+    setErrorMessage(null);
 
     if (!idDepartamento) {
-      setErrorMessage('Debe seleccionar un departamento.')
-      return
+      setErrorMessage('Debe seleccionar un departamento.');
+      return;
     }
 
     if (fechaFin && fechaFin < fechaInicio) {
-      setErrorMessage('La fecha de fin no puede ser anterior a la fecha de inicio.')
-      return
+      setErrorMessage('La fecha de fin no puede ser anterior a la fecha de inicio.');
+      return;
     }
 
-    setSubmitting(true)
+    setSubmitting(true);
 
     try {
       const payload = {
@@ -80,47 +81,45 @@ export default function AsignarUnidadModal({
         tipoOcupante,
         fechaInicio,
         fechaFin: fechaFin || null,
-        esPropietarioDirecto: tipoOcupante === 'Propietario' ? esPropietarioDirecto : false
-      }
+        esPropietarioDirecto: tipoOcupante === 'Propietario' ? esPropietarioDirecto : false,
+      };
 
       const res = await fetch(`/api/v1/personas/${persona.idPersona}/unidades`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-      })
+        body: JSON.stringify(payload),
+      });
 
-      const data = await res.json()
+      const data = await res.json();
 
       if (!res.ok) {
-        setErrorMessage(data.message || 'Error al realizar la asignación de unidad')
-        setSubmitting(false)
-        return
+        setErrorMessage(data.message || 'Error al realizar la asignación de unidad');
+        setSubmitting(false);
+        return;
       }
 
-      onSuccess()
-      onClose()
+      onSuccess();
+      onClose();
     } catch (err: any) {
-      setErrorMessage(err.message || 'Error de conexión')
+      setErrorMessage(err.message || 'Error de conexión');
     } finally {
-      setSubmitting(false)
+      setSubmitting(false);
     }
-  }
+  };
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
       <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 w-full max-w-lg rounded-2xl shadow-2xl overflow-hidden transition-all transform animate-in fade-in zoom-in-95 duration-200">
+        
         {/* Header Modal */}
         <div className="px-6 py-5 border-b border-slate-200 dark:border-slate-800 flex justify-between items-center bg-slate-50/50 dark:bg-slate-850">
           <div>
             <h3 className="font-bold text-lg text-slate-900 dark:text-white flex items-center gap-2">
-              <span>🏠</span> Asignar Unidad Habitacional
+              <Home className="w-5 h-5 text-indigo-500 shrink-0" />
+              Asignar Unidad Habitacional
             </h3>
             <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-              Asociar a{' '}
-              <strong className="text-slate-800 dark:text-slate-200">
-                {persona.nombres} {persona.apellidos}
-              </strong>{' '}
-              con un departamento.
+              Asociar a <strong className="text-slate-800 dark:text-slate-200">{persona.nombres} {persona.apellidos}</strong> con un departamento.
             </p>
           </div>
           <button
@@ -128,12 +127,7 @@ export default function AsignarUnidadModal({
             className="text-slate-400 hover:text-slate-600 dark:hover:text-white transition-colors p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800"
           >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth="2"
-                d="M6 18L18 6M6 6l12 12"
-              />
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
             </svg>
           </button>
         </div>
@@ -141,13 +135,14 @@ export default function AsignarUnidadModal({
         {/* Alerta de Error */}
         {errorMessage && (
           <div className="mx-6 mt-4 p-3.5 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900/60 rounded-xl text-rose-700 dark:text-rose-300 text-xs flex items-start gap-2.5">
-            <span className="text-base shrink-0">⚠️</span>
+            <AlertTriangle className="w-4 h-4 shrink-0 text-rose-500 mt-0.5" />
             <div className="flex-1 font-medium">{errorMessage}</div>
           </div>
         )}
 
         {/* Formulario */}
         <form onSubmit={handleSubmit} className="p-6 space-y-4">
+          
           {/* Selección de Departamento */}
           <div>
             <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
@@ -164,10 +159,7 @@ export default function AsignarUnidadModal({
               >
                 {departamentos.map((dep) => (
                   <option key={dep.idDepartamento} value={dep.idDepartamento}>
-                    Dpto #{dep.numero} (Piso {dep.piso || '-'}) - Status: {dep.estado}{' '}
-                    {dep.propietario
-                      ? `[Propietario: ${dep.propietario.nombres} ${dep.propietario.apellidos}]`
-                      : ''}
+                    Dpto #{dep.numero} (Piso {dep.piso || '-'}) - Status: {dep.estado} {dep.propietario ? `[Propietario: ${dep.propietario.nombres} ${dep.propietario.apellidos}]` : ''}
                   </option>
                 ))}
               </select>
@@ -193,12 +185,12 @@ export default function AsignarUnidadModal({
                   value="Propietario"
                   checked={tipoOcupante === 'Propietario'}
                   onChange={() => {
-                    setTipoOcupante('Propietario')
-                    setEsPropietarioDirecto(true)
+                    setTipoOcupante('Propietario');
+                    setEsPropietarioDirecto(true);
                   }}
                   className="sr-only"
                 />
-                <span>🏠 Propietario</span>
+                <span className="flex items-center gap-1.5"><Home className="w-4 h-4" /> Propietario</span>
               </label>
 
               <label
@@ -214,12 +206,12 @@ export default function AsignarUnidadModal({
                   value="Inquilino"
                   checked={tipoOcupante === 'Inquilino'}
                   onChange={() => {
-                    setTipoOcupante('Inquilino')
-                    setEsPropietarioDirecto(false)
+                    setTipoOcupante('Inquilino');
+                    setEsPropietarioDirecto(false);
                   }}
                   className="sr-only"
                 />
-                <span>🔑 Inquilino</span>
+                <span className="flex items-center gap-1.5"><Key className="w-4 h-4" /> Inquilino</span>
               </label>
             </div>
           </div>
@@ -262,10 +254,7 @@ export default function AsignarUnidadModal({
                 onChange={(e) => setEsPropietarioDirecto(e.target.checked)}
                 className="w-4 h-4 text-emerald-600 rounded border-slate-300 focus:ring-emerald-500"
               />
-              <label
-                htmlFor="chkPropietarioDirecto"
-                className="text-xs text-emerald-900 dark:text-emerald-300 font-medium cursor-pointer"
-              >
+              <label htmlFor="chkPropietarioDirecto" className="text-xs text-emerald-900 dark:text-emerald-300 font-medium cursor-pointer">
                 Establecer como Propietario Titular principal de la unidad
               </label>
             </div>
@@ -287,14 +276,7 @@ export default function AsignarUnidadModal({
             >
               {submitting && (
                 <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
-                  <circle
-                    className="opacity-25"
-                    cx="12"
-                    cy="12"
-                    r="10"
-                    stroke="currentColor"
-                    strokeWidth="4"
-                  />
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                   <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
                 </svg>
               )}
@@ -304,5 +286,5 @@ export default function AsignarUnidadModal({
         </form>
       </div>
     </div>
-  )
+  );
 }
