@@ -1,5 +1,4 @@
-// frontend/app/(admin)/layout.tsx
-'use client';
+'use client'
 
 import React, { useState } from 'react'
 import Link from 'next/link'
@@ -14,7 +13,7 @@ const ADMIN_LINKS = [
   { href: '/residentes', label: 'Residentes', icon: Users },
   { href: '/departamentos', label: 'Departamentos', icon: Building2 },
   { href: '/expensas', label: 'Expensas', icon: Receipt },
-  { href: '/egresos', label: 'Egresos', icon: Wallet },
+  { href: '/egresos', label: 'Ingresos y Egresos', icon: Wallet },
   { href: '/personal', label: 'Personal', icon: Users2 }
 ]
 
