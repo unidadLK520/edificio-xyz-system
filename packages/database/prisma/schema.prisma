@@ -272,6 +272,7 @@ model CategoriaMovimiento {
   tipo        String       @db.VarChar(10) // Ingreso, Egreso
   movimientos Movimiento[]
 
+  @@unique([nombre, tipo])
   @@map("categorias_movimiento")
   @@schema("edificio")
 }
@@ -285,6 +286,10 @@ model Movimiento {
   fecha               DateTime              @default(now()) @db.Timestamp(6)
   comprobanteUrl      String?               @map("comprobante_url") @db.Text
   idUsuarioRegistro   Int?                  @map("id_usuario_registro")
+  anulado             Boolean               @default(false)
+  fechaAnulacion      DateTime?             @map("fecha_anulacion") @db.Timestamp(6)
+  idUsuarioAnulacion  Int?                  @map("id_usuario_anulacion")
+  motivoAnulacion     String?               @map("motivo_anulacion") @db.Text
   
   categoria           CategoriaMovimiento   @relation(fields: [idCategoria], references: [idCategoria])
   usuarioRegistro     Usuario?              @relation(fields: [idUsuarioRegistro], references: [idUsuario])
