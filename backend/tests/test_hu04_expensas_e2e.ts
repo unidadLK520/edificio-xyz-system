@@ -62,6 +62,7 @@ async function main() {
   let persona2Id: number | null = null;
   let depto1Id: number | null = null;
   let depto2Id: number | null = null;
+  let deptoRegresionId: number | null = null;
   let expensa1Id: number | null = null;
   let expensa2Id: number | null = null;
   let pagoId: number | null = null;
@@ -196,8 +197,8 @@ async function main() {
       console.log(`📋 Expensa creada encontrada (ID: ${expensa1Id}, Monto: ${jsonExpensas.data[0].monto})`);
     }
 
-    // ── CA03 & CA04: Registro de Pago y Pago Anticipado ──────────────────────
-    console.log('\n--- CA03 & CA04: Registrar Pago y Marca de Pago Anticipado ---');
+    // ── CA03 & CA04: Registro de Pagos y Anticipos Reales (FIFO) ────────────
+    console.log('\n--- CA03: Registrar Pago Ordinario ---');
     if (expensa1Id) {
       const resPago = await fetch(`${baseUrl}/${expensa1Id}/pagos`, {
         method: 'POST',
@@ -217,23 +218,211 @@ async function main() {
       } else {
         console.error('❌ CA03 FAIL:', jsonPago);
       }
+    }
 
-      // Registro de Pago Anticipado (CA04)
-      const resAnticipado = await fetch(`${baseUrl}/${expensa1Id}/pagos`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${adminToken}` },
-        body: JSON.stringify({
-          montoPagado: 300,
-          metodoPago: 'QR',
-          esAnticipado: true,
-        }),
+    // ── CA04: Anticipos Reales (FIFO, saldoDisponible, aplicación automática y manual) ──
+    console.log('\n--- CA04-1: Registrar anticipo mayor al monto de la expensa y aplicación parcial FIFO ---');
+    const resAnticipo600 = await fetch(`${baseUrl}/anticipo/pagos`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${adminToken}` },
+      body: JSON.stringify({
+        idDepartamento: depto1Id,
+        idExpensa: null,
+        montoPagado: 600,
+        metodoPago: 'Transferencia',
+        esAnticipado: true,
+      }),
+    });
+    const jsonAnticipo600 = await resAnticipo600.json();
+    const idAnticipo600 = jsonAnticipo600.pago?.idPago;
+    console.log('Status Anticipo 600:', resAnticipo600.status, 'ID:', idAnticipo600);
+
+    // Crear expensa de 400 para depto1 en un nuevo período (2026-11-01)
+    const resExpAutoAnticipo = await fetch(`${baseUrl}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${adminToken}` },
+      body: JSON.stringify({
+        idDepartamento: depto1Id,
+        periodo: '2026-11-01',
+        monto: 400,
+        tasaInteresMora: 5,
+        fechaVencimiento: '2026-11-15',
+      }),
+    });
+    const jsonExpAutoAnticipo = await resExpAutoAnticipo.json();
+    console.log('Status Expensa con Anticipo Automático:', resExpAutoAnticipo.status, 'Saldo:', jsonExpAutoAnticipo.saldoPendiente, 'Estado:', jsonExpAutoAnticipo.estado);
+
+    const aplicaciones600 = await prisma.aplicacionAnticipo.findMany({ where: { idPago: idAnticipo600 } });
+    const totalAplicado600 = aplicaciones600.reduce((acc, a) => acc + Number(a.monto), 0);
+    const saldoDisponible600 = 600 - totalAplicado600;
+
+    if (
+      resAnticipo600.status === 201 &&
+      resExpAutoAnticipo.status === 201 &&
+      Number(jsonExpAutoAnticipo.saldoPendiente) === 0 &&
+      jsonExpAutoAnticipo.estado === 'Pagado' &&
+      totalAplicado600 === 400 &&
+      saldoDisponible600 === 200
+    ) {
+      console.log(`✅ CA04-1 PASS: Anticipo aplicado parcialmente por FIFO (400 aplicado, saldoDisponible restante: ${saldoDisponible600}).`);
+    } else {
+      console.error('❌ CA04-1 FAIL: Error en aplicación parcial FIFO:', {
+        jsonAnticipo600,
+        jsonExpAutoAnticipo,
+        totalAplicado600,
+        saldoDisponible600,
       });
-      const jsonAnticipado = await resAnticipado.json();
-      if (resAnticipado.status === 201 && jsonAnticipado.pago?.esAnticipado) {
-        console.log('✅ CA04 PASS: Pago anticipado registrado conservando importe para aplicación posterior.');
-      } else {
-        console.error('❌ CA04 FAIL:', jsonAnticipado);
-      }
+    }
+
+    console.log('\n--- CA04-2: Registrar anticipo exacto al monto de la expensa ---');
+    const resAnticipo350 = await fetch(`${baseUrl}/anticipo/pagos`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${adminToken}` },
+      body: JSON.stringify({
+        idDepartamento: depto1Id,
+        idExpensa: null,
+        montoPagado: 350,
+        metodoPago: 'QR',
+        esAnticipado: true,
+      }),
+    });
+    const jsonAnticipo350 = await resAnticipo350.json();
+    const idAnticipo350 = jsonAnticipo350.pago?.idPago;
+
+    const resExpExacta = await fetch(`${baseUrl}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${adminToken}` },
+      body: JSON.stringify({
+        idDepartamento: depto1Id,
+        periodo: '2026-12-01',
+        monto: 350,
+        tasaInteresMora: 5,
+        fechaVencimiento: '2026-12-15',
+      }),
+    });
+    const jsonExpExacta = await resExpExacta.json();
+
+    if (
+      resAnticipo350.status === 201 &&
+      resExpExacta.status === 201 &&
+      Number(jsonExpExacta.saldoPendiente) === 0 &&
+      jsonExpExacta.estado === 'Pagado'
+    ) {
+      console.log(`✅ CA04-2 PASS: Expensa cubierta completamente por FIFO (saldoPendiente: 0, estado: Pagado).`);
+    } else {
+      console.error('❌ CA04-2 FAIL: Error en cobertura de expensa con anticipos:', {
+        jsonAnticipo350,
+        jsonExpExacta,
+      });
+    }
+
+    console.log('\n--- CA04-3: Aplicación manual de anticipo y validación de límite de saldo disponible ---');
+    const resAnticipo100 = await fetch(`${baseUrl}/anticipo/pagos`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${adminToken}` },
+      body: JSON.stringify({
+        idDepartamento: depto2Id,
+        idExpensa: null,
+        montoPagado: 100,
+        metodoPago: 'Efectivo',
+        esAnticipado: true,
+      }),
+    });
+    const jsonAnticipo100 = await resAnticipo100.json();
+    const idAnticipo100 = jsonAnticipo100.pago?.idPago;
+
+    // Intentamos aplicar 150 a expensa1Id (cuando solo hay 100 disponible)
+    const resManualExceso = await fetch(`${baseUrl}/${expensa1Id}/aplicar-anticipo/${idAnticipo100}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${adminToken}` },
+      body: JSON.stringify({ monto: 150 }),
+    });
+    const jsonManualExceso = await resManualExceso.json();
+    console.log('Status Exceso:', resManualExceso.status, 'Error Code:', jsonManualExceso.code || jsonManualExceso.error);
+
+    // Aplicar a expensa creada de depto2
+    // Crear expensa en depto2 sin fecha vencida para prueba de aplicación manual
+    const expManualDepto2 = await prisma.expensa.create({
+      data: {
+        idDepartamento: depto2Id!,
+        periodo: new Date('2026-11-01'),
+        monto: 300,
+        saldoPendiente: 300,
+        tasaInteresMora: 5,
+        fechaVencimiento: new Date('2026-11-15'),
+        estado: 'Pendiente',
+      },
+    });
+
+    const resManualOk = await fetch(`${baseUrl}/${expManualDepto2.idExpensa}/aplicar-anticipo/${idAnticipo100}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${adminToken}` },
+      body: JSON.stringify({ monto: 100 }),
+    });
+    const jsonManualOk = await resManualOk.json();
+    console.log('Status Aplicar Manual OK:', resManualOk.status, 'Saldo Restante Anticipo:', jsonManualOk.saldoDisponibleRestante);
+
+    if (
+      resManualExceso.status === 400 &&
+      resManualOk.status === 200 &&
+      jsonManualOk.saldoDisponibleRestante === 0 &&
+      Number(jsonManualOk.expensa?.saldoPendiente) === 200
+    ) {
+      console.log('✅ CA04-3 PASS: Aplicación manual respetó el límite de saldoDisponible y aplicó correctamente el monto.');
+    } else {
+      console.error('❌ CA04-3 FAIL: Error en aplicación manual:', { jsonManualExceso, jsonManualOk });
+    }
+
+    console.log('\n--- CA04-4: Regresión: Generación de expensa en departamento SIN anticipos previos ---');
+    const numDeptoRegresion = `F4-${ts}`;
+    const deptoRegresion = await prisma.departamento.create({
+      data: {
+        numero: numDeptoRegresion,
+        piso: 4,
+        areaM2: 70.0,
+        idPropietario: personaId,
+        estado: 'Ocupado',
+      },
+    });
+    deptoRegresionId = deptoRegresion.idDepartamento;
+
+    const resExpSinAnticipos = await fetch(`${baseUrl}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${adminToken}` },
+      body: JSON.stringify({
+        idDepartamento: deptoRegresion.idDepartamento,
+        periodo: '2026-11-01',
+        monto: 350,
+        tasaInteresMora: 5,
+        fechaVencimiento: '2026-11-15',
+      }),
+    });
+    const jsonExpSinAnticipos = await resExpSinAnticipos.json();
+
+    if (
+      resExpSinAnticipos.status === 201 &&
+      Number(jsonExpSinAnticipos.saldoPendiente) === 350 &&
+      jsonExpSinAnticipos.estado === 'Pendiente'
+    ) {
+      console.log('✅ CA04-4 PASS: Expensa generada sin anticipos conserva monto completo en saldoPendiente (350) y estado Pendiente.');
+    } else {
+      console.error('❌ CA04-4 FAIL: Comportamiento inesperado al generar expensa sin anticipos:', jsonExpSinAnticipos);
+    }
+
+    console.log('\n--- CA04-5: GET /estado-cuenta/:idDepartamento muestra anticipos con saldo disponible ---');
+    const resEstadoCuentaAnticipos = await fetch(`${baseUrl}/estado-cuenta/${depto1Id}`, {
+      headers: { Authorization: `Bearer ${adminToken}` },
+    });
+    const jsonEstadoCuentaAnticipos = await resEstadoCuentaAnticipos.json();
+
+    if (
+      resEstadoCuentaAnticipos.status === 200 &&
+      Array.isArray(jsonEstadoCuentaAnticipos.anticiposDisponibles) &&
+      jsonEstadoCuentaAnticipos.resumen?.totalAnticiposDisponibles !== undefined
+    ) {
+      console.log(`✅ CA04-5 PASS: Estado de cuenta incluye sección de anticipos con saldo disponible (Total Disponible: ${jsonEstadoCuentaAnticipos.resumen.totalAnticiposDisponibles}).`);
+    } else {
+      console.error('❌ CA04-5 FAIL: Estructura de estado-cuenta no contiene anticiposDisponibles:', jsonEstadoCuentaAnticipos);
     }
 
     // ── CA05: Consulta de Estado e Importes de Expensa ───────────────────────
@@ -243,10 +432,32 @@ async function main() {
         headers: { Authorization: `Bearer ${adminToken}` },
       });
       const jsonDetalle = await resDetalle.json();
-      if (resDetalle.status === 200 && jsonDetalle.pagos.length >= 2) {
-        console.log(`✅ CA05 PASS: Estado consultado (Monto: ${jsonDetalle.monto}, Saldo: ${jsonDetalle.saldoPendiente}, Pagos: ${jsonDetalle.pagos.length}).`);
+
+      // expensa1Id tiene 1 pago directo (CA03: 200 por Transferencia).
+      // El anticipo de 600 (CA04-1) cubrió una expensa de noviembre distinta (not expensa1Id),
+      // y los anticipos se reflejan en aplicacionesAnticipos, no en el array pagos.
+      const pagosNoAnulados = (jsonDetalle.pagos ?? []).filter((p: any) => !p.anulado);
+      const tieneUnPagoValido = pagosNoAnulados.length === 1 && Number(pagosNoAnulados[0].montoPagado) === 200;
+
+      // El anticipo debe aparecer en el estado-cuenta del departamento, no en pagos de la expensa.
+      // Reutilizamos jsonEstadoCuentaAnticipos (CA04-5, mismo depto1Id).
+      const anticipoEnEstadoCuenta =
+        Array.isArray(jsonEstadoCuentaAnticipos?.anticipos) &&
+        jsonEstadoCuentaAnticipos.anticipos.some((a: any) => Number(a.montoPagado) === 600);
+
+      if (resDetalle.status === 200 && tieneUnPagoValido && anticipoEnEstadoCuenta) {
+        console.log(
+          `✅ CA05 PASS: Estado consultado (Monto: ${jsonDetalle.monto}, Saldo: ${jsonDetalle.saldoPendiente}, ` +
+          `PagosDirectos: ${pagosNoAnulados.length}, AnticipoenEstadoCuenta: ${anticipoEnEstadoCuenta}).`
+        );
       } else {
-        console.error('❌ CA05 FAIL:', jsonDetalle);
+        console.error('❌ CA05 FAIL:', {
+          status: resDetalle.status,
+          tieneUnPagoValido,
+          anticipoEnEstadoCuenta,
+          pagosLength: jsonDetalle.pagos?.length,
+          pagosNoAnuladosLength: pagosNoAnulados.length,
+        });
       }
     }
 
@@ -578,14 +789,25 @@ async function main() {
     if (personaId || persona2Id) {
       await prisma.ocupanteDepartamento.deleteMany({ where: { idPersona: { in: [personaId, persona2Id].filter(Boolean) as number[] } } });
     }
-    if (depto1Id || depto2Id) {
+    const deptosAClean = [depto1Id, depto2Id, deptoRegresionId].filter(Boolean) as number[];
+    if (deptosAClean.length > 0) {
+      try {
+        await prisma.aplicacionAnticipo.deleteMany({
+          where: {
+            OR: [
+              { pago: { idDepartamento: { in: deptosAClean } } },
+              { expensa: { idDepartamento: { in: deptosAClean } } },
+            ],
+          },
+        });
+      } catch (_) {}
       await prisma.pago.updateMany({
-        where: { idDepartamento: { in: [depto1Id!, depto2Id!].filter(Boolean) } },
+        where: { idDepartamento: { in: deptosAClean } },
         data: { idPagoOriginal: null },
       });
-      await prisma.pago.deleteMany({ where: { idDepartamento: { in: [depto1Id!, depto2Id!].filter(Boolean) } } });
-      await prisma.expensa.deleteMany({ where: { idDepartamento: { in: [depto1Id!, depto2Id!].filter(Boolean) } } });
-      await prisma.departamento.deleteMany({ where: { idDepartamento: { in: [depto1Id!, depto2Id!].filter(Boolean) } } });
+      await prisma.pago.deleteMany({ where: { idDepartamento: { in: deptosAClean } } });
+      await prisma.expensa.deleteMany({ where: { idDepartamento: { in: deptosAClean } } });
+      await prisma.departamento.deleteMany({ where: { idDepartamento: { in: deptosAClean } } });
     }
     if (personaId || persona2Id) {
       await prisma.persona.deleteMany({ where: { idPersona: { in: [personaId, persona2Id].filter(Boolean) as number[] } } });
