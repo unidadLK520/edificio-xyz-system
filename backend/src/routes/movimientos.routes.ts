@@ -1,23 +1,24 @@
 // backend/src/routes/movimientos.routes.ts
 // Gestión de movimientos financieros (ingresos y egresos)
-//   GET    /api/v1/movimientos           — listar con filtros (tipo, categoría, período)
-//   GET    /api/v1/movimientos/resumen   — resumen financiero (totales de ingresos, egresos y balance)
-//   GET    /api/v1/movimientos/categorias— categorías de ingresos y egresos
-//   GET    /api/v1/movimientos/:id       — detalle
-//   POST   /api/v1/movimientos           — crear movimiento (requiere permisos financieros)
-//   PUT    /api/v1/movimientos/:id       — modificar movimiento (requiere permisos financieros)
-//   DELETE /api/v1/movimientos/:id       — eliminar movimiento (requiere permisos financieros)
+//   GET    /api/v1/movimientos           - listar con filtros (tipo, categoría, período)
+//   GET    /api/v1/movimientos/resumen   - resumen financiero (totales de ingresos, egresos y balance)
+//   GET    /api/v1/movimientos/categorias- categorías de ingresos y egresos
+//   GET    /api/v1/movimientos/:id       - detalle
+//   POST   /api/v1/movimientos           - crear movimiento (requiere permisos financieros)
+//   PUT    /api/v1/movimientos/:id       - modificar movimiento (requiere permisos financieros)
+//   DELETE /api/v1/movimientos/:id       - anular movimiento (soft-delete, requiere permisos financieros)
 
 import { Router, Response, NextFunction, IRouter } from 'express';
 import { prisma } from '@edificio-xyz/database';
 import { z } from 'zod';
 import { authMiddleware, AuthRequest } from '../middlewares/auth.middleware';
 import { authorizeRoles } from '../middlewares/role.middleware';
+import { auditoriaService } from '../modules/auditoria';
 
 export const movimientosRouter: IRouter = Router();
 movimientosRouter.use(authMiddleware);
 
-// ── Schemas ──────────────────────────────────────────────────────────────────
+// -- Schemas ------------------------------------------------------------------
 const movimientoSchema = z.object({
   tipo: z.enum(['Ingreso', 'Egreso']),
   idCategoria: z.number().int().positive(),
@@ -36,10 +37,21 @@ const movimientoUpdateSchema = z.object({
   comprobanteUrl: z.string().optional().nullable(),
 });
 
-// ── GET /movimientos/categorias ──────────────────────────────────────────────
+const anularMovimientoSchema = z
+  .object({
+    motivo: z.string().trim().min(1, 'El motivo de anulación es obligatorio').optional(),
+    motivoAnulacion: z.string().trim().min(1, 'El motivo de anulación es obligatorio').optional(),
+  })
+  .refine((data) => Boolean(data.motivo || data.motivoAnulacion), {
+    message: 'El motivo de anulación es obligatorio',
+    path: ['motivo'],
+  });
+
+// -- GET /movimientos/categorias ----------------------------------------------
 // Lista categorías disponibles clasificadas por tipo (Ingreso / Egreso)
 movimientosRouter.get(
   '/categorias',
+  authorizeRoles('Administrador', 'Directorio'),
   async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
     try {
       const { tipo } = req.query;
@@ -66,8 +78,16 @@ movimientosRouter.get(
           { nombre: 'Donación o Aporte Voluntario', tipo: 'Ingreso' },
           { nombre: 'Intereses y Rendimientos', tipo: 'Ingreso' },
         ];
-        await prisma.categoriaMovimiento.createMany({ data: defaultCats });
-        categorias = await prisma.categoriaMovimiento.findMany({ orderBy: { idCategoria: 'asc' } });
+
+        await prisma.categoriaMovimiento.createMany({
+          data: defaultCats,
+          skipDuplicates: true,
+        });
+
+        categorias = await prisma.categoriaMovimiento.findMany({
+          where,
+          orderBy: { idCategoria: 'asc' },
+        });
       }
 
       res.json(categorias);
@@ -77,10 +97,11 @@ movimientosRouter.get(
   }
 );
 
-// ── GET /movimientos/resumen ─────────────────────────────────────────────────
+// -- GET /movimientos/resumen -------------------------------------------------
 // Totales consistentes de ingresos y egresos según período o categoría (CA10)
 movimientosRouter.get(
   '/resumen',
+  authorizeRoles('Administrador', 'Directorio'),
   async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
     try {
       const { mes, anio, idCategoria, fechaDesde, fechaHasta } = req.query;
@@ -102,7 +123,9 @@ movimientosRouter.get(
         fechaFin = mes ? new Date(a, m + 1, 0, 23, 59, 59, 999) : new Date(a, 11, 31, 23, 59, 59, 999);
       }
 
-      const where: Record<string, unknown> = {};
+      const where: Record<string, unknown> = {
+        anulado: false,
+      };
       if (fechaInicio || fechaFin) {
         where.fecha = {
           ...(fechaInicio && { gte: fechaInicio }),
@@ -155,10 +178,11 @@ movimientosRouter.get(
   }
 );
 
-// ── GET /movimientos ─────────────────────────────────────────────────────────
+// -- GET /movimientos ---------------------------------------------------------
 // Listado de movimientos con filtros por tipo, categoría, período y paginación (CA6, CA7)
 movimientosRouter.get(
   '/',
+  authorizeRoles('Administrador', 'Directorio'),
   async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
     try {
       const { tipo, idCategoria, fechaDesde, fechaHasta, page = '1', limit = '50', q } = req.query;
@@ -220,9 +244,10 @@ movimientosRouter.get(
   }
 );
 
-// ── GET /movimientos/:id ─────────────────────────────────────────────────────
+// -- GET /movimientos/:id -----------------------------------------------------
 movimientosRouter.get(
   '/:id',
+  authorizeRoles('Administrador', 'Directorio'),
   async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
     try {
       const id = parseInt(req.params.id);
@@ -257,11 +282,11 @@ movimientosRouter.get(
   }
 );
 
-// ── POST /movimientos ────────────────────────────────────────────────────────
+// -- POST /movimientos --------------------------------------------------------
 // Registrar ingreso o egreso (CA1, CA2, CA3, CA4, CA5, CA9)
 movimientosRouter.post(
   '/',
-  authorizeRoles('Administrador', 'SuperAdmin'),
+  authorizeRoles('Administrador'),
   async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
     try {
       const result = movimientoSchema.safeParse(req.body);
@@ -299,6 +324,15 @@ movimientosRouter.post(
         },
       });
 
+      await auditoriaService.registrarEvento({
+        tablaAfectada: 'movimientos',
+        idRegistro: movimiento.idMovimiento.toString(),
+        accion: 'CREAR_MOVIMIENTO',
+        resultado: 'EXITO',
+        datosNuevos: movimiento,
+        idUsuario: req.user!.idUsuario,
+      });
+
       res.status(201).json(movimiento);
     } catch (err) {
       next(err);
@@ -306,11 +340,11 @@ movimientosRouter.post(
   }
 );
 
-// ── PUT /movimientos/:id ─────────────────────────────────────────────────────
+// -- PUT /movimientos/:id -----------------------------------------------------
 // Modificar movimiento financiero (CA8, CA9)
 movimientosRouter.put(
   '/:id',
-  authorizeRoles('Administrador', 'SuperAdmin'),
+  authorizeRoles('Administrador'),
   async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
     try {
       const id = parseInt(req.params.id);
@@ -325,6 +359,15 @@ movimientosRouter.put(
 
       if (!existing) {
         res.status(404).json({ error: 'Not Found', message: 'Movimiento no encontrado' });
+        return;
+      }
+
+      if (existing.anulado) {
+        res.status(409).json({
+          error: 'MOVIMIENTO_ANULADO',
+          code: 'MOVIMIENTO_ANULADO',
+          message: 'No se puede modificar un movimiento que ha sido anulado',
+        });
         return;
       }
 
@@ -366,6 +409,16 @@ movimientosRouter.put(
         },
       });
 
+      await auditoriaService.registrarEvento({
+        tablaAfectada: 'movimientos',
+        idRegistro: updated.idMovimiento.toString(),
+        accion: 'MODIFICAR_MOVIMIENTO',
+        resultado: 'EXITO',
+        datosAnteriores: existing,
+        datosNuevos: updated,
+        idUsuario: req.user!.idUsuario,
+      });
+
       res.json(updated);
     } catch (err) {
       next(err);
@@ -373,11 +426,11 @@ movimientosRouter.put(
   }
 );
 
-// ── DELETE /movimientos/:id ──────────────────────────────────────────────────
-// Eliminar movimiento (CA9)
+// -- DELETE /movimientos/:id --------------------------------------------------
+// Anulación (soft-delete) de movimiento financiero (CA9)
 movimientosRouter.delete(
   '/:id',
-  authorizeRoles('Administrador', 'SuperAdmin'),
+  authorizeRoles('Administrador'),
   async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
     try {
       const id = parseInt(req.params.id);
@@ -385,6 +438,18 @@ movimientosRouter.delete(
         res.status(400).json({ error: 'Bad Request', message: 'ID inválido' });
         return;
       }
+
+      const bodyResult = anularMovimientoSchema.safeParse(req.body);
+      if (!bodyResult.success) {
+        res.status(400).json({
+          error: 'Bad Request',
+          message: 'El motivo de anulación es obligatorio',
+          details: bodyResult.error.flatten().fieldErrors,
+        });
+        return;
+      }
+
+      const motivo = (bodyResult.data.motivo || bodyResult.data.motivoAnulacion)!.trim();
 
       const existing = await prisma.movimiento.findUnique({
         where: { idMovimiento: id },
@@ -395,11 +460,49 @@ movimientosRouter.delete(
         return;
       }
 
-      await prisma.movimiento.delete({
-        where: { idMovimiento: id },
+      if (existing.anulado) {
+        res.status(409).json({
+          error: 'Conflict',
+          message: 'El movimiento ya fue anulado',
+          code: 'ANULACION_YA_REALIZADA',
+        });
+        return;
+      }
+
+      const anulado = await prisma.$transaction(async (tx) => {
+        const mov = await tx.movimiento.update({
+          where: { idMovimiento: id },
+          data: {
+            anulado: true,
+            fechaAnulacion: new Date(),
+            idUsuarioAnulacion: req.user!.idUsuario,
+            motivoAnulacion: motivo,
+          },
+          include: {
+            categoria: { select: { idCategoria: true, nombre: true, tipo: true } },
+            usuarioRegistro: { select: { idUsuario: true, nombreUsuario: true } },
+          },
+        });
+
+        await auditoriaService.registrarEvento({
+          tablaAfectada: 'movimientos',
+          idRegistro: mov.idMovimiento.toString(),
+          accion: 'ANULACION_MOVIMIENTO',
+          resultado: 'EXITO',
+          datosAnteriores: existing,
+          datosNuevos: mov,
+          idUsuario: req.user!.idUsuario,
+          tx,
+        });
+
+        return mov;
       });
 
-      res.json({ success: true, message: 'Movimiento eliminado correctamente' });
+      res.json({
+        success: true,
+        message: 'Movimiento anulado correctamente',
+        data: anulado,
+      });
     } catch (err) {
       next(err);
     }
