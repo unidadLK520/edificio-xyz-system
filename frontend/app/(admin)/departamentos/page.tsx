@@ -15,7 +15,6 @@ import {
   Edit,
   Car,
   Box,
-  Layers,
   Percent,
   CheckCircle2,
   UserCheck
@@ -99,7 +98,8 @@ const UNIDADES_SEED: UnidadItem[] = [
 ]
 
 export default function DepartamentosPage() {
-  const [unidades, setUnidades] = useState<UnidadItem[]>(UNIDADES_SEED)
+  // Universo completo de unidades del edificio (para KPIs globales y persistencia)
+  const [allUnidades, setAllUnidades] = useState<UnidadItem[]>(UNIDADES_SEED)
   const [searchTerm, setSearchTerm] = useState('')
   const [filtroTipo, setFiltroTipo] = useState<string>('Todos')
   const [filtroEstado, setFiltroEstado] = useState('Todos')
@@ -115,10 +115,10 @@ export default function DepartamentosPage() {
   const [createErrorMessage, setCreateErrorMessage] = useState<string | null>(null)
   const [successToast, setSuccessToast] = useState<string | null>(null)
 
-  // Fetch unidades desde la API
+  // Fetch todas las unidades desde la API (obtiene el universo global para mantener KPIs consistentes)
   const fetchUnidades = useCallback(async () => {
     try {
-      const res = await fetch(`/api/v1/unidades?tipo=${filtroTipo}&estado=${filtroEstado}&search=${encodeURIComponent(searchTerm)}`)
+      const res = await fetch('/api/v1/unidades?tipo=Todos&limit=500')
       if (res.ok) {
         const json = await res.json()
         if (json.data && Array.isArray(json.data) && json.data.length > 0) {
@@ -141,35 +141,73 @@ export default function DepartamentosPage() {
                   correo: item.propietario.correo
                 }
               : null,
+            ocupanteActual: item.ocupanteActual
+              ? {
+                  id: item.ocupanteActual.idPersona,
+                  nombre: `${item.ocupanteActual.nombres || ''} ${item.ocupanteActual.apellidos || ''}`.trim(),
+                  ci: item.ocupanteActual.ciNit,
+                  telefono: item.ocupanteActual.telefono,
+                  correo: item.ocupanteActual.correo
+                }
+              : null,
+            tipoOcupante: item.tipoOcupante || null,
             persona: item.persona,
             departamento: item.departamento,
             fechaRegistro: item.fechaRegistro || '2024-01-01'
           }))
-          setUnidades(mapped)
+          setAllUnidades(mapped)
         }
       }
     } catch {}
-  }, [filtroTipo, filtroEstado, searchTerm])
+  }, [])
 
   useEffect(() => {
     fetchUnidades()
   }, [fetchUnidades])
 
-  const totalAreaConstruida = useMemo(() => {
-    return unidades.filter((u) => u.tipoUnidad === 'Departamento').reduce((acc, d) => acc + (d.areaM2 || 0), 0)
-  }, [unidades])
+  // KPIs globales del edificio calculados a partir de allUnidades (no se resetean al cambiar de pestaña)
+  const totalDeptos = useMemo(() => {
+    return allUnidades.filter((u) => u.tipoUnidad === 'Departamento').length
+  }, [allUnidades])
 
-  // Filtrado reactivo
+  const totalAreaConstruida = useMemo(() => {
+    return allUnidades
+      .filter((u) => u.tipoUnidad === 'Departamento')
+      .reduce((acc, d) => acc + (d.areaM2 || 0), 0)
+  }, [allUnidades])
+
+  const ocupados = useMemo(() => {
+    return allUnidades.filter((u) => u.tipoUnidad === 'Departamento' && u.estado === 'Ocupado').length
+  }, [allUnidades])
+
+  const disponibles = useMemo(() => {
+    return allUnidades.filter(
+      (u) => u.tipoUnidad === 'Departamento' && (u.estado === 'Disponible' || u.estado === 'En Alquiler')
+    ).length
+  }, [allUnidades])
+
+  const conParqueo = useMemo(() => {
+    const tieneParqueos = allUnidades.some((u) => u.tipoUnidad === 'Parqueo')
+    if (tieneParqueos) {
+      return allUnidades.filter((u) => u.tipoUnidad === 'Parqueo' && (u.estado === 'Asignado' || !!u.departamento)).length
+    }
+    return allUnidades.filter((u) => u.tipoUnidad === 'Departamento' && u.parqueo && u.parqueo !== 'Sin parqueo').length
+  }, [allUnidades])
+
+  // Filtrado reactivo en la tabla
   const unidadesFiltradas = useMemo(() => {
-    return unidades.filter((u) => {
+    return allUnidades.filter((u) => {
       const searchLower = searchTerm.toLowerCase()
       const matchSearch =
         u.numero.toLowerCase().includes(searchLower) ||
         (u.propietario &&
           (u.propietario.nombre.toLowerCase().includes(searchLower) ||
-            u.propietario.ci.toLowerCase().includes(searchLower))) ||
+            u.propietario.ci?.toLowerCase().includes(searchLower))) ||
+        (u.ocupanteActual &&
+          (u.ocupanteActual.nombre.toLowerCase().includes(searchLower) ||
+            u.ocupanteActual.ci?.toLowerCase().includes(searchLower))) ||
         (u.persona &&
-          `${u.persona.nombres} ${u.persona.apellidos}`.toLowerCase().includes(searchLower))
+          `${u.persona.nombres || ''} ${u.persona.apellidos || ''}`.toLowerCase().includes(searchLower))
 
       const matchTipo = filtroTipo === 'Todos' || u.tipoUnidad === filtroTipo
       const matchEstado = filtroEstado === 'Todos' || u.estado === filtroEstado
@@ -177,15 +215,7 @@ export default function DepartamentosPage() {
 
       return matchSearch && matchTipo && matchEstado && matchPiso
     })
-  }, [unidades, searchTerm, filtroTipo, filtroEstado, filtroPiso])
-
-  // KPIs
-  const totalDeptos = unidades.filter((u) => u.tipoUnidad === 'Departamento').length
-  const ocupados = unidades.filter((u) => u.tipoUnidad === 'Departamento' && u.estado === 'Ocupado').length
-  const disponibles = unidades.filter(
-    (u) => u.estado === 'Disponible' || u.estado === 'En Alquiler'
-  ).length
-  const conParqueo = unidades.filter((u) => u.tipoUnidad === 'Departamento' && u.parqueo !== 'Sin parqueo').length
+  }, [allUnidades, searchTerm, filtroTipo, filtroEstado, filtroPiso])
 
   const showToast = (msg: string) => {
     setSuccessToast(msg)
@@ -224,6 +254,18 @@ export default function DepartamentosPage() {
       }
 
       await fetchUnidades()
+      setAllUnidades((prev) => [
+        ...prev,
+        {
+          id: json.data?.id || Date.now(),
+          tipoUnidad: payload.tipoUnidad as TipoUnidad,
+          numero: payload.numero,
+          piso: payload.piso,
+          areaM2: payload.areaM2,
+          estado: payload.estado,
+          fechaRegistro: new Date().toISOString().split('T')[0]
+        }
+      ])
       setIsCreateModalOpen(false)
       showToast(`¡Unidad ${payload.tipoUnidad} ${payload.numero} registrada exitosamente!`)
     } catch {
@@ -234,24 +276,33 @@ export default function DepartamentosPage() {
   // CA3: Modificar datos de unidad
   const handleUpdateSubmit = async (updated: UnidadItem) => {
     try {
+      const payload: any = {
+        numero: updated.numero,
+        piso: updated.piso,
+        areaM2: updated.areaM2
+      }
+      // Para departamento el estado Ocupado/Disponible es automático según asignaciones
+      if (updated.tipoUnidad !== 'Departamento') {
+        payload.estado = updated.estado
+      }
+
       const res = await fetch(`/api/v1/unidades/${updated.tipoUnidad}/${updated.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          numero: updated.numero,
-          piso: updated.piso,
-          areaM2: updated.areaM2,
-          estado: updated.estado
-        })
+        body: JSON.stringify(payload)
       })
 
       if (res.ok) {
         await fetchUnidades()
-        showToast(`¡Unidad ${updated.numero} actualizada correctamente!`)
       }
     } catch {}
 
+    // Actualización inmediata en estado reactivo
+    setAllUnidades((prev) =>
+      prev.map((u) => (u.tipoUnidad === updated.tipoUnidad && u.id === updated.id ? { ...u, ...updated } : u))
+    )
     setIsEditModalOpen(false)
+    showToast(`¡${updated.tipoUnidad} ${updated.numero} actualizado correctamente!`)
   }
 
   return (
@@ -291,7 +342,7 @@ export default function DepartamentosPage() {
         </button>
       </div>
 
-      {/* TARJETAS KPI MODULAR */}
+      {/* TARJETAS KPI MODULAR (Métricas globales del edificio) */}
       <DepartamentosKpis
         totalDeptos={totalDeptos}
         ocupados={ocupados}
@@ -419,7 +470,10 @@ export default function DepartamentosPage() {
                           </div>
                           <div className="text-[10px] text-blue-700 dark:text-indigo-400 font-semibold flex items-center gap-0.5">
                             <Percent className="w-3 h-3" />
-                            Alícuota: {unidad.alicuota || ((Number(unidad.areaM2) / 2650) * 100).toFixed(2)}%
+                            Alícuota:{' '}
+                            {totalAreaConstruida > 0 && unidad.areaM2
+                              ? `${((Number(unidad.areaM2) / totalAreaConstruida) * 100).toFixed(2)}%`
+                              : `${unidad.alicuota || 0}%`}
                           </div>
                         </div>
                       ) : (
@@ -432,18 +486,49 @@ export default function DepartamentosPage() {
                     <td className="py-3.5 px-4">
                       {unidad.propietario ? (
                         <div>
-                          <div className="font-bold text-[#262422] dark:text-white flex items-center gap-1.5">
-                            <Users className="w-3.5 h-3.5 text-blue-700 dark:text-indigo-400" />
-                            {unidad.propietario.nombre}
+                          <div className="font-bold text-[#262422] dark:text-white flex items-center gap-1.5 flex-wrap">
+                            <Users className="w-3.5 h-3.5 text-blue-700 dark:text-indigo-400 shrink-0" />
+                            <span>{unidad.propietario.nombre}</span>
+                            <span className="text-[9px] px-1.5 py-0.2 bg-blue-100 dark:bg-blue-950/70 text-blue-800 dark:text-blue-300 rounded font-bold uppercase tracking-wider">
+                              Propietario
+                            </span>
                           </div>
                           <div className="text-[11px] text-[#7d776f] dark:text-slate-400 font-mono">
-                            CI: {unidad.propietario.ci} • {unidad.propietario.telefono}
+                            CI: {unidad.propietario.ci || 'S/N'} • {unidad.propietario.telefono || 'Sin tel'}
+                          </div>
+                          {unidad.ocupanteActual && unidad.ocupanteActual.id !== unidad.propietario.id && (
+                            <div className="text-[11px] text-[#5c5750] dark:text-slate-300 mt-0.5 flex items-center gap-1">
+                              <span className="text-[9px] px-1.5 py-0.2 bg-purple-100 dark:bg-purple-950/70 text-purple-800 dark:text-purple-300 rounded font-bold">
+                                Inquilino:
+                              </span>
+                              <span>{unidad.ocupanteActual.nombre}</span>
+                            </div>
+                          )}
+                        </div>
+                      ) : unidad.ocupanteActual ? (
+                        <div>
+                          <div className="font-bold text-[#262422] dark:text-white flex items-center gap-1.5 flex-wrap">
+                            <Users className="w-3.5 h-3.5 text-purple-700 dark:text-purple-400 shrink-0" />
+                            <span>{unidad.ocupanteActual.nombre}</span>
+                            <span className="text-[9px] px-1.5 py-0.5 bg-purple-100 dark:bg-purple-950/70 text-purple-800 dark:text-purple-300 rounded font-bold uppercase tracking-wider">
+                              {unidad.tipoOcupante || 'Inquilino / Ocupante'}
+                            </span>
+                          </div>
+                          <div className="text-[11px] text-[#7d776f] dark:text-slate-400 font-mono">
+                            CI: {unidad.ocupanteActual.ci || 'S/N'} • {unidad.ocupanteActual.telefono || 'Sin tel'}
                           </div>
                         </div>
                       ) : unidad.persona ? (
-                        <div className="font-bold text-[#262422] dark:text-white flex items-center gap-1.5">
-                          <Users className="w-3.5 h-3.5 text-blue-700 dark:text-indigo-400" />
-                          {unidad.persona.nombres} {unidad.persona.apellidos}
+                        <div>
+                          <div className="font-bold text-[#262422] dark:text-white flex items-center gap-1.5">
+                            <Users className="w-3.5 h-3.5 text-amber-700 dark:text-amber-400 shrink-0" />
+                            <span>{unidad.persona.nombres} {unidad.persona.apellidos}</span>
+                          </div>
+                          {unidad.persona.ciNit && (
+                            <div className="text-[11px] text-[#7d776f] dark:text-slate-400 font-mono">
+                              CI: {unidad.persona.ciNit}
+                            </div>
+                          )}
                         </div>
                       ) : (
                         <span className="text-[#7d776f] dark:text-slate-500 italic">
@@ -520,15 +605,16 @@ export default function DepartamentosPage() {
 
       <EditarDepartamentoModal
         isOpen={isEditModalOpen}
-        depto={unidadToEdit as any}
+        depto={unidadToEdit}
         onClose={() => setIsEditModalOpen(false)}
-        onUpdate={handleUpdateSubmit as any}
-        onChange={(u) => setUnidadToEdit(u as any)}
+        onUpdate={handleUpdateSubmit}
+        onChange={(u) => setUnidadToEdit(u)}
       />
 
       <FichaTecnicaModal
         isOpen={!!selectedUnidad}
-        depto={selectedUnidad as any}
+        depto={selectedUnidad}
+        totalAreaConstruida={totalAreaConstruida}
         onClose={() => setSelectedUnidad(null)}
       />
 
