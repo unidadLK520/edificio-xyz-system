@@ -132,15 +132,30 @@ unidadesRouter.get(
         });
 
         deptos.forEach((d) => {
+          const tieneOcupante = d.ocupantes.length > 0;
+          const tienePropietario = !!d.propietario;
+          const tieneAsignacionActiva = tieneOcupante || tienePropietario;
+
+          // Sincronización automática de estado: Ocupado si tiene titular/ocupante activo, Disponible si no
+          let estadoFinal = d.estado;
+          if (['Ocupado', 'Disponible', 'Desocupado'].includes(d.estado)) {
+            estadoFinal = tieneAsignacionActiva ? 'Ocupado' : 'Disponible';
+          }
+
+          if (filterEstado && filterEstado !== 'Todos' && estadoFinal !== filterEstado) {
+            return;
+          }
+
           results.push({
             id: d.idDepartamento,
             tipoUnidad: 'Departamento',
             numero: d.numero,
             piso: d.piso,
             areaM2: d.areaM2 ? Number(d.areaM2) : null,
-            estado: d.estado,
+            estado: estadoFinal,
             propietario: d.propietario,
-            ocupanteActual: d.ocupantes.length > 0 ? d.ocupantes[0].persona : null,
+            ocupanteActual: tieneOcupante ? d.ocupantes[0].persona : null,
+            tipoOcupante: tieneOcupante ? d.ocupantes[0].tipoOcupante : (tienePropietario ? 'Propietario' : null),
             parqueos: d.parqueos,
             bauleras: d.bauleras,
           });
@@ -461,17 +476,6 @@ unidadesRouter.put(
         }
       }
 
-      // Regla: Bloquear si viene manual 'Ocupado' o 'Disponible' en Departamento
-      if (tipo === 'Departamento' && estado !== undefined) {
-        if (estado === 'Ocupado' || estado === 'Disponible') {
-          res.status(400).json({
-            error: 'ESTADO_TRANSICION_AUTOMATICA',
-            message: 'Los estados Ocupado y Disponible no pueden ser modificados manualmente',
-          });
-          return;
-        }
-      }
-
       let unidadAnterior: any = null;
       if (tipo === 'Departamento') {
         unidadAnterior = await prisma.departamento.findUnique({ where: { idDepartamento: id } });
@@ -484,6 +488,17 @@ unidadesRouter.put(
       if (!unidadAnterior) {
         res.status(404).json({ error: 'Not Found', message: 'Unidad no encontrada' });
         return;
+      }
+
+      // Regla: Bloquear si viene manual 'Ocupado' o 'Disponible' en Departamento y difiere del estado actual
+      if (tipo === 'Departamento' && estado !== undefined && estado !== unidadAnterior.estado) {
+        if (estado === 'Ocupado' || estado === 'Disponible') {
+          res.status(400).json({
+            error: 'ESTADO_TRANSICION_AUTOMATICA',
+            message: 'Los estados Ocupado y Disponible no pueden ser modificados manualmente',
+          });
+          return;
+        }
       }
 
       let unidadActualizada: any;
@@ -841,7 +856,10 @@ unidadesRouter.post(
 
           await tx.departamento.update({
             where: { idDepartamento: idUnidad },
-            data: { estado: nuevoEstado },
+            data: {
+              estado: nuevoEstado,
+              ...(nuevoEstado === 'Disponible' ? { idPropietario: null } : {}),
+            },
           });
 
           await auditoriaService.registrarEvento({
