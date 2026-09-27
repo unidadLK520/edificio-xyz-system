@@ -465,8 +465,11 @@ expensasRouter.post(
       }
 
       const { periodo, fechaVencimiento, montoBase, tasaInteresMora, excluirDepartamentos } = parsed.data;
-      const periodoDate = new Date(periodo);
-      const vencimientoDate = new Date(fechaVencimiento);
+      // Normalizar periodo al primer día del mes en formato UTC para evitar discrepancias de zona horaria
+      const [pYear, pMonth] = periodo.split('-');
+      const periodoNormalizado = `${pYear}-${pMonth}-01`;
+      const periodoDate = new Date(`${periodoNormalizado}T00:00:00.000Z`);
+      const vencimientoDate = new Date(`${fechaVencimiento}T00:00:00.000Z`);
 
       // CA2: Obtener unidades aplicables (excluir desocupadas/inactivas o especificadas en reglas)
       const { generadas, excepciones } = await prisma.$transaction(async (tx) => {
@@ -642,15 +645,35 @@ expensasRouter.post(
       }
 
       const { idDepartamento, periodo, monto, tasaInteresMora, fechaVencimiento } = result.data;
+      const [pYear, pMonth] = periodo.split('-');
+      const periodoNormalizado = `${pYear}-${pMonth}-01`;
+      const periodoDate = new Date(`${periodoNormalizado}T00:00:00.000Z`);
+      const vencimientoDate = new Date(`${fechaVencimiento}T00:00:00.000Z`);
+
+      // Verificar si ya existe expensa para este departamento en este período
+      const existente = await prisma.expensa.findFirst({
+        where: {
+          idDepartamento,
+          periodo: periodoDate,
+        },
+      });
+
+      if (existente) {
+        res.status(409).json({
+          error: 'Conflict',
+          message: `Ya existe una expensa registrada para el departamento en el período ${pYear}-${pMonth}`,
+        });
+        return;
+      }
 
       const expensaFinal = await prisma.$transaction(async (tx) => {
         const expensaCreada = await tx.expensa.create({
           data: {
             idDepartamento,
-            periodo: new Date(periodo),
+            periodo: periodoDate,
             monto,
             tasaInteresMora,
-            fechaVencimiento: new Date(fechaVencimiento),
+            fechaVencimiento: vencimientoDate,
             saldoPendiente: monto,
             estado: 'Pendiente',
           },
