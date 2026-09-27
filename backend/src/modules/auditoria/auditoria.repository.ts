@@ -1,3 +1,4 @@
+//-----------------------------Giovani Quiroz------------------------
 // backend/src/modules/auditoria/auditoria.repository.ts
 // Acceso a datos para persistencia de eventos de auditoría
 
@@ -6,7 +7,8 @@ import { RegistrarAuditoriaParams } from './auditoria.types';
 
 export class AuditoriaRepository {
   async crear(params: RegistrarAuditoriaParams): Promise<Auditoria> {
-    return prisma.auditoria.create({
+    const client = params.tx || prisma;
+    return client.auditoria.create({
       data: {
         tablaAfectada: params.tablaAfectada || 'usuarios',
         idRegistro: params.idRegistro ?? (params.idUsuario ? String(params.idUsuario) : null),

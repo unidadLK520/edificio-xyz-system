@@ -1,3 +1,4 @@
+//-----------------------------Giovani Quiroz------------------------
 // backend/src/routes/unidades.routes.ts
 // HU03 — Gestión de Unidades (Departamentos, Parqueos, Bauleras), Asignaciones e Historial de Antecedentes
 
@@ -6,6 +7,7 @@ import { prisma } from '@edificio-xyz/database';
 import { z } from 'zod';
 import { authMiddleware, AuthRequest } from '../middlewares/auth.middleware';
 import { authorizeRoles } from '../middlewares/role.middleware';
+import { auditoriaService } from '../modules/auditoria';
 
 export const unidadesRouter: IRouter = Router();
 unidadesRouter.use(authMiddleware);
@@ -79,6 +81,7 @@ async function verificarIdentificadorDuplicado(
 // CA2, CA08, CA10: Listar y filtrar unidades por tipo, estado o búsqueda
 unidadesRouter.get(
   '/',
+  authorizeRoles('Administrador', 'Directorio', 'Consulta', 'Copropietario'),
   async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
     try {
       const { tipo, estado, search, page = '1', limit = '50' } = req.query;
@@ -244,6 +247,7 @@ unidadesRouter.get(
 // CA2, CA10: Obtener detalle completo de una unidad por tipo e ID
 unidadesRouter.get(
   '/:tipo/:id',
+  authorizeRoles('Administrador', 'Directorio', 'Consulta', 'Copropietario'),
   async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
     try {
       const tipo = req.params.tipo as 'Departamento' | 'Parqueo' | 'Baulera';
@@ -347,8 +351,17 @@ unidadesRouter.post(
       const esDuplicado = await verificarIdentificadorDuplicado(tipoUnidad, numero);
       if (esDuplicado) {
         res.status(409).json({
-          error: 'Conflict',
+          error: 'IDENTIFICADOR_DUPLICADO',
           message: 'El identificador ya se encuentra utilizado',
+        });
+        return;
+      }
+
+      // Regla: Bloquear si viene manual 'Ocupado' en Departamento
+      if (tipoUnidad === 'Departamento' && estado === 'Ocupado') {
+        res.status(400).json({
+          error: 'ESTADO_TRANSICION_AUTOMATICA',
+          message: 'No se permite asignar el estado Ocupado manualmente',
         });
         return;
       }
@@ -356,12 +369,13 @@ unidadesRouter.post(
       let nuevaUnidad: any;
 
       if (tipoUnidad === 'Departamento') {
+        const estadoFinal = estado && estado !== 'Desocupado' ? estado : 'Disponible';
         nuevaUnidad = await prisma.departamento.create({
           data: {
             numero,
             piso: piso ?? null,
             areaM2: areaM2 ? areaM2 : null,
-            estado: estado || 'Desocupado',
+            estado: estadoFinal,
           },
         });
       } else if (tipoUnidad === 'Parqueo') {
@@ -379,6 +393,21 @@ unidadesRouter.post(
           },
         });
       }
+
+      const idUsuario = req.user?.idUsuario ?? null;
+      await auditoriaService.registrarEvento({
+        tablaAfectada: tipoUnidad === 'Departamento' ? 'departamentos' : tipoUnidad === 'Parqueo' ? 'parqueos' : 'bauleras',
+        idRegistro: String(
+          tipoUnidad === 'Departamento'
+            ? nuevaUnidad.idDepartamento
+            : tipoUnidad === 'Parqueo'
+            ? nuevaUnidad.idParqueo
+            : nuevaUnidad.idBaulera
+        ),
+        accion: 'CREATE',
+        idUsuario,
+        datosNuevos: nuevaUnidad,
+      });
 
       res.status(201).json({
         message: 'Unidad registrada exitosamente',
@@ -425,11 +454,36 @@ unidadesRouter.put(
         const esDuplicado = await verificarIdentificadorDuplicado(tipo, numero, id);
         if (esDuplicado) {
           res.status(409).json({
-            error: 'Conflict',
+            error: 'IDENTIFICADOR_DUPLICADO',
             message: 'El identificador ya se encuentra utilizado',
           });
           return;
         }
+      }
+
+      // Regla: Bloquear si viene manual 'Ocupado' o 'Disponible' en Departamento
+      if (tipo === 'Departamento' && estado !== undefined) {
+        if (estado === 'Ocupado' || estado === 'Disponible') {
+          res.status(400).json({
+            error: 'ESTADO_TRANSICION_AUTOMATICA',
+            message: 'Los estados Ocupado y Disponible no pueden ser modificados manualmente',
+          });
+          return;
+        }
+      }
+
+      let unidadAnterior: any = null;
+      if (tipo === 'Departamento') {
+        unidadAnterior = await prisma.departamento.findUnique({ where: { idDepartamento: id } });
+      } else if (tipo === 'Parqueo') {
+        unidadAnterior = await prisma.parqueo.findUnique({ where: { idParqueo: id } });
+      } else {
+        unidadAnterior = await prisma.baulera.findUnique({ where: { idBaulera: id } });
+      }
+
+      if (!unidadAnterior) {
+        res.status(404).json({ error: 'Not Found', message: 'Unidad no encontrada' });
+        return;
       }
 
       let unidadActualizada: any;
@@ -461,6 +515,16 @@ unidadesRouter.put(
           },
         });
       }
+
+      const idUsuario = req.user?.idUsuario ?? null;
+      await auditoriaService.registrarEvento({
+        tablaAfectada: tipo === 'Departamento' ? 'departamentos' : tipo === 'Parqueo' ? 'parqueos' : 'bauleras',
+        idRegistro: String(id),
+        accion: 'UPDATE',
+        idUsuario,
+        datosAnteriores: unidadAnterior,
+        datosNuevos: unidadActualizada,
+      });
 
       res.json({
         message: 'Unidad actualizada exitosamente',
@@ -503,178 +567,218 @@ unidadesRouter.post(
       }
 
       const ahora = new Date();
+      const idUsuario = req.user?.idUsuario ?? null;
 
-      if (tipoUnidad === 'Departamento') {
-        const depto = await prisma.departamento.findUnique({ where: { idDepartamento: idUnidad } });
-        if (!depto) {
-          res.status(404).json({ error: 'Not Found', message: 'Departamento no encontrado' });
-          return;
-        }
+      const result = await prisma.$transaction(async (tx) => {
+        if (tipoUnidad === 'Departamento') {
+          const depto = await tx.departamento.findUnique({ where: { idDepartamento: idUnidad } });
+          if (!depto) {
+            return { status: 404, body: { error: 'Not Found', message: 'Departamento no encontrado' } };
+          }
 
-        if (tipoRelacion === 'Propietario' && idPersona) {
-          // CA07: Si ya tenía un propietario distinto, registrar el antecedente anterior
-          if (depto.idPropietario && depto.idPropietario !== idPersona) {
-            await prisma.historialAsignacionUnidad.create({
+          if (tipoRelacion === 'Propietario' && idPersona) {
+            // CA07: Si ya tenía un propietario distinto, registrar el antecedente anterior
+            if (depto.idPropietario && depto.idPropietario !== idPersona) {
+              await tx.historialAsignacionUnidad.create({
+                data: {
+                  tipoUnidad: 'Departamento',
+                  idUnidad: depto.idDepartamento,
+                  numeroUnidad: depto.numero,
+                  idPersona: depto.idPropietario,
+                  tipoRelacion: 'Propietario',
+                  fechaInicio: ahora,
+                  fechaFin: ahora,
+                  notas: 'Cambio de propietario',
+                },
+              });
+            }
+
+            await tx.departamento.update({
+              where: { idDepartamento: idUnidad },
+              data: { idPropietario: idPersona, estado: 'Ocupado' },
+            });
+          }
+
+          if (idPersona) {
+            // Finalizar cualquier ocupante previo activo para mantener antecedente (CA07)
+            await tx.ocupanteDepartamento.updateMany({
+              where: { idDepartamento: idUnidad, fechaFin: null },
+              data: { fechaFin: ahora },
+            });
+
+            await tx.ocupanteDepartamento.create({
               data: {
-                tipoUnidad: 'Departamento',
-                idUnidad: depto.idDepartamento,
-                numeroUnidad: depto.numero,
-                idPersona: depto.idPropietario,
-                tipoRelacion: 'Propietario',
+                idDepartamento: idUnidad,
+                idPersona,
+                tipoOcupante: tipoRelacion === 'Inquilino' ? 'Inquilino' : 'Propietario',
                 fechaInicio: ahora,
+              },
+            });
+
+            // Asegurar que el estado del departamento pase a Ocupado
+            await tx.departamento.update({
+              where: { idDepartamento: idUnidad },
+              data: { estado: 'Ocupado' },
+            });
+          }
+
+          // Registrar entrada en historial de antecedentes (CA07)
+          await tx.historialAsignacionUnidad.create({
+            data: {
+              tipoUnidad: 'Departamento',
+              idUnidad: depto.idDepartamento,
+              numeroUnidad: depto.numero,
+              idPersona: idPersona || null,
+              tipoRelacion,
+              fechaInicio: ahora,
+              notas: notas || `Asignación de ${tipoRelacion}`,
+            },
+          });
+
+          await auditoriaService.registrarEvento({
+            tablaAfectada: 'departamentos',
+            idRegistro: String(idUnidad),
+            accion: 'ASIGNACION_UNIDAD',
+            idUsuario,
+            datosNuevos: { tipoUnidad, idUnidad, idPersona, tipoRelacion, notas },
+            tx,
+          });
+
+          return { status: 200, body: { message: 'Asignación de departamento realizada correctamente' } };
+        } else if (tipoUnidad === 'Parqueo') {
+          const parqueo = await tx.parqueo.findUnique({ where: { idParqueo: idUnidad } });
+          if (!parqueo) {
+            return { status: 404, body: { error: 'Not Found', message: 'Parqueo no encontrado' } };
+          }
+
+          // CA07: Si el parqueo ya estaba asignado, cerrar antecedente previo en el historial
+          if (parqueo.estado === 'Asignado' && (parqueo.idPersona || parqueo.idDepartamento)) {
+            await tx.historialAsignacionUnidad.create({
+              data: {
+                tipoUnidad: 'Parqueo',
+                idUnidad: parqueo.idParqueo,
+                numeroUnidad: parqueo.numero,
+                idPersona: parqueo.idPersona,
+                idDepartamento: parqueo.idDepartamento,
+                tipoRelacion: 'Asignado',
+                fechaInicio: parqueo.fechaAsignacion || ahora,
                 fechaFin: ahora,
-                notas: 'Cambio de propietario',
+                notas: 'Asignación previa finalizada al reasignar',
               },
             });
           }
 
-          await prisma.departamento.update({
-            where: { idDepartamento: idUnidad },
-            data: { idPropietario: idPersona, estado: 'Ocupado' },
-          });
-        }
-
-        if (idPersona) {
-          // Finalizar cualquier ocupante previo activo para mantener antecedente (CA07)
-          await prisma.ocupanteDepartamento.updateMany({
-            where: { idDepartamento: idUnidad, fechaFin: null },
-            data: { fechaFin: ahora },
-          });
-
-          await prisma.ocupanteDepartamento.create({
+          // CA6: Actualizar el estado del parqueo para que deje de figurar como 'Disponible' (pasa a 'Asignado')
+          const parqueoActualizado = await tx.parqueo.update({
+            where: { idParqueo: idUnidad },
             data: {
-              idDepartamento: idUnidad,
-              idPersona,
-              tipoOcupante: tipoRelacion === 'Inquilino' ? 'Inquilino' : 'Propietario',
-              fechaInicio: ahora,
+              estado: 'Asignado',
+              idDepartamento: idDepartamento || null,
+              idPersona: idPersona || null,
+              fechaAsignacion: ahora,
             },
           });
-        }
 
-        // Registrar entrada en historial de antecedentes (CA07)
-        await prisma.historialAsignacionUnidad.create({
-          data: {
-            tipoUnidad: 'Departamento',
-            idUnidad: depto.idDepartamento,
-            numeroUnidad: depto.numero,
-            idPersona: idPersona || null,
-            tipoRelacion,
-            fechaInicio: ahora,
-            notas: notas || `Asignación de ${tipoRelacion}`,
-          },
-        });
-
-        res.json({ message: 'Asignación de departamento realizada correctamente' });
-        return;
-      } else if (tipoUnidad === 'Parqueo') {
-        const parqueo = await prisma.parqueo.findUnique({ where: { idParqueo: idUnidad } });
-        if (!parqueo) {
-          res.status(404).json({ error: 'Not Found', message: 'Parqueo no encontrado' });
-          return;
-        }
-
-        // CA07: Si el parqueo ya estaba asignado, cerrar antecedente previo en el historial
-        if (parqueo.estado === 'Asignado' && (parqueo.idPersona || parqueo.idDepartamento)) {
-          await prisma.historialAsignacionUnidad.create({
+          // CA07: Guardar la nueva asignación en el historial
+          await tx.historialAsignacionUnidad.create({
             data: {
               tipoUnidad: 'Parqueo',
-              idUnidad: parqueo.idParqueo,
-              numeroUnidad: parqueo.numero,
-              idPersona: parqueo.idPersona,
-              idDepartamento: parqueo.idDepartamento,
+              idUnidad: parqueoActualizado.idParqueo,
+              numeroUnidad: parqueoActualizado.numero,
+              idPersona: idPersona || null,
+              idDepartamento: idDepartamento || null,
               tipoRelacion: 'Asignado',
-              fechaInicio: parqueo.fechaAsignacion || ahora,
-              fechaFin: ahora,
-              notas: 'Asignación previa finalizada al reasignar',
+              fechaInicio: ahora,
+              notas: notas || 'Asignación de parqueo',
             },
           });
-        }
 
-        // CA6: Actualizar el estado del parqueo para que deje de figurar como 'Disponible' (pasa a 'Asignado')
-        const parqueoActualizado = await prisma.parqueo.update({
-          where: { idParqueo: idUnidad },
-          data: {
-            estado: 'Asignado',
-            idDepartamento: idDepartamento || null,
-            idPersona: idPersona || null,
-            fechaAsignacion: ahora,
-          },
-        });
+          await auditoriaService.registrarEvento({
+            tablaAfectada: 'parqueos',
+            idRegistro: String(idUnidad),
+            accion: 'ASIGNACION_UNIDAD',
+            idUsuario,
+            datosNuevos: { tipoUnidad, idUnidad, idPersona, idDepartamento, tipoRelacion, notas },
+            tx,
+          });
 
-        // CA07: Guardar la nueva asignación en el historial
-        await prisma.historialAsignacionUnidad.create({
-          data: {
-            tipoUnidad: 'Parqueo',
-            idUnidad: parqueoActualizado.idParqueo,
-            numeroUnidad: parqueoActualizado.numero,
-            idPersona: idPersona || null,
-            idDepartamento: idDepartamento || null,
-            tipoRelacion: 'Asignado',
-            fechaInicio: ahora,
-            notas: notas || 'Asignación de parqueo',
-          },
-        });
+          return {
+            status: 200,
+            body: {
+              message: 'Asignación de parqueo registrada y estado actualizado a Asignado',
+              parqueo: parqueoActualizado,
+            },
+          };
+        } else if (tipoUnidad === 'Baulera') {
+          const baulera = await tx.baulera.findUnique({ where: { idBaulera: idUnidad } });
+          if (!baulera) {
+            return { status: 404, body: { error: 'Not Found', message: 'Baulera no encontrada' } };
+          }
 
-        res.json({
-          message: 'Asignación de parqueo registrada y estado actualizado a Asignado',
-          parqueo: parqueoActualizado,
-        });
-        return;
-      } else if (tipoUnidad === 'Baulera') {
-        const baulera = await prisma.baulera.findUnique({ where: { idBaulera: idUnidad } });
-        if (!baulera) {
-          res.status(404).json({ error: 'Not Found', message: 'Baulera no encontrada' });
-          return;
-        }
+          // CA07: Guardar antecedente previo si estaba asignada
+          if (baulera.estado === 'Asignado' && (baulera.idPersona || baulera.idDepartamento)) {
+            await tx.historialAsignacionUnidad.create({
+              data: {
+                tipoUnidad: 'Baulera',
+                idUnidad: baulera.idBaulera,
+                numeroUnidad: baulera.numero,
+                idPersona: baulera.idPersona,
+                idDepartamento: baulera.idDepartamento,
+                tipoRelacion: 'Asignado',
+                fechaInicio: baulera.fechaAsignacion || ahora,
+                fechaFin: ahora,
+                notas: 'Asignación previa finalizada al reasignar',
+              },
+            });
+          }
 
-        // CA07: Guardar antecedente previo si estaba asignada
-        if (baulera.estado === 'Asignado' && (baulera.idPersona || baulera.idDepartamento)) {
-          await prisma.historialAsignacionUnidad.create({
+          // CA6: Actualizar estado de baulera a 'Asignado'
+          const bauleraActualizada = await tx.baulera.update({
+            where: { idBaulera: idUnidad },
+            data: {
+              estado: 'Asignado',
+              idDepartamento: idDepartamento || null,
+              idPersona: idPersona || null,
+              fechaAsignacion: ahora,
+            },
+          });
+
+          // CA07: Guardar historial
+          await tx.historialAsignacionUnidad.create({
             data: {
               tipoUnidad: 'Baulera',
-              idUnidad: baulera.idBaulera,
-              numeroUnidad: baulera.numero,
-              idPersona: baulera.idPersona,
-              idDepartamento: baulera.idDepartamento,
+              idUnidad: bauleraActualizada.idBaulera,
+              numeroUnidad: bauleraActualizada.numero,
+              idPersona: idPersona || null,
+              idDepartamento: idDepartamento || null,
               tipoRelacion: 'Asignado',
-              fechaInicio: baulera.fechaAsignacion || ahora,
-              fechaFin: ahora,
-              notas: 'Asignación previa finalizada al reasignar',
+              fechaInicio: ahora,
+              notas: notas || 'Asignación de baulera',
             },
           });
+
+          await auditoriaService.registrarEvento({
+            tablaAfectada: 'bauleras',
+            idRegistro: String(idUnidad),
+            accion: 'ASIGNACION_UNIDAD',
+            idUsuario,
+            datosNuevos: { tipoUnidad, idUnidad, idPersona, idDepartamento, tipoRelacion, notas },
+            tx,
+          });
+
+          return {
+            status: 200,
+            body: {
+              message: 'Asignación de baulera registrada y estado actualizado a Asignado',
+              baulera: bauleraActualizada,
+            },
+          };
         }
 
-        // CA6: Actualizar estado de baulera a 'Asignado'
-        const bauleraActualizada = await prisma.baulera.update({
-          where: { idBaulera: idUnidad },
-          data: {
-            estado: 'Asignado',
-            idDepartamento: idDepartamento || null,
-            idPersona: idPersona || null,
-            fechaAsignacion: ahora,
-          },
-        });
+        return { status: 400, body: { error: 'Bad Request', message: 'Tipo de unidad no soportado' } };
+      });
 
-        // CA07: Guardar historial
-        await prisma.historialAsignacionUnidad.create({
-          data: {
-            tipoUnidad: 'Baulera',
-            idUnidad: bauleraActualizada.idBaulera,
-            numeroUnidad: bauleraActualizada.numero,
-            idPersona: idPersona || null,
-            idDepartamento: idDepartamento || null,
-            tipoRelacion: 'Asignado',
-            fechaInicio: ahora,
-            notas: notas || 'Asignación de baulera',
-          },
-        });
-
-        res.json({
-          message: 'Asignación de baulera registrada y estado actualizado a Asignado',
-          baulera: bauleraActualizada,
-        });
-        return;
-      }
+      res.status(result.status).json(result.body);
     } catch (err) {
       next(err);
     }
@@ -700,112 +804,146 @@ unidadesRouter.post(
 
       const { tipoUnidad, idUnidad, notas } = parsed.data;
       const ahora = new Date();
+      const idUsuario = req.user?.idUsuario ?? null;
 
-      if (tipoUnidad === 'Departamento') {
-        const depto = await prisma.departamento.findUnique({ where: { idDepartamento: idUnidad } });
-        if (!depto) {
-          res.status(404).json({ error: 'Not Found', message: 'Departamento no encontrado' });
-          return;
+      const result = await prisma.$transaction(async (tx) => {
+        if (tipoUnidad === 'Departamento') {
+          const depto = await tx.departamento.findUnique({ where: { idDepartamento: idUnidad } });
+          if (!depto) {
+            return { status: 404, body: { error: 'Not Found', message: 'Departamento no encontrado' } };
+          }
+
+          // Finalizar ocupantes activos
+          await tx.ocupanteDepartamento.updateMany({
+            where: { idDepartamento: idUnidad, fechaFin: null },
+            data: { fechaFin: ahora },
+          });
+
+          // Registrar antecedente en historial
+          await tx.historialAsignacionUnidad.create({
+            data: {
+              tipoUnidad: 'Departamento',
+              idUnidad: depto.idDepartamento,
+              numeroUnidad: depto.numero,
+              idPersona: depto.idPropietario,
+              tipoRelacion: 'Finalizado',
+              fechaInicio: ahora,
+              fechaFin: ahora,
+              notas: notas || 'Asignación finalizada',
+            },
+          });
+
+          // Verificar ocupantes activos restantes para sincronizar estado (Ocupado / Disponible)
+          const ocupantesActivos = await tx.ocupanteDepartamento.count({
+            where: { idDepartamento: idUnidad, fechaFin: null },
+          });
+          const nuevoEstado = ocupantesActivos > 0 ? 'Ocupado' : 'Disponible';
+
+          await tx.departamento.update({
+            where: { idDepartamento: idUnidad },
+            data: { estado: nuevoEstado },
+          });
+
+          await auditoriaService.registrarEvento({
+            tablaAfectada: 'departamentos',
+            idRegistro: String(idUnidad),
+            accion: 'FINALIZACION_ASIGNACION',
+            idUsuario,
+            datosNuevos: { tipoUnidad, idUnidad, notas, estado: nuevoEstado },
+            tx,
+          });
+
+          return { status: 200, body: { message: 'Asignación de departamento finalizada' } };
+        } else if (tipoUnidad === 'Parqueo') {
+          const parqueo = await tx.parqueo.findUnique({ where: { idParqueo: idUnidad } });
+          if (!parqueo) {
+            return { status: 404, body: { error: 'Not Found', message: 'Parqueo no encontrado' } };
+          }
+
+          // CA07: Conservar el antecedente de la asignación anterior
+          await tx.historialAsignacionUnidad.create({
+            data: {
+              tipoUnidad: 'Parqueo',
+              idUnidad: parqueo.idParqueo,
+              numeroUnidad: parqueo.numero,
+              idPersona: parqueo.idPersona,
+              idDepartamento: parqueo.idDepartamento,
+              tipoRelacion: 'Asignado',
+              fechaInicio: parqueo.fechaAsignacion || ahora,
+              fechaFin: ahora,
+              notas: notas || 'Asignación finalizada - vuelve a estar disponible',
+            },
+          });
+
+          // CA6: Retornar a estado 'Disponible'
+          const parqueoLibre = await tx.parqueo.update({
+            where: { idParqueo: idUnidad },
+            data: {
+              estado: 'Disponible',
+              idDepartamento: null,
+              idPersona: null,
+              fechaAsignacion: null,
+            },
+          });
+
+          await auditoriaService.registrarEvento({
+            tablaAfectada: 'parqueos',
+            idRegistro: String(idUnidad),
+            accion: 'FINALIZACION_ASIGNACION',
+            idUsuario,
+            datosNuevos: { tipoUnidad, idUnidad, notas, estado: 'Disponible' },
+            tx,
+          });
+
+          return { status: 200, body: { message: 'Asignación de parqueo finalizada', parqueo: parqueoLibre } };
+        } else if (tipoUnidad === 'Baulera') {
+          const baulera = await tx.baulera.findUnique({ where: { idBaulera: idUnidad } });
+          if (!baulera) {
+            return { status: 404, body: { error: 'Not Found', message: 'Baulera no encontrada' } };
+          }
+
+          // CA07: Conservar antecedente
+          await tx.historialAsignacionUnidad.create({
+            data: {
+              tipoUnidad: 'Baulera',
+              idUnidad: baulera.idBaulera,
+              numeroUnidad: baulera.numero,
+              idPersona: baulera.idPersona,
+              idDepartamento: baulera.idDepartamento,
+              tipoRelacion: 'Asignado',
+              fechaInicio: baulera.fechaAsignacion || ahora,
+              fechaFin: ahora,
+              notas: notas || 'Asignación finalizada - vuelve a estar disponible',
+            },
+          });
+
+          // CA6: Retornar a estado 'Disponible'
+          const bauleraLibre = await tx.baulera.update({
+            where: { idBaulera: idUnidad },
+            data: {
+              estado: 'Disponible',
+              idDepartamento: null,
+              idPersona: null,
+              fechaAsignacion: null,
+            },
+          });
+
+          await auditoriaService.registrarEvento({
+            tablaAfectada: 'bauleras',
+            idRegistro: String(idUnidad),
+            accion: 'FINALIZACION_ASIGNACION',
+            idUsuario,
+            datosNuevos: { tipoUnidad, idUnidad, notas, estado: 'Disponible' },
+            tx,
+          });
+
+          return { status: 200, body: { message: 'Asignación de baulera finalizada', baulera: bauleraLibre } };
         }
 
-        // Finalizar ocupantes activos
-        await prisma.ocupanteDepartamento.updateMany({
-          where: { idDepartamento: idUnidad, fechaFin: null },
-          data: { fechaFin: ahora },
-        });
+        return { status: 400, body: { error: 'Bad Request', message: 'Tipo de unidad no soportado' } };
+      });
 
-        // Registrar antecedente en historial
-        await prisma.historialAsignacionUnidad.create({
-          data: {
-            tipoUnidad: 'Departamento',
-            idUnidad: depto.idDepartamento,
-            numeroUnidad: depto.numero,
-            idPersona: depto.idPropietario,
-            tipoRelacion: 'Finalizado',
-            fechaInicio: ahora,
-            fechaFin: ahora,
-            notas: notas || 'Asignación finalizada',
-          },
-        });
-
-        await prisma.departamento.update({
-          where: { idDepartamento: idUnidad },
-          data: { estado: 'Desocupado' },
-        });
-
-        res.json({ message: 'Asignación de departamento finalizada' });
-        return;
-      } else if (tipoUnidad === 'Parqueo') {
-        const parqueo = await prisma.parqueo.findUnique({ where: { idParqueo: idUnidad } });
-        if (!parqueo) {
-          res.status(404).json({ error: 'Not Found', message: 'Parqueo no encontrado' });
-          return;
-        }
-
-        // CA07: Conservar el antecedente de la asignación anterior
-        await prisma.historialAsignacionUnidad.create({
-          data: {
-            tipoUnidad: 'Parqueo',
-            idUnidad: parqueo.idParqueo,
-            numeroUnidad: parqueo.numero,
-            idPersona: parqueo.idPersona,
-            idDepartamento: parqueo.idDepartamento,
-            tipoRelacion: 'Asignado',
-            fechaInicio: parqueo.fechaAsignacion || ahora,
-            fechaFin: ahora,
-            notas: notas || 'Asignación finalizada - vuelve a estar disponible',
-          },
-        });
-
-        // CA6: Retornar a estado 'Disponible'
-        const parqueoLibre = await prisma.parqueo.update({
-          where: { idParqueo: idUnidad },
-          data: {
-            estado: 'Disponible',
-            idDepartamento: null,
-            idPersona: null,
-            fechaAsignacion: null,
-          },
-        });
-
-        res.json({ message: 'Asignación de parqueo finalizada', parqueo: parqueoLibre });
-        return;
-      } else if (tipoUnidad === 'Baulera') {
-        const baulera = await prisma.baulera.findUnique({ where: { idBaulera: idUnidad } });
-        if (!baulera) {
-          res.status(404).json({ error: 'Not Found', message: 'Baulera no encontrada' });
-          return;
-        }
-
-        // CA07: Conservar antecedente
-        await prisma.historialAsignacionUnidad.create({
-          data: {
-            tipoUnidad: 'Baulera',
-            idUnidad: baulera.idBaulera,
-            numeroUnidad: baulera.numero,
-            idPersona: baulera.idPersona,
-            idDepartamento: baulera.idDepartamento,
-            tipoRelacion: 'Asignado',
-            fechaInicio: baulera.fechaAsignacion || ahora,
-            fechaFin: ahora,
-            notas: notas || 'Asignación finalizada - vuelve a estar disponible',
-          },
-        });
-
-        // CA6: Retornar a estado 'Disponible'
-        const bauleraLibre = await prisma.baulera.update({
-          where: { idBaulera: idUnidad },
-          data: {
-            estado: 'Disponible',
-            idDepartamento: null,
-            idPersona: null,
-            fechaAsignacion: null,
-          },
-        });
-
-        res.json({ message: 'Asignación de baulera finalizada', baulera: bauleraLibre });
-        return;
-      }
+      res.status(result.status).json(result.body);
     } catch (err) {
       next(err);
     }

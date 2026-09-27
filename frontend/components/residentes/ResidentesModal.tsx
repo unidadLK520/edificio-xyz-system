@@ -2,6 +2,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import { AlertTriangle } from 'lucide-react';
 
 export interface PersonaData {
   idPersona?: number;
@@ -146,7 +147,7 @@ export default function ResidentesModal({
         {/* Mensaje de error / Alerta CA4 */}
         {errorMessage && (
           <div className="mx-6 mt-4 p-3.5 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900/60 rounded-xl text-rose-700 dark:text-rose-300 text-xs flex items-start gap-2.5">
-            <span className="text-base shrink-0">⚠️</span>
+            <AlertTriangle className="w-4 h-4 shrink-0 text-rose-500 mt-0.5" />
             <div className="flex-1 font-medium">{errorMessage}</div>
           </div>
         )}
