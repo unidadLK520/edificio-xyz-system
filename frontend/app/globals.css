@@ -75,6 +75,15 @@ body {
 }
 
 /* Custom scrollbar ligero */
+.custom-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: #c5beaf transparent;
+}
+
+.dark .custom-scrollbar {
+  scrollbar-color: #334155 transparent;
+}
+
 ::-webkit-scrollbar {
   width: 6px;
   height: 6px;

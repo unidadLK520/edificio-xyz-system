@@ -62,17 +62,67 @@ export default function ExpensasPage() {
   const [comprobanteUrlInput, setComprobanteUrlInput] = useState<string>('')
   const [isSubmittingPago, setIsSubmittingPago] = useState<boolean>(false)
 
-  // Formulario Emisión Masiva (CA1, CA2)
-  const [nuevoPeriodo, setNuevoPeriodo] = useState('2026-10-01')
-  const [nuevaFechaVencimiento, setNuevaFechaVencimiento] = useState('2026-10-15')
+  // Formulario Emisión (Masiva e Individual)
+  const today = new Date()
+  const defaultPeriodo = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-01`
+  const defaultVencimiento = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-15`
+
+  const [nuevoPeriodo, setNuevoPeriodo] = useState(defaultPeriodo)
+  const [nuevaFechaVencimiento, setNuevaFechaVencimiento] = useState(defaultVencimiento)
   const [montoBaseInput, setMontoBaseInput] = useState(450)
   const [tasaMoraInput, setTasaMoraInput] = useState(5)
   const [isSubmittingEmision, setIsSubmittingEmision] = useState(false)
+
+  // Selector individual vs masivo
+  const [tipoEmision, setTipoEmision] = useState<'masivo' | 'individual'>('masivo')
+  const [departamentosList, setDepartamentosList] = useState<any[]>([])
+  const [deptoSeleccionado, setDeptoSeleccionado] = useState<number | ''>('')
+  const [montoIndividual, setMontoIndividual] = useState<number>(450)
 
   const showToast = (msg: string) => {
     setSuccessToast(msg)
     setTimeout(() => setSuccessToast(null), 4000)
   }
+
+  // Helpers de visualización de fechas sin desfases de zona horaria
+  const formatPeriodoTexto = (periodoStr: string) => {
+    if (!periodoStr) return '-'
+    const [datePart] = periodoStr.split('T')
+    const [y, m] = datePart.split('-')
+    const meses = [
+      'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
+      'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'
+    ]
+    const mesIndex = parseInt(m, 10) - 1
+    return `${meses[mesIndex] || m} ${y}`
+  }
+
+  const formatFechaVisual = (fechaStr: string) => {
+    if (!fechaStr) return '-'
+    const [datePart] = fechaStr.split('T')
+    const [y, m, d] = datePart.split('-')
+    return `${d}/${m}/${y}`
+  }
+
+  // Cargar lista de departamentos para el selector
+  const fetchDepartamentos = useCallback(async () => {
+    try {
+      const res = await fetch('/api/v1/departamentos?limit=100')
+      if (res.ok) {
+        const json = await res.json()
+        if (json.data && Array.isArray(json.data)) {
+          setDepartamentosList(json.data)
+          if (json.data.length > 0) {
+            setDeptoSeleccionado(json.data[0].idDepartamento)
+            if (json.data[0].areaM2) {
+              const factor = Number(json.data[0].areaM2) / 100
+              setMontoIndividual(Math.round(450 * factor * 100) / 100)
+            }
+          }
+        }
+      }
+    } catch {}
+  }, [])
 
   // CA05: Fetch expensas desde la API
   const fetchExpensas = useCallback(async () => {
@@ -84,11 +134,11 @@ export default function ExpensasPage() {
           const mapped: ExpensaItem[] = json.data.map((item: any) => ({
             idExpensa: item.idExpensa,
             idDepartamento: item.idDepartamento,
-            periodo: new Date(item.periodo).toISOString().split('T')[0],
+            periodo: typeof item.periodo === 'string' ? item.periodo.split('T')[0] : new Date(item.periodo).toISOString().split('T')[0],
             monto: Number(item.monto),
             saldoPendiente: Number(item.saldoPendiente),
             tasaInteresMora: Number(item.tasaInteresMora || 0),
-            fechaVencimiento: new Date(item.fechaVencimiento).toISOString().split('T')[0],
+            fechaVencimiento: typeof item.fechaVencimiento === 'string' ? item.fechaVencimiento.split('T')[0] : new Date(item.fechaVencimiento).toISOString().split('T')[0],
             estado: item.estado,
             departamento: item.departamento,
             propietarioNombre: item.departamento?.propietario
@@ -118,7 +168,8 @@ export default function ExpensasPage() {
   useEffect(() => {
     fetchExpensas()
     fetchMorosos()
-  }, [fetchExpensas, fetchMorosos])
+    fetchDepartamentos()
+  }, [fetchExpensas, fetchMorosos, fetchDepartamentos])
 
   // KPIs
   const totalFacturado = useMemo(() => expensas.reduce((acc, curr) => acc + curr.monto, 0), [expensas])
@@ -126,30 +177,74 @@ export default function ExpensasPage() {
   const totalCobrado = Math.max(0, totalFacturado - totalPendiente)
   const tasaCumplimiento = totalFacturado > 0 ? Math.round((totalCobrado / totalFacturado) * 100) : 0
 
-  // CA1, CA2: Emisión Masiva de Expensas
-  const handleEmisionMasiva = async (e: React.FormEvent) => {
+  // Cambio de departamento en emision individual
+  const handleSelectDepartamento = (id: number) => {
+    setDeptoSeleccionado(id)
+    const depto = departamentosList.find((d) => d.idDepartamento === id)
+    if (depto && depto.areaM2) {
+      const factor = Number(depto.areaM2) / 100
+      setMontoIndividual(Math.round(montoBaseInput * factor * 100) / 100)
+    }
+  }
+
+  // CA1, CA2: Emisión de Expensas (Individual o Lote Masivo)
+  const handleEmisionSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setIsSubmittingEmision(true)
 
     try {
-      const res = await fetch('/api/v1/expensas/generar-masivo', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          periodo: nuevoPeriodo,
-          fechaVencimiento: nuevaFechaVencimiento,
-          montoBase: montoBaseInput,
-          tasaInteresMora: tasaMoraInput
-        })
-      })
+      // Normalizar el periodo al día 1 del mes para asegurar consistencia
+      const [y, m] = nuevoPeriodo.split('-')
+      const periodoFinal = `${y}-${m}-01`
 
-      const json = await res.json()
-      if (res.ok) {
-        await fetchExpensas()
-        setIsEmitirModalOpen(false)
-        showToast(`¡Emisión masiva completada! ${json.generadasCount} expensas generadas.`)
+      if (tipoEmision === 'individual') {
+        if (!deptoSeleccionado) {
+          alert('Por favor seleccione un departamento.')
+          setIsSubmittingEmision(false)
+          return
+        }
+
+        const res = await fetch('/api/v1/expensas', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            idDepartamento: Number(deptoSeleccionado),
+            periodo: periodoFinal,
+            fechaVencimiento: nuevaFechaVencimiento,
+            monto: montoIndividual,
+            tasaInteresMora: tasaMoraInput
+          })
+        })
+
+        const json = await res.json()
+        if (res.ok) {
+          await fetchExpensas()
+          setIsEmitirModalOpen(false)
+          showToast(`¡Expensa emitida exitosamente para el departamento!`)
+        } else {
+          alert(json.message || 'Error al emitir la expensa')
+        }
       } else {
-        alert(json.message || 'Error en la emisión masiva')
+        // Emisión masiva de lote (todos los departamentos activos)
+        const res = await fetch('/api/v1/expensas/generar-masivo', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            periodo: periodoFinal,
+            fechaVencimiento: nuevaFechaVencimiento,
+            montoBase: montoBaseInput,
+            tasaInteresMora: tasaMoraInput
+          })
+        })
+
+        const json = await res.json()
+        if (res.ok) {
+          await fetchExpensas()
+          setIsEmitirModalOpen(false)
+          showToast(`¡Emisión de lote completada! ${json.generadasCount} expensas generadas (${json.excepcionesCount || 0} omitidas por ya existir).`)
+        } else {
+          alert(json.message || 'Error en la emisión masiva')
+        }
       }
     } catch {
       alert('Error de conexión con el servidor')
@@ -284,13 +379,13 @@ export default function ExpensasPage() {
             Recalcular Mora
           </button>
 
-          {/* CA1: Botón Emisión Masiva */}
+          {/* CA1: Botón Emisión */}
           <button
             onClick={() => setIsEmitirModalOpen(true)}
             className="inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-emerald-700 hover:bg-emerald-600 active:bg-emerald-800 text-white text-xs sm:text-sm font-bold rounded-xl shadow-lg shadow-emerald-800/20 transition-all cursor-pointer"
           >
             <Plus className="w-4 h-4" />
-            Emisión Masiva de Lote
+            Emitir Expensa(s)
           </button>
         </div>
       </div>
@@ -409,12 +504,12 @@ export default function ExpensasPage() {
             </div>
           </div>
 
-          {/* TABLA DE EXPENSAS (CA05) */}
-          <div className="rounded-2xl bg-[#ede9e1] dark:bg-slate-900 border border-[#cec8bc] dark:border-slate-800 overflow-hidden shadow-sm">
-            <div className="overflow-x-auto">
+          {/* TABLA DE EXPENSAS (CA05) CON SCROLLBAR Y HEADER FIJO */}
+          <div className="rounded-2xl bg-[#ede9e1] dark:bg-slate-900 border border-[#cec8bc] dark:border-slate-800 shadow-sm flex flex-col overflow-hidden">
+            <div className="overflow-x-auto overflow-y-auto max-h-[520px] custom-scrollbar">
               <table className="w-full text-left border-collapse text-xs sm:text-sm">
-                <thead>
-                  <tr className="border-b border-[#cec8bc] dark:border-slate-800 bg-[#dfd9ce]/60 dark:bg-slate-950/60 text-[#7d776f] dark:text-slate-400 uppercase text-[11px] font-bold">
+                <thead className="sticky top-0 z-10 bg-[#dfd9ce] dark:bg-slate-950 shadow-xs backdrop-blur-md">
+                  <tr className="border-b border-[#cec8bc] dark:border-slate-800 text-[#7d776f] dark:text-slate-400 uppercase text-[11px] font-bold">
                     <th className="py-3 px-4">Departamento</th>
                     <th className="py-3 px-4">Período</th>
                     <th className="py-3 px-4">Monto Importe</th>
@@ -434,15 +529,29 @@ export default function ExpensasPage() {
                   ) : (
                     expensasFiltradas.map((item) => (
                       <tr key={item.idExpensa} className="hover:bg-[#dfd9ce]/40 dark:hover:bg-slate-800/40">
-                        <td className="py-3.5 px-4 font-bold text-[#262422] dark:text-white">
-                          Dpto {item.departamento?.numero || item.idDepartamento}
+                        <td className="py-3.5 px-4">
+                          <div className="font-bold text-[#262422] dark:text-white">
+                            Dpto {item.departamento?.numero || item.idDepartamento}
+                          </div>
+                          <div className="text-[11px] text-[#7d776f] dark:text-slate-400 truncate max-w-[160px]">
+                            {item.propietarioNombre}
+                          </div>
                         </td>
-                        <td className="py-3.5 px-4 font-mono text-xs">{item.periodo}</td>
+                        <td className="py-3.5 px-4">
+                          <div className="font-bold text-xs text-[#262422] dark:text-white">
+                            {formatPeriodoTexto(item.periodo)}
+                          </div>
+                          <div className="font-mono text-[11px] text-[#7d776f] dark:text-slate-400">
+                            {formatFechaVisual(item.periodo)}
+                          </div>
+                        </td>
                         <td className="py-3.5 px-4 font-bold font-mono">Bs. {item.monto.toFixed(2)}</td>
                         <td className="py-3.5 px-4 font-bold font-mono text-red-600 dark:text-red-400">
                           Bs. {item.saldoPendiente.toFixed(2)}
                         </td>
-                        <td className="py-3.5 px-4 text-xs">{item.fechaVencimiento}</td>
+                        <td className="py-3.5 px-4 text-xs font-mono">
+                          {formatFechaVisual(item.fechaVencimiento)}
+                        </td>
                         <td className="py-3.5 px-4">
                           <span
                             className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-extrabold ${
@@ -467,7 +576,7 @@ export default function ExpensasPage() {
                                 setMontoPagoInput(item.saldoPendiente)
                                 setIsPagarModalOpen(true)
                               }}
-                              className="px-2.5 py-1 bg-emerald-700 hover:bg-emerald-800 text-white rounded-lg text-xs font-bold transition-all shadow-xs"
+                              className="px-2.5 py-1 bg-emerald-700 hover:bg-emerald-800 text-white rounded-lg text-xs font-bold transition-all shadow-xs cursor-pointer"
                               title="Registrar Pago"
                             >
                               Pagar
@@ -476,7 +585,7 @@ export default function ExpensasPage() {
                           {/* CA08: Estado de Cuenta */}
                           <button
                             onClick={() => handleVerEstadoCuenta(item.idDepartamento)}
-                            className="p-1.5 rounded-lg text-[#5c5750] hover:text-blue-700 dark:text-slate-400 hover:bg-[#ded8cc] transition-colors"
+                            className="p-1.5 rounded-lg text-[#5c5750] hover:text-blue-700 dark:text-slate-400 hover:bg-[#ded8cc] transition-colors cursor-pointer"
                             title="Ver Estado de Cuenta"
                           >
                             <History className="w-4 h-4" />
@@ -487,6 +596,11 @@ export default function ExpensasPage() {
                   )}
                 </tbody>
               </table>
+            </div>
+            {/* Pie informativo de la tabla */}
+            <div className="px-4 py-2.5 border-t border-[#cec8bc] dark:border-slate-800 bg-[#dfd9ce]/30 dark:bg-slate-950/30 flex justify-between items-center text-xs text-[#7d776f] dark:text-slate-400">
+              <span>Mostrando <strong>{expensasFiltradas.length}</strong> de <strong>{expensas.length}</strong> expensas</span>
+              <span className="text-[11px] hidden sm:inline">Desplace verticalmente la tabla para ver más registros</span>
             </div>
           </div>
         </>
@@ -510,118 +624,232 @@ export default function ExpensasPage() {
             </div>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {listadoMorosos.map((m) => (
-              <div
-                key={m.idDepartamento}
-                className="p-4 rounded-2xl bg-[#ede9e1] dark:bg-slate-900 border border-[#cec8bc] dark:border-slate-800 space-y-3"
-              >
-                <div className="flex justify-between items-start">
-                  <div>
-                    <h4 className="font-black text-base text-[#262422] dark:text-white">
-                      Departamento {m.numero} (Piso {m.piso || '-'})
-                    </h4>
-                    <p className="text-xs text-[#7d776f] dark:text-slate-400">
-                      Titular: {m.propietario ? `${m.propietario.nombres} ${m.propietario.apellidos}` : 'Sin Titular'} • CI: {m.propietario?.ciNit || '-'}
-                    </p>
+          <div className="max-h-[520px] overflow-y-auto pr-1.5 custom-scrollbar">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {listadoMorosos.map((m) => (
+                <div
+                  key={m.idDepartamento}
+                  className="p-4 rounded-2xl bg-[#ede9e1] dark:bg-slate-900 border border-[#cec8bc] dark:border-slate-800 space-y-3"
+                >
+                  <div className="flex justify-between items-start">
+                    <div>
+                      <h4 className="font-black text-base text-[#262422] dark:text-white">
+                        Departamento {m.numero} (Piso {m.piso || '-'})
+                      </h4>
+                      <p className="text-xs text-[#7d776f] dark:text-slate-400">
+                        Titular: {m.propietario ? `${m.propietario.nombres} ${m.propietario.apellidos}` : 'Sin Titular'} • CI: {m.propietario?.ciNit || '-'}
+                      </p>
+                    </div>
+                    <span className="px-2.5 py-1 rounded-full bg-red-100 text-red-800 text-xs font-black">
+                      {m.expensasMoraCount} mes(es) en mora
+                    </span>
                   </div>
-                  <span className="px-2.5 py-1 rounded-full bg-red-100 text-red-800 text-xs font-black">
-                    {m.expensasMoraCount} mes(es) en mora
-                  </span>
-                </div>
 
-                <div className="p-3 rounded-xl bg-[#dfd9ce]/60 dark:bg-slate-950/60 font-mono text-xs space-y-1">
-                  <div className="flex justify-between font-bold">
-                    <span>Deuda Acumulada:</span>
-                    <span className="text-red-600 dark:text-red-400">Bs. {m.totalDeuda.toFixed(2)}</span>
+                  <div className="p-3 rounded-xl bg-[#dfd9ce]/60 dark:bg-slate-950/60 font-mono text-xs space-y-1">
+                    <div className="flex justify-between font-bold">
+                      <span>Deuda Acumulada:</span>
+                      <span className="text-red-600 dark:text-red-400">Bs. {m.totalDeuda.toFixed(2)}</span>
+                    </div>
+                  </div>
+
+                  <div className="flex justify-end gap-2 pt-2">
+                    <button
+                      onClick={() => handleVerEstadoCuenta(m.idDepartamento)}
+                      className="px-3 py-1.5 rounded-xl bg-blue-700 hover:bg-blue-800 text-white text-xs font-bold cursor-pointer"
+                    >
+                      Ver Estado de Cuenta
+                    </button>
                   </div>
                 </div>
-
-                <div className="flex justify-end gap-2 pt-2">
-                  <button
-                    onClick={() => handleVerEstadoCuenta(m.idDepartamento)}
-                    className="px-3 py-1.5 rounded-xl bg-blue-700 hover:bg-blue-800 text-white text-xs font-bold"
-                  >
-                    Ver Estado de Cuenta
-                  </button>
-                </div>
-              </div>
-            ))}
+              ))}
+            </div>
           </div>
         </div>
       )}
 
-      {/* MODAL EMISIÓN MASIVA (CA1, CA2) */}
+      {/* MODAL EMISIÓN DE EXPENSAS (INDIVIDUAL Y MASIVA) */}
       {isEmitirModalOpen && (
         <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 backdrop-blur-xs">
-          <div className="w-full max-w-md bg-[#ede9e1] dark:bg-slate-900 rounded-2xl border border-[#cec8bc] dark:border-slate-800 p-6 space-y-4">
+          <div className="w-full max-w-lg bg-[#ede9e1] dark:bg-slate-900 rounded-2xl border border-[#cec8bc] dark:border-slate-800 p-6 space-y-4 max-h-[92vh] overflow-y-auto custom-scrollbar">
             <div className="flex justify-between items-center border-b border-[#cec8bc] dark:border-slate-800 pb-3">
-              <h3 className="font-extrabold text-base text-[#262422] dark:text-white">
-                Emisión Masiva de Lote
-              </h3>
-              <button onClick={() => setIsEmitirModalOpen(false)}>
-                <X className="w-5 h-5 text-[#7d776f]" />
+              <div>
+                <h3 className="font-extrabold text-base text-[#262422] dark:text-white">
+                  Emisión de Expensas
+                </h3>
+                <p className="text-xs text-[#7d776f] dark:text-slate-400">
+                  Genere una expensa para un departamento o para todos los activos
+                </p>
+              </div>
+              <button onClick={() => setIsEmitirModalOpen(false)} className="cursor-pointer">
+                <X className="w-5 h-5 text-[#7d776f] hover:text-[#262422] dark:hover:text-white" />
               </button>
             </div>
 
-            <form onSubmit={handleEmisionMasiva} className="space-y-3.5 text-xs">
-              <div>
-                <label className="block font-bold mb-1">Período (YYYY-MM-DD) *</label>
-                <input
-                  type="date"
-                  required
-                  value={nuevoPeriodo}
-                  onChange={(e) => setNuevoPeriodo(e.target.value)}
-                  className="w-full px-3 py-2 rounded-xl bg-[#dfd9ce] dark:bg-slate-800 border"
-                />
-              </div>
+            {/* Selector de modo: Lote Masivo vs Departamento Específico */}
+            <div className="grid grid-cols-2 p-1 bg-[#dfd9ce]/80 dark:bg-slate-800 rounded-xl text-xs font-bold">
+              <button
+                type="button"
+                onClick={() => setTipoEmision('masivo')}
+                className={`py-2 px-3 rounded-lg transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                  tipoEmision === 'masivo'
+                    ? 'bg-emerald-700 text-white shadow-xs'
+                    : 'text-[#7d776f] hover:text-[#262422] dark:hover:text-white'
+                }`}
+              >
+                <Building2 className="w-4 h-4" />
+                Lote Masivo (Todos)
+              </button>
+              <button
+                type="button"
+                onClick={() => setTipoEmision('individual')}
+                className={`py-2 px-3 rounded-lg transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                  tipoEmision === 'individual'
+                    ? 'bg-emerald-700 text-white shadow-xs'
+                    : 'text-[#7d776f] hover:text-[#262422] dark:hover:text-white'
+                }`}
+              >
+                <Plus className="w-4 h-4" />
+                Un Departamento (Individual)
+              </button>
+            </div>
 
-              <div>
-                <label className="block font-bold mb-1">Fecha Vencimiento *</label>
-                <input
-                  type="date"
-                  required
-                  value={nuevaFechaVencimiento}
-                  onChange={(e) => setNuevaFechaVencimiento(e.target.value)}
-                  className="w-full px-3 py-2 rounded-xl bg-[#dfd9ce] dark:bg-slate-800 border"
-                />
+            {/* Banner explicativo según el modo */}
+            {tipoEmision === 'masivo' ? (
+              <div className="p-3 rounded-xl bg-blue-100/70 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-900/40 text-xs text-blue-900 dark:text-blue-300">
+                🏢 <strong>Modo Lote Masivo:</strong> Se emitirá una expensa para cada uno de los <strong>{departamentosList.length} departamentos activos</strong>. Si alguno ya tiene expensa generada en este período, se omitirá automáticamente para evitar duplicados.
               </div>
+            ) : (
+              <div className="p-3 rounded-xl bg-emerald-100/70 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-900/40 text-xs text-emerald-900 dark:text-emerald-300">
+                🚪 <strong>Modo Individual:</strong> Se generará <strong>exactamente 1 expensa</strong> para la unidad específica que elija a continuación.
+              </div>
+            )}
 
-              <div className="grid grid-cols-2 gap-2">
+            <form onSubmit={handleEmisionSubmit} className="space-y-4 text-xs">
+              {/* Selector de Departamento (sólo si es Individual) */}
+              {tipoEmision === 'individual' && (
                 <div>
-                  <label className="block font-bold mb-1">Monto Base (Bs.)</label>
-                  <input
-                    type="number"
-                    value={montoBaseInput}
-                    onChange={(e) => setMontoBaseInput(Number(e.target.value))}
-                    className="w-full px-3 py-2 rounded-xl bg-[#dfd9ce] dark:bg-slate-800 border font-mono font-bold"
-                  />
+                  <label className="block font-bold mb-1 text-[#262422] dark:text-white">
+                    Seleccionar Departamento *
+                  </label>
+                  <select
+                    required
+                    value={deptoSeleccionado}
+                    onChange={(e) => handleSelectDepartamento(Number(e.target.value))}
+                    className="w-full px-3 py-2.5 rounded-xl bg-[#dfd9ce] dark:bg-slate-800 border border-[#cec8bc] dark:border-slate-700 text-xs sm:text-sm font-semibold text-[#262422] dark:text-white cursor-pointer"
+                  >
+                    {departamentosList.map((d) => (
+                      <option key={d.idDepartamento} value={d.idDepartamento}>
+                        Dpto {d.numero} (Piso {d.piso || '-'}) — {d.propietario ? `${d.propietario.nombres} ${d.propietario.apellidos}` : 'Sin Titular'} ({d.areaM2 || 100} m²)
+                      </option>
+                    ))}
+                  </select>
                 </div>
+              )}
+
+              {/* Selector de Fechas con Vista Previa Legible */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
-                  <label className="block font-bold mb-1">Tasa Mora (%)</label>
+                  <label className="block font-bold mb-1 text-[#262422] dark:text-white">
+                    Período / Mes a Facturar *
+                  </label>
+                  <input
+                    type="date"
+                    required
+                    value={nuevoPeriodo}
+                    onChange={(e) => setNuevoPeriodo(e.target.value)}
+                    className="w-full px-3 py-2 rounded-xl bg-[#dfd9ce] dark:bg-slate-800 border border-[#cec8bc] dark:border-slate-700 font-mono text-xs cursor-pointer"
+                  />
+                  <div className="mt-1 text-[11px] text-emerald-700 dark:text-emerald-400 font-bold">
+                    📅 {formatPeriodoTexto(nuevoPeriodo)} ({formatFechaVisual(nuevoPeriodo)})
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block font-bold mb-1 text-[#262422] dark:text-white">
+                    Fecha Límite de Vencimiento *
+                  </label>
+                  <input
+                    type="date"
+                    required
+                    value={nuevaFechaVencimiento}
+                    onChange={(e) => setNuevaFechaVencimiento(e.target.value)}
+                    className="w-full px-3 py-2 rounded-xl bg-[#dfd9ce] dark:bg-slate-800 border border-[#cec8bc] dark:border-slate-700 font-mono text-xs cursor-pointer"
+                  />
+                  <div className="mt-1 text-[11px] text-[#7d776f] dark:text-slate-400">
+                    ⏳ Vence: {formatFechaVisual(nuevaFechaVencimiento)}
+                  </div>
+                </div>
+              </div>
+
+              {/* Montos y Tasas */}
+              <div className="grid grid-cols-2 gap-3">
+                {tipoEmision === 'individual' ? (
+                  <div>
+                    <label className="block font-bold mb-1 text-[#262422] dark:text-white">
+                      Monto a Cobrar (Bs.) *
+                    </label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      required
+                      value={montoIndividual}
+                      onChange={(e) => setMontoIndividual(Number(e.target.value))}
+                      className="w-full px-3 py-2 rounded-xl bg-[#dfd9ce] dark:bg-slate-800 border border-[#cec8bc] dark:border-slate-700 font-mono font-bold text-sm text-emerald-700 dark:text-emerald-400"
+                    />
+                  </div>
+                ) : (
+                  <div>
+                    <label className="block font-bold mb-1 text-[#262422] dark:text-white">
+                      Monto Base Referencial (Bs.)
+                    </label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      required
+                      value={montoBaseInput}
+                      onChange={(e) => setMontoBaseInput(Number(e.target.value))}
+                      className="w-full px-3 py-2 rounded-xl bg-[#dfd9ce] dark:bg-slate-800 border border-[#cec8bc] dark:border-slate-700 font-mono font-bold text-sm text-emerald-700 dark:text-emerald-400"
+                    />
+                    <span className="text-[10px] text-[#7d776f] block mt-0.5">Ajustado según alícuota/área m²</span>
+                  </div>
+                )}
+
+                <div>
+                  <label className="block font-bold mb-1 text-[#262422] dark:text-white">
+                    Tasa Interés Mora (%)
+                  </label>
                   <input
                     type="number"
+                    step="0.1"
+                    min="0"
+                    max="100"
                     value={tasaMoraInput}
                     onChange={(e) => setTasaMoraInput(Number(e.target.value))}
-                    className="w-full px-3 py-2 rounded-xl bg-[#dfd9ce] dark:bg-slate-800 border font-mono font-bold"
+                    className="w-full px-3 py-2 rounded-xl bg-[#dfd9ce] dark:bg-slate-800 border border-[#cec8bc] dark:border-slate-700 font-mono font-bold text-sm"
                   />
+                  <span className="text-[10px] text-[#7d776f] block mt-0.5">Aplicable si vence sin pago</span>
                 </div>
               </div>
 
-              <div className="flex justify-end gap-2 pt-3 border-t">
+              {/* Botones de acción */}
+              <div className="flex justify-end gap-2 pt-3 border-t border-[#cec8bc] dark:border-slate-800">
                 <button
                   type="button"
                   onClick={() => setIsEmitirModalOpen(false)}
-                  className="px-4 py-2 rounded-xl text-xs font-bold text-[#7d776f]"
+                  className="px-4 py-2 rounded-xl text-xs font-bold text-[#7d776f] hover:text-[#262422] dark:hover:text-white cursor-pointer"
                 >
                   Cancelar
                 </button>
                 <button
                   type="submit"
                   disabled={isSubmittingEmision}
-                  className="px-4 py-2 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold"
+                  className="px-4 py-2 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold shadow-md cursor-pointer transition-all disabled:opacity-50"
                 >
-                  {isSubmittingEmision ? 'Generando...' : 'Ejecutar Emisión Masiva'}
+                  {isSubmittingEmision
+                    ? 'Procesando...'
+                    : tipoEmision === 'individual'
+                      ? 'Emitir Expensa Individual (1)'
+                      : `Ejecutar Emisión Masiva (${departamentosList.length} Dptos)`}
                 </button>
               </div>
             </form>
