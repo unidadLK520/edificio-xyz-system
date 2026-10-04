@@ -8,5 +8,9 @@ export default defineConfig({
     testTimeout: 30000,
     hookTimeout: 30000,
     include: ['tests/**/*.test.ts'],
+    fileParallelism: false,
+    sequence: {
+      concurrent: false,
+    },
   },
 });

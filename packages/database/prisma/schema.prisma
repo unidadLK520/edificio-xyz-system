@@ -45,6 +45,7 @@ model Usuario {
   auditorias          Auditoria[]
   reservasRegistradas      Reserva[]
   solicitudesMantenimiento SolicitudMantenimiento[]
+  reglasMoraCreadas        ReglaMora[]
 
   @@map("usuarios")
   @@schema("edificio")
@@ -180,6 +181,20 @@ model Expensa {
   @@index([idDepartamento], map: "idx_expensas_departamento")
   @@index([estado], map: "idx_expensas_estado")
   @@map("expensas")
+  @@schema("edificio")
+}
+
+model ReglaMora {
+  idRegla           Int       @id @default(autoincrement()) @map("id_regla")
+  tasaInteres       Decimal   @map("tasa_interes") @db.Decimal(5, 2)
+  diasGracia        Int       @default(0) @map("dias_gracia")
+  activa            Boolean   @default(true)
+  fechaCreacion     DateTime  @default(now()) @map("fecha_creacion") @db.Timestamp(6)
+  idUsuarioCreacion Int?      @map("id_usuario_creacion")
+
+  usuarioCreacion   Usuario?  @relation(fields: [idUsuarioCreacion], references: [idUsuario])
+
+  @@map("reglas_mora")
   @@schema("edificio")
 }
 

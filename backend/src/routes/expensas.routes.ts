@@ -7,7 +7,12 @@ import { z } from 'zod';
 import { authMiddleware, AuthRequest } from '../middlewares/auth.middleware';
 import { authorizeRoles } from '../middlewares/role.middleware';
 import { auditoriaService } from '../modules/auditoria';
-import { calcularCapitalPendiente } from '../modules/expensas';
+import {
+  calcularCapitalPendiente,
+  configurarReglaMora,
+  obtenerReglasMora,
+  ejecutarCalculoMora,
+} from '../modules/expensas';
 
 export const expensasRouter: IRouter = Router();
 expensasRouter.use(authMiddleware);
@@ -78,6 +83,11 @@ const anularPagoSchema = z.object({
 
 const corregirPagoSchema = pagoSchema.extend({
   motivo: z.string().min(1, 'El motivo de corrección es obligatorio'),
+});
+
+const reglaMoraSchema = z.object({
+  tasaInteres: z.number().min(0, 'La tasa de interés debe ser mayor o igual a 0').max(100, 'La tasa de interés no puede exceder 100'),
+  diasGracia: z.number().int().min(0, 'Los días de gracia no pueden ser negativos').optional().default(0),
 });
 
 // ── Helper FIFO para aplicación automática de anticipos ──────────────────────
@@ -411,6 +421,55 @@ expensasRouter.get(
   }
 );
 
+// ── GET /api/v1/expensas/reglas-mora ─────────────────────────────────────────
+// CA09: Consultar regla de mora activa e historial completo
+expensasRouter.get(
+  '/reglas-mora',
+  authorizeRoles('Administrador', 'Directorio'),
+  async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const resultado = await obtenerReglasMora();
+      res.json(resultado);
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+// ── POST /api/v1/expensas/reglas-mora ────────────────────────────────────────
+// CA09, CA10: Configurar nueva regla de mora activa (desactiva anterior de forma atómica y audita)
+expensasRouter.post(
+  '/reglas-mora',
+  authorizeRoles('Administrador', 'Directorio'),
+  async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const parsed = reglaMoraSchema.safeParse(req.body);
+      if (!parsed.success) {
+        res.status(400).json({
+          error: 'Validation Error',
+          message: 'Parámetros de regla de mora inválidos',
+          details: parsed.error.flatten().fieldErrors,
+        });
+        return;
+      }
+
+      const { tasaInteres, diasGracia } = parsed.data;
+      const nuevaRegla = await configurarReglaMora({
+        tasaInteres,
+        diasGracia,
+        idUsuario: req.user?.idUsuario || null,
+      });
+
+      res.status(201).json({
+        message: 'Regla de mora configurada exitosamente',
+        regla: nuevaRegla,
+      });
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
 // ── GET /api/v1/expensas/:id ─────────────────────────────────────────────────
 // CA05: Detalle de una expensa específica con sus pagos y saldos
 expensasRouter.get(
@@ -567,75 +626,30 @@ expensasRouter.post(
 );
 
 // ── POST /api/v1/expensas/calcular-mora ──────────────────────────────────────
-// CA6, CA10: Cálculo idempotente de mora sobre expensas vencidas con auditoría transaccional
+// CA6, CA09, CA10: Cálculo idempotente de mora sobre expensas vencidas con auditoría transaccional
 expensasRouter.post(
   '/calcular-mora',
   authorizeRoles('Administrador', 'Directorio'),
   async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
     try {
-      const ahora = new Date();
-
-      const { actualizadasCount } = await prisma.$transaction(async (tx) => {
-        // Buscar expensas vencidas con saldo pendiente > 0 y que no estén pagadas
-        const expensasVencidas = await tx.expensa.findMany({
-          where: {
-            fechaVencimiento: { lt: ahora },
-            saldoPendiente: { gt: 0 },
-            estado: { not: 'Pagado' },
-          },
-          include: {
-            pagos: {
-              where: { anulado: false },
-            },
-            aplicacionesAnticipos: {
-              include: { pago: true },
-            },
-          },
-        });
-
-        let count = 0;
-
-        for (const exp of expensasVencidas) {
-          const capitalPendiente = calcularCapitalPendiente(exp);
-          const tasa = Number(exp.tasaInteresMora) > 0 ? Number(exp.tasaInteresMora) : 5;
-          const montoMora = Math.round((capitalPendiente * (tasa / 100)) * 100) / 100;
-          const nuevoSaldo = Math.max(0, Math.round((capitalPendiente + montoMora) * 100) / 100);
-          const nuevoEstado = (exp.fechaVencimiento < ahora && nuevoSaldo > 0) ? 'Moroso' : (nuevoSaldo === 0 ? 'Pagado' : 'Pendiente');
-
-          await tx.expensa.update({
-            where: { idExpensa: exp.idExpensa },
-            data: {
-              montoMora,
-              saldoPendiente: nuevoSaldo,
-              estado: nuevoEstado,
-            },
-          });
-
-          count++;
-        }
-
-        // CA10: Auditoría oficial dentro de la misma transacción
-        await auditoriaService.registrarEvento({
-          tablaAfectada: 'expensas',
-          idRegistro: `MORA-${ahora.toISOString().split('T')[0]}`,
-          accion: 'CALCULO_MORA_EXPENSAS',
-          resultado: 'EXITO',
-          datosNuevos: {
-            actualizadasCount: count,
-            fechaEjecucion: ahora.toISOString(),
-          },
-          idUsuario: req.user?.idUsuario || null,
-          tx,
-        });
-
-        return { actualizadasCount: count };
-      }, { timeout: 30000, maxWait: 15000 });
+      const resultado = await ejecutarCalculoMora({
+        idUsuario: req.user?.idUsuario || null,
+        origen: 'MANUAL',
+      });
 
       res.json({
-        message: `Se aplicó el recargo de mora a ${actualizadasCount} expensas vencidas`,
-        actualizadasCount,
+        message: resultado.mensaje,
+        actualizadasCount: resultado.actualizadasCount,
       });
-    } catch (err) {
+    } catch (err: any) {
+      if (err.statusCode) {
+        res.status(err.statusCode).json({
+          error: err.code || 'Bad Request',
+          code: err.code,
+          message: err.message,
+        });
+        return;
+      }
       next(err);
     }
   }

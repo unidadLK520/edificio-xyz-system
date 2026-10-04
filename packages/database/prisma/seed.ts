@@ -340,6 +340,22 @@ async function main() {
     },
   });
 
+  // 10. Regla de Mora inicial (CA09)
+  const reglaMoraExistente = await prisma.reglaMora.findFirst({
+    where: { activa: true },
+  });
+  if (!reglaMoraExistente) {
+    await prisma.reglaMora.create({
+      data: {
+        tasaInteres: 5.0,
+        diasGracia: 0,
+        activa: true,
+        idUsuarioCreacion: adminUser.idUsuario,
+      },
+    });
+    console.log('Regla de mora inicial creada (5% interés, 0 días de gracia).');
+  }
+
   console.log('✅ Seed completado con éxito.');
 }
 
