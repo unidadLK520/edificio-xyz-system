@@ -68,15 +68,17 @@ app.use((req, res) => {
 app.use(errorMiddleware);
 
 // ── Iniciar servidor ─────────────────────────────────────────────────────────
-app.listen(config.port, () => {
-  console.log('');
-  console.log('🏢 ═══════════════════════════════════════════════');
-  console.log(`   Edificio XYZ API — v1.0.0`);
-  console.log(`   🚀 http://localhost:${config.port}`);
-  console.log(`   📦 Ambiente: ${config.nodeEnv}`);
-  console.log(`   🌐 CORS: ${config.corsOrigin}`);
-  console.log('   ═══════════════════════════════════════════════');
-  console.log('');
-});
+if (process.env.NODE_ENV !== 'test') {
+  app.listen(config.port, () => {
+    console.log('');
+    console.log('🏢 ═══════════════════════════════════════════════');
+    console.log(`   Edificio XYZ API — v1.0.0`);
+    console.log(`   🚀 http://localhost:${config.port}`);
+    console.log(`   📦 Ambiente: ${config.nodeEnv}`);
+    console.log(`   🌐 CORS: ${config.corsOrigin}`);
+    console.log('   ═══════════════════════════════════════════════');
+    console.log('');
+  });
+}
 
 export { app };

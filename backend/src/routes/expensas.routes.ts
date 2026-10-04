@@ -7,6 +7,7 @@ import { z } from 'zod';
 import { authMiddleware, AuthRequest } from '../middlewares/auth.middleware';
 import { authorizeRoles } from '../middlewares/role.middleware';
 import { auditoriaService } from '../modules/auditoria';
+import { calcularCapitalPendiente } from '../modules/expensas';
 
 export const expensasRouter: IRouter = Router();
 expensasRouter.use(authMiddleware);
@@ -232,6 +233,8 @@ expensasRouter.get(
               propietario: { select: { idPersona: true, nombres: true, apellidos: true, ciNit: true, telefono: true, correo: true } },
             },
           },
+          pagos: { where: { anulado: false } },
+          aplicacionesAnticipos: { include: { pago: true } },
         },
         orderBy: [{ idDepartamento: 'asc' }, { periodo: 'asc' }],
       });
@@ -260,6 +263,7 @@ expensasRouter.get(
           idExpensa: exp.idExpensa,
           periodo: exp.periodo,
           montoTotal: Number(exp.monto),
+          capitalPendiente: calcularCapitalPendiente(exp),
           saldoPendiente: Number(exp.saldoPendiente),
           fechaVencimiento: exp.fechaVencimiento,
           tasaInteresMora: Number(exp.tasaInteresMora),
@@ -340,7 +344,10 @@ expensasRouter.get(
         prisma.expensa.findMany({
           where: { idDepartamento },
           orderBy: { periodo: 'desc' },
-          include: { pagos: true, aplicacionesAnticipos: true },
+          include: {
+            pagos: { where: { anulado: false } },
+            aplicacionesAnticipos: { include: { pago: true } },
+          },
         }),
         // Devuelve TODOS los pagos (anulados y vigentes) para trazabilidad completa.
         // El cálculo de totales excluye los anulados por filtro JS más abajo.
@@ -355,6 +362,11 @@ expensasRouter.get(
           orderBy: { fechaPago: 'desc' },
         }),
       ]);
+
+      const expensasConCapital = expensas.map((e) => ({
+        ...e,
+        capitalPendiente: calcularCapitalPendiente(e),
+      }));
 
       const anticiposConSaldo = anticipos.map((ant) => {
         const totalAplicado = ant.aplicacionesAnticipo.reduce(
@@ -388,7 +400,7 @@ expensasRouter.get(
           totalAnticiposDisponibles,
           estadoGlobal: saldoPendienteTotal > 0 ? (expensas.some((e) => e.estado === 'Moroso') ? 'Moroso' : 'Deuda Pendiente') : 'Al Día',
         },
-        expensas,
+        expensas: expensasConCapital,
         pagos,
         anticipos: anticiposConSaldo,
         anticiposDisponibles,
@@ -575,17 +587,19 @@ expensasRouter.post(
             pagos: {
               where: { anulado: false },
             },
+            aplicacionesAnticipos: {
+              include: { pago: true },
+            },
           },
         });
 
         let count = 0;
 
         for (const exp of expensasVencidas) {
-          const totalPagosValidos = exp.pagos.reduce((acc, p) => acc + Number(p.montoPagado), 0);
+          const capitalPendiente = calcularCapitalPendiente(exp);
           const tasa = Number(exp.tasaInteresMora) > 0 ? Number(exp.tasaInteresMora) : 5;
-          const baseParaMora = Math.max(0, Number(exp.monto) - totalPagosValidos);
-          const montoMora = Math.round((baseParaMora * (tasa / 100)) * 100) / 100;
-          const nuevoSaldo = Math.max(0, Math.round((Number(exp.monto) + montoMora - totalPagosValidos) * 100) / 100);
+          const montoMora = Math.round((capitalPendiente * (tasa / 100)) * 100) / 100;
+          const nuevoSaldo = Math.max(0, Math.round((capitalPendiente + montoMora) * 100) / 100);
           const nuevoEstado = (exp.fechaVencimiento < ahora && nuevoSaldo > 0) ? 'Moroso' : (nuevoSaldo === 0 ? 'Pagado' : 'Pendiente');
 
           await tx.expensa.update({
@@ -1020,36 +1034,28 @@ async function recalcularSaldoExpensa(
 ) {
   const expensa = await tx.expensa.findUnique({
     where: { idExpensa },
+    include: {
+      pagos: {
+        where: { anulado: false },
+      },
+      aplicacionesAnticipos: {
+        include: { pago: true },
+      },
+    },
   });
 
   if (!expensa) return null;
 
-  const pagosActivos = await tx.pago.findMany({
-    where: {
-      idExpensa,
-      anulado: false,
-    },
-  });
-
-  const aplicacionesAnticipo = await tx.aplicacionAnticipo.findMany({
-    where: {
-      idExpensa,
-      pago: { anulado: false },
-    },
-  });
-
-  const totalPagosDirectos = pagosActivos.reduce((acc, p) => acc + Number(p.montoPagado), 0);
-  const totalAnticiposAplicados = aplicacionesAnticipo.reduce((acc, a) => acc + Number(a.monto), 0);
-  const totalPagado = totalPagosDirectos + totalAnticiposAplicados;
-  const totalObligacion = Number(expensa.monto) + Number(expensa.montoMora);
-  const nuevoSaldo = Math.max(0, Math.round((totalObligacion - totalPagado) * 100) / 100);
+  const capitalPendiente = calcularCapitalPendiente(expensa);
+  const montoMora = Number(expensa.montoMora || 0);
+  const nuevoSaldo = Math.max(0, Math.round((capitalPendiente + montoMora) * 100) / 100);
 
   let nuevoEstado = 'Pendiente';
   if (nuevoSaldo === 0) {
     nuevoEstado = 'Pagado';
-  } else if (totalPagado > 0) {
+  } else if (capitalPendiente < Number(expensa.monto)) {
     nuevoEstado = 'Parcial';
-  } else if (Number(expensa.montoMora) > 0) {
+  } else if (montoMora > 0 || expensa.fechaVencimiento < new Date()) {
     nuevoEstado = 'Moroso';
   } else {
     nuevoEstado = 'Pendiente';
