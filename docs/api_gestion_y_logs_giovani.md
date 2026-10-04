@@ -138,6 +138,8 @@
 | `ACTUALIZAR_UNIDAD` | `departamentos` / `parqueos` / `bauleras` | `PUT /api/v1/unidades/:tipo/:id` | Atributos modificados y estado anterior.
 | `ASIGNACION_UNIDAD_ATOMIC`| `historial_asignacion_unidades`| `POST /api/v1/unidades/asignaciones` | ID Unidad, ID Persona/Depto, Tipo de Relación, Notas. 
 | `FINALIZAR_ASIGNACION_ATOMIC`| `historial_asignacion_unidades`| `POST /api/v1/unidades/asignaciones/finalizar` | ID Unidad, Fecha de cierre, Nuevo estado disponible. 
+| `CONFIGURAR_REGLA_MORA`      | `reglas_mora`                 | `POST /api/v1/expensas/reglas-mora`            | ID Regla, Tasa de Interés (%), Días de Gracia, Activa, Usuario creador.
+| `CALCULO_MORA_EXPENSAS`      | `expensas`                    | `POST /api/v1/expensas/calcular-mora` / Cron   | Cantidad de expensas actualizadas, Origen (`MANUAL` o `SISTEMA_CRON`), Ejecutado por.
 
   4.3 Ejemplo de Estructura de un Registro de Log de Auditoría en BD
   Ejemplo 1: Intento Fallido con Bloqueo de Cuenta por Seguridad
@@ -160,9 +162,10 @@
     "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)..."
   }
 }
+```
 
 Ejemplo 2: Actualización de Datos de Copropietario con Delta Histórico
-json
+```json
 {
   "idAuditoria": 9022,
   "tablaAfectada": "personas",
@@ -180,7 +183,56 @@ json
     "direccion": "Av. América 890"
   }
 }
+```
 
+Ejemplo 3: Configuración de Nueva Regla de Mora (CA09)
+```json
+{
+  "idAuditoria": 9030,
+  "tablaAfectada": "reglas_mora",
+  "idRegistro": "2",
+  "accion": "CONFIGURAR_REGLA_MORA",
+  "fechaHora": "2026-10-04T12:00:00.000Z",
+  "idUsuario": 1,
+  "resultado": "EXITO",
+  "datosAnteriores": {
+    "idRegla": 1,
+    "tasaInteres": 5.0,
+    "diasGracia": 0,
+    "activa": true
+  },
+  "datosNuevos": {
+    "idRegla": 2,
+    "tasaInteres": 6.0,
+    "diasGracia": 3,
+    "activa": true
+  }
+}
+```
+
+5. Módulo de Expensas, Reglas de Mora y Tareas Programadas (US2.1)
+  Ubicación en el código: `backend/src/modules/expensas/` y `backend/src/routes/expensas.routes.ts`
+  Prefijo de ruta: `/api/v1/expensas`
+
+  5.1 Consultar Reglas de Mora (CA09)
+    Método y Ruta: `GET /api/v1/expensas/reglas-mora`
+    Propósito: Devuelve la regla de mora activa actual y el historial completo ordenado cronológicamente.
+    Rol requerido: `Administrador`, `Directorio`.
+
+  5.2 Configurar Nueva Regla de Mora (CA09)
+    Método y Ruta: `POST /api/v1/expensas/reglas-mora`
+    Propósito: Define la tasa de interés por mora (%) y días de gracia. Desactiva atómicamente la regla anterior en transacción ACID y registra auditoría `CONFIGURAR_REGLA_MORA`.
+    Rol requerido: `Administrador`, `Directorio`.
+
+  5.3 Recálculo Idempotente de Mora sobre Capital Pendiente (CA06)
+    Método y Ruta: `POST /api/v1/expensas/calcular-mora`
+    Propósito: Calcula y aplica el recargo de mora considerando la fórmula exacta: Capital Pendiente = Monto Base - Pagos Directos Válidos - Anticipos Aplicados Válidos. Respeta días de gracia y toma la tasa de la expensa o la regla activa. Registra auditoría `CALCULO_MORA_EXPENSAS`.
+    Rol requerido: `Administrador`, `Directorio`.
+
+  5.4 Tarea Programada de Mora Automática (CA10)
+    Tecnología: `node-cron`
+    Configuración: `MORA_CRON` (default: `"0 1 * * *"`), `MORA_CRON_ENABLED` (`true` / `false`).
+    Propósito: Ejecuta el mismo servicio `ejecutarCalculoMora` en segundo plano, auditando la operación con `idUsuario: null` y marca clara de ejecución por `sistema`.
 
 Matriz de Control de Acceso por Roles (RBAC)
 
@@ -201,3 +253,6 @@ Matriz de Control de Acceso por Roles (RBAC)
 | **Unidades**     | `/unidades/:tipo/:id`                 | `PUT`  | ✅           | ✅         | ❌       | ❌ 
 | **Unidades**     | `/unidades/asignaciones`              | `POST` | ✅           | ✅         | ❌       | ❌ 
 | **Unidades**     | `/unidades/asignaciones/finalizar`    | `POST` | ✅           | ✅         | ❌       | ❌ 
+| **Expensas**     | `/expensas/reglas-mora`               | `GET`  | ✅           | ✅         | ❌       | ❌ 
+| **Expensas**     | `/expensas/reglas-mora`               | `POST` | ✅           | ✅         | ❌       | ❌ 
+| **Expensas**     | `/expensas/calcular-mora`             | `POST` | ✅           | ✅         | ❌       | ❌ 
