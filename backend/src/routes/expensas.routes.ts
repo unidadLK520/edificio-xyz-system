@@ -65,7 +65,7 @@ const generarMasivoSchema = z.object({
 const pagoSchema = z.object({
   idDepartamento: z.number().int().positive().optional(),
   idExpensa: z.number().int().positive().nullable().optional(),
-  montoPagado: z.number().positive(),
+  montoPagado: z.number(),
   interesPagado: z.number().min(0).default(0),
   metodoPago: z.enum(['Efectivo', 'Transferencia', 'Cheque', 'QR']).optional(),
   esAnticipado: z.boolean().default(false),
@@ -170,12 +170,17 @@ expensasRouter.get(
   authorizeRoles('Administrador', 'Directorio'),
   async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
     try {
-      const { estado, idDepartamento, periodo, page = '1', limit = '50' } = req.query;
+      const { estado, idDepartamento, periodo, vencida, page = '1', limit = '50' } = req.query;
+      const ahora = new Date();
 
       const where: Record<string, unknown> = {};
       if (estado && estado !== 'Todos') where.estado = String(estado);
       if (idDepartamento) where.idDepartamento = parseInt(String(idDepartamento));
       if (periodo) where.periodo = new Date(String(periodo));
+      if (vencida === 'true') {
+        where.fechaVencimiento = { lt: ahora };
+        where.saldoPendiente = { gt: 0 };
+      }
 
       const pageNum = Math.max(1, parseInt(String(page)) || 1);
       const limitNum = Math.max(1, parseInt(String(limit)) || 50);
@@ -203,8 +208,13 @@ expensasRouter.get(
         prisma.expensa.count({ where }),
       ]);
 
+      const expensasConVencida = expensas.map((e) => ({
+        ...e,
+        vencida: new Date(e.fechaVencimiento) < ahora && Number(e.saldoPendiente) > 0,
+      }));
+
       res.json({
-        data: expensas,
+        data: expensasConVencida,
         meta: {
           total,
           page: pageNum,
@@ -511,7 +521,13 @@ expensasRouter.get(
         return;
       }
 
-      res.json(expensa);
+      const ahora = new Date();
+      const vencida = new Date(expensa.fechaVencimiento) < ahora && Number(expensa.saldoPendiente) > 0;
+
+      res.json({
+        ...expensa,
+        vencida,
+      });
     } catch (err) {
       next(err);
     }
@@ -829,7 +845,31 @@ expensasRouter.post(
         return;
       }
 
+      if (montoPagado <= 0) {
+        res.status(422).json({
+          error: 'Unprocessable Entity',
+          message: 'El monto pagado debe ser mayor a cero',
+        });
+        return;
+      }
+
+      if (expensa.estado === 'Pagado' || Number(expensa.saldoPendiente) <= 0) {
+        res.status(422).json({
+          error: 'Unprocessable Entity',
+          message: 'La expensa ya se encuentra totalmente pagada',
+        });
+        return;
+      }
+
       const saldoActual = Number(expensa.saldoPendiente);
+      if (montoPagado > saldoActual) {
+        res.status(422).json({
+          error: 'Unprocessable Entity',
+          message: `El monto pagado (${montoPagado}) no puede exceder el saldo pendiente (${saldoActual})`,
+        });
+        return;
+      }
+
       const nuevoSaldo = Math.max(0, Math.round((saldoActual - montoPagado) * 100) / 100);
       const nuevoEstado = nuevoSaldo === 0 ? 'Pagado' : 'Parcial';
 
@@ -1226,11 +1266,38 @@ expensasRouter.patch(
       }
 
       const { motivo, montoPagado, interesPagado, metodoPago, esAnticipado, idCuenta, comprobanteUrl } = result.data;
+      if (montoPagado <= 0) {
+        res.status(422).json({
+          error: 'Unprocessable Entity',
+          message: 'El monto pagado debe ser mayor a cero',
+        });
+        return;
+      }
+
       const idUsuario = req.user?.idUsuario;
 
       const { pagoAnulado, nuevoPago, expensaFinal } = await prisma.$transaction(async (tx) => {
         // 1. Anular el pago original reutilizando la lógica interna
-        const { pagoAnulado } = await anularPagoInterno(tx, idPago, idUsuario, motivo);
+        const { pagoAnulado, expensaActualizada } = await anularPagoInterno(tx, idPago, idUsuario, motivo);
+
+        // Si el pago pertenece a una expensa, validar contra el saldo sin el pago original
+        if (pagoAnulado.idExpensa && expensaActualizada) {
+          const saldoSinPagoOriginal = Number(expensaActualizada.saldoPendiente);
+          if (saldoSinPagoOriginal <= 0) {
+            const err: any = new Error('La expensa ya se encuentra totalmente pagada');
+            err.statusCode = 422;
+            err.code = 'EXPENSA_YA_PAGADA';
+            throw err;
+          }
+          if (montoPagado > saldoSinPagoOriginal) {
+            const err: any = new Error(
+              `El monto pagado (${montoPagado}) no puede exceder el saldo pendiente (${saldoSinPagoOriginal})`
+            );
+            err.statusCode = 422;
+            err.code = 'MONTO_EXCEDE_SALDO';
+            throw err;
+          }
+        }
 
         // 2. Crear el nuevo pago vinculado al original
         const nuevoPago = await tx.pago.create({

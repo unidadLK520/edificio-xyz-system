@@ -140,6 +140,10 @@
 | `FINALIZAR_ASIGNACION_ATOMIC`| `historial_asignacion_unidades`| `POST /api/v1/unidades/asignaciones/finalizar` | ID Unidad, Fecha de cierre, Nuevo estado disponible. 
 | `CONFIGURAR_REGLA_MORA`      | `reglas_mora`                 | `POST /api/v1/expensas/reglas-mora`            | ID Regla, Tasa de Interés (%), Días de Gracia, Activa, Usuario creador.
 | `CALCULO_MORA_EXPENSAS`      | `expensas`                    | `POST /api/v1/expensas/calcular-mora` / Cron   | Cantidad de expensas actualizadas, Origen (`MANUAL` o `SISTEMA_CRON`), Ejecutado por.
+| `CREAR_EXPENSA`              | `expensas`                    | `POST /api/v1/expensas`                        | ID Expensa, Monto, Periodo, Departamento, Saldo post-anticipos.
+| `REGISTRO_ANTICIPO`          | `pagos`                       | `POST /api/v1/expensas/:id/pagos` (anticipo)   | ID Pago, Monto, Departamento, Método de pago.
+| `CORRECCION_PAGO`            | `pagos`                       | `PATCH /api/v1/expensas/pagos/:id/corregir`    | ID Pago nuevo, ID Pago original anulado, Motivo, Saldo recalculado.
+| `ANULACION_PAGO`             | `pagos`                       | `DELETE /api/v1/expensas/pagos/:id`            | ID Pago anulado, Motivo, Saldo recalculado de expensa.
 
   4.3 Ejemplo de Estructura de un Registro de Log de Auditoría en BD
   Ejemplo 1: Intento Fallido con Bloqueo de Cuenta por Seguridad
@@ -271,3 +275,34 @@ Matriz de Control de Acceso por Roles (RBAC)
 | **Expensas**     | `/expensas/reglas-mora`               | `GET`  | ✅           | ✅         | ❌       | ❌ 
 | **Expensas**     | `/expensas/reglas-mora`               | `POST` | ✅           | ✅         | ❌       | ❌ 
 | **Expensas**     | `/expensas/calcular-mora`             | `POST` | ✅           | ✅         | ❌       | ❌ 
+| **Expensas**     | `/expensas`                           | `GET`  | ✅           | ✅         | ✅       | ❌ 
+| **Expensas**     | `/expensas/:id`                       | `GET`  | ✅           | ✅         | ✅       | ❌ 
+| **Expensas**     | `/expensas`                           | `POST` | ✅           | ✅         | ❌       | ❌ 
+| **Expensas**     | `/expensas/:id/pagos`                 | `POST` | ✅           | ✅         | ❌       | ❌ 
+| **Expensas**     | `/expensas/pagos/:id/corregir`        | `PATCH`| ✅           | ✅         | ❌       | ❌ 
+
+---
+
+7. Reglas de Validación Financiera, Control de Integridad y Pagos (Bloque 3)
+  Ubicación en el código: `backend/src/routes/expensas.routes.ts`
+
+  7.1 Validación Estricta de Sobrepagos y Pagos Nulos (HTTP 422)
+    - Endpoint: `POST /api/v1/expensas/:id/pagos`
+    - Regla 1 (Monto Positivo): El campo `montoPagado` debe ser estrictamente mayor a 0. De ser menor o igual a 0, retorna `422 Unprocessable Entity` ("El monto pagado debe ser mayor a cero").
+    - Regla 2 (Expensa No Pagada): No se admiten pagos sobre expensas cuyo `estado === 'Pagado'` o con `saldoPendiente <= 0`. Retorna `422 Unprocessable Entity` ("La expensa ya se encuentra totalmente pagada").
+    - Regla 3 (Límite de Saldo Pendiente): `montoPagado` no puede exceder el `saldoPendiente` actual de la expensa. Si es superior, retorna `422 Unprocessable Entity` con el detalle de montos.
+
+  7.2 Corrección Segura de Pagos con Saldo sin Pago Original (HTTP 422)
+    - Endpoint: `PATCH /api/v1/expensas/pagos/:idPago/corregir`
+    - Regla 1 (Monto Positivo): Valida `montoPagado > 0`, respondiendo `422 Unprocessable Entity` si es inválido.
+    - Regla 2 (Evaluación contra Saldo sin el Pago Original): Dentro de la transacción atómica, el sistema anula el pago original y recalcula el saldo pendiente que tendría la expensa sin dicho pago (`saldoSinPagoOriginal`). El nuevo monto corregido no puede exceder este saldo disponible restaurado. En caso de superarlo, la transacción aborta con `422 Unprocessable Entity` ("El monto pagado no puede exceder el saldo pendiente").
+
+  7.3 Detección Aditiva de Expensas Vencidas
+    - Endpoints: `GET /api/v1/expensas` y `GET /api/v1/expensas/:id`
+    - Campo Aditivo: Cada objeto de expensa incluye de forma aditiva y transparente el atributo booleano `vencida: boolean`, determinado mediante la regla: `fechaVencimiento < ahora && saldoPendiente > 0`.
+    - Filtro por Query Param: En el listado `GET /api/v1/expensas`, el parámetro `?vencida=true` filtra dinámicamente en base de datos para devolver únicamente aquellas expensas cuyo plazo venció y mantienen deuda pendiente.
+
+  7.4 Prevención de Expensas Duplicadas por Departamento y Período (HTTP 409)
+    - Endpoint: `POST /api/v1/expensas`
+    - Control de Duplicidad: Antes de la persistencia transaccional, se ejecuta una consulta previa con índice compuesto para verificar si ya existe una expensa para el par `(idDepartamento, periodoNormalizado)`. En caso afirmativo, responde de inmediato con `409 Conflict` ("Ya existe una expensa registrada para el departamento en el período YYYY-MM") sin crear registros huérfanos ni alterar la base de datos.
+
