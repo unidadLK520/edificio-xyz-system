@@ -19,6 +19,23 @@ if (!testDbUrl) {
   process.exit(1);
 }
 
+// Validación de Host: DEBE ser estrictamente localhost o 127.0.0.1
+let testHost = '';
+try {
+  const urlObj = new URL(testDbUrl.replace(/^postgresql:\/\//, 'http://'));
+  testHost = urlObj.hostname;
+} catch {
+  console.error('\n🛑 ERROR DE SEGURIDAD CRÍTICO: TEST_DATABASE_URL tiene un formato inválido.\n');
+  process.exit(1);
+}
+
+const isLocalHost = testHost === 'localhost' || testHost === '127.0.0.1';
+if (!isLocalHost && process.env.ALLOW_REMOTE_TEST_DB !== 'true') {
+  console.error(`\n🛑 ABORTANDO PRUEBAS: El host de TEST_DATABASE_URL ("${testHost}") NO es localhost ni 127.0.0.1.`);
+  console.error('Por seguridad absoluta, las pruebas no pueden ejecutarse contra servidores remotos.\n');
+  process.exit(1);
+}
+
 if (testDbUrl === devDbUrl) {
   console.error('\n🛑 ERROR DE SEGURIDAD CRÍTICO: TEST_DATABASE_URL es IDÉNTICA a la DATABASE_URL de desarrollo.');
   console.error('Abortando ejecución de pruebas para evitar sobreescritura de datos.\n');
