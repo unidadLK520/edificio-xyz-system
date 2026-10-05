@@ -210,6 +210,20 @@ Ejemplo 3: Configuración de Nueva Regla de Mora (CA09)
 }
 ```
 
+  4.12 Dinámica de Recálculo de Mora sobre Capital Pendiente y Efecto de Pagos Posteriores
+    - Mecanismo de Recálculo: La mora se recalcula dinámicamente en cada ejecución del proceso (`POST /api/v1/expensas/calcular-mora` o job de cron) directamente sobre el capital pendiente actual de la expensa (`Capital Pendiente = Monto Base - Pagos Directos Válidos - Anticipos Aplicados Válidos`).
+    - Impacto de Pagos Posteriores: Dado que el cálculo evalúa el saldo vivo de capital al momento de la ejecución, cualquier pago registrado con posterioridad a la primera aplicación de mora reduce la base del cálculo o incluso elimina por completo la mora calculada si el capital queda saldado.
+    - Ejemplo Práctico (550 / 300):
+      1. Se emite una expensa con monto base de Bs 550 y tasa de interés por mora del 5%.
+      2. Al vencer el plazo sin pagos registrados, la ejecución inicial de cálculo de mora determina una mora del 5% sobre Bs 550 = Bs 27.50 (Total adeudado = Bs 577.50).
+      3. Posteriormente, el copropietario efectúa un pago parcial de Bs 250 (o se aplican anticipos por dicho valor), dejando un capital pendiente residual de Bs 300 (550 - 250).
+      4. Al ejecutarse nuevamente el cálculo de mora, el sistema evalúa los Bs 300 de capital pendiente: la mora pasa a ser el 5% de Bs 300 = Bs 15.00 (en lugar de conservar los Bs 27.50 calculados inicialmente). Si el copropietario cubre los Bs 550 completos de capital, el recargo de mora se recalcula a Bs 0.00.
+    - Uso del campo `interesPagado`:
+      En la tabla `edificio.pagos` existe la columna `interesPagado`. Se aclara explícitamente que `interesPagado` **NO se utiliza en ningún cálculo operativo ni financiero del sistema actual**: no amortiza `montoMora`, no reduce `saldoPendiente` ni disminuye el capital pendiente. Se almacena exclusivamente con fines informativos y de registro histórico contable.
+
+    #### Pendientes conocidos (Decisiones de Negocio Abiertas)
+    - **Decisión de Negocio Abierta sobre Consolidación de Mora:** Debe definirse a nivel de negocio si el monto de mora calculado por primera vez al vencer el plazo debe "congelarse" o consolidarse como un cargo punitorio fijo e inmutable (independiente de pagos parciales posteriores), o si debe mantenerse el comportamiento actual donde la mora se recalcula dinámicamente sobre el capital pendiente decreciente.
+
 5. Módulo de Expensas, Reglas de Mora y Tareas Programadas (US2.1)
   Ubicación en el código: `backend/src/modules/expensas/` y `backend/src/routes/expensas.routes.ts`
   Prefijo de ruta: `/api/v1/expensas`
@@ -227,6 +241,7 @@ Ejemplo 3: Configuración de Nueva Regla de Mora (CA09)
   5.3 Recálculo Idempotente de Mora sobre Capital Pendiente (CA06)
     Método y Ruta: `POST /api/v1/expensas/calcular-mora`
     Propósito: Calcula y aplica el recargo de mora considerando la fórmula exacta: Capital Pendiente = Monto Base - Pagos Directos Válidos - Anticipos Aplicados Válidos. Respeta días de gracia y toma la tasa de la expensa o la regla activa. Registra auditoría `CALCULO_MORA_EXPENSAS`.
+    Nota sobre Recálculo Dinámico: Ver detalles técnicos, ejemplo numérico (550/300), aclaración de `interesPagado` y decisiones abiertas en la sección `4.12`.
     Rol requerido: `Administrador`, `Directorio`.
 
   5.4 Tarea Programada de Mora Automática (CA10)
