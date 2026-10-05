@@ -1,8 +1,8 @@
 // backend/tests/setup.ts
 // Configuración global y verificación estricta de aislamiento de BD para pruebas Vitest
 
-import path from 'path';
-import dotenv from 'dotenv';
+import * as path from 'path';
+import * as dotenv from 'dotenv';
 import { SignJWT } from 'jose';
 import { beforeAll, afterAll } from 'vitest';
 
