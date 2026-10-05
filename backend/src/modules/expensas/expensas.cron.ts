@@ -49,15 +49,21 @@ export function iniciarCronMora(): ScheduledTask | null {
     scheduledTask.stop();
   }
 
-  scheduledTask = cron.schedule(expresion, async () => {
-    try {
-      await tareaCronCalculoMora();
-    } catch (err) {
-      console.error('[CRON-MORA] Fallo al ejecutar tarea programada:', err);
+  scheduledTask = cron.schedule(
+    expresion,
+    async () => {
+      try {
+        await tareaCronCalculoMora();
+      } catch (err) {
+        console.error('[CRON-MORA] Fallo al ejecutar tarea programada:', err);
+      }
+    },
+    {
+      timezone: 'America/La_Paz',
     }
-  });
+  );
 
-  console.log(`[CRON-MORA] Tarea programada iniciada con expresión "${expresion}".`);
+  console.log(`[CRON-MORA] Tarea programada iniciada con expresión "${expresion}" (Timezone: America/La_Paz).`);
   return scheduledTask;
 }
 
@@ -75,12 +81,13 @@ export function detenerCronMora(): void {
 /**
  * Consultar estado actual del cron.
  */
-export function obtenerEstadoCronMora(): { activo: boolean; expresion: string; habilitado: boolean } {
+export function obtenerEstadoCronMora(): { activo: boolean; expresion: string; habilitado: boolean; timezone: string } {
   return {
     activo: scheduledTask !== null,
     expresion: process.env.MORA_CRON || config.moraCron || '0 1 * * *',
     habilitado: process.env.MORA_CRON_ENABLED !== undefined
       ? process.env.MORA_CRON_ENABLED === 'true'
       : config.moraCronEnabled,
+    timezone: 'America/La_Paz',
   };
 }

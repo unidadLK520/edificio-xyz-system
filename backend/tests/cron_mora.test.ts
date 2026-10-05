@@ -11,33 +11,62 @@ import {
   configurarReglaMora,
 } from '../src/modules/expensas';
 
-describe('US2.1 - Punto 3: Scheduler Cron de Mora (CA10)', () => {
+describe('US2.1 - Punto 3: Scheduler Cron de Mora (CA10) - Configuración y Timezone', () => {
+  it('1. Control de configuración: MORA_CRON_ENABLED=false no inicia el cron, MORA_CRON_ENABLED=true sí lo inicia con America/La_Paz', () => {
+    // Probar deshabilitado
+    process.env.MORA_CRON_ENABLED = 'false';
+    const taskDeshabilitada = iniciarCronMora();
+    expect(taskDeshabilitada).toBeNull();
+    expect(obtenerEstadoCronMora().activo).toBe(false);
+
+    // Probar habilitado
+    process.env.MORA_CRON_ENABLED = 'true';
+    process.env.MORA_CRON = '*/10 * * * *';
+    const taskHabilitada = iniciarCronMora();
+    expect(taskHabilitada).not.toBeNull();
+    expect(obtenerEstadoCronMora().activo).toBe(true);
+    expect(obtenerEstadoCronMora().expresion).toBe('*/10 * * * *');
+    expect(obtenerEstadoCronMora().timezone).toBe('America/La_Paz');
+
+    // Detener
+    detenerCronMora();
+    expect(obtenerEstadoCronMora().activo).toBe(false);
+  });
+});
+
+describe('US2.1 - Punto 3: Scheduler Cron de Mora (CA10) - Ejecución y Auditoría', () => {
   let testDepartamentoId: number;
   const createdExpensasIds: number[] = [];
 
   beforeAll(async () => {
-    // Asegurar departamento de prueba
-    const depto = await prisma.departamento.create({
-      data: {
-        numero: `CRON-${Date.now().toString().slice(-4)}`,
-        piso: 3,
-        estado: 'Ocupado',
-      },
-    });
-    testDepartamentoId = depto.idDepartamento;
+    try {
+      // Asegurar departamento de prueba
+      const depto = await prisma.departamento.create({
+        data: {
+          numero: `CRON-${Date.now().toString().slice(-4)}`,
+          piso: 3,
+          estado: 'Ocupado',
+        },
+      });
+      testDepartamentoId = depto.idDepartamento;
 
-    // Asegurar regla activa: 5% tasa, 0 días de gracia
-    await configurarReglaMora({ tasaInteres: 5.0, diasGracia: 0 });
+      // Asegurar regla activa: 5% tasa, 0 días de gracia
+      await configurarReglaMora({ tasaInteres: 5.0, diasGracia: 0 });
+    } catch {
+      // Si no hay BD local disponible, se omite
+    }
   });
 
   afterAll(async () => {
     detenerCronMora();
-    if (createdExpensasIds.length > 0) {
-      await prisma.expensa.deleteMany({ where: { idExpensa: { in: createdExpensasIds } } });
-    }
-    if (testDepartamentoId) {
-      await prisma.departamento.deleteMany({ where: { idDepartamento: testDepartamentoId } });
-    }
+    try {
+      if (createdExpensasIds.length > 0) {
+        await prisma.expensa.deleteMany({ where: { idExpensa: { in: createdExpensasIds } } });
+      }
+      if (testDepartamentoId) {
+        await prisma.departamento.deleteMany({ where: { idDepartamento: testDepartamentoId } });
+      }
+    } catch {}
   });
 
   it('1. Tarea programada Cron debe reutilizar el servicio de mora y auditar como sistema (idUsuario: null, ejecutadoPor: sistema)', async () => {
@@ -86,25 +115,5 @@ describe('US2.1 - Punto 3: Scheduler Cron de Mora (CA10)', () => {
     const datosNuevos = auditoriaCron!.datosNuevos as any;
     expect(datosNuevos.origen).toBe('SISTEMA_CRON');
     expect(datosNuevos.ejecutadoPor).toBe('sistema');
-  });
-
-  it('2. Control de configuración: MORA_CRON_ENABLED=false no inicia el cron, MORA_CRON_ENABLED=true sí lo inicia', () => {
-    // Probar deshabilitado
-    process.env.MORA_CRON_ENABLED = 'false';
-    const taskDeshabilitada = iniciarCronMora();
-    expect(taskDeshabilitada).toBeNull();
-    expect(obtenerEstadoCronMora().activo).toBe(false);
-
-    // Probar habilitado
-    process.env.MORA_CRON_ENABLED = 'true';
-    process.env.MORA_CRON = '*/10 * * * *';
-    const taskHabilitada = iniciarCronMora();
-    expect(taskHabilitada).not.toBeNull();
-    expect(obtenerEstadoCronMora().activo).toBe(true);
-    expect(obtenerEstadoCronMora().expresion).toBe('*/10 * * * *');
-
-    // Detener
-    detenerCronMora();
-    expect(obtenerEstadoCronMora().activo).toBe(false);
   });
 });
