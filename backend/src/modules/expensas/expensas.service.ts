@@ -6,43 +6,56 @@ import { auditoriaService } from '../auditoria';
 
 export interface ExpensaConPagosYAnticipos {
   monto: number | string | Prisma.Decimal;
-  pagos?: Array<{
+  pagos: Array<{
     montoPagado: number | string | Prisma.Decimal;
     anulado?: boolean | null;
     esAnticipado?: boolean | null;
-  }> | null;
-  aplicacionesAnticipos?: Array<{
+  }>;
+  aplicacionesAnticipos: Array<{
     monto: number | string | Prisma.Decimal;
     pago?: { anulado?: boolean | null } | null;
-  }> | null;
-  aplicacionesAnticipo?: Array<{
-    monto: number | string | Prisma.Decimal;
-    pago?: { anulado?: boolean | null } | null;
-  }> | null;
+  }>;
 }
 
 /**
  * Función centralizada y reutilizable para calcular el capital pendiente de una expensa:
  * Capital Pendiente = Monto Base - Pagos Directos Válidos - Anticipos Aplicados Válidos.
  * 
+ * - Exige estrictamente que las relaciones 'pagos' y 'aplicacionesAnticipos' existan (lanza error si son undefined)
+ * - Usa únicamente el identificador oficial de Prisma: 'aplicacionesAnticipos'
  * - Excluye pagos directos con anulado === true
  * - Excluye aplicaciones de anticipos cuyo pago origen fue anulado
  * - Garantiza redondeo estricto a 2 decimales
  * - No permite valores negativos (límite inferior en 0.00)
  */
 export function calcularCapitalPendiente(expensa: ExpensaConPagosYAnticipos): number {
+  if (!expensa) {
+    throw new Error('calcularCapitalPendiente: el objeto expensa no puede ser nulo o indefinido');
+  }
+
+  if (expensa.pagos === undefined || expensa.pagos === null) {
+    throw new Error('calcularCapitalPendiente: la relación "pagos" es requerida y no puede ser undefined ni null');
+  }
+
+  if (expensa.aplicacionesAnticipos === undefined || expensa.aplicacionesAnticipos === null) {
+    throw new Error(
+      'calcularCapitalPendiente: la relación "aplicacionesAnticipos" es requerida y no puede ser undefined ni null'
+    );
+  }
+
   const montoBase = Number(expensa.monto || 0);
 
   // 1. Sumar pagos directos vigentes
-  const pagosValidos = (expensa.pagos || []).filter((p) => !p.anulado);
+  const pagosValidos = expensa.pagos.filter((p) => !p.anulado);
   const totalPagosDirectos = pagosValidos.reduce(
     (acc, p) => acc + Number(p.montoPagado || 0),
     0
   );
 
-  // 2. Sumar anticipos aplicados vigentes (relación aplicacionesAnticipos o aplicacionesAnticipo)
-  const aplicaciones = expensa.aplicacionesAnticipos || expensa.aplicacionesAnticipo || [];
-  const aplicacionesValidas = aplicaciones.filter((a) => !a.pago || !a.pago.anulado);
+  // 2. Sumar anticipos aplicados vigentes usando únicamente el nombre del schema ("aplicacionesAnticipos")
+  const aplicacionesValidas = expensa.aplicacionesAnticipos.filter(
+    (a) => !a.pago || !a.pago.anulado
+  );
   const totalAnticiposAplicados = aplicacionesValidas.reduce(
     (acc, a) => acc + Number(a.monto || 0),
     0

@@ -59,44 +59,49 @@ process.env.NODE_ENV = 'test';
 import { prisma } from '@edificio-xyz/database';
 
 beforeAll(async () => {
-  // Verificar conectividad con la BD de pruebas aislada
-  const result: any[] = await prisma.$queryRawUnsafe('SELECT current_database() as db, current_schema() as schema');
-  const activeDb = result[0]?.db;
-  if (activeDb !== 'edificio_test' && !activeDb.includes('test')) {
-    console.error(`\n🛑 ABORTANDO: La base de datos conectada es "${activeDb}", NO es la base de datos de pruebas.\n`);
-    process.exit(1);
+  try {
+    // Verificar conectividad con la BD de pruebas aislada
+    const result: any[] = await prisma.$queryRawUnsafe('SELECT current_database() as db, current_schema() as schema');
+    const activeDb = result[0]?.db;
+    if (activeDb !== 'edificio_test' && !activeDb.includes('test')) {
+      console.error(`\n🛑 ABORTANDO: La base de datos conectada es "${activeDb}", NO es la base de datos de pruebas.\n`);
+      process.exit(1);
+    }
+
+    // Asegurar roles y usuario admin de pruebas
+    const rolAdmin = await prisma.rol.upsert({
+      where: { nombre: 'Administrador' },
+      update: {},
+      create: { nombre: 'Administrador', descripcion: 'Administrador de pruebas' },
+    });
+
+    await prisma.rol.upsert({
+      where: { nombre: 'Directorio' },
+      update: {},
+      create: { nombre: 'Directorio', descripcion: 'Directorio de pruebas' },
+    });
+
+    await prisma.rol.upsert({
+      where: { nombre: 'Copropietario' },
+      update: {},
+      create: { nombre: 'Copropietario', descripcion: 'Copropietario de pruebas' },
+    });
+
+    await prisma.usuario.upsert({
+      where: { correo: 'admin@edificioxyz.com' },
+      update: { activo: true },
+      create: {
+        nombreUsuario: 'admin',
+        correo: 'admin@edificioxyz.com',
+        passwordHash: '$2a$10$dummyhashfortestenvironmentonly1234567890',
+        idRol: rolAdmin.idRol,
+        activo: true,
+      },
+    });
+  } catch (dbErr: any) {
+    // Si la BD local no está levantada, advertir para permitir que corran pruebas unitarias puras
+    console.warn(`[TEST SETUP] Base de datos local no disponible (${dbErr.message}). Pruebas que requieran BD exigirán postgres local en marcha.`);
   }
-
-  // Asegurar roles y usuario admin de pruebas
-  const rolAdmin = await prisma.rol.upsert({
-    where: { nombre: 'Administrador' },
-    update: {},
-    create: { nombre: 'Administrador', descripcion: 'Administrador de pruebas' },
-  });
-
-  await prisma.rol.upsert({
-    where: { nombre: 'Directorio' },
-    update: {},
-    create: { nombre: 'Directorio', descripcion: 'Directorio de pruebas' },
-  });
-
-  await prisma.rol.upsert({
-    where: { nombre: 'Copropietario' },
-    update: {},
-    create: { nombre: 'Copropietario', descripcion: 'Copropietario de pruebas' },
-  });
-
-  await prisma.usuario.upsert({
-    where: { correo: 'admin@edificioxyz.com' },
-    update: { activo: true },
-    create: {
-      nombreUsuario: 'admin',
-      correo: 'admin@edificioxyz.com',
-      passwordHash: '$2a$10$dummyhashfortestenvironmentonly1234567890',
-      idRol: rolAdmin.idRol,
-      activo: true,
-    },
-  });
 });
 
 afterAll(async () => {
