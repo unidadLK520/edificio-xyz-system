@@ -1,6 +1,10 @@
 # Guía de Cambios de Base de Datos para DevOps / DBAs
 ## Módulo de Expensas y Reglas de Mora (US2.1 / CA09 / CA10)
 
+> **ESTADO DE LA BASE DE DATOS COMPARTIDA:**  
+> **APLICADO por Giovani el 2026-10-04 en BD compartida: solo tabla reglas_mora + 1 fila**.  
+> El DDL idempotente y el seed de 1 fila inicial (5% interés, 0 días de gracia, activa=true) fueron aplicados directamente en la base de datos compartida bajo autorización.
+>
 > **AVISO CRÍTICO PARA DESPLIEGUE:**  
 > La tabla `edificio.reglas_mora` y el registro de la regla activa inicial son **estrictamente obligatorios**.  
 > - Sin la tabla: `GET /api/v1/expensas/reglas-mora` y `POST /api/v1/expensas/reglas-mora` fallarán con error 500 (`relation "edificio.reglas_mora" does not exist`).  
@@ -89,3 +93,16 @@ DROP CONSTRAINT IF EXISTS "reglas_mora_id_usuario_creacion_fkey";
 -- 2. Eliminar la tabla de reglas de mora
 DROP TABLE IF EXISTS "edificio"."reglas_mora";
 ```
+
+---
+
+### 3. Nota Técnica para DevOps sobre `_prisma_migrations`
+
+Dado que el DDL y Seed fueron ejecutados directamente sobre la base de datos compartida sin registrar una entrada manual en `edificio._prisma_migrations`, la tabla existe pero el CLI de Prisma Migrate no tiene asentada la migración `20261004000000_hu04_regla_mora`.
+
+Para sincronizar formalmente el historial de Prisma en los pipelines CI/CD y evitar advertencias o intentos redundantes al ejecutar `prisma migrate deploy`, DevOps debe registrar la migración como ya aplicada con el comando:
+
+```bash
+npx prisma migrate resolve --applied 20261004000000_hu04_regla_mora
+```
+
