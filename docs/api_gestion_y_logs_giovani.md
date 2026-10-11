@@ -1,4 +1,12 @@
 
+# 0. Resumen Ejecutivo y Estado General del Sistema (US2.1 - VIGENTE)
+- **Estado General:** VIGENTE y verificado en entorno de pruebas local `pg-test` (`localhost:5433/edificio_test`).
+- **Política Financiera de Expensas Fijas:** La expensa es fija por tipo de departamento (`tipos_departamento.monto_expensa`: Tipo A = Bs 300, Tipo B = Bs 350, Tipo C = Bs 400). El monto sale del tipo y cubre de manera integral seguridad, limpieza, mantenimiento, energía y agua comunes, sin cálculo por área.
+- **Inmutabilidad de Emisiones:** Cada expensa conserva de manera inmutable su monto al momento de ser emitida. Actualizaciones posteriores a `tipos_departamento.monto_expensa` no alteran expensas previamente generadas.
+- **Regla del Pagador (RN10):** En `POST /api/v1/expensas/:id/pagos` (pagos directos y anticipos) y `PATCH /api/v1/expensas/pagos/:idPago/corregir`, el campo `idPersonaPagador` es estrictamente obligatorio, respondiendo con error `422 Unprocessable Entity` si está ausente o si la persona no existe.
+
+---
+
 1. Módulo de Autenticación, Control de Acceso y Sesiones
   Ubicación en el código:** `backend/src/modules/auth/`
   Prefijo de ruta:** `/api/v1/auth`
@@ -257,9 +265,9 @@
 
 |      Campo    |   Tipo   | Restricciones / Mapeo        | Descripción |
 |`idAuditoria`  | `Int`    |`@id @default(autoincrement())`| Clave primaria secuencial única del evento. |
-|`tablaAfectada`| `String` | `@db.VarChar(50)`            | Nombre de la entidad afectada (`usuarios`, `personas`, `unidades`, `expensas`, `pagos`). |
+|`tablaAfectada`| `String` | `@db.VarChar(50)`            | Nombre de la entidad afectada (`usuarios`, `personas`, `unidades`, `tipos_departamento`, `expensas`, `pagos`). |
 | `idRegistro`  |`String?` | `@db.VarChar(100)`           | ID de la entidad involucrada (ej. `"15"`, `"PAGO-77"`). |
-| `accion`      |`String`  | `@db.VarChar(50)`            | Operación ejecutada (`LOGIN_EXITOSO`, `CREAR_PERSONA`, `ANULACION_PAGO`). |
+| `accion`      |`String`  | `@db.VarChar(50)`            | Operación ejecutada (`LOGIN_EXITOSO`, `CREAR_PERSONA`, `CONFIGURAR_MONTO_EXPENSA`, `ANULACION_PAGO`). |
 | `fechaHora`   |`DateTime`| `@default(now()) @db.Timestamp(6)` | Marca temporal UTC del servidor en el momento de la mutación. |
 | `idUsuario`   |`Int?`    | `@db.Integer` | Clave foránea al usuario autenticado que ejecutó la acción (`null` para fallos de login). |
 | `resultado`   |`String?` | `@default("EXITO") @db.VarChar(30)` | Resultado del evento (`EXITO`, `CREDENCIALES_INVALIDAS`, `BLOQUEO_TEMPORAL`). |
@@ -272,21 +280,24 @@
 | Código de Evento | Tabla Afectada | Disparador / Origen   | Datos Capturados en `datosNuevos` 
 | `LOGIN_EXITOSO`  | `usuarios` | `POST /api/v1/auth/login` | Correo, Rol, Dirección IP, User-Agent. 
 | `LOGIN_FALLIDO`  | `usuarios` | `POST /api/v1/auth/login` | Correo intentado, Motivo, Intentos acumulados, IP. 
-|`USUARIO_BLOQUEADO`| `usuarios`| `Al 3er intento fallido`  | Correo, Duración de bloqueo (10 min), Fecha límite de desbloqueo. 
+| `USUARIO_BLOQUEADO`| `usuarios`| `Al 3er intento fallido`  | Correo, Duración de bloqueo (10 min), Fecha límite de desbloqueo. 
 | `LOGOUT`         | `usuarios` | `POST /api/v1/auth/logout`| ID de usuario, IP, User-Agent. 
 | `CREAR_PERSONA`  | `personas` | `POST /api/v1/personas`   | CI/NIT, Nombres, Apellidos, Teléfono, Correo. 
-|`ACTUALIZAR_PERSONA`|`personas`| `PUT /api/v1/personas/:id`| Delta entre `datosAnteriores` y `datosNuevos`. 
+| `ACTUALIZAR_PERSONA`|`personas`| `PUT /api/v1/personas/:id`| Delta entre `datosAnteriores` y `datosNuevos`. 
 | `ASIGNAR_UNIDAD` |`ocupantes_departamento`| `POST /api/v1/personas/:id/unidades`| ID de Persona, ID de Departamento, Tipo de Ocupante (`Propietario`/`Inquilino`). 
-|`FINALIZAR_OCUPACION`|`ocupantes_departamento`| `PATCH /ocupaciones/:id/finalizar` | ID de Ocupación, Fecha de fin registrada. 
-| `CREAR_UNIDAD`   |`departamentos` / `parqueos` / `bauleras`| `POST /api/v1/unidades` | Tipo de unidad, Número, Piso, Alícuota/Área. 
+| `FINALIZAR_OCUPACION`|`ocupantes_departamento`| `PATCH /ocupaciones/:id/finalizar` | ID de Ocupación, Fecha de fin registrada. 
+| `CREAR_UNIDAD`   |`departamentos` / `parqueos` / `bauleras`| `POST /api/v1/unidades` | Tipo de unidad, Número, Piso, Área m² / Tipo asignado. 
 | `ACTUALIZAR_UNIDAD` | `departamentos` / `parqueos` / `bauleras` | `PUT /api/v1/unidades/:tipo/:id` | Atributos modificados y estado anterior.
 | `ASIGNACION_UNIDAD_ATOMIC`| `historial_asignacion_unidades`| `POST /api/v1/unidades/asignaciones` | ID Unidad, ID Persona/Depto, Tipo de Relación, Notas. 
 | `FINALIZAR_ASIGNACION_ATOMIC`| `historial_asignacion_unidades`| `POST /api/v1/unidades/asignaciones/finalizar` | ID Unidad, Fecha de cierre, Nuevo estado disponible. 
+| `CONFIGURAR_MONTO_EXPENSA`   | `tipos_departamento`          | `PUT /api/v1/expensas/montos-tipo`             | ID Tipo, Nombre, Monto nuevo vs. Monto anterior.
+| `GENERACION_MASIVA_EXPENSAS` | `expensas`                    | `POST /api/v1/expensas/generar-masivo`         | Período, Conteo de generadas (monto fijo por tipo), Conteo de excepciones.
 | `CONFIGURAR_REGLA_MORA`      | `reglas_mora`                 | `POST /api/v1/expensas/reglas-mora`            | ID Regla, Tasa de Interés (%), Días de Gracia, Activa, Usuario creador.
 | `CALCULO_MORA_EXPENSAS`      | `expensas`                    | `POST /api/v1/expensas/calcular-mora` / Cron   | Cantidad de expensas actualizadas, Origen (`MANUAL` o `SISTEMA_CRON`), Ejecutado por.
 | `CREAR_EXPENSA`              | `expensas`                    | `POST /api/v1/expensas`                        | ID Expensa, Monto, Periodo, Departamento, Saldo post-anticipos.
-| `REGISTRO_ANTICIPO`          | `pagos`                       | `POST /api/v1/expensas/:id/pagos` (anticipo)   | ID Pago, Monto, Departamento, Método de pago.
-| `CORRECCION_PAGO`            | `pagos`                       | `PATCH /api/v1/expensas/pagos/:id/corregir`    | ID Pago nuevo, ID Pago original anulado, Motivo, Saldo recalculado.
+| `REGISTRO_ANTICIPO`          | `pagos`                       | `POST /api/v1/expensas/:id/pagos` (anticipo)   | ID Pago, Monto, Departamento, Pagador (`idPersonaPagador`), Método de pago.
+| `REGISTRO_PAGO_EXPENSA`      | `pagos`                       | `POST /api/v1/expensas/:id/pagos`              | ID Pago, Monto, Expensa, Pagador (`idPersonaPagador`), Nuevo saldo.
+| `CORRECCION_PAGO`            | `pagos`                       | `PATCH /api/v1/expensas/pagos/:id/corregir`    | ID Pago nuevo, ID Pago original anulado, Pagador (`idPersonaPagador`), Motivo, Saldo recalculado.
 | `ANULACION_PAGO`             | `pagos`                       | `DELETE /api/v1/expensas/pagos/:id`            | ID Pago anulado, Motivo, Saldo recalculado de expensa.
 
   4.3 Ejemplo de Estructura de un Registro de Log de Auditoría en BD
@@ -358,8 +369,28 @@ Ejemplo 3: Configuración de Nueva Regla de Mora (CA09)
 }
 ```
 
-  4.12 Dinámica de Recálculo de Mora sobre Capital Pendiente y Efecto de Pagos Posteriores
-    - Mecanismo de Recálculo: La mora se recalcula dinámicamente en cada ejecución del proceso (`POST /api/v1/expensas/calcular-mora` o job de cron) directamente sobre el capital pendiente actual de la expensa (`Capital Pendiente = Monto Base - Pagos Directos Válidos - Anticipos Aplicados Válidos`).
+  4.6 Auditoría y Reglas de Generación Masiva de Expensas (VIGENTE)
+    - Método y Ruta: `POST /api/v1/expensas/generar-masivo`
+    - Regla de Monto Fijo por Tipo: El monto de cada expensa se determina estrictamente a partir de `tipos_departamento.monto_expensa` del tipo configurado para la unidad. Se eliminó definitivamente el cálculo proporcional por área (`montoBase * areaM2 / 100`) y el filtro por estado `Inactivo`. El monto sale directamente del tipo configurado, sin cálculo por área.
+    - Manejo de Departamentos sin Tipo: Todo departamento que no tenga un tipo asignado en `tipos_departamento` es omitido de la generación y derivado al arreglo de `excepciones[]` con motivo claro (`El departamento no tiene un tipo asignado en tipos_departamento`).
+    - Exclusión de Duplicados: Si una expensa ya fue emitida para el departamento en dicho período, se omite y se registra en `excepciones[]` con motivo `Expensa ya fue generada previamente para este período`.
+    - Aplicación Automática FIFO: Si el departamento cuenta con anticipos a favor disponibles, se aplican automáticamente en orden FIFO dentro de la misma transacción `$transaction`.
+    - Parámetros de Compatibilidad: `montoBase` y `excluirDepartamentos` se conservan en la interfaz de entrada por compatibilidad hacia atrás.
+    - Registro de Auditoría: Emite el evento `GENERACION_MASIVA_EXPENSAS` sobre la tabla `expensas` registrando `periodo`, `generadasCount` y `excepcionesCount`.
+    - Rol requerido: `Administrador`, `Directorio`.
+
+  4.11 Configuración y Auditoría de Montos de Expensa por Tipo (VIGENTE)
+    - Métodos y Rutas:
+      - `GET /api/v1/expensas/montos-tipo`: Obtiene la lista completa de tipos de departamento con su `idTipo`, `nombre` y `montoExpensa` configurado.
+      - `PUT /api/v1/expensas/montos-tipo`: Actualiza el monto de expensa para uno o varios tipos (soporta objeto individual, array o colección `{ tipos: [...] }`).
+    - Validación Financiera: Valida estrictamente que el monto sea mayor a 0 (`monto > 0`). Si el monto es menor o igual a 0 o inválido, responde `HTTP 400 Validation Error`.
+    - Inmutabilidad de Expensas Emitidas: Cambiar el monto del tipo en `tipos_departamento` aplica exclusivamente a las nuevas expensas que se emitan a futuro; **bajo ninguna circunstancia altera las expensas ya emitidas**, las cuales conservan su monto original de forma inmutable.
+    - Auditoría: Genera un evento `CONFIGURAR_MONTO_EXPENSA` sobre la tabla `tipos_departamento` con `idRegistro: String(idTipo)`, registrando `datosAnteriores` (montoExpensa previo) y `datosNuevos` (nuevo montoExpensa) con el `idUsuario` autenticado dentro de la transacción.
+    - Rol requerido: `Administrador`, `Directorio`.
+
+  4.12 Dinámica de Recálculo de Mora sobre Capital Pendiente y Efecto de Pagos Posteriores (VIGENTE)
+    - Mecanismo de Recálculo: La mora se recalcula dinámicamente en cada ejecución del proceso (`POST /api/v1/expensas/calcular-mora` o job de cron) directamente sobre el capital pendiente actual de la expensa (`Capital Pendiente = Monto Base del Tipo - Pagos Directos Válidos - Anticipos Aplicados Válidos`).
+    - Determinación del Monto Base: El monto base proviene exclusivamente del tipo de departamento (`tipos_departamento.monto_expensa`), cubriendo seguridad, limpieza, mantenimiento, energía y agua comunes. El monto sale directamente del tipo de departamento, sin cálculo por área.
     - Impacto de Pagos Posteriores: Dado que el cálculo evalúa el saldo vivo de capital al momento de la ejecución, cualquier pago registrado con posterioridad a la primera aplicación de mora reduce la base del cálculo o incluso elimina por completo la mora calculada si el capital queda saldado.
     - Ejemplo Práctico (550 / 300):
       1. Se emite una expensa con monto base de Bs 550 y tasa de interés por mora del 5%.
@@ -368,9 +399,8 @@ Ejemplo 3: Configuración de Nueva Regla de Mora (CA09)
       4. Al ejecutarse nuevamente el cálculo de mora, el sistema evalúa los Bs 300 de capital pendiente: la mora pasa a ser el 5% de Bs 300 = Bs 15.00 (en lugar de conservar los Bs 27.50 calculados inicialmente). Si el copropietario cubre los Bs 550 completos de capital, el recargo de mora se recalcula a Bs 0.00.
     - Uso del campo `interesPagado`:
       En la tabla `edificio.pagos` existe la columna `interesPagado`. Se aclara explícitamente que `interesPagado` **NO se utiliza en ningún cálculo operativo ni financiero del sistema actual**: no amortiza `montoMora`, no reduce `saldoPendiente` ni disminuye el capital pendiente. Se almacena exclusivamente con fines informativos y de registro histórico contable.
-
-    #### Pendientes conocidos (Decisiones de Negocio Abiertas)
-    - **Decisión de Negocio Abierta sobre Consolidación de Mora:** Debe definirse a nivel de negocio si el monto de mora calculado por primera vez al vencer el plazo debe "congelarse" o consolidarse como un cargo punitorio fijo e inmutable (independiente de pagos parciales posteriores), o si debe mantenerse el comportamiento actual donde la mora se recalcula dinámicamente sobre el capital pendiente decreciente.
+    - Decisiones de Negocio (VIGENTE):
+      El comportamiento de recálculo dinámico sobre el capital vivo pendiente ha sido ratificado y queda como política financiera vigente del sistema.
 
 5. Módulo de Expensas, Reglas de Mora y Tareas Programadas
   Ubicación en el código: `backend/src/modules/expensas/` y `backend/src/routes/expensas.routes.ts`
@@ -422,8 +452,38 @@ Matriz de Control de Acceso por Roles (RBAC)
 | **Expensas**     | `/expensas`                           | `GET`  | ✅           | ✅         | ✅       | ❌ 
 | **Expensas**     | `/expensas/:id`                       | `GET`  | ✅           | ✅         | ✅       | ❌ 
 | **Expensas**     | `/expensas`                           | `POST` | ✅           | ✅         | ❌       | ❌ 
+| **Expensas**     | `/expensas/generar-masivo`            | `POST` | ✅           | ✅         | ❌       | ❌ 
+| **Expensas**     | `/expensas/montos-tipo`               | `GET`  | ✅           | ✅         | ❌       | ❌ 
+| **Expensas**     | `/expensas/montos-tipo`               | `PUT`  | ✅           | ✅         | ❌       | ❌ 
 | **Expensas**     | `/expensas/:id/pagos`                 | `POST` | ✅           | ✅         | ❌       | ❌ 
 | **Expensas**     | `/expensas/pagos/:id/corregir`        | `PATCH`| ✅           | ✅         | ❌       | ❌ 
+
+---
+
+6. Subsistema de Pagos y Control de Personas Pagadoras (RN10 - VIGENTE)
+
+  6.2 Regla de Negocio del Pagador Obligatorio (RN10)
+    - Endpoints Afectados:
+      - `POST /api/v1/expensas/:id/pagos` (pagos directos y anticipos mediante `/anticipo/pagos`)
+      - `PATCH /api/v1/expensas/pagos/:idPago/corregir` (corrección atómica de pagos)
+    - Obligatoriedad Estricta (HTTP 422): El campo `idPersonaPagador` es **estrictamente obligatorio**. Si no se envía en el cuerpo de la solicitud, o si el ID enviado no existe en la tabla `edificio.personas`, el servidor responde de manera inmediata con código `422 Unprocessable Entity` ("El idPersonaPagador es obligatorio y debe ser un número entero positivo" o "La persona pagadora especificada en idPersonaPagador no existe").
+    - Persistencia en Base de Datos: Columna `edificio.pagos.id_persona_pagador` con clave foránea a `edificio.personas(id_persona) ON DELETE SET NULL`.
+    - Payload de Solicitud Ejemplo (`POST /api/v1/expensas/:id/pagos`):
+    ```json
+    {
+      "idPersonaPagador": 1,
+      "montoPagado": 350.00,
+      "metodoPago": "Transferencia",
+      "comprobanteUrl": "https://comprobantes.edificioxyz.com/recibo-101.pdf"
+    }
+    ```
+    - Respuesta de Error por Pagador Ausente o Inexistente (HTTP 422):
+    ```json
+    {
+      "error": "Unprocessable Entity",
+      "message": "El idPersonaPagador es obligatorio y debe ser un número entero positivo"
+    }
+    ```
 
 ---
 
@@ -449,4 +509,17 @@ Matriz de Control de Acceso por Roles (RBAC)
   7.4 Prevención de Expensas Duplicadas por Departamento y Período (HTTP 409)
     - Endpoint: `POST /api/v1/expensas`
     - Control de Duplicidad: Antes de la persistencia transaccional, se ejecuta una consulta previa con índice compuesto para verificar si ya existe una expensa para el par `(idDepartamento, periodoNormalizado)`. En caso afirmativo, responde de inmediato con `409 Conflict` ("Ya existe una expensa registrada para el departamento en el período YYYY-MM") sin crear registros huérfanos ni alterar la base de datos.
+
+---
+
+9. Trazabilidad de Requerimientos y Estado de Implementación (US2.1 - VIGENTE)
+
+| Requerimiento | Descripción Técnica | Estado |
+|---|---|---|
+| **Expensas Fijas por Tipo de Departamento** | El monto sale directamente de `tipos_departamento.monto_expensa` (A: Bs 300, B: Bs 350, C: Bs 400), sin cálculo por área. Departamentos sin tipo van a excepciones con motivo claro. | **VIGENTE** |
+| **Configuración de Montos por Tipo** | Endpoints `GET` y `PUT /api/v1/expensas/montos-tipo` con validación `monto > 0`, auditoría transaccional `CONFIGURAR_MONTO_EXPENSA` con `datosAnteriores` y `datosNuevos`, garantizando inmutabilidad sobre expensas históricas. | **VIGENTE** |
+| **Persona Pagadora Obligatoria (RN10)** | Campo `idPersonaPagador` obligatorio en `POST /expensas/:id/pagos`, anticipos y `PATCH /pagos/:idPago/corregir` con respuesta `422 Unprocessable Entity` ante ausencia o inexistencia. | **VIGENTE** |
+| **Reglas de Mora Dinámicas y Scheduler** | Tasa configurada en `reglas_mora`, cálculo sobre capital vivo pendiente y scheduler cron automatizado con zona horaria America/La_Paz. | **VIGENTE** |
+| **Seed de Demostración Local Aislado** | Script `backend/scripts/seed_demo_local.ts` con guarda estricta que aborta si la conexión no es `localhost:5433/edificio_test`. | **VIGENTE** |
+
 
