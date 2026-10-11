@@ -480,6 +480,162 @@ expensasRouter.post(
   }
 );
 
+// ── GET /api/v1/expensas/montos-tipo ─────────────────────────────────────────
+// Lectura de tipos de departamento y sus montos de expensa configurados
+expensasRouter.get(
+  '/montos-tipo',
+  authorizeRoles('Administrador', 'Directorio'),
+  async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const tipos = await prisma.tipoDepartamento.findMany({
+        orderBy: { idTipo: 'asc' },
+      });
+      res.json({
+        data: tipos.map((t) => ({
+          idTipo: t.idTipo,
+          nombre: t.nombre,
+          montoExpensa: Number(t.montoExpensa),
+        })),
+      });
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+// ── PUT /api/v1/expensas/montos-tipo ─────────────────────────────────────────
+// Actualización de montos de expensa por tipo con validación > 0 y auditoría CONFIGURAR_MONTO_EXPENSA
+expensasRouter.put(
+  '/montos-tipo',
+  authorizeRoles('Administrador', 'Directorio'),
+  async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      let items: Array<{ idTipo?: number; nombre?: string; monto: number }> = [];
+
+      if (Array.isArray(req.body)) {
+        items = req.body.map((item) => ({
+          idTipo: item.idTipo,
+          nombre: item.nombre,
+          monto: Number(item.monto !== undefined ? item.monto : item.montoExpensa),
+        }));
+      } else if (req.body && Array.isArray(req.body.tipos)) {
+        items = req.body.tipos.map((item: any) => ({
+          idTipo: item.idTipo,
+          nombre: item.nombre,
+          monto: Number(item.monto !== undefined ? item.monto : item.montoExpensa),
+        }));
+      } else if (req.body && (req.body.idTipo !== undefined || req.body.nombre !== undefined)) {
+        items = [
+          {
+            idTipo: req.body.idTipo,
+            nombre: req.body.nombre,
+            monto: Number(req.body.monto !== undefined ? req.body.monto : req.body.montoExpensa),
+          },
+        ];
+      } else {
+        res.status(400).json({
+          error: 'Validation Error',
+          message: 'Debe especificar al menos un tipo de departamento a actualizar (idTipo o nombre y monto)',
+        });
+        return;
+      }
+
+      if (items.length === 0) {
+        res.status(400).json({
+          error: 'Validation Error',
+          message: 'La lista de tipos a actualizar está vacía',
+        });
+        return;
+      }
+
+      // Validar montos > 0
+      for (const item of items) {
+        if (item.monto === undefined || isNaN(item.monto) || item.monto <= 0) {
+          res.status(400).json({
+            error: 'Validation Error',
+            message: 'El monto de la expensa debe ser mayor a cero',
+          });
+          return;
+        }
+        if (item.idTipo === undefined && !item.nombre) {
+          res.status(400).json({
+            error: 'Validation Error',
+            message: 'Debe especificar idTipo o nombre para identificar el tipo',
+          });
+          return;
+        }
+      }
+
+      // Actualizar en transacción con auditoría individual para cada tipo
+      const actualizados = await prisma.$transaction(async (tx) => {
+        const resultados: any[] = [];
+
+        for (const item of items) {
+          const tipoActual = await tx.tipoDepartamento.findFirst({
+            where: item.idTipo !== undefined ? { idTipo: item.idTipo } : { nombre: item.nombre },
+          });
+
+          if (!tipoActual) {
+            throw {
+              statusCode: 404,
+              code: 'NOT_FOUND',
+              message: `Tipo de departamento ${item.idTipo || item.nombre} no encontrado`,
+            };
+          }
+
+          const datosAnteriores = {
+            idTipo: tipoActual.idTipo,
+            nombre: tipoActual.nombre,
+            montoExpensa: Number(tipoActual.montoExpensa),
+          };
+
+          const tipoNuevo = await tx.tipoDepartamento.update({
+            where: { idTipo: tipoActual.idTipo },
+            data: { montoExpensa: item.monto },
+          });
+
+          const datosNuevos = {
+            idTipo: tipoNuevo.idTipo,
+            nombre: tipoNuevo.nombre,
+            montoExpensa: Number(tipoNuevo.montoExpensa),
+          };
+
+          await tx.auditoria.create({
+            data: {
+              tablaAfectada: 'tipos_departamento',
+              idRegistro: String(tipoNuevo.idTipo),
+              accion: 'CONFIGURAR_MONTO_EXPENSA',
+              resultado: 'EXITO',
+              datosAnteriores,
+              datosNuevos,
+              idUsuario: req.user?.idUsuario || null,
+              fechaHora: new Date(),
+            },
+          });
+
+          resultados.push(datosNuevos);
+        }
+
+        return resultados;
+      });
+
+      res.json({
+        message: 'Montos de expensa por tipo actualizados exitosamente',
+        actualizados,
+      });
+    } catch (err: any) {
+      if (err.statusCode) {
+        res.status(err.statusCode).json({
+          error: err.code || 'Bad Request',
+          message: err.message,
+        });
+        return;
+      }
+      next(err);
+    }
+  }
+);
+
 // ── GET /api/v1/expensas/:id ─────────────────────────────────────────────────
 // CA05: Detalle de una expensa específica con sus pagos y saldos
 expensasRouter.get(
