@@ -2,9 +2,9 @@
 -- PostgreSQL database dump
 --
 
-\restrict 1279REbL3q3oTVJHciVPQntNyxeChwRFy5uJWTlpnEwNDkJTIb5PYAEIWbiUJ6Y
+\restrict 9eyr5rYva2fTzyslRBEUGyRgJxoaWmyiBuZOJAtQYciLGDdgFcNFbFxIfhU8W5Y
 
--- Dumped from database version 17.11
+-- Dumped from database version 17.6
 -- Dumped by pg_dump version 17.11
 
 SET statement_timeout = 0;
@@ -85,12 +85,12 @@ ALTER TABLE edificio.roles ENABLE TRIGGER ALL;
 ALTER TABLE edificio.usuarios DISABLE TRIGGER ALL;
 
 COPY edificio.usuarios (id_usuario, nombre_usuario, correo, password_hash, id_rol, activo, fecha_creacion, ultimo_acceso, bloqueado_hasta, intentos_fallidos, id_persona) FROM stdin;
+3	consulta	consulta@edificioxyz.com	$2b$10$Njhk3xLxWvHUOwUFOo04/./Ir0mXw7Xobpj.Oxl8g9qgFtg2Yxubi	3	t	2026-09-07 02:47:37.990492	2026-10-11 21:29:46.9	\N	1	\N
+7	copropietario	copropietario@edificioxyz.com	$2b$10$oaBoiAjSCVJFVO2OEp5/Pe.Q7LFjglo.GN6G2j0Insqu10cJsXXyG	6	t	2026-09-13 05:14:08.594	2026-10-11 21:31:46.903	\N	0	\N
+1	admin	admin@edificioxyz.com	$2b$10$moKl8pdBaQkhZnnvjSQAxu4SSUKHZhDv2J98U.3yoIAwjMrbjR1DO	1	t	2026-09-07 02:47:37.990492	2026-10-11 21:32:21.607	\N	0	\N
 14	rodrigo	rodriheredia911@gmail.com	$2b$10$hoIeJ8F1sTqE274GM.ihJ.6Dc61HsSqKJEl1uKW9nZRFp5rKEp7gW	1	t	2026-09-19 01:19:31.772	\N	\N	0	12
 12	Heredia	202002501@est.umss.edu	$2b$10$1GTobXC5uEhuklf/cSV7jOVTr7TzrnrXDF7kLXnZweGuN85umBY5e	1	t	2026-09-14 21:52:51.735	2026-10-11 01:41:58.342	\N	0	6
-1	admin	admin@edificioxyz.com	$2b$10$moKl8pdBaQkhZnnvjSQAxu4SSUKHZhDv2J98U.3yoIAwjMrbjR1DO	1	t	2026-09-07 02:47:37.990492	2026-10-11 02:06:24.455	\N	0	\N
 2	directorio	directorio@edificioxyz.com	$2b$10$MrTirlNTJ4Zem8W6U2diz.0Zs56WbVhLw2w66TCvzc3fLJ/FeM5U.	2	t	2026-09-07 02:47:37.990492	2026-09-28 11:15:33.619	\N	0	\N
-3	consulta	consulta@edificioxyz.com	$2b$10$Njhk3xLxWvHUOwUFOo04/./Ir0mXw7Xobpj.Oxl8g9qgFtg2Yxubi	3	t	2026-09-07 02:47:37.990492	2026-09-28 11:15:46.413	\N	0	\N
-7	copropietario	copropietario@edificioxyz.com	$2b$10$oaBoiAjSCVJFVO2OEp5/Pe.Q7LFjglo.GN6G2j0Insqu10cJsXXyG	3	t	2026-09-13 05:14:08.594	2026-09-28 11:17:31.622	\N	0	\N
 24	pruebas@gmail.com	prueba@gmail.com	$2b$10$08rmxIQU5Yd1H9NpQmDFB.dr2JwDHEuajzteuMOv.z8waeMkDXM7i	1	t	2026-09-25 22:59:10.217	2026-09-25 22:59:58.116	\N	0	47
 \.
 
@@ -2059,6 +2059,31 @@ COPY edificio.auditoria (id_auditoria, tabla_afectada, id_registro, accion, dato
 1862	expensas	\N	INSERT	\N	{"monto": 450.00, "estado": "Pagado", "periodo": "2026-10-01", "id_expensa": 117, "monto_mora": 0.00, "fecha_creacion": "2026-10-11T13:43:14.624", "id_departamento": 2, "saldo_pendiente": 0.00, "fecha_vencimiento": "2026-10-15", "tasa_interes_mora": 0.00}	\N	2026-10-11 13:43:14.548403	\N
 1863	expensas	\N	INSERT	\N	{"monto": 480.00, "estado": "Pendiente", "periodo": "2026-10-01", "id_expensa": 118, "monto_mora": 0.00, "fecha_creacion": "2026-10-11T13:43:15.961", "id_departamento": 3, "saldo_pendiente": 480.00, "fecha_vencimiento": "2026-10-15", "tasa_interes_mora": 0.00}	\N	2026-10-11 13:43:15.899619	\N
 1864	expensas	\N	INSERT	\N	{"monto": 600.00, "estado": "Moroso", "periodo": "2026-09-01", "id_expensa": 119, "monto_mora": 0.00, "fecha_creacion": "2026-10-11T13:43:17.298", "id_departamento": 4, "saldo_pendiente": 600.00, "fecha_vencimiento": "2026-09-15", "tasa_interes_mora": 3.50}	\N	2026-10-11 13:43:17.22339	\N
+1865	usuarios	1	LOGIN_EXITOSO	\N	{"ip": "::1", "rol": "Administrador", "correo": "admin@edificioxyz.com", "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36"}	1	2026-10-11 18:17:19.837	EXITO
+1866	usuarios	1	LOGOUT	\N	{"ip": "::1", "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36"}	1	2026-10-11 21:24:20.098	EXITO
+1867	usuarios	1	LOGOUT	\N	{"ip": "::1", "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36"}	1	2026-10-11 21:24:20.501	EXITO
+1868	usuarios	1	LOGOUT	\N	{"ip": "::1", "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36"}	1	2026-10-11 21:24:20.584	EXITO
+1869	usuarios	1	LOGOUT	\N	{"ip": "::1", "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36"}	1	2026-10-11 21:24:20.605	EXITO
+1870	usuarios	1	LOGOUT	\N	{"ip": "::1", "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36"}	1	2026-10-11 21:24:23.88	EXITO
+1871	usuarios	1	LOGOUT	\N	{"ip": "::1", "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36"}	1	2026-10-11 21:24:22.482	EXITO
+1872	usuarios	1	LOGOUT	\N	{"ip": "::1", "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36"}	1	2026-10-11 21:24:24.279	EXITO
+1873	usuarios	1	LOGOUT	\N	{"ip": "::1", "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36"}	1	2026-10-11 21:24:24.34	EXITO
+1874	usuarios	1	LOGOUT	\N	{"ip": "::1", "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36"}	1	2026-10-11 21:24:24.527	EXITO
+1875	usuarios	1	LOGIN_EXITOSO	\N	{"ip": "::1", "rol": "Administrador", "correo": "admin@edificioxyz.com", "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36"}	1	2026-10-11 21:24:32.849	EXITO
+1876	usuarios	1	LOGOUT	\N	{"ip": "::1", "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36"}	1	2026-10-11 21:28:31.808	EXITO
+1877	usuarios	\N	LOGIN_FALLIDO	\N	{"ip": "::1", "correo": "Copropietario@edificioxyz.com", "motivo": "Usuario inexistente", "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36"}	\N	2026-10-11 21:29:14.677	CREDENCIALES_INVALIDAS
+1878	usuarios	\N	LOGIN_FALLIDO	\N	{"ip": "::1", "correo": "residente@edificioxyz.com", "motivo": "Usuario inexistente", "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36"}	\N	2026-10-11 21:29:21.918	CREDENCIALES_INVALIDAS
+1879	usuarios	7	LOGIN_FALLIDO	\N	{"ip": "::1", "correo": "copropietario@edificioxyz.com", "motivo": "Contraseña inválida", "intentos": 1, "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36"}	7	2026-10-11 21:29:37.523	CREDENCIALES_INVALIDAS
+1880	usuarios	3	LOGIN_EXITOSO	\N	{"ip": "::1", "rol": "Consulta", "correo": "consulta@edificioxyz.com", "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36"}	3	2026-10-11 21:29:47.92	EXITO
+1881	usuarios	3	LOGOUT	\N	{"ip": "::1", "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36"}	3	2026-10-11 21:30:07.021	EXITO
+1882	usuarios	3	LOGIN_FALLIDO	\N	{"ip": "::1", "correo": "consulta@edificioxyz.com", "motivo": "Contraseña inválida", "intentos": 1, "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36"}	3	2026-10-11 21:30:15.526	CREDENCIALES_INVALIDAS
+1883	usuarios	1	LOGIN_EXITOSO	\N	{"ip": "::1", "rol": "Administrador", "correo": "admin@edificioxyz.com", "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36"}	1	2026-10-11 21:30:23.126	EXITO
+1884	usuarios	7	USUARIO_MODIFICADO	{"rol": "Consulta", "idRol": 3}	{"rol": "Copropietario", "idRol": 6, "tipoCambio": "ASIGNAR_ROL"}	1	2026-10-11 21:30:57.936	EXITO
+1885	usuarios	1	LOGOUT	\N	{"ip": "::1", "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36"}	1	2026-10-11 21:31:05.167	EXITO
+1886	usuarios	7	LOGIN_FALLIDO	\N	{"ip": "::1", "correo": "copropietario@edificioxyz.com", "motivo": "Contraseña inválida", "intentos": 2, "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36"}	7	2026-10-11 21:31:19.223	CREDENCIALES_INVALIDAS
+1887	usuarios	7	LOGIN_EXITOSO	\N	{"ip": "::1", "rol": "Copropietario", "correo": "copropietario@edificioxyz.com", "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36"}	7	2026-10-11 21:31:47.924	EXITO
+1888	usuarios	7	LOGOUT	\N	{"ip": "::1", "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36"}	7	2026-10-11 21:32:11.125	EXITO
+1889	usuarios	1	LOGIN_EXITOSO	\N	{"ip": "::1", "rol": "Administrador", "correo": "admin@edificioxyz.com", "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36"}	1	2026-10-11 21:32:22.628	EXITO
 \.
 
 
@@ -2290,7 +2315,7 @@ SELECT pg_catalog.setval('edificio.aplicaciones_anticipos_id_aplicacion_seq', 30
 -- Name: auditoria_id_auditoria_seq; Type: SEQUENCE SET; Schema: edificio; Owner: postgres
 --
 
-SELECT pg_catalog.setval('edificio.auditoria_id_auditoria_seq', 1864, true);
+SELECT pg_catalog.setval('edificio.auditoria_id_auditoria_seq', 1889, true);
 
 
 --
@@ -2444,5 +2469,5 @@ SELECT pg_catalog.setval('edificio.usuarios_id_usuario_seq', 32, true);
 -- PostgreSQL database dump complete
 --
 
-\unrestrict 1279REbL3q3oTVJHciVPQntNyxeChwRFy5uJWTlpnEwNDkJTIb5PYAEIWbiUJ6Y
+\unrestrict 9eyr5rYva2fTzyslRBEUGyRgJxoaWmyiBuZOJAtQYciLGDdgFcNFbFxIfhU8W5Y
 
