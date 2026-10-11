@@ -558,14 +558,14 @@ expensasRouter.post(
       const periodoDate = new Date(`${periodoNormalizado}T00:00:00.000Z`);
       const vencimientoDate = new Date(`${fechaVencimiento}T00:00:00.000Z`);
 
-      // CA2: Obtener unidades aplicables (excluir desocupadas/inactivas o especificadas en reglas)
+      // CA2: Obtener unidades aplicables (excluir departamentos especificados)
       const { generadas, excepciones } = await prisma.$transaction(async (tx) => {
         const departamentos = await tx.departamento.findMany({
-          where: {
-            NOT: [
-              { idDepartamento: { in: excluirDepartamentos } },
-              { estado: 'Inactivo' },
-            ],
+          where: excluirDepartamentos && excluirDepartamentos.length > 0
+            ? { idDepartamento: { notIn: excluirDepartamentos } }
+            : {},
+          include: {
+            tipo: true,
           },
         });
 
@@ -573,6 +573,16 @@ expensasRouter.post(
         const excepcionesArr: any[] = [];
 
         for (const depto of departamentos) {
+          // Si el departamento no tiene tipo asignado, va a excepciones
+          if (!depto.tipo) {
+            excepcionesArr.push({
+              idDepartamento: depto.idDepartamento,
+              numero: depto.numero,
+              motivo: 'El departamento no tiene un tipo asignado en tipos_departamento',
+            });
+            continue;
+          }
+
           // Verificar si ya existe expensa para el departamento en este período
           const existente = await tx.expensa.findFirst({
             where: {
@@ -590,9 +600,8 @@ expensasRouter.post(
             continue;
           }
 
-          // Calcular monto (proporcional al área m2 o monto base)
-          const areaFactor = depto.areaM2 ? Number(depto.areaM2) / 100 : 1;
-          const montoFinal = Math.round(montoBase * areaFactor * 100) / 100;
+          // Monto fijo del tipo de departamento (tipos_departamento.monto_expensa)
+          const montoFinal = Number(depto.tipo.montoExpensa);
 
           const nuevaExpensa = await tx.expensa.create({
             data: {
