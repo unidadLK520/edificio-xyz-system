@@ -27,6 +27,9 @@ vi.mock('@edificio-xyz/database', () => {
     departamento: {
       findUnique: vi.fn(),
     },
+    persona: {
+      findUnique: vi.fn(),
+    },
     aplicacionAnticipo: {
       findMany: vi.fn(),
       create: vi.fn(),
@@ -42,10 +45,44 @@ describe('BLOQUE 3: Reglas de Negocio de Pagos, Expensas Vencidas y Control de D
   beforeEach(async () => {
     vi.clearAllMocks();
     adminToken = await generarTokenPrueba(1, 'admin@edificioxyz.com', 'Administrador');
+    (prisma.persona.findUnique as any).mockResolvedValue({
+      idPersona: 1,
+      nombres: 'Juan',
+      apellidos: 'Perez',
+    });
   });
 
   // ── a) Validaciones 422 en POST /expensas/:id/pagos ──────────────────────────
   describe('a) POST /api/v1/expensas/:id/pagos - Validaciones 422', () => {
+    it('Debe retornar 422 si falta idPersonaPagador', async () => {
+      const res = await request(app)
+        .post('/api/v1/expensas/10/pagos')
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({
+          montoPagado: 100,
+          metodoPago: 'Efectivo',
+        });
+
+      expect(res.status).toBe(422);
+      expect(res.body.message).toContain('idPersonaPagador es obligatorio');
+    });
+
+    it('Debe retornar 422 si la persona pagadora no existe', async () => {
+      (prisma.persona.findUnique as any).mockResolvedValue(null);
+
+      const res = await request(app)
+        .post('/api/v1/expensas/10/pagos')
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({
+          idPersonaPagador: 999,
+          montoPagado: 100,
+          metodoPago: 'Efectivo',
+        });
+
+      expect(res.status).toBe(422);
+      expect(res.body.message).toContain('no existe');
+    });
+
     it('Debe retornar 422 si montoPagado <= 0', async () => {
       (prisma.expensa.findUnique as any).mockResolvedValue({
         idExpensa: 10,
@@ -58,6 +95,7 @@ describe('BLOQUE 3: Reglas de Negocio de Pagos, Expensas Vencidas y Control de D
         .post('/api/v1/expensas/10/pagos')
         .set('Authorization', `Bearer ${adminToken}`)
         .send({
+          idPersonaPagador: 1,
           montoPagado: 0,
           metodoPago: 'Efectivo',
         });
@@ -78,6 +116,7 @@ describe('BLOQUE 3: Reglas de Negocio de Pagos, Expensas Vencidas y Control de D
         .post('/api/v1/expensas/10/pagos')
         .set('Authorization', `Bearer ${adminToken}`)
         .send({
+          idPersonaPagador: 1,
           montoPagado: 100,
           metodoPago: 'Efectivo',
         });
@@ -98,6 +137,7 @@ describe('BLOQUE 3: Reglas de Negocio de Pagos, Expensas Vencidas y Control de D
         .post('/api/v1/expensas/10/pagos')
         .set('Authorization', `Bearer ${adminToken}`)
         .send({
+          idPersonaPagador: 1,
           montoPagado: 450,
           metodoPago: 'Efectivo',
         });
@@ -109,11 +149,41 @@ describe('BLOQUE 3: Reglas de Negocio de Pagos, Expensas Vencidas y Control de D
 
   // ── a.2) Validaciones 422 en PATCH /pagos/:idPago/corregir ────────────────────
   describe('a.2) PATCH /api/v1/expensas/pagos/:idPago/corregir - Validaciones 422', () => {
+    it('Debe retornar 422 si falta idPersonaPagador en corrección', async () => {
+      const res = await request(app)
+        .patch('/api/v1/expensas/pagos/55/corregir')
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({
+          motivo: 'Error de tipeo',
+          montoPagado: 100,
+        });
+
+      expect(res.status).toBe(422);
+      expect(res.body.message).toContain('idPersonaPagador es obligatorio');
+    });
+
+    it('Debe retornar 422 si la persona pagadora no existe en corrección', async () => {
+      (prisma.persona.findUnique as any).mockResolvedValue(null);
+
+      const res = await request(app)
+        .patch('/api/v1/expensas/pagos/55/corregir')
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({
+          idPersonaPagador: 999,
+          motivo: 'Error de tipeo',
+          montoPagado: 100,
+        });
+
+      expect(res.status).toBe(422);
+      expect(res.body.message).toContain('no existe');
+    });
+
     it('Debe retornar 422 si montoPagado en corrección <= 0', async () => {
       const res = await request(app)
         .patch('/api/v1/expensas/pagos/55/corregir')
         .set('Authorization', `Bearer ${adminToken}`)
         .send({
+          idPersonaPagador: 1,
           motivo: 'Error de tipeo',
           montoPagado: 0,
         });
@@ -168,6 +238,7 @@ describe('BLOQUE 3: Reglas de Negocio de Pagos, Expensas Vencidas y Control de D
         .patch('/api/v1/expensas/pagos/55/corregir')
         .set('Authorization', `Bearer ${adminToken}`)
         .send({
+          idPersonaPagador: 1,
           motivo: 'Corrección de monto',
           montoPagado: 999999, // Excede enormemente el saldo de la expensa
         });

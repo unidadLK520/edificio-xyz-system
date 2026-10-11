@@ -204,6 +204,7 @@ async function main() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${adminToken}` },
         body: JSON.stringify({
+          idPersonaPagador: personaId,
           montoPagado: 200,
           metodoPago: 'Transferencia',
           esAnticipado: false,
@@ -227,6 +228,7 @@ async function main() {
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${adminToken}` },
       body: JSON.stringify({
         idDepartamento: depto1Id,
+        idPersonaPagador: personaId,
         idExpensa: null,
         montoPagado: 600,
         metodoPago: 'Transferencia',
@@ -280,6 +282,7 @@ async function main() {
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${adminToken}` },
       body: JSON.stringify({
         idDepartamento: depto1Id,
+        idPersonaPagador: personaId,
         idExpensa: null,
         montoPagado: 350,
         metodoPago: 'QR',
@@ -322,6 +325,7 @@ async function main() {
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${adminToken}` },
       body: JSON.stringify({
         idDepartamento: depto2Id,
+        idPersonaPagador: persona2Id,
         idExpensa: null,
         montoPagado: 100,
         metodoPago: 'Efectivo',
@@ -546,6 +550,7 @@ async function main() {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${adminToken}` },
       body: JSON.stringify({
+        idPersonaPagador: persona2Id,
         montoPagado: 100,
         metodoPago: 'Efectivo',
       }),
@@ -616,6 +621,7 @@ async function main() {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${adminToken}` },
       body: JSON.stringify({
+        idPersonaPagador: personaId,
         montoPagado: 150,
         metodoPago: 'Efectivo',
       }),
@@ -670,6 +676,7 @@ async function main() {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${adminToken}` },
       body: JSON.stringify({
+        idPersonaPagador: personaId,
         montoPagado: 100,
         metodoPago: 'Efectivo',
       }),
@@ -682,6 +689,7 @@ async function main() {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${adminToken}` },
       body: JSON.stringify({
+        idPersonaPagador: personaId,
         montoPagado: 180,
         metodoPago: 'Transferencia',
         motivo: 'Monto real era 180 según voucher bancario',

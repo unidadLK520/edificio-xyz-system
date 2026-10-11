@@ -65,6 +65,7 @@ model Persona {
   usuarios             Usuario[]
   parqueosAsignados    Parqueo[]
   baulerasAsignadas    Baulera[]
+  pagosRealizados      Pago[]
 
   @@map("personas")
   @@schema("edificio")
@@ -218,6 +219,7 @@ model Pago {
   idPago              Int                  @id @default(autoincrement()) @map("id_pago")
   idExpensa           Int?                 @map("id_expensa")
   idDepartamento      Int                  @map("id_departamento")
+  idPersonaPagador    Int?                 @map("id_persona_pagador")
   montoPagado         Decimal              @map("monto_pagado") @db.Decimal(10, 2)
   interesPagado       Decimal              @default(0) @map("interes_pagado") @db.Decimal(10, 2)
   fechaPago           DateTime             @default(now()) @map("fecha_pago") @db.Timestamp(6)
@@ -236,6 +238,7 @@ model Pago {
   
   expensa              Expensa?             @relation(fields: [idExpensa], references: [idExpensa])
   departamento         Departamento         @relation(fields: [idDepartamento], references: [idDepartamento])
+  pagador              Persona?             @relation(fields: [idPersonaPagador], references: [idPersona], onUpdate: NoAction, onDelete: SetNull, map: "fk_pagos_persona_pagador")
   usuarioRegistro      Usuario?             @relation(fields: [idUsuarioRegistro], references: [idUsuario])
   cuentaBancaria       CuentaBancaria?      @relation(fields: [idCuenta], references: [idCuenta])
   cajaMovimiento       Caja?                @relation(fields: [idMovimientoCaja], references: [idMovimientoCaja])
@@ -243,6 +246,7 @@ model Pago {
   pagosCorreccion      Pago[]               @relation("CorreccionPago")
   aplicacionesAnticipo AplicacionAnticipo[]
 
+  @@index([idPersonaPagador], map: "idx_pagos_persona_pagador")
   @@index([idCuenta], map: "idx_pagos_cuenta")
   @@index([idMovimientoCaja], map: "idx_pagos_movimiento_caja")
   @@index([idPagoOriginal], map: "idx_pagos_pago_original")

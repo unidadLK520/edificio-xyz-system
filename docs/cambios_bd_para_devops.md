@@ -106,3 +106,55 @@ Para sincronizar formalmente el historial de Prisma en los pipelines CI/CD y evi
 npx prisma migrate resolve --applied 20261004000000_hu04_regla_mora
 ```
 
+---
+
+## Módulo de Pagos: Persona Pagadora Obligatoria (RN10)
+
+### 4. DDL Idempotente: Columna `id_persona_pagador` en `edificio.pagos`
+
+Este script agrega el campo de auditoría del pagador como clave foránea nullable con regla `ON DELETE SET NULL`. Es seguro e idempotente.
+
+```sql
+-- ====================================================================
+-- PASO 1: Agregar columna id_persona_pagador (nullable)
+-- ====================================================================
+ALTER TABLE "edificio"."pagos" 
+ADD COLUMN IF NOT EXISTS "id_persona_pagador" INTEGER;
+
+-- ====================================================================
+-- PASO 2: Clave Foránea a edificio.personas (ON DELETE SET NULL)
+-- ====================================================================
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint 
+        WHERE conname = 'fk_pagos_persona_pagador'
+    ) THEN
+        ALTER TABLE "edificio"."pagos"
+        ADD CONSTRAINT "fk_pagos_persona_pagador"
+        FOREIGN KEY ("id_persona_pagador")
+        REFERENCES "edificio"."personas"("id_persona")
+        ON DELETE SET NULL;
+    END IF;
+END $$;
+
+-- ====================================================================
+-- PASO 3: Índice para optimización de consultas por pagador
+-- ====================================================================
+CREATE INDEX IF NOT EXISTS "idx_pagos_persona_pagador" 
+ON "edificio"."pagos"("id_persona_pagador");
+```
+
+---
+
+### 5. Plan de Reversión (Rollback)
+
+```sql
+-- ====================================================================
+-- SCRIPT DE ROLLBACK / REVERSIÓN RN10
+-- ====================================================================
+ALTER TABLE "edificio"."pagos" DROP CONSTRAINT IF EXISTS "fk_pagos_persona_pagador";
+DROP INDEX IF EXISTS "edificio"."idx_pagos_persona_pagador";
+ALTER TABLE "edificio"."pagos" DROP COLUMN IF EXISTS "id_persona_pagador";
+```
+

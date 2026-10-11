@@ -65,6 +65,7 @@ const generarMasivoSchema = z.object({
 const pagoSchema = z.object({
   idDepartamento: z.number().int().positive().optional(),
   idExpensa: z.number().int().positive().nullable().optional(),
+  idPersonaPagador: z.number().int().positive().optional(),
   montoPagado: z.number(),
   interesPagado: z.number().min(0).default(0),
   metodoPago: z.enum(['Efectivo', 'Transferencia', 'Cheque', 'QR']).optional(),
@@ -922,6 +923,29 @@ expensasRouter.post(
   authorizeRoles('Administrador', 'Directorio'),
   async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
     try {
+      // RN10: idPersonaPagador es obligatorio (422 si falta o la persona no existe, también en anticipos)
+      const rawPagador = req.body?.idPersonaPagador;
+      if (rawPagador === undefined || rawPagador === null || !Number.isInteger(Number(rawPagador)) || Number(rawPagador) <= 0) {
+        res.status(422).json({
+          error: 'Unprocessable Entity',
+          message: 'El idPersonaPagador es obligatorio y debe ser un número entero positivo',
+        });
+        return;
+      }
+
+      const idPersonaPagador = Number(rawPagador);
+      const personaExiste = await prisma.persona.findUnique({
+        where: { idPersona: idPersonaPagador },
+      });
+
+      if (!personaExiste) {
+        res.status(422).json({
+          error: 'Unprocessable Entity',
+          message: `La persona pagadora con ID ${idPersonaPagador} no existe`,
+        });
+        return;
+      }
+
       const result = pagoSchema.safeParse(req.body);
       if (!result.success) {
         res.status(400).json({
@@ -971,6 +995,7 @@ expensasRouter.post(
           data: {
             idExpensa: null,
             idDepartamento: targetDepartamentoId,
+            idPersonaPagador,
             montoPagado,
             interesPagado: interesPagado ?? 0,
             metodoPago: metodoPago || 'Efectivo',
@@ -1043,6 +1068,7 @@ expensasRouter.post(
           data: {
             idExpensa: expensaId,
             idDepartamento: expensa.idDepartamento,
+            idPersonaPagador,
             montoPagado,
             interesPagado: interesPagado ?? 0,
             metodoPago: metodoPago || 'Efectivo',
@@ -1420,6 +1446,29 @@ expensasRouter.patch(
         return;
       }
 
+      // RN10: idPersonaPagador es obligatorio (422 si falta o la persona no existe)
+      const rawPagador = req.body?.idPersonaPagador;
+      if (rawPagador === undefined || rawPagador === null || !Number.isInteger(Number(rawPagador)) || Number(rawPagador) <= 0) {
+        res.status(422).json({
+          error: 'Unprocessable Entity',
+          message: 'El idPersonaPagador es obligatorio y debe ser un número entero positivo',
+        });
+        return;
+      }
+
+      const idPersonaPagador = Number(rawPagador);
+      const personaExiste = await prisma.persona.findUnique({
+        where: { idPersona: idPersonaPagador },
+      });
+
+      if (!personaExiste) {
+        res.status(422).json({
+          error: 'Unprocessable Entity',
+          message: `La persona pagadora con ID ${idPersonaPagador} no existe`,
+        });
+        return;
+      }
+
       const result = corregirPagoSchema.safeParse(req.body);
       if (!result.success) {
         res.status(400).json({
@@ -1469,6 +1518,7 @@ expensasRouter.patch(
           data: {
             idExpensa: pagoAnulado.idExpensa,
             idDepartamento: pagoAnulado.idDepartamento,
+            idPersonaPagador,
             montoPagado,
             interesPagado: interesPagado ?? 0,
             metodoPago: metodoPago || 'Efectivo',
