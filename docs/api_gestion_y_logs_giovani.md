@@ -80,26 +80,170 @@
     Método y Ruta: `GET /api/v1/unidades/:tipo/:id`
     Propósito: Retorna la información completa de una unidad específica (`tipo`: `Departamento`, `Parqueo` o `Baulera`). Para Departamentos incluye `tipo`, `monto` del tipo configurado (`tipos_departamento`) y su `historialAsignaciones` derivado dinámicamente de `ocupantes_departamento`. Para Parqueos y Bauleras, su `historialAsignaciones` se deriva de los eventos registrados en el subsistema de `auditoria` de dicha unidad. Mantiene la misma estructura de respuesta homogénea (`idHistorial`, `tipoUnidad`, `idUnidad`, `idPersona`, `tipoRelacion`, `fechaInicio`, `fechaFin`, `notas`, `persona`, `departamento`).
     Rol requerido: `Administrador`, `Directorio`, `Consulta`.
+    Ejemplo de Respuesta (HTTP 200):
+    ```json
+    {
+      "unidad": {
+        "idDepartamento": 1,
+        "numero": "101",
+        "piso": 1,
+        "areaM2": 95.5,
+        "estado": "Ocupado",
+        "idTipo": 1,
+        "tipo": "A",
+        "monto": 300.0,
+        "tipoUnidad": "Departamento",
+        "propietario": {
+          "idPersona": 1,
+          "nombres": "Carlos",
+          "apellidos": "Gómez"
+        },
+        "parqueos": [],
+        "bauleras": []
+      },
+      "historialAsignaciones": [
+        {
+          "idHistorial": 10,
+          "tipoUnidad": "Departamento",
+          "idUnidad": 1,
+          "numeroUnidad": "101",
+          "idPersona": 1,
+          "idDepartamento": 1,
+          "tipoRelacion": "Propietario",
+          "fechaInicio": "2026-03-01T00:00:00.000Z",
+          "fechaFin": null,
+          "notas": "Ocupación registrada como Propietario",
+          "persona": { "idPersona": 1, "nombres": "Carlos", "apellidos": "Gómez" },
+          "departamento": { "idDepartamento": 1, "numero": "101" }
+        }
+      ]
+    }
+    ```
 
   3.3 Crear Unidad Física (Departamento / Parqueo / Baulera)
     Método y Ruta: `POST /api/v1/unidades`
     Propósito: Registra una nueva unidad verificando la no duplicidad del identificador alfanumérico según el tipo de unidad. Para Departamentos, acepta opcionalmente `idTipo` (validando su existencia en `tipos_departamento`, respondiendo `422 Unprocessable Entity` si no existe). Registra el evento en auditoría (`tablaAfectada`: `departamentos`/`parqueos`/`bauleras`, `accion`: `CREATE`, `datosNuevos`).
     Rol requerido: `Administrador`, `Directorio`.
+    Payload de Solicitud:
+    ```json
+    {
+      "tipoUnidad": "Departamento",
+      "numero": "102",
+      "piso": 1,
+      "areaM2": 92.0,
+      "idTipo": 1
+    }
+    ```
+    Respuesta Exitosa (HTTP 201):
+    ```json
+    {
+      "message": "Unidad registrada exitosamente",
+      "unidad": {
+        "idDepartamento": 2,
+        "numero": "102",
+        "piso": 1,
+        "areaM2": 92.0,
+        "estado": "Disponible",
+        "idTipo": 1,
+        "tipo": "A",
+        "monto": 300.0,
+        "tipoUnidad": "Departamento"
+      }
+    }
+    ```
+    Respuesta de Error de Validación (HTTP 422 - idTipo inexistente):
+    ```json
+    {
+      "error": "UNPROCESSABLE_ENTITY",
+      "message": "El idTipo especificado no existe en tipos_departamento"
+    }
+    ```
 
  3.4 Editar Unidad Física
     Método y Ruta: `PUT /api/v1/unidades/:tipo/:id`
     Propósito: Modifica los atributos físicos o de estado de una unidad, validando que el nuevo número no colisione con unidades existentes. Para Departamentos, acepta `idTipo` opcional (con validación de existencia en `tipos_departamento`, respondiendo `422 Unprocessable Entity` en caso de no existir). Guarda el delta de cambios en auditoría con `datosAnteriores` y `datosNuevos`.
     Rol requerido: `Administrador`, `Directorio`.
+    Payload de Solicitud:
+    ```json
+    {
+      "idTipo": 2,
+      "piso": 2
+    }
+    ```
+    Respuesta Exitosa (HTTP 200):
+    ```json
+    {
+      "message": "Unidad actualizada exitosamente",
+      "unidad": {
+        "idDepartamento": 2,
+        "numero": "102",
+        "piso": 2,
+        "areaM2": 92.0,
+        "estado": "Disponible",
+        "idTipo": 2,
+        "tipo": "B",
+        "monto": 350.0,
+        "tipoUnidad": "Departamento"
+      }
+    }
+    ```
 
   3.5 Asignación Atómica de Unidad (Vínculo Persona/Departamento)
     Método y Ruta: `POST /api/v1/unidades/asignaciones`
     Propósito: Vincula de manera atómica transaccional una unidad a una persona o a un departamento titular mediante `$transaction`. En Parqueos y Bauleras actualiza exclusivamente `estado` (a `Asignado`), `id_departamento`, `id_persona` y `fecha_asignacion`. Registra el evento en auditoría con `datosAnteriores` y `datosNuevos` dentro de la transacción, prescindiendo del modelo físico `historial_asignacion_unidades`.
     Rol requerido: `Administrador`, `Directorio`.
+    Payload de Solicitud:
+    ```json
+    {
+      "tipoUnidad": "Parqueo",
+      "idUnidad": 1,
+      "idPersona": 1,
+      "idDepartamento": 1,
+      "tipoRelacion": "Asignado",
+      "notas": "Asignación de parqueo principal"
+    }
+    ```
+    Respuesta Exitosa (HTTP 200):
+    ```json
+    {
+      "message": "Asignación de parqueo registrada y estado actualizado a Asignado",
+      "parqueo": {
+        "idParqueo": 1,
+        "numero": "P-01",
+        "estado": "Asignado",
+        "idDepartamento": 1,
+        "idPersona": 1,
+        "fechaAsignacion": "2026-10-11T19:00:00.000Z"
+      }
+    }
+    ```
 
  3.6 Finalizar Asignación de Unidad
     Método y Ruta: `POST /api/v1/unidades/asignaciones/finalizar`
     Propósito: Concluye la asignación activa de una unidad liberándola de forma atómica en `$transaction`. En Parqueos y Bauleras actualiza `estado` a `Disponible` y limpia `id_departamento`, `id_persona` y `fecha_asignacion`. Para Departamentos finaliza los ocupantes activos en `ocupantes_departamento` y re-evalúa el estado. Emite el evento de auditoría (`FINALIZACION_ASIGNACION`) conservando la trazabilidad histórica sin requerir `historial_asignacion_unidades`.
     Rol requerido: `Administrador`, `Directorio`.
+    Payload de Solicitud:
+    ```json
+    {
+      "tipoUnidad": "Parqueo",
+      "idUnidad": 1,
+      "notas": "Liberación de parqueo"
+    }
+    ```
+    Respuesta Exitosa (HTTP 200):
+    ```json
+    {
+      "message": "Asignación de parqueo finalizada",
+      "parqueo": {
+        "idParqueo": 1,
+        "numero": "P-01",
+        "estado": "Disponible",
+        "idDepartamento": null,
+        "idPersona": null,
+        "fechaAsignacion": null
+      }
+    }
+    ```
 
 
 
