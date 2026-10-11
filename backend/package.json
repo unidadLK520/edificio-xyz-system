@@ -8,7 +8,8 @@
     "start": "node dist/index.js",
     "lint": "tsc --noEmit",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "seed:demo": "tsx scripts/seed_demo_local.ts"
   },
   "dependencies": {
     "@edificio-xyz/database": "workspace:*",
