@@ -78,27 +78,27 @@
 
   3.2 Detalle Específico de Unidad con Historial de Antecedentes
     Método y Ruta: `GET /api/v1/unidades/:tipo/:id`
-    Propósito: Retorna la información completa de una unidad específica (`tipo`: `Departamento`, `Parqueo` o `Baulera`) incluyendo historial de asignaciones pasadas, ocupantes vigentes y anexos vinculados.
+    Propósito: Retorna la información completa de una unidad específica (`tipo`: `Departamento`, `Parqueo` o `Baulera`). Para Departamentos incluye `tipo`, `monto` del tipo configurado (`tipos_departamento`) y su `historialAsignaciones` derivado dinámicamente de `ocupantes_departamento`. Para Parqueos y Bauleras, su `historialAsignaciones` se deriva de los eventos registrados en el subsistema de `auditoria` de dicha unidad. Mantiene la misma estructura de respuesta homogénea (`idHistorial`, `tipoUnidad`, `idUnidad`, `idPersona`, `tipoRelacion`, `fechaInicio`, `fechaFin`, `notas`, `persona`, `departamento`).
     Rol requerido: `Administrador`, `Directorio`, `Consulta`.
 
   3.3 Crear Unidad Física (Departamento / Parqueo / Baulera)
     Método y Ruta: `POST /api/v1/unidades`
-    Propósito: Registra una nueva unidad verificando la no duplicidad del identificador alfanumérico (ej. "101", "P-01") según el tipo de unidad. Registra el evento en auditoría.
+    Propósito: Registra una nueva unidad verificando la no duplicidad del identificador alfanumérico según el tipo de unidad. Para Departamentos, acepta opcionalmente `idTipo` (validando su existencia en `tipos_departamento`, respondiendo `422 Unprocessable Entity` si no existe). Registra el evento en auditoría (`tablaAfectada`: `departamentos`/`parqueos`/`bauleras`, `accion`: `CREATE`, `datosNuevos`).
     Rol requerido: `Administrador`, `Directorio`.
 
  3.4 Editar Unidad Física
     Método y Ruta: `PUT /api/v1/unidades/:tipo/:id`
-    Propósito: Modifica los atributos físicos o de estado de una unidad, validando que el nuevo número no colisione con unidades existentes. Guarda el delta de cambios en auditoría.
+    Propósito: Modifica los atributos físicos o de estado de una unidad, validando que el nuevo número no colisione con unidades existentes. Para Departamentos, acepta `idTipo` opcional (con validación de existencia en `tipos_departamento`, respondiendo `422 Unprocessable Entity` en caso de no existir). Guarda el delta de cambios en auditoría con `datosAnteriores` y `datosNuevos`.
     Rol requerido: `Administrador`, `Directorio`.
 
   3.5 Asignación Atómica de Unidad (Vínculo Persona/Departamento)
     Método y Ruta: `POST /api/v1/unidades/asignaciones`
-    Propósito: Vincula de manera atómica transaccional una unidad (parqueo, baulera o departamento) a una persona o a un departamento titular. Si se asigna un parqueo a un departamento, actualiza el estado de la unidad a `Ocupado` o `Asignado`, crea la entrada en `historial_asignacion_unidades` y emite el evento de auditoría en una sola transacción ACID.
+    Propósito: Vincula de manera atómica transaccional una unidad a una persona o a un departamento titular mediante `$transaction`. En Parqueos y Bauleras actualiza exclusivamente `estado` (a `Asignado`), `id_departamento`, `id_persona` y `fecha_asignacion`. Registra el evento en auditoría con `datosAnteriores` y `datosNuevos` dentro de la transacción, prescindiendo del modelo físico `historial_asignacion_unidades`.
     Rol requerido: `Administrador`, `Directorio`.
 
  3.6 Finalizar Asignación de Unidad
     Método y Ruta: `POST /api/v1/unidades/asignaciones/finalizar`
-    Propósito: Desvincula la unidad liberándola (vuelve a estado `Disponible`), cierra la asignación activa con fecha fin en el historial y registra el log de auditoría.
+    Propósito: Concluye la asignación activa de una unidad liberándola de forma atómica en `$transaction`. En Parqueos y Bauleras actualiza `estado` a `Disponible` y limpia `id_departamento`, `id_persona` y `fecha_asignacion`. Para Departamentos finaliza los ocupantes activos en `ocupantes_departamento` y re-evalúa el estado. Emite el evento de auditoría (`FINALIZACION_ASIGNACION`) conservando la trazabilidad histórica sin requerir `historial_asignacion_unidades`.
     Rol requerido: `Administrador`, `Directorio`.
 
 
@@ -228,27 +228,27 @@ Ejemplo 3: Configuración de Nueva Regla de Mora (CA09)
     #### Pendientes conocidos (Decisiones de Negocio Abiertas)
     - **Decisión de Negocio Abierta sobre Consolidación de Mora:** Debe definirse a nivel de negocio si el monto de mora calculado por primera vez al vencer el plazo debe "congelarse" o consolidarse como un cargo punitorio fijo e inmutable (independiente de pagos parciales posteriores), o si debe mantenerse el comportamiento actual donde la mora se recalcula dinámicamente sobre el capital pendiente decreciente.
 
-5. Módulo de Expensas, Reglas de Mora y Tareas Programadas (US2.1)
+5. Módulo de Expensas, Reglas de Mora y Tareas Programadas
   Ubicación en el código: `backend/src/modules/expensas/` y `backend/src/routes/expensas.routes.ts`
   Prefijo de ruta: `/api/v1/expensas`
 
-  5.1 Consultar Reglas de Mora (CA09)
+  5.1 Consultar Reglas de Mora
     Método y Ruta: `GET /api/v1/expensas/reglas-mora`
     Propósito: Devuelve la regla de mora activa actual y el historial completo ordenado cronológicamente.
     Rol requerido: `Administrador`, `Directorio`.
 
-  5.2 Configurar Nueva Regla de Mora (CA09)
+  5.2 Configurar Nueva Regla de Mora
     Método y Ruta: `POST /api/v1/expensas/reglas-mora`
     Propósito: Define la tasa de interés por mora (%) y días de gracia. Desactiva atómicamente la regla anterior en transacción ACID y registra auditoría `CONFIGURAR_REGLA_MORA`.
     Rol requerido: `Administrador`, `Directorio`.
 
-  5.3 Recálculo Idempotente de Mora sobre Capital Pendiente (CA06)
+  5.3 Recálculo Idempotente de Mora sobre Capital Pendiente
     Método y Ruta: `POST /api/v1/expensas/calcular-mora`
     Propósito: Calcula y aplica el recargo de mora considerando la fórmula exacta: Capital Pendiente = Monto Base - Pagos Directos Válidos - Anticipos Aplicados Válidos. Respeta días de gracia y toma la tasa de la expensa o la regla activa. Registra auditoría `CALCULO_MORA_EXPENSAS`.
     Nota sobre Recálculo Dinámico: Ver detalles técnicos, ejemplo numérico (550/300), aclaración de `interesPagado` y decisiones abiertas en la sección `4.12`.
     Rol requerido: `Administrador`, `Directorio`.
 
-  5.4 Tarea Programada de Mora Automática (CA10)
+  5.4 Tarea Programada de Mora Automática
     Tecnología: `node-cron`
     Configuración: `MORA_CRON` (default: `"0 1 * * *"`), `MORA_CRON_ENABLED` (`true` / `false`).
     Propósito: Ejecuta el mismo servicio `ejecutarCalculoMora` en segundo plano, auditando la operación con `idUsuario: null` y marca clara de ejecución por `sistema`.

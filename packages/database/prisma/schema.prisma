@@ -67,9 +67,18 @@ model Persona {
   usuarios             Usuario[]
   parqueosAsignados    Parqueo[]
   baulerasAsignadas    Baulera[]
-  historialAsignaciones HistorialAsignacionUnidad[]
 
   @@map("personas")
+  @@schema("edificio")
+}
+
+model TipoDepartamento {
+  idTipo        Int            @id @default(autoincrement()) @map("id_tipo")
+  nombre        String         @unique @db.VarChar(10)
+  montoExpensa  Decimal        @map("monto_expensa") @db.Decimal(10, 2)
+  departamentos Departamento[]
+
+  @@map("tipos_departamento")
   @@schema("edificio")
 }
 
@@ -80,8 +89,10 @@ model Departamento {
   areaM2         Decimal?               @map("area_m2") @db.Decimal(8, 2)
   idPropietario  Int?                   @map("id_propietario")
   estado         String                 @default("Ocupado") @db.VarChar(20)
+  idTipo         Int?                   @map("id_tipo")
   
   propietario    Persona?               @relation("PropietarioDepartamentos", fields: [idPropietario], references: [idPersona])
+  tipo           TipoDepartamento?      @relation(fields: [idTipo], references: [idTipo])
   parqueos       Parqueo[]
   bauleras       Baulera[]
   ocupantes      OcupanteDepartamento[]
@@ -89,8 +100,8 @@ model Departamento {
   pagos          Pago[]
   reservas       Reserva[]
   solicitudesMantenimiento SolicitudMantenimiento[]
-  historialAsignaciones HistorialAsignacionUnidad[]
 
+  @@index([idTipo], map: "idx_departamentos_tipo")
   @@map("departamentos")
   @@schema("edificio")
 }
@@ -138,26 +149,6 @@ model OcupanteDepartamento {
 
   @@index([idDepartamento], map: "idx_ocupantes_departamento")
   @@map("ocupantes_departamento")
-  @@schema("edificio")
-}
-
-model HistorialAsignacionUnidad {
-  idHistorial    Int          @id @default(autoincrement()) @map("id_historial")
-  tipoUnidad     String       @map("tipo_unidad") @db.VarChar(20) // Departamento, Parqueo, Baulera
-  idUnidad       Int          @map("id_unidad")
-  numeroUnidad   String       @map("numero_unidad") @db.VarChar(20)
-  idPersona      Int?         @map("id_persona")
-  idDepartamento Int?         @map("id_departamento")
-  tipoRelacion   String       @map("tipo_relacion") @db.VarChar(30) // Propietario, Inquilino, Asignado
-  fechaInicio    DateTime     @default(now()) @map("fecha_inicio") @db.Timestamp(6)
-  fechaFin       DateTime?    @map("fecha_fin") @db.Timestamp(6)
-  notas          String?      @db.Text
-
-  persona        Persona?     @relation(fields: [idPersona], references: [idPersona])
-  departamento   Departamento? @relation(fields: [idDepartamento], references: [idDepartamento])
-
-  @@index([tipoUnidad, idUnidad], map: "idx_historial_unidad")
-  @@map("historial_asignacion_unidades")
   @@schema("edificio")
 }
 
