@@ -2,7 +2,7 @@
 -- PostgreSQL database dump
 --
 
-\restrict 9eyr5rYva2fTzyslRBEUGyRgJxoaWmyiBuZOJAtQYciLGDdgFcNFbFxIfhU8W5Y
+\restrict f5iZdgHI7fWP1Fxep7rfgXpNfvT1DLUTA4QXPYvdqhSLeg2JIiSJptMOtKghpTa
 
 -- Dumped from database version 17.6
 -- Dumped by pg_dump version 17.11
@@ -87,7 +87,7 @@ ALTER TABLE edificio.usuarios DISABLE TRIGGER ALL;
 COPY edificio.usuarios (id_usuario, nombre_usuario, correo, password_hash, id_rol, activo, fecha_creacion, ultimo_acceso, bloqueado_hasta, intentos_fallidos, id_persona) FROM stdin;
 3	consulta	consulta@edificioxyz.com	$2b$10$Njhk3xLxWvHUOwUFOo04/./Ir0mXw7Xobpj.Oxl8g9qgFtg2Yxubi	3	t	2026-09-07 02:47:37.990492	2026-10-11 21:29:46.9	\N	1	\N
 7	copropietario	copropietario@edificioxyz.com	$2b$10$oaBoiAjSCVJFVO2OEp5/Pe.Q7LFjglo.GN6G2j0Insqu10cJsXXyG	6	t	2026-09-13 05:14:08.594	2026-10-11 21:31:46.903	\N	0	\N
-1	admin	admin@edificioxyz.com	$2b$10$moKl8pdBaQkhZnnvjSQAxu4SSUKHZhDv2J98U.3yoIAwjMrbjR1DO	1	t	2026-09-07 02:47:37.990492	2026-10-11 21:32:21.607	\N	0	\N
+1	admin	admin@edificioxyz.com	$2b$10$moKl8pdBaQkhZnnvjSQAxu4SSUKHZhDv2J98U.3yoIAwjMrbjR1DO	1	t	2026-09-07 02:47:37.990492	2026-10-12 02:07:04.584	\N	0	\N
 14	rodrigo	rodriheredia911@gmail.com	$2b$10$hoIeJ8F1sTqE274GM.ihJ.6Dc61HsSqKJEl1uKW9nZRFp5rKEp7gW	1	t	2026-09-19 01:19:31.772	\N	\N	0	12
 12	Heredia	202002501@est.umss.edu	$2b$10$1GTobXC5uEhuklf/cSV7jOVTr7TzrnrXDF7kLXnZweGuN85umBY5e	1	t	2026-09-14 21:52:51.735	2026-10-11 01:41:58.342	\N	0	6
 2	directorio	directorio@edificioxyz.com	$2b$10$MrTirlNTJ4Zem8W6U2diz.0Zs56WbVhLw2w66TCvzc3fLJ/FeM5U.	2	t	2026-09-07 02:47:37.990492	2026-09-28 11:15:33.619	\N	0	\N
@@ -134,10 +134,10 @@ ALTER TABLE edificio.cuentas_bancarias ENABLE TRIGGER ALL;
 
 ALTER TABLE edificio.tipos_departamento DISABLE TRIGGER ALL;
 
-COPY edificio.tipos_departamento (id_tipo, nombre, monto_expensa) FROM stdin;
-1	A	300.00
-2	B	350.00
-3	C	400.00
+COPY edificio.tipos_departamento (id_tipo, nombre, monto_expensa, tipo_departamento) FROM stdin;
+1	A	300.00	individual
+2	B	350.00	duo 
+3	C	400.00	familiar
 \.
 
 
@@ -150,23 +150,26 @@ ALTER TABLE edificio.tipos_departamento ENABLE TRIGGER ALL;
 ALTER TABLE edificio.departamentos DISABLE TRIGGER ALL;
 
 COPY edificio.departamentos (id_departamento, numero, piso, area_m2, id_propietario, estado, id_tipo) FROM stdin;
-6	HU3-80666	5	105.00	20	Ocupado	\N
-5	202	2	88.00	\N	Ocupado	\N
-50	555	7	200.00	\N	Disponible	\N
-4	201	2	120.00	\N	Disponible	\N
-56	177	7	220.00	6	Ocupado	\N
-57	888	6	250.00	\N	Ocupado	\N
-58	D305	8	875.00	\N	Disponible	\N
-59	E412	6	940.00	\N	Ocupado	\N
-60	D52	9	1060.00	\N	Disponible	\N
-61	D863	13	1475.00	\N	Disponible	\N
-62	E761	17	1890.00	\N	Disponible	\N
-63	24	3	300.00	\N	Ocupado	\N
-64	23	3	300.00	\N	Disponible	\N
-65	35	5	450.00	\N	Disponible	\N
-66	47	8	520.00	\N	Disponible	\N
-3	102	1	92.00	\N	Disponible	1
-2	101	1	85.50	5	Disponible	1
+3	102	1	60.00	\N	Disponible	1
+5	202	2	100.00	\N	Ocupado	3
+2	101	1	60.00	5	Disponible	1
+50	555	7	60.00	\N	Disponible	1
+4	201	2	80.00	\N	Disponible	2
+56	177	7	100.00	6	Ocupado	3
+57	888	6	60.00	\N	Ocupado	1
+58	D305	8	80.00	\N	Disponible	2
+59	E412	6	100.00	\N	Ocupado	3
+60	D52	9	60.00	\N	Disponible	1
+63	24	3	60.00	\N	Ocupado	1
+64	23	3	80.00	\N	Disponible	2
+65	35	5	100.00	\N	Disponible	3
+66	47	8	60.00	\N	Disponible	1
+1	100	6	80.00	\N	Disponible	2
+7	103	2	100.00	\N	Disponible	3
+20	104	1	60.00	\N	Disponible	1
+61	D863	10	80.00	\N	Disponible	2
+62	E761	10	100.00	\N	Disponible	3
+6	105	5	80.00	20	Ocupado	2
 \.
 
 
@@ -181,7 +184,17 @@ ALTER TABLE edificio.expensas DISABLE TRIGGER ALL;
 COPY edificio.expensas (id_expensa, id_departamento, periodo, monto, tasa_interes_mora, fecha_vencimiento, saldo_pendiente, estado, fecha_creacion, monto_mora) FROM stdin;
 117	2	2026-10-01	450.00	0.00	2026-10-15	0.00	Pagado	2026-10-11 13:43:14.624	0.00
 118	3	2026-10-01	480.00	0.00	2026-10-15	480.00	Pendiente	2026-10-11 13:43:15.961	0.00
-119	4	2026-09-01	600.00	3.50	2026-09-15	600.00	Moroso	2026-10-11 13:43:17.298	0.00
+126	63	2026-10-01	300.00	5.00	2026-10-15	300.00	Pendiente	2026-10-12 01:52:32.185116	0.00
+127	65	2026-10-01	400.00	5.00	2026-10-15	400.00	Pendiente	2026-10-12 01:52:32.185116	0.00
+128	59	2026-10-01	400.00	5.00	2026-10-15	400.00	Pendiente	2026-10-12 01:52:32.185116	0.00
+129	50	2026-10-01	300.00	5.00	2026-10-15	300.00	Pendiente	2026-10-12 01:52:32.185116	0.00
+120	57	2026-08-01	300.00	5.00	2026-08-15	315.00	Moroso	2026-10-12 01:52:32.185116	15.00
+121	58	2026-08-01	350.00	5.00	2026-08-15	367.50	Moroso	2026-10-12 01:52:32.185116	17.50
+122	64	2026-09-01	350.00	5.00	2026-09-15	367.50	Moroso	2026-10-12 01:52:32.185116	17.50
+123	56	2026-09-01	400.00	5.00	2026-09-15	420.00	Moroso	2026-10-12 01:52:32.185116	20.00
+124	6	2026-09-01	350.00	5.00	2026-09-15	367.50	Moroso	2026-10-12 01:52:32.185116	17.50
+125	60	2026-09-01	300.00	5.00	2026-09-15	315.00	Moroso	2026-10-12 01:52:32.185116	15.00
+119	4	2026-09-01	600.00	5.00	2026-09-15	630.00	Moroso	2026-10-11 13:43:17.298	30.00
 \.
 
 
@@ -2084,6 +2097,50 @@ COPY edificio.auditoria (id_auditoria, tabla_afectada, id_registro, accion, dato
 1887	usuarios	7	LOGIN_EXITOSO	\N	{"ip": "::1", "rol": "Copropietario", "correo": "copropietario@edificioxyz.com", "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36"}	7	2026-10-11 21:31:47.924	EXITO
 1888	usuarios	7	LOGOUT	\N	{"ip": "::1", "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36"}	7	2026-10-11 21:32:11.125	EXITO
 1889	usuarios	1	LOGIN_EXITOSO	\N	{"ip": "::1", "rol": "Administrador", "correo": "admin@edificioxyz.com", "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36"}	1	2026-10-11 21:32:22.628	EXITO
+1890	usuarios	1	LOGIN_EXITOSO	\N	{"ip": "::1", "rol": "Administrador", "correo": "admin@edificioxyz.com", "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36"}	1	2026-10-11 23:31:51.518	EXITO
+1891	usuarios	1	LOGOUT	\N	{"ip": "::1", "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36"}	1	2026-10-12 01:36:16.981	EXITO
+1892	usuarios	1	LOGOUT	\N	{"ip": "::1", "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36"}	1	2026-10-12 01:36:19.644	EXITO
+1893	usuarios	1	LOGIN_EXITOSO	\N	{"ip": "::1", "rol": "Administrador", "correo": "admin@edificioxyz.com", "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36"}	1	2026-10-12 01:36:27.198	EXITO
+1894	expensas	\N	INSERT	\N	{"monto": 300.00, "estado": "Moroso", "periodo": "2026-08-01", "id_expensa": 120, "monto_mora": 15.00, "fecha_creacion": "2026-10-12T01:52:32.185116", "id_departamento": 57, "saldo_pendiente": 315.00, "fecha_vencimiento": "2026-08-15", "tasa_interes_mora": 5.00}	\N	2026-10-12 01:52:32.185116	\N
+1895	expensas	\N	INSERT	\N	{"monto": 350.00, "estado": "Moroso", "periodo": "2026-08-01", "id_expensa": 121, "monto_mora": 17.50, "fecha_creacion": "2026-10-12T01:52:32.185116", "id_departamento": 58, "saldo_pendiente": 367.50, "fecha_vencimiento": "2026-08-15", "tasa_interes_mora": 5.00}	\N	2026-10-12 01:52:32.185116	\N
+1896	expensas	\N	INSERT	\N	{"monto": 350.00, "estado": "Moroso", "periodo": "2026-09-01", "id_expensa": 122, "monto_mora": 17.50, "fecha_creacion": "2026-10-12T01:52:32.185116", "id_departamento": 64, "saldo_pendiente": 367.50, "fecha_vencimiento": "2026-09-15", "tasa_interes_mora": 5.00}	\N	2026-10-12 01:52:32.185116	\N
+1897	expensas	\N	INSERT	\N	{"monto": 400.00, "estado": "Moroso", "periodo": "2026-09-01", "id_expensa": 123, "monto_mora": 20.00, "fecha_creacion": "2026-10-12T01:52:32.185116", "id_departamento": 56, "saldo_pendiente": 420.00, "fecha_vencimiento": "2026-09-15", "tasa_interes_mora": 5.00}	\N	2026-10-12 01:52:32.185116	\N
+1898	expensas	\N	INSERT	\N	{"monto": 350.00, "estado": "Moroso", "periodo": "2026-09-01", "id_expensa": 124, "monto_mora": 17.50, "fecha_creacion": "2026-10-12T01:52:32.185116", "id_departamento": 6, "saldo_pendiente": 367.50, "fecha_vencimiento": "2026-09-15", "tasa_interes_mora": 5.00}	\N	2026-10-12 01:52:32.185116	\N
+1899	expensas	\N	INSERT	\N	{"monto": 300.00, "estado": "Moroso", "periodo": "2026-09-01", "id_expensa": 125, "monto_mora": 15.00, "fecha_creacion": "2026-10-12T01:52:32.185116", "id_departamento": 60, "saldo_pendiente": 315.00, "fecha_vencimiento": "2026-09-15", "tasa_interes_mora": 5.00}	\N	2026-10-12 01:52:32.185116	\N
+1900	expensas	\N	INSERT	\N	{"monto": 300.00, "estado": "Pendiente", "periodo": "2026-10-01", "id_expensa": 126, "monto_mora": 0.00, "fecha_creacion": "2026-10-12T01:52:32.185116", "id_departamento": 63, "saldo_pendiente": 300.00, "fecha_vencimiento": "2026-10-15", "tasa_interes_mora": 5.00}	\N	2026-10-12 01:52:32.185116	\N
+1901	expensas	\N	INSERT	\N	{"monto": 400.00, "estado": "Pendiente", "periodo": "2026-10-01", "id_expensa": 127, "monto_mora": 0.00, "fecha_creacion": "2026-10-12T01:52:32.185116", "id_departamento": 65, "saldo_pendiente": 400.00, "fecha_vencimiento": "2026-10-15", "tasa_interes_mora": 5.00}	\N	2026-10-12 01:52:32.185116	\N
+1902	expensas	\N	INSERT	\N	{"monto": 400.00, "estado": "Pendiente", "periodo": "2026-10-01", "id_expensa": 128, "monto_mora": 0.00, "fecha_creacion": "2026-10-12T01:52:32.185116", "id_departamento": 59, "saldo_pendiente": 400.00, "fecha_vencimiento": "2026-10-15", "tasa_interes_mora": 5.00}	\N	2026-10-12 01:52:32.185116	\N
+1903	expensas	\N	INSERT	\N	{"monto": 300.00, "estado": "Pendiente", "periodo": "2026-10-01", "id_expensa": 129, "monto_mora": 0.00, "fecha_creacion": "2026-10-12T01:52:32.185116", "id_departamento": 50, "saldo_pendiente": 300.00, "fecha_vencimiento": "2026-10-15", "tasa_interes_mora": 5.00}	\N	2026-10-12 01:52:32.185116	\N
+1904	expensas	\N	UPDATE	{"monto": 600.00, "estado": "Moroso", "periodo": "2026-09-01", "id_expensa": 119, "monto_mora": 0.00, "fecha_creacion": "2026-10-11T13:43:17.298", "id_departamento": 4, "saldo_pendiente": 600.00, "fecha_vencimiento": "2026-09-15", "tasa_interes_mora": 3.50}	{"monto": 600.00, "estado": "Moroso", "periodo": "2026-09-01", "id_expensa": 119, "monto_mora": 0.00, "fecha_creacion": "2026-10-11T13:43:17.298", "id_departamento": 4, "saldo_pendiente": 600.00, "fecha_vencimiento": "2026-09-15", "tasa_interes_mora": 5.00}	\N	2026-10-12 01:52:58.443595	\N
+1905	usuarios	1	LOGOUT	\N	{"ip": "::1", "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36"}	1	2026-10-12 02:06:51.975	EXITO
+1906	usuarios	1	LOGOUT	\N	{"ip": "::1", "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36"}	1	2026-10-12 02:06:52.58	EXITO
+1907	usuarios	1	LOGOUT	\N	{"ip": "::1", "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36"}	1	2026-10-12 02:06:56.45	EXITO
+1908	usuarios	1	LOGIN_EXITOSO	\N	{"ip": "::1", "rol": "Administrador", "correo": "admin@edificioxyz.com", "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36"}	1	2026-10-12 02:07:05.603	EXITO
+1909	expensas	\N	UPDATE	{"monto": 300.00, "estado": "Moroso", "periodo": "2026-08-01", "id_expensa": 120, "monto_mora": 15.00, "fecha_creacion": "2026-10-12T01:52:32.185116", "id_departamento": 57, "saldo_pendiente": 315.00, "fecha_vencimiento": "2026-08-15", "tasa_interes_mora": 5.00}	{"monto": 300.00, "estado": "Moroso", "periodo": "2026-08-01", "id_expensa": 120, "monto_mora": 15.00, "fecha_creacion": "2026-10-12T01:52:32.185116", "id_departamento": 57, "saldo_pendiente": 315.00, "fecha_vencimiento": "2026-08-15", "tasa_interes_mora": 5.00}	\N	2026-10-12 02:10:24.996041	\N
+1910	expensas	\N	UPDATE	{"monto": 350.00, "estado": "Moroso", "periodo": "2026-08-01", "id_expensa": 121, "monto_mora": 17.50, "fecha_creacion": "2026-10-12T01:52:32.185116", "id_departamento": 58, "saldo_pendiente": 367.50, "fecha_vencimiento": "2026-08-15", "tasa_interes_mora": 5.00}	{"monto": 350.00, "estado": "Moroso", "periodo": "2026-08-01", "id_expensa": 121, "monto_mora": 17.50, "fecha_creacion": "2026-10-12T01:52:32.185116", "id_departamento": 58, "saldo_pendiente": 367.50, "fecha_vencimiento": "2026-08-15", "tasa_interes_mora": 5.00}	\N	2026-10-12 02:10:24.996041	\N
+1911	expensas	\N	UPDATE	{"monto": 600.00, "estado": "Moroso", "periodo": "2026-09-01", "id_expensa": 119, "monto_mora": 0.00, "fecha_creacion": "2026-10-11T13:43:17.298", "id_departamento": 4, "saldo_pendiente": 600.00, "fecha_vencimiento": "2026-09-15", "tasa_interes_mora": 5.00}	{"monto": 600.00, "estado": "Moroso", "periodo": "2026-09-01", "id_expensa": 119, "monto_mora": 30.00, "fecha_creacion": "2026-10-11T13:43:17.298", "id_departamento": 4, "saldo_pendiente": 630.00, "fecha_vencimiento": "2026-09-15", "tasa_interes_mora": 5.00}	\N	2026-10-12 02:10:24.996041	\N
+1912	expensas	\N	UPDATE	{"monto": 350.00, "estado": "Moroso", "periodo": "2026-09-01", "id_expensa": 122, "monto_mora": 17.50, "fecha_creacion": "2026-10-12T01:52:32.185116", "id_departamento": 64, "saldo_pendiente": 367.50, "fecha_vencimiento": "2026-09-15", "tasa_interes_mora": 5.00}	{"monto": 350.00, "estado": "Moroso", "periodo": "2026-09-01", "id_expensa": 122, "monto_mora": 17.50, "fecha_creacion": "2026-10-12T01:52:32.185116", "id_departamento": 64, "saldo_pendiente": 367.50, "fecha_vencimiento": "2026-09-15", "tasa_interes_mora": 5.00}	\N	2026-10-12 02:10:24.996041	\N
+1913	expensas	\N	UPDATE	{"monto": 400.00, "estado": "Moroso", "periodo": "2026-09-01", "id_expensa": 123, "monto_mora": 20.00, "fecha_creacion": "2026-10-12T01:52:32.185116", "id_departamento": 56, "saldo_pendiente": 420.00, "fecha_vencimiento": "2026-09-15", "tasa_interes_mora": 5.00}	{"monto": 400.00, "estado": "Moroso", "periodo": "2026-09-01", "id_expensa": 123, "monto_mora": 20.00, "fecha_creacion": "2026-10-12T01:52:32.185116", "id_departamento": 56, "saldo_pendiente": 420.00, "fecha_vencimiento": "2026-09-15", "tasa_interes_mora": 5.00}	\N	2026-10-12 02:10:24.996041	\N
+1914	expensas	\N	UPDATE	{"monto": 350.00, "estado": "Moroso", "periodo": "2026-09-01", "id_expensa": 124, "monto_mora": 17.50, "fecha_creacion": "2026-10-12T01:52:32.185116", "id_departamento": 6, "saldo_pendiente": 367.50, "fecha_vencimiento": "2026-09-15", "tasa_interes_mora": 5.00}	{"monto": 350.00, "estado": "Moroso", "periodo": "2026-09-01", "id_expensa": 124, "monto_mora": 17.50, "fecha_creacion": "2026-10-12T01:52:32.185116", "id_departamento": 6, "saldo_pendiente": 367.50, "fecha_vencimiento": "2026-09-15", "tasa_interes_mora": 5.00}	\N	2026-10-12 02:10:24.996041	\N
+1915	expensas	\N	UPDATE	{"monto": 300.00, "estado": "Moroso", "periodo": "2026-09-01", "id_expensa": 125, "monto_mora": 15.00, "fecha_creacion": "2026-10-12T01:52:32.185116", "id_departamento": 60, "saldo_pendiente": 315.00, "fecha_vencimiento": "2026-09-15", "tasa_interes_mora": 5.00}	{"monto": 300.00, "estado": "Moroso", "periodo": "2026-09-01", "id_expensa": 125, "monto_mora": 15.00, "fecha_creacion": "2026-10-12T01:52:32.185116", "id_departamento": 60, "saldo_pendiente": 315.00, "fecha_vencimiento": "2026-09-15", "tasa_interes_mora": 5.00}	\N	2026-10-12 02:10:24.996041	\N
+1916	expensas	MORA-2026-10-12	CALCULO_MORA_EXPENSAS	\N	{"fechaEjecucion": "2026-10-12T02:10:24.691Z", "actualizadasCount": 7}	1	2026-10-12 02:10:28.988	EXITO
+1917	expensas	\N	UPDATE	{"monto": 300.00, "estado": "Moroso", "periodo": "2026-08-01", "id_expensa": 120, "monto_mora": 15.00, "fecha_creacion": "2026-10-12T01:52:32.185116", "id_departamento": 57, "saldo_pendiente": 315.00, "fecha_vencimiento": "2026-08-15", "tasa_interes_mora": 5.00}	{"monto": 300.00, "estado": "Moroso", "periodo": "2026-08-01", "id_expensa": 120, "monto_mora": 15.00, "fecha_creacion": "2026-10-12T01:52:32.185116", "id_departamento": 57, "saldo_pendiente": 315.00, "fecha_vencimiento": "2026-08-15", "tasa_interes_mora": 5.00}	\N	2026-10-12 02:10:32.068946	\N
+1918	expensas	\N	UPDATE	{"monto": 350.00, "estado": "Moroso", "periodo": "2026-08-01", "id_expensa": 121, "monto_mora": 17.50, "fecha_creacion": "2026-10-12T01:52:32.185116", "id_departamento": 58, "saldo_pendiente": 367.50, "fecha_vencimiento": "2026-08-15", "tasa_interes_mora": 5.00}	{"monto": 350.00, "estado": "Moroso", "periodo": "2026-08-01", "id_expensa": 121, "monto_mora": 17.50, "fecha_creacion": "2026-10-12T01:52:32.185116", "id_departamento": 58, "saldo_pendiente": 367.50, "fecha_vencimiento": "2026-08-15", "tasa_interes_mora": 5.00}	\N	2026-10-12 02:10:32.068946	\N
+1919	expensas	\N	UPDATE	{"monto": 350.00, "estado": "Moroso", "periodo": "2026-09-01", "id_expensa": 122, "monto_mora": 17.50, "fecha_creacion": "2026-10-12T01:52:32.185116", "id_departamento": 64, "saldo_pendiente": 367.50, "fecha_vencimiento": "2026-09-15", "tasa_interes_mora": 5.00}	{"monto": 350.00, "estado": "Moroso", "periodo": "2026-09-01", "id_expensa": 122, "monto_mora": 17.50, "fecha_creacion": "2026-10-12T01:52:32.185116", "id_departamento": 64, "saldo_pendiente": 367.50, "fecha_vencimiento": "2026-09-15", "tasa_interes_mora": 5.00}	\N	2026-10-12 02:10:32.068946	\N
+1920	expensas	\N	UPDATE	{"monto": 400.00, "estado": "Moroso", "periodo": "2026-09-01", "id_expensa": 123, "monto_mora": 20.00, "fecha_creacion": "2026-10-12T01:52:32.185116", "id_departamento": 56, "saldo_pendiente": 420.00, "fecha_vencimiento": "2026-09-15", "tasa_interes_mora": 5.00}	{"monto": 400.00, "estado": "Moroso", "periodo": "2026-09-01", "id_expensa": 123, "monto_mora": 20.00, "fecha_creacion": "2026-10-12T01:52:32.185116", "id_departamento": 56, "saldo_pendiente": 420.00, "fecha_vencimiento": "2026-09-15", "tasa_interes_mora": 5.00}	\N	2026-10-12 02:10:32.068946	\N
+1921	expensas	\N	UPDATE	{"monto": 350.00, "estado": "Moroso", "periodo": "2026-09-01", "id_expensa": 124, "monto_mora": 17.50, "fecha_creacion": "2026-10-12T01:52:32.185116", "id_departamento": 6, "saldo_pendiente": 367.50, "fecha_vencimiento": "2026-09-15", "tasa_interes_mora": 5.00}	{"monto": 350.00, "estado": "Moroso", "periodo": "2026-09-01", "id_expensa": 124, "monto_mora": 17.50, "fecha_creacion": "2026-10-12T01:52:32.185116", "id_departamento": 6, "saldo_pendiente": 367.50, "fecha_vencimiento": "2026-09-15", "tasa_interes_mora": 5.00}	\N	2026-10-12 02:10:32.068946	\N
+1922	expensas	\N	UPDATE	{"monto": 300.00, "estado": "Moroso", "periodo": "2026-09-01", "id_expensa": 125, "monto_mora": 15.00, "fecha_creacion": "2026-10-12T01:52:32.185116", "id_departamento": 60, "saldo_pendiente": 315.00, "fecha_vencimiento": "2026-09-15", "tasa_interes_mora": 5.00}	{"monto": 300.00, "estado": "Moroso", "periodo": "2026-09-01", "id_expensa": 125, "monto_mora": 15.00, "fecha_creacion": "2026-10-12T01:52:32.185116", "id_departamento": 60, "saldo_pendiente": 315.00, "fecha_vencimiento": "2026-09-15", "tasa_interes_mora": 5.00}	\N	2026-10-12 02:10:32.068946	\N
+1923	expensas	\N	UPDATE	{"monto": 600.00, "estado": "Moroso", "periodo": "2026-09-01", "id_expensa": 119, "monto_mora": 30.00, "fecha_creacion": "2026-10-11T13:43:17.298", "id_departamento": 4, "saldo_pendiente": 630.00, "fecha_vencimiento": "2026-09-15", "tasa_interes_mora": 5.00}	{"monto": 600.00, "estado": "Moroso", "periodo": "2026-09-01", "id_expensa": 119, "monto_mora": 30.00, "fecha_creacion": "2026-10-11T13:43:17.298", "id_departamento": 4, "saldo_pendiente": 630.00, "fecha_vencimiento": "2026-09-15", "tasa_interes_mora": 5.00}	\N	2026-10-12 02:10:32.068946	\N
+1924	expensas	MORA-2026-10-12	CALCULO_MORA_EXPENSAS	\N	{"fechaEjecucion": "2026-10-12T02:10:31.968Z", "actualizadasCount": 7}	1	2026-10-12 02:10:36.038	EXITO
+1925	expensas	\N	UPDATE	{"monto": 300.00, "estado": "Moroso", "periodo": "2026-08-01", "id_expensa": 120, "monto_mora": 15.00, "fecha_creacion": "2026-10-12T01:52:32.185116", "id_departamento": 57, "saldo_pendiente": 315.00, "fecha_vencimiento": "2026-08-15", "tasa_interes_mora": 5.00}	{"monto": 300.00, "estado": "Moroso", "periodo": "2026-08-01", "id_expensa": 120, "monto_mora": 15.00, "fecha_creacion": "2026-10-12T01:52:32.185116", "id_departamento": 57, "saldo_pendiente": 315.00, "fecha_vencimiento": "2026-08-15", "tasa_interes_mora": 5.00}	\N	2026-10-12 02:10:36.846745	\N
+1926	expensas	\N	UPDATE	{"monto": 350.00, "estado": "Moroso", "periodo": "2026-08-01", "id_expensa": 121, "monto_mora": 17.50, "fecha_creacion": "2026-10-12T01:52:32.185116", "id_departamento": 58, "saldo_pendiente": 367.50, "fecha_vencimiento": "2026-08-15", "tasa_interes_mora": 5.00}	{"monto": 350.00, "estado": "Moroso", "periodo": "2026-08-01", "id_expensa": 121, "monto_mora": 17.50, "fecha_creacion": "2026-10-12T01:52:32.185116", "id_departamento": 58, "saldo_pendiente": 367.50, "fecha_vencimiento": "2026-08-15", "tasa_interes_mora": 5.00}	\N	2026-10-12 02:10:36.846745	\N
+1927	expensas	\N	UPDATE	{"monto": 350.00, "estado": "Moroso", "periodo": "2026-09-01", "id_expensa": 122, "monto_mora": 17.50, "fecha_creacion": "2026-10-12T01:52:32.185116", "id_departamento": 64, "saldo_pendiente": 367.50, "fecha_vencimiento": "2026-09-15", "tasa_interes_mora": 5.00}	{"monto": 350.00, "estado": "Moroso", "periodo": "2026-09-01", "id_expensa": 122, "monto_mora": 17.50, "fecha_creacion": "2026-10-12T01:52:32.185116", "id_departamento": 64, "saldo_pendiente": 367.50, "fecha_vencimiento": "2026-09-15", "tasa_interes_mora": 5.00}	\N	2026-10-12 02:10:36.846745	\N
+1928	expensas	\N	UPDATE	{"monto": 400.00, "estado": "Moroso", "periodo": "2026-09-01", "id_expensa": 123, "monto_mora": 20.00, "fecha_creacion": "2026-10-12T01:52:32.185116", "id_departamento": 56, "saldo_pendiente": 420.00, "fecha_vencimiento": "2026-09-15", "tasa_interes_mora": 5.00}	{"monto": 400.00, "estado": "Moroso", "periodo": "2026-09-01", "id_expensa": 123, "monto_mora": 20.00, "fecha_creacion": "2026-10-12T01:52:32.185116", "id_departamento": 56, "saldo_pendiente": 420.00, "fecha_vencimiento": "2026-09-15", "tasa_interes_mora": 5.00}	\N	2026-10-12 02:10:36.846745	\N
+1929	expensas	\N	UPDATE	{"monto": 350.00, "estado": "Moroso", "periodo": "2026-09-01", "id_expensa": 124, "monto_mora": 17.50, "fecha_creacion": "2026-10-12T01:52:32.185116", "id_departamento": 6, "saldo_pendiente": 367.50, "fecha_vencimiento": "2026-09-15", "tasa_interes_mora": 5.00}	{"monto": 350.00, "estado": "Moroso", "periodo": "2026-09-01", "id_expensa": 124, "monto_mora": 17.50, "fecha_creacion": "2026-10-12T01:52:32.185116", "id_departamento": 6, "saldo_pendiente": 367.50, "fecha_vencimiento": "2026-09-15", "tasa_interes_mora": 5.00}	\N	2026-10-12 02:10:36.846745	\N
+1930	expensas	\N	UPDATE	{"monto": 300.00, "estado": "Moroso", "periodo": "2026-09-01", "id_expensa": 125, "monto_mora": 15.00, "fecha_creacion": "2026-10-12T01:52:32.185116", "id_departamento": 60, "saldo_pendiente": 315.00, "fecha_vencimiento": "2026-09-15", "tasa_interes_mora": 5.00}	{"monto": 300.00, "estado": "Moroso", "periodo": "2026-09-01", "id_expensa": 125, "monto_mora": 15.00, "fecha_creacion": "2026-10-12T01:52:32.185116", "id_departamento": 60, "saldo_pendiente": 315.00, "fecha_vencimiento": "2026-09-15", "tasa_interes_mora": 5.00}	\N	2026-10-12 02:10:36.846745	\N
+1931	expensas	\N	UPDATE	{"monto": 600.00, "estado": "Moroso", "periodo": "2026-09-01", "id_expensa": 119, "monto_mora": 30.00, "fecha_creacion": "2026-10-11T13:43:17.298", "id_departamento": 4, "saldo_pendiente": 630.00, "fecha_vencimiento": "2026-09-15", "tasa_interes_mora": 5.00}	{"monto": 600.00, "estado": "Moroso", "periodo": "2026-09-01", "id_expensa": 119, "monto_mora": 30.00, "fecha_creacion": "2026-10-11T13:43:17.298", "id_departamento": 4, "saldo_pendiente": 630.00, "fecha_vencimiento": "2026-09-15", "tasa_interes_mora": 5.00}	\N	2026-10-12 02:10:36.846745	\N
+1932	expensas	MORA-2026-10-12	CALCULO_MORA_EXPENSAS	\N	{"fechaEjecucion": "2026-10-12T02:10:36.746Z", "actualizadasCount": 7}	1	2026-10-12 02:10:40.816	EXITO
+1933	usuarios	1	LOGOUT	\N	{"ip": "::1", "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36"}	1	2026-10-12 02:16:46.979	EXITO
 \.
 
 
@@ -2315,7 +2372,7 @@ SELECT pg_catalog.setval('edificio.aplicaciones_anticipos_id_aplicacion_seq', 30
 -- Name: auditoria_id_auditoria_seq; Type: SEQUENCE SET; Schema: edificio; Owner: postgres
 --
 
-SELECT pg_catalog.setval('edificio.auditoria_id_auditoria_seq', 1889, true);
+SELECT pg_catalog.setval('edificio.auditoria_id_auditoria_seq', 1933, true);
 
 
 --
@@ -2385,7 +2442,7 @@ SELECT pg_catalog.setval('edificio.empleados_id_empleado_seq', 2, true);
 -- Name: expensas_id_expensa_seq; Type: SEQUENCE SET; Schema: edificio; Owner: postgres
 --
 
-SELECT pg_catalog.setval('edificio.expensas_id_expensa_seq', 119, true);
+SELECT pg_catalog.setval('edificio.expensas_id_expensa_seq', 129, true);
 
 
 --
@@ -2469,5 +2526,5 @@ SELECT pg_catalog.setval('edificio.usuarios_id_usuario_seq', 32, true);
 -- PostgreSQL database dump complete
 --
 
-\unrestrict 9eyr5rYva2fTzyslRBEUGyRgJxoaWmyiBuZOJAtQYciLGDdgFcNFbFxIfhU8W5Y
+\unrestrict f5iZdgHI7fWP1Fxep7rfgXpNfvT1DLUTA4QXPYvdqhSLeg2JIiSJptMOtKghpTa
 
