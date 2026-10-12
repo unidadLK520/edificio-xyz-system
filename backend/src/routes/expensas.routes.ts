@@ -910,7 +910,14 @@ expensasRouter.post(
       }, { timeout: 30000, maxWait: 15000 });
 
       res.status(201).json(expensaFinal);
-    } catch (err) {
+    } catch (err: any) {
+      if (err.code === 'P2002') {
+        res.status(409).json({
+          error: 'Conflict',
+          message: 'Ya existe una expensa registrada para el departamento en este período',
+        });
+        return;
+      }
       next(err);
     }
   }

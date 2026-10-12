@@ -322,5 +322,26 @@ describe('BLOQUE 3: Reglas de Negocio de Pagos, Expensas Vencidas y Control de D
       expect(res.body.error).toBe('Conflict');
       expect(res.body.message).toContain('Ya existe una expensa registrada para el departamento');
     });
+
+    it('Debe retornar 409 Conflict si la base de datos lanza P2002 por restricción única en concurrencia', async () => {
+      (prisma.expensa.findFirst as any).mockResolvedValue(null);
+      const prismaError: any = new Error('Unique constraint failed on the fields: (id_departamento, periodo)');
+      prismaError.code = 'P2002';
+      (prisma.$transaction as any).mockRejectedValue(prismaError);
+
+      const res = await request(app)
+        .post('/api/v1/expensas')
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({
+          idDepartamento: 1,
+          periodo: '2026-10-01',
+          monto: 500,
+          fechaVencimiento: '2026-10-25',
+        });
+
+      expect(res.status).toBe(409);
+      expect(res.body.error).toBe('Conflict');
+      expect(res.body.message).toContain('Ya existe una expensa registrada para el departamento en este período');
+    });
   });
 });
