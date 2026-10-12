@@ -69,10 +69,9 @@ export default function EditarDepartamentoModal({
                 onChange={(e) => onChange({ ...depto, estado: e.target.value as any })}
                 className="w-full px-3 py-2 rounded-xl bg-[#ded8cc] dark:bg-slate-800 border border-[#cec8bc] dark:border-slate-700 text-xs text-[#262422] dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-600 cursor-pointer"
               >
-                <option value="Ocupado">Ocupado</option>
-                <option value="Disponible">Disponible</option>
-                <option value="En Alquiler">En Alquiler</option>
-                <option value="Mantenimiento">Mantenimiento</option>
+                <option value="Ocupado por Propietario">Ocupado por Propietario</option>
+                <option value="Alquilado">Alquilado a Inquilino</option>
+                <option value="Desocupado">Desocupado / Vacío (Genera Expensa)</option>
               </select>
             </div>
           </div>

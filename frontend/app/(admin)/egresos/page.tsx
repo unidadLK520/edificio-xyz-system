@@ -53,19 +53,147 @@ export interface CategoriaItem {
 
 const DEFAULT_CATEGORIAS: CategoriaItem[] = [
   { idCategoria: 1, nombre: 'Mantenimiento y Reparaciones', tipo: 'Egreso' },
-  { idCategoria: 2, nombre: 'Servicios Básicos (Luz/Agua)', tipo: 'Egreso' },
+  { idCategoria: 2, nombre: 'Servicios Básicos Comunes (Luz/Agua)', tipo: 'Egreso' },
   { idCategoria: 3, nombre: 'Seguridad y Vigilancia', tipo: 'Egreso' },
   { idCategoria: 4, nombre: 'Limpieza y Desinfección', tipo: 'Egreso' },
-  { idCategoria: 5, nombre: 'Administrativo y Legal', tipo: 'Egreso' },
-  { idCategoria: 6, nombre: 'Ingreso Extraordinario', tipo: 'Ingreso' },
-  { idCategoria: 7, nombre: 'Alquiler Áreas Comunes / Salón', tipo: 'Ingreso' },
-  { idCategoria: 8, nombre: 'Multas y Penalidades', tipo: 'Ingreso' },
-  { idCategoria: 9, nombre: 'Donación o Aporte Voluntario', tipo: 'Ingreso' },
-  { idCategoria: 10, nombre: 'Intereses y Rendimientos', tipo: 'Ingreso' },
+  { idCategoria: 5, nombre: 'Administrativo y Operativo', tipo: 'Egreso' },
+  { idCategoria: 6, nombre: 'Cobro de Expensas Ordinarias', tipo: 'Ingreso' },
+  { idCategoria: 7, nombre: 'Fondo de Reserva / Cuota Extraordinaria', tipo: 'Ingreso' },
+  { idCategoria: 8, nombre: 'Multas y Penalidades Reglamentarias', tipo: 'Ingreso' },
+  { idCategoria: 9, nombre: 'Intereses y Rendimientos', tipo: 'Ingreso' },
+]
+
+const DEFAULT_MOVIMIENTOS_SEED: MovimientoItem[] = [
+  {
+    id: 1,
+    tipo: 'Egreso',
+    codigo: 'EGR-2026-001',
+    fecha: '2026-10-02',
+    idCategoria: 3,
+    categoria: 'Seguridad y Vigilancia',
+    tercero: 'Seguritas Integral Ltda.',
+    descripcion: 'Servicio de vigilancia física 24/7 y control de accesos peatonales y vehiculares.',
+    nroFactura: 'FAC-11928',
+    monto: 5600.0,
+    metodoPago: 'Transferencia Bancaria',
+    registradoPor: 'admin'
+  },
+  {
+    id: 2,
+    tipo: 'Egreso',
+    codigo: 'EGR-2026-002',
+    fecha: '2026-10-03',
+    idCategoria: 4,
+    categoria: 'Limpieza y Desinfección',
+    tercero: 'Servicios Limpios del Valle',
+    descripcion: 'Personal de limpieza para áreas comunes, pasillos, gradas y retiro de residuos.',
+    nroFactura: 'FAC-4891',
+    monto: 2200.0,
+    metodoPago: 'Transferencia Bancaria',
+    registradoPor: 'admin'
+  },
+  {
+    id: 3,
+    tipo: 'Egreso',
+    codigo: 'EGR-2026-003',
+    fecha: '2026-10-04',
+    idCategoria: 1,
+    categoria: 'Mantenimiento y Reparaciones',
+    tercero: 'Otis Elevadores Bolivia S.A.',
+    descripcion: 'Mantenimiento preventivo reglamentario mensual de ascensores torre principal.',
+    nroFactura: 'FAC-90182',
+    monto: 700.0,
+    metodoPago: 'Transferencia Bancaria',
+    registradoPor: 'admin'
+  },
+  {
+    id: 4,
+    tipo: 'Egreso',
+    codigo: 'EGR-2026-004',
+    fecha: '2026-10-05',
+    idCategoria: 2,
+    categoria: 'Servicios Básicos Comunes (Luz/Agua)',
+    tercero: 'ELFEC S.A. (Medidor Común)',
+    descripcion: 'Energía eléctrica de pasillos, iluminación perimetral, bomba de agua y áreas comunes.',
+    nroFactura: 'FAC-349012',
+    monto: 800.0,
+    metodoPago: 'Débito Automático',
+    registradoPor: 'admin'
+  },
+  {
+    id: 5,
+    tipo: 'Egreso',
+    codigo: 'EGR-2026-005',
+    fecha: '2026-10-05',
+    idCategoria: 2,
+    categoria: 'Servicios Básicos Comunes (Luz/Agua)',
+    tercero: 'SEMAPA (Consumo Común)',
+    descripcion: 'Consumo de agua para limpieza de áreas comunes, jardineras y cisterna central.',
+    nroFactura: 'FAC-78190',
+    monto: 300.0,
+    metodoPago: 'Débito Automático',
+    registradoPor: 'admin'
+  },
+  {
+    id: 6,
+    tipo: 'Ingreso',
+    codigo: 'ING-2026-001',
+    fecha: '2026-10-05',
+    idCategoria: 6,
+    categoria: 'Cobro de Expensas Ordinarias',
+    tercero: 'María López (Inquilina Dpto 305)',
+    descripcion: 'Cobro de Expensa mensual Dpto 305 (Tipo B, 80 m², Alícuota 5%). Propietario responsable: Juan Pérez.',
+    nroFactura: 'REC-2026-10-305',
+    monto: 775.0,
+    metodoPago: 'QR Simple Interbancario',
+    registradoPor: 'admin'
+  },
+  {
+    id: 7,
+    tipo: 'Ingreso',
+    codigo: 'ING-2026-002',
+    fecha: '2026-10-06',
+    idCategoria: 6,
+    categoria: 'Cobro de Expensas Ordinarias',
+    tercero: 'Pedro Ramírez (Inquilino Dpto 101)',
+    descripcion: 'Cobro de Expensa mensual Dpto 101 (Tipo A, 60 m², Alícuota 3.75%). Propietaria responsable: Ana Valdivia.',
+    nroFactura: 'REC-2026-10-101',
+    monto: 581.25,
+    metodoPago: 'Transferencia Bancaria',
+    registradoPor: 'admin'
+  },
+  {
+    id: 8,
+    tipo: 'Ingreso',
+    codigo: 'ING-2026-003',
+    fecha: '2026-10-06',
+    idCategoria: 6,
+    categoria: 'Cobro de Expensas Ordinarias',
+    tercero: 'Laura Céspedes (Propietaria Dpto 103)',
+    descripcion: 'Cobro de Expensa mensual Dpto 103 desocupado/vacío (Tipo C, 100 m², Alícuota 6.25%). Genera expensa obligatoria.',
+    nroFactura: 'REC-2026-10-103',
+    monto: 968.75,
+    metodoPago: 'Transferencia Bancaria',
+    registradoPor: 'admin'
+  },
+  {
+    id: 9,
+    tipo: 'Ingreso',
+    codigo: 'ING-2026-004',
+    fecha: '2026-10-07',
+    idCategoria: 6,
+    categoria: 'Cobro de Expensas Ordinarias',
+    tercero: 'Alejandro Gómez (Propietario Dpto 204)',
+    descripcion: 'Cobro de Expensa mensual Dpto 204 (Tipo B, 80 m², Alícuota 5%). Habitado por su propietario.',
+    nroFactura: 'REC-2026-10-204',
+    monto: 775.0,
+    metodoPago: 'QR Simple BNB',
+    registradoPor: 'admin'
+  }
 ]
 
 export default function FinanzasPage() {
-  const [movimientos, setMovimientos] = useState<MovimientoItem[]>([])
+  const [movimientos, setMovimientos] = useState<MovimientoItem[]>(DEFAULT_MOVIMIENTOS_SEED)
   const [categorias, setCategorias] = useState<CategoriaItem[]>(DEFAULT_CATEGORIAS)
   const [loading, setLoading] = useState<boolean>(true)
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false)
@@ -189,10 +317,17 @@ export default function FinanzasPage() {
             registradoPor: item.usuarioRegistro?.nombreUsuario || 'admin'
           }
         })
-        setMovimientos(mapped)
+        if (mapped.length > 0) {
+          setMovimientos(mapped)
+        } else {
+          setMovimientos(DEFAULT_MOVIMIENTOS_SEED)
+        }
+      } else {
+        setMovimientos(DEFAULT_MOVIMIENTOS_SEED)
       }
     } catch (err) {
       console.error('Error al cargar movimientos desde la API:', err)
+      setMovimientos(DEFAULT_MOVIMIENTOS_SEED)
     } finally {
       setLoading(false)
     }

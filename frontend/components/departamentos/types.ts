@@ -1,7 +1,11 @@
 // frontend/components/departamentos/types.ts
-// Tipos e interfaces compartidas para el módulo de Departamentos, Parqueos y Bauleras (HU03)
+// Tipos e interfaces compartidas para el módulo de Departamentos, Parqueos y Bauleras (Edificio XYZ)
 
 export type TipoUnidad = 'Departamento' | 'Parqueo' | 'Baulera'
+
+export type TipologiaDepto = 'Tipo A (60 m²)' | 'Tipo B (80 m²)' | 'Tipo C (100 m²)'
+
+export type EstadoOcupacionDepto = 'Ocupado por Propietario' | 'Alquilado' | 'Desocupado'
 
 export interface PropietarioInfo {
   id?: number
@@ -12,15 +16,18 @@ export interface PropietarioInfo {
 }
 
 export interface InquilinoInfo {
+  id?: number
   nombre: string
+  ci?: string
   telefono: string
+  correo?: string
 }
 
 export interface HistorialOcupanteItem {
   idHistorial?: number
   periodo?: string
   residente?: string
-  tipo?: string
+  tipo?: 'Propietario' | 'Inquilino' | string
   fechaInicio?: string
   fechaFin?: string
   notas?: string
@@ -32,10 +39,10 @@ export interface UnidadItem {
   numero: string
   piso?: number | null
   areaM2?: number | null
+  tipologia?: TipologiaDepto
   alicuota?: number
-  estado: string
+  estado: EstadoOcupacionDepto | string // 'Ocupado por Propietario' | 'Alquilado' | 'Desocupado' | 'Asignado' | 'Disponible'
   propietario?: PropietarioInfo | null
-  ocupanteActual?: PropietarioInfo | null
   inquilinoActual?: InquilinoInfo | null
   idDepartamento?: number | null
   departamento?: { idDepartamento?: number; numero?: string } | null
@@ -56,6 +63,7 @@ export interface DepartamentoFormData {
   numero: string
   piso: number
   areaM2: number
+  tipologia?: TipologiaDepto
   alicuota?: number
   parqueo?: string
   baulera?: string
@@ -63,6 +71,7 @@ export interface DepartamentoFormData {
   propietarioCi?: string
   propietarioTel?: string
   propietarioCorreo?: string
-  estado: string
+  inquilinoNombre?: string
+  inquilinoTel?: string
+  estado: EstadoOcupacionDepto | string
 }
-

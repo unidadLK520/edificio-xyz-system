@@ -32,7 +32,7 @@ export default function CrearDepartamentoModal({
     propietarioCi: '',
     propietarioTel: '',
     propietarioCorreo: '',
-    estado: 'Ocupado'
+    estado: 'Ocupado por Propietario'
   })
   const [isSubmitting, setIsSubmitting] = useState(false)
 
@@ -147,10 +147,9 @@ export default function CrearDepartamentoModal({
               >
                 {tipo === 'Departamento' ? (
                   <>
-                    <option value="Ocupado">Ocupado</option>
-                    <option value="Disponible">Disponible</option>
-                    <option value="En Alquiler">En Alquiler</option>
-                    <option value="Mantenimiento">Mantenimiento</option>
+                    <option value="Ocupado por Propietario">Ocupado por Propietario</option>
+                    <option value="Alquilado">Alquilado a Inquilino</option>
+                    <option value="Desocupado">Desocupado / Vacío (Genera Expensa)</option>
                   </>
                 ) : (
                   <>
