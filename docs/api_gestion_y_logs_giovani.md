@@ -611,6 +611,7 @@ Ejemplo (550 / 300): expensa de Bs 550, tasa 5 %. Al vencer sin pagos, mora = 27
 Caso del bug corregido: expensa 550 con anticipo aplicado de 250; antes la mora se calculaba sobre 550 (27.50, saldo 577.50); ahora sobre 300 (15.00, saldo 315.00).
 Idempotencia: ejecutar el cálculo varias veces sin cambios intermedios da el mismo resultado, porque sobrescribe `montoMora` sobre una base limpia. Si entre ejecuciones hubo pagos o cambió la regla, el resultado cambia.
 `interesPagado`: se almacena de forma informativa; no amortiza mora, ni saldo, ni capital.
+Ejemplo de independencia de mora por período (febrero y marzo): un mismo departamento con dos expensas vencidas (febrero por Bs 300 y marzo por Bs 300) genera un 5 % de mora independiente en cada una (Bs 15 de mora en febrero y Bs 15 en marzo, resultando en saldos de Bs 315 en cada período). La mora no crece acumulativamente con el paso de los meses ni se calcula sobre la mora de otros períodos. El endpoint `/morosos` consolida ambas obligaciones en `totalDeuda = Bs 630.00`.
 4.13 Configuración de mora (CA09)
 `GET /api/v1/expensas/reglas-mora` · Roles: Administrador, Directorio. Devuelve la regla activa y el historial.
 ```json
@@ -640,7 +641,7 @@ Corrección contra saldo sin el pago original	`PATCH .../corregir`	`422` si lo e
 Expensa duplicada (departamento + período)	`POST /expensas`	`409`
 Detección de vencidas	`GET /expensas`, `GET /expensas/:id`	Campo `vencida`; filtro `?vencida=true`
 Monto de expensa por tipo positivo	`PUT .../montos-tipo`	`400` si monto <= 0 o inválido
-> Limitación conocida: el control de duplicados es por consulta previa; sin un índice único en base de datos, dos solicitudes simultáneas podrían duplicar. El `@@unique(idDepartamento, periodo)` está pendiente de coordinar con DevOps.
+Control de duplicados e integridad física: La BD real ya cuenta con la restricción `UNIQUE (id_departamento, periodo)`. El control de duplicados se realiza tanto por consulta previa como por restricción física de motor (el error de unicidad `P2002` se mapea y responde como `409 Conflict` en endpoints individuales y masivos, probado en pg-test).
 
 4.16 Montos de expensa por tipo de departamento
 `GET /api/v1/expensas/montos-tipo` · Roles: Administrador, Directorio.
@@ -974,7 +975,7 @@ CA	Endpoint(s)	Estado	Nota
 01 Generación	`generar-masivo`	Cumple	Monto fijo por tipo de departamento A/B/C (probado en pg-test).
 02 Asociación a la unidad	`generar-masivo`, `POST /expensas`	Cumple	Asociación a departamento (probado en pg-test).
 03 Unidades aplicables	`generar-masivo`	Cumple	Departamentos sin tipo van a excepciones[] con motivo claro (probado en pg-test).
-04 Duplicados	`POST /expensas`, `generar-masivo`	Cumple	Omite duplicados en masivo y 409 en creación individual (probado en pg-test).
+04 Duplicados	`POST /expensas`, `generar-masivo`	Cumple	Omite duplicados en masivo y 409 en creación individual; respaldado por la restricción `UNIQUE (id_departamento, periodo)` de la BD real con error P2002 convertido a 409 (probado en pg-test).
 05-07 Pagos (parcial/total)	`POST .../pagos`	Cumple	Validaciones 422 e idPersonaPagador obligatorio (probado en pg-test).
 08 Anticipo	`POST .../pagos`, `aplicar-anticipo`	Cumple	FIFO automático y aplicación manual (probado en pg-test).
 09 Configuración de mora	`reglas-mora`	Cumple	Regla activa e historial cronológico (probado en pg-test).
@@ -982,7 +983,7 @@ CA	Endpoint(s)	Estado	Nota
 11 Vencidas	campo `vencida`, `?vencida=true`, `morosos`	Cumple	Detección aditiva por fecha y saldo (probado en pg-test).
 12 Saldo actualizado	pagos, anulación, corrección	Cumple	Saldo actualizado con pagos y anticipos (probado en pg-test).
 13 Corrección o cancelación	`DELETE`, `PATCH corregir`	Parcial	DELETE y PATCH corregir con idPersonaPagador probados en pg-test; pendiente anulación de anticipo ya aplicado.
-14 Trazabilidad	auditoría	Parcial	Auditoría transversal y CONFIGURAR_MONTO_EXPENSA probados en pg-test; pendiente detalle por expensa en cálculo masivo de mora.
+14 Trazabilidad	auditoría	Cumple	Auditoría transversal, CONFIGURAR_MONTO_EXPENSA y detalle de expensas {idExpensa, moraAnterior, moraNueva, saldoAnterior, saldoNuevo} (máx 200, truncado:true) en CALCULO_MORA_EXPENSAS probados en pg-test.
 US2.2: Estados de cuenta y saldos
 CA	Estado	Nota
 01-02 Departamento y propietario	Cumple	Probado en pg-test.
@@ -1008,7 +1009,7 @@ CA	Endpoint(s)	Estado	Nota
 ---
 ## 9. Pendientes conocidos
 - Quién pagó: `idPersonaPagador` obligatorio en pagos y correcciones implementado y probado en pg-test; la columna `id_persona_pagador` en `edificio.pagos` NO existe en la BD real y su creación en producción/desarrollo compartido depende de DevOps (ver `docs/cambios_bd_para_devops.md`).
-- Índice único `(idDepartamento, periodo)` en expensas: control de duplicados implementado por consulta previa en backend; el índice único en base de datos depende de DevOps (Pendiente).
+- Control de duplicados en expensas: resuelto; la BD real ya cuenta con la restricción `UNIQUE (id_departamento, periodo)` y el backend maneja P2002 como 409 Conflict.
 - Pagos de expensa e ingresos: hoy un pago de expensa no genera un Ingreso en Movimientos (Pendiente).
 - Anulación de anticipo ya aplicado: pendiente bloquear con `409 Conflict` (Parcial / Pendiente).
 - US2.2: filtros (`periodo`, `desde`, `hasta`), concepto, línea de tiempo y caso sin movimientos (Pendiente).
