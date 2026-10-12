@@ -223,6 +223,13 @@ export async function ejecutarCalculoMora(
     const diasGracia = reglaActiva ? reglaActiva.diasGracia : 0;
 
     let count = 0;
+    const detallesExpensas: Array<{
+      idExpensa: number;
+      moraAnterior: number;
+      moraNueva: number;
+      saldoAnterior: number;
+      saldoNuevo: number;
+    }> = [];
 
     for (const exp of expensasCandidatas) {
       // Regla de días de gracia: No hay mora si hoy <= fechaVencimiento + diasGracia
@@ -262,6 +269,9 @@ export async function ejecutarCalculoMora(
         ? 'Moroso'
         : (nuevoSaldo === 0 ? 'Pagado' : 'Pendiente');
 
+      const moraAnterior = Number(exp.montoMora);
+      const saldoAnterior = Number(exp.saldoPendiente);
+
       await tx.expensa.update({
         where: { idExpensa: exp.idExpensa },
         data: {
@@ -271,8 +281,20 @@ export async function ejecutarCalculoMora(
         },
       });
 
+      detallesExpensas.push({
+        idExpensa: exp.idExpensa,
+        moraAnterior,
+        moraNueva: montoMora,
+        saldoAnterior,
+        saldoNuevo: nuevoSaldo,
+      });
+
       count++;
     }
+
+    const MAX_AUDITORIA_EXPENSAS = 200;
+    const truncado = detallesExpensas.length > MAX_AUDITORIA_EXPENSAS;
+    const expensasGuardadas = detallesExpensas.slice(0, MAX_AUDITORIA_EXPENSAS);
 
     // 3. Auditoría formal del recálculo de mora
     await auditoriaService.registrarEvento({
@@ -287,6 +309,8 @@ export async function ejecutarCalculoMora(
         ejecutadoPor: esCron ? 'sistema' : (params.idUsuario ? `usuario:${params.idUsuario}` : 'sistema'),
         diasGraciaAplicados: diasGracia,
         tasaGeneralUsada: reglaActiva ? Number(reglaActiva.tasaInteres) : null,
+        expensas: expensasGuardadas,
+        ...(truncado ? { truncado: true } : {}),
       },
       idUsuario: idUsuarioAuditoria,
       tx,

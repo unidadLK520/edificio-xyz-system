@@ -115,5 +115,15 @@ describe('US2.1 - Punto 3: Scheduler Cron de Mora (CA10) - EjecuciÃ³n y AuditorÃ
     const datosNuevos = auditoriaCron!.datosNuevos as any;
     expect(datosNuevos.origen).toBe('SISTEMA_CRON');
     expect(datosNuevos.ejecutadoPor).toBe('sistema');
+    expect(datosNuevos.expensas).toBeDefined();
+    expect(Array.isArray(datosNuevos.expensas)).toBe(true);
+    expect(datosNuevos.expensas.length).toBeGreaterThan(0);
+    const primerDetalle = datosNuevos.expensas.find((e: any) => e.idExpensa === expensa.idExpensa);
+    expect(primerDetalle).toBeDefined();
+    expect(primerDetalle.idExpensa).toBe(expensa.idExpensa);
+    expect(primerDetalle.moraAnterior).toBe(0);
+    expect(primerDetalle.moraNueva).toBe(30);
+    expect(primerDetalle.saldoAnterior).toBe(600);
+    expect(primerDetalle.saldoNuevo).toBe(630);
   });
 });
