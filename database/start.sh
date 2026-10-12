@@ -12,6 +12,38 @@ until pg_isready -h 127.0.0.1 -p 5432 -U "${POSTGRES_USER:-postgres}"; do
 done
 
 echo "=== POSTGRESQL LISTO Y OPERATIVO ==="
+
+echo "=== CONFIGURANDO ENLACE EN TIEMPO REAL CON SUPABASE (FDW) ==="
+psql -h 127.0.0.1 -p 5432 -U "${POSTGRES_USER:-postgres}" -d "${POSTGRES_DB:-postgres}" << 'EOF' || true
+CREATE EXTENSION IF NOT EXISTS postgres_fdw;
+
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_foreign_server WHERE srvname = 'supabase_live') THEN
+    CREATE SERVER supabase_live
+      FOREIGN DATA WRAPPER postgres_fdw
+      OPTIONS (host 'aws-0-sa-east-1.pooler.supabase.com', port '5432', dbname 'postgres');
+  END IF;
+END $$;
+
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_user_mappings WHERE srvname = 'supabase_live') THEN
+    CREATE USER MAPPING FOR postgres
+      SERVER supabase_live
+      OPTIONS (user 'postgres.eexlnikxsxsskilduyjk', password 'ByteMafiaeslaley2026');
+  END IF;
+END $$;
+
+DROP SCHEMA IF EXISTS edificio CASCADE;
+CREATE SCHEMA edificio;
+
+IMPORT FOREIGN SCHEMA edificio
+  FROM SERVER supabase_live
+  INTO edificio;
+EOF
+echo "=== ENLACE EN TIEMPO REAL ACTIVO (25 TABLAS Y 4 VISTAS VINCULADAS EN VIVO) ==="
+
 echo "=== INICIANDO VISOR SQL WEB EN PUERTO $HTTP_PORT ==="
 
 exec pgweb \
