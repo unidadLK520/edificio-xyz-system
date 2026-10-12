@@ -19,7 +19,6 @@ import {
 
 const COPROPIETARIO_LINKS = [
   { href: '/mi-cuenta', label: 'Mi Cuenta y Expensas', icon: Receipt },
-  { href: '/reservas', label: 'Reserva de Áreas', icon: CalendarCheck },
   { href: '/comunicados', label: 'Comunicados y Avisos', icon: Megaphone }
 ]
 

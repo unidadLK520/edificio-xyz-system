@@ -74,12 +74,15 @@ export default function EditarDepartamentoModal({
                 Estado Actual {isDepto && <span className="text-[10px] text-[#7d776f] font-normal">(Automático)</span>}
               </label>
               {isDepto ? (
-                <div className="w-full px-3 py-2 rounded-xl bg-[#ded8cc]/60 dark:bg-slate-800/60 border border-[#cec8bc] dark:border-slate-700 text-[#262422] dark:text-white font-semibold flex items-center justify-between">
-                  <span>{depto.estado}</span>
-                  <span className="text-[10px] text-blue-700 dark:text-indigo-400 font-bold bg-blue-100 dark:bg-blue-950/60 px-2 py-0.5 rounded-full">
-                    Automático por asignación
-                  </span>
-                </div>
+                <select
+                  value={depto.estado}
+                  onChange={(e) => onChange({ ...depto, estado: e.target.value as any })}
+                  className="w-full px-3 py-2 rounded-xl bg-[#ded8cc] dark:bg-slate-800 border border-[#cec8bc] dark:border-slate-700 text-xs text-[#262422] dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-600 cursor-pointer"
+                >
+                  <option value="Ocupado por Propietario">Ocupado por Propietario</option>
+                  <option value="Alquilado">Alquilado a Inquilino</option>
+                  <option value="Desocupado">Desocupado / Vacío (Genera Expensa)</option>
+                </select>
               ) : (
                 <select
                   value={depto.estado}
