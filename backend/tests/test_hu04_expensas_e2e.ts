@@ -59,11 +59,15 @@ async function main() {
   const numDepto2 = `E4-${ts}`;
 
   let personaId: number | null = null;
+  let persona2Id: number | null = null;
   let depto1Id: number | null = null;
   let depto2Id: number | null = null;
+  let deptoRegresionId: number | null = null;
   let expensa1Id: number | null = null;
   let expensa2Id: number | null = null;
   let pagoId: number | null = null;
+  let usuarioCopropietarioId: number | null = null;
+  let copropietarioToken: string = '';
 
   try {
     // Crear persona y departamentos de prueba
@@ -77,6 +81,17 @@ async function main() {
       },
     });
     personaId = nuevaPersona.idPersona;
+
+    const nuevaPersona2 = await prisma.persona.create({
+      data: {
+        nombres: 'Vecino Ajeno Test',
+        apellidos: 'HU04',
+        ciNit: `CI-AJENO-${ts}`,
+        telefono: '77998877',
+        correo: `ajeno.hu4.${ts}@email.com`,
+      },
+    });
+    persona2Id = nuevaPersona2.idPersona;
 
     const d1 = await prisma.departamento.create({
       data: {
@@ -94,11 +109,56 @@ async function main() {
         numero: numDepto2,
         piso: 4,
         areaM2: 80.0,
-        idPropietario: personaId,
+        idPropietario: persona2Id,
         estado: 'Ocupado',
       },
     });
     depto2Id = d2.idDepartamento;
+
+    // Asignar personaId a d1 como ocupante activo
+    await prisma.ocupanteDepartamento.create({
+      data: {
+        idDepartamento: depto1Id,
+        idPersona: personaId,
+        tipoOcupante: 'Propietario',
+        fechaInicio: new Date(),
+        fechaFin: null,
+      },
+    });
+
+    // Asignar persona2Id a d2 como ocupante activo
+    await prisma.ocupanteDepartamento.create({
+      data: {
+        idDepartamento: depto2Id,
+        idPersona: persona2Id,
+        tipoOcupante: 'Propietario',
+        fechaInicio: new Date(),
+        fechaFin: null,
+      },
+    });
+
+    // Obtener rol Copropietario o ID por defecto
+    const rolCopropietario = await prisma.rol.findFirst({
+      where: { nombre: 'Copropietario' },
+    });
+
+    const usuarioCopropietario = await prisma.usuario.create({
+      data: {
+        nombreUsuario: `copropietario_${ts}`,
+        correo: `copropietario_${ts}@edificioxyz.com`,
+        passwordHash: '$2a$10$abcdefghijklmnopqrstuv',
+        idRol: rolCopropietario ? rolCopropietario.idRol : 3,
+        idPersona: personaId,
+        activo: true,
+      },
+    });
+    usuarioCopropietarioId = usuarioCopropietario.idUsuario;
+
+    copropietarioToken = await generarToken(
+      usuarioCopropietario.idUsuario,
+      usuarioCopropietario.correo,
+      'Copropietario'
+    );
 
     console.log(`🏢 Departamentos creados (${numDepto1} ID: ${depto1Id}, ${numDepto2} ID: ${depto2Id})`);
 
@@ -137,8 +197,8 @@ async function main() {
       console.log(`📋 Expensa creada encontrada (ID: ${expensa1Id}, Monto: ${jsonExpensas.data[0].monto})`);
     }
 
-    // ── CA03 & CA04: Registro de Pago y Pago Anticipado ──────────────────────
-    console.log('\n--- CA03 & CA04: Registrar Pago y Marca de Pago Anticipado ---');
+    // ── CA03 & CA04: Registro de Pagos y Anticipos Reales (FIFO) ────────────
+    console.log('\n--- CA03: Registrar Pago Ordinario ---');
     if (expensa1Id) {
       const resPago = await fetch(`${baseUrl}/${expensa1Id}/pagos`, {
         method: 'POST',
@@ -158,23 +218,211 @@ async function main() {
       } else {
         console.error('❌ CA03 FAIL:', jsonPago);
       }
+    }
 
-      // Registro de Pago Anticipado (CA04)
-      const resAnticipado = await fetch(`${baseUrl}/${expensa1Id}/pagos`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${adminToken}` },
-        body: JSON.stringify({
-          montoPagado: 300,
-          metodoPago: 'QR',
-          esAnticipado: true,
-        }),
+    // ── CA04: Anticipos Reales (FIFO, saldoDisponible, aplicación automática y manual) ──
+    console.log('\n--- CA04-1: Registrar anticipo mayor al monto de la expensa y aplicación parcial FIFO ---');
+    const resAnticipo600 = await fetch(`${baseUrl}/anticipo/pagos`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${adminToken}` },
+      body: JSON.stringify({
+        idDepartamento: depto1Id,
+        idExpensa: null,
+        montoPagado: 600,
+        metodoPago: 'Transferencia',
+        esAnticipado: true,
+      }),
+    });
+    const jsonAnticipo600 = await resAnticipo600.json();
+    const idAnticipo600 = jsonAnticipo600.pago?.idPago;
+    console.log('Status Anticipo 600:', resAnticipo600.status, 'ID:', idAnticipo600);
+
+    // Crear expensa de 400 para depto1 en un nuevo período (2026-11-01)
+    const resExpAutoAnticipo = await fetch(`${baseUrl}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${adminToken}` },
+      body: JSON.stringify({
+        idDepartamento: depto1Id,
+        periodo: '2026-11-01',
+        monto: 400,
+        tasaInteresMora: 5,
+        fechaVencimiento: '2026-11-15',
+      }),
+    });
+    const jsonExpAutoAnticipo = await resExpAutoAnticipo.json();
+    console.log('Status Expensa con Anticipo Automático:', resExpAutoAnticipo.status, 'Saldo:', jsonExpAutoAnticipo.saldoPendiente, 'Estado:', jsonExpAutoAnticipo.estado);
+
+    const aplicaciones600 = await prisma.aplicacionAnticipo.findMany({ where: { idPago: idAnticipo600 } });
+    const totalAplicado600 = aplicaciones600.reduce((acc, a) => acc + Number(a.monto), 0);
+    const saldoDisponible600 = 600 - totalAplicado600;
+
+    if (
+      resAnticipo600.status === 201 &&
+      resExpAutoAnticipo.status === 201 &&
+      Number(jsonExpAutoAnticipo.saldoPendiente) === 0 &&
+      jsonExpAutoAnticipo.estado === 'Pagado' &&
+      totalAplicado600 === 400 &&
+      saldoDisponible600 === 200
+    ) {
+      console.log(`✅ CA04-1 PASS: Anticipo aplicado parcialmente por FIFO (400 aplicado, saldoDisponible restante: ${saldoDisponible600}).`);
+    } else {
+      console.error('❌ CA04-1 FAIL: Error en aplicación parcial FIFO:', {
+        jsonAnticipo600,
+        jsonExpAutoAnticipo,
+        totalAplicado600,
+        saldoDisponible600,
       });
-      const jsonAnticipado = await resAnticipado.json();
-      if (resAnticipado.status === 201 && jsonAnticipado.pago?.esAnticipado) {
-        console.log('✅ CA04 PASS: Pago anticipado registrado conservando importe para aplicación posterior.');
-      } else {
-        console.error('❌ CA04 FAIL:', jsonAnticipado);
-      }
+    }
+
+    console.log('\n--- CA04-2: Registrar anticipo exacto al monto de la expensa ---');
+    const resAnticipo350 = await fetch(`${baseUrl}/anticipo/pagos`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${adminToken}` },
+      body: JSON.stringify({
+        idDepartamento: depto1Id,
+        idExpensa: null,
+        montoPagado: 350,
+        metodoPago: 'QR',
+        esAnticipado: true,
+      }),
+    });
+    const jsonAnticipo350 = await resAnticipo350.json();
+    const idAnticipo350 = jsonAnticipo350.pago?.idPago;
+
+    const resExpExacta = await fetch(`${baseUrl}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${adminToken}` },
+      body: JSON.stringify({
+        idDepartamento: depto1Id,
+        periodo: '2026-12-01',
+        monto: 350,
+        tasaInteresMora: 5,
+        fechaVencimiento: '2026-12-15',
+      }),
+    });
+    const jsonExpExacta = await resExpExacta.json();
+
+    if (
+      resAnticipo350.status === 201 &&
+      resExpExacta.status === 201 &&
+      Number(jsonExpExacta.saldoPendiente) === 0 &&
+      jsonExpExacta.estado === 'Pagado'
+    ) {
+      console.log(`✅ CA04-2 PASS: Expensa cubierta completamente por FIFO (saldoPendiente: 0, estado: Pagado).`);
+    } else {
+      console.error('❌ CA04-2 FAIL: Error en cobertura de expensa con anticipos:', {
+        jsonAnticipo350,
+        jsonExpExacta,
+      });
+    }
+
+    console.log('\n--- CA04-3: Aplicación manual de anticipo y validación de límite de saldo disponible ---');
+    const resAnticipo100 = await fetch(`${baseUrl}/anticipo/pagos`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${adminToken}` },
+      body: JSON.stringify({
+        idDepartamento: depto2Id,
+        idExpensa: null,
+        montoPagado: 100,
+        metodoPago: 'Efectivo',
+        esAnticipado: true,
+      }),
+    });
+    const jsonAnticipo100 = await resAnticipo100.json();
+    const idAnticipo100 = jsonAnticipo100.pago?.idPago;
+
+    // Intentamos aplicar 150 a expensa1Id (cuando solo hay 100 disponible)
+    const resManualExceso = await fetch(`${baseUrl}/${expensa1Id}/aplicar-anticipo/${idAnticipo100}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${adminToken}` },
+      body: JSON.stringify({ monto: 150 }),
+    });
+    const jsonManualExceso = await resManualExceso.json();
+    console.log('Status Exceso:', resManualExceso.status, 'Error Code:', jsonManualExceso.code || jsonManualExceso.error);
+
+    // Aplicar a expensa creada de depto2
+    // Crear expensa en depto2 sin fecha vencida para prueba de aplicación manual
+    const expManualDepto2 = await prisma.expensa.create({
+      data: {
+        idDepartamento: depto2Id!,
+        periodo: new Date('2026-11-01'),
+        monto: 300,
+        saldoPendiente: 300,
+        tasaInteresMora: 5,
+        fechaVencimiento: new Date('2026-11-15'),
+        estado: 'Pendiente',
+      },
+    });
+
+    const resManualOk = await fetch(`${baseUrl}/${expManualDepto2.idExpensa}/aplicar-anticipo/${idAnticipo100}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${adminToken}` },
+      body: JSON.stringify({ monto: 100 }),
+    });
+    const jsonManualOk = await resManualOk.json();
+    console.log('Status Aplicar Manual OK:', resManualOk.status, 'Saldo Restante Anticipo:', jsonManualOk.saldoDisponibleRestante);
+
+    if (
+      resManualExceso.status === 400 &&
+      resManualOk.status === 200 &&
+      jsonManualOk.saldoDisponibleRestante === 0 &&
+      Number(jsonManualOk.expensa?.saldoPendiente) === 200
+    ) {
+      console.log('✅ CA04-3 PASS: Aplicación manual respetó el límite de saldoDisponible y aplicó correctamente el monto.');
+    } else {
+      console.error('❌ CA04-3 FAIL: Error en aplicación manual:', { jsonManualExceso, jsonManualOk });
+    }
+
+    console.log('\n--- CA04-4: Regresión: Generación de expensa en departamento SIN anticipos previos ---');
+    const numDeptoRegresion = `F4-${ts}`;
+    const deptoRegresion = await prisma.departamento.create({
+      data: {
+        numero: numDeptoRegresion,
+        piso: 4,
+        areaM2: 70.0,
+        idPropietario: personaId,
+        estado: 'Ocupado',
+      },
+    });
+    deptoRegresionId = deptoRegresion.idDepartamento;
+
+    const resExpSinAnticipos = await fetch(`${baseUrl}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${adminToken}` },
+      body: JSON.stringify({
+        idDepartamento: deptoRegresion.idDepartamento,
+        periodo: '2026-11-01',
+        monto: 350,
+        tasaInteresMora: 5,
+        fechaVencimiento: '2026-11-15',
+      }),
+    });
+    const jsonExpSinAnticipos = await resExpSinAnticipos.json();
+
+    if (
+      resExpSinAnticipos.status === 201 &&
+      Number(jsonExpSinAnticipos.saldoPendiente) === 350 &&
+      jsonExpSinAnticipos.estado === 'Pendiente'
+    ) {
+      console.log('✅ CA04-4 PASS: Expensa generada sin anticipos conserva monto completo en saldoPendiente (350) y estado Pendiente.');
+    } else {
+      console.error('❌ CA04-4 FAIL: Comportamiento inesperado al generar expensa sin anticipos:', jsonExpSinAnticipos);
+    }
+
+    console.log('\n--- CA04-5: GET /estado-cuenta/:idDepartamento muestra anticipos con saldo disponible ---');
+    const resEstadoCuentaAnticipos = await fetch(`${baseUrl}/estado-cuenta/${depto1Id}`, {
+      headers: { Authorization: `Bearer ${adminToken}` },
+    });
+    const jsonEstadoCuentaAnticipos = await resEstadoCuentaAnticipos.json();
+
+    if (
+      resEstadoCuentaAnticipos.status === 200 &&
+      Array.isArray(jsonEstadoCuentaAnticipos.anticiposDisponibles) &&
+      jsonEstadoCuentaAnticipos.resumen?.totalAnticiposDisponibles !== undefined
+    ) {
+      console.log(`✅ CA04-5 PASS: Estado de cuenta incluye sección de anticipos con saldo disponible (Total Disponible: ${jsonEstadoCuentaAnticipos.resumen.totalAnticiposDisponibles}).`);
+    } else {
+      console.error('❌ CA04-5 FAIL: Estructura de estado-cuenta no contiene anticiposDisponibles:', jsonEstadoCuentaAnticipos);
     }
 
     // ── CA05: Consulta de Estado e Importes de Expensa ───────────────────────
@@ -184,15 +432,37 @@ async function main() {
         headers: { Authorization: `Bearer ${adminToken}` },
       });
       const jsonDetalle = await resDetalle.json();
-      if (resDetalle.status === 200 && jsonDetalle.pagos.length >= 2) {
-        console.log(`✅ CA05 PASS: Estado consultado (Monto: ${jsonDetalle.monto}, Saldo: ${jsonDetalle.saldoPendiente}, Pagos: ${jsonDetalle.pagos.length}).`);
+
+      // expensa1Id tiene 1 pago directo (CA03: 200 por Transferencia).
+      // El anticipo de 600 (CA04-1) cubrió una expensa de noviembre distinta (not expensa1Id),
+      // y los anticipos se reflejan en aplicacionesAnticipos, no en el array pagos.
+      const pagosNoAnulados = (jsonDetalle.pagos ?? []).filter((p: any) => !p.anulado);
+      const tieneUnPagoValido = pagosNoAnulados.length === 1 && Number(pagosNoAnulados[0].montoPagado) === 200;
+
+      // El anticipo debe aparecer en el estado-cuenta del departamento, no en pagos de la expensa.
+      // Reutilizamos jsonEstadoCuentaAnticipos (CA04-5, mismo depto1Id).
+      const anticipoEnEstadoCuenta =
+        Array.isArray(jsonEstadoCuentaAnticipos?.anticipos) &&
+        jsonEstadoCuentaAnticipos.anticipos.some((a: any) => Number(a.montoPagado) === 600);
+
+      if (resDetalle.status === 200 && tieneUnPagoValido && anticipoEnEstadoCuenta) {
+        console.log(
+          `✅ CA05 PASS: Estado consultado (Monto: ${jsonDetalle.monto}, Saldo: ${jsonDetalle.saldoPendiente}, ` +
+          `PagosDirectos: ${pagosNoAnulados.length}, AnticipoenEstadoCuenta: ${anticipoEnEstadoCuenta}).`
+        );
       } else {
-        console.error('❌ CA05 FAIL:', jsonDetalle);
+        console.error('❌ CA05 FAIL:', {
+          status: resDetalle.status,
+          tieneUnPagoValido,
+          anticipoEnEstadoCuenta,
+          pagosLength: jsonDetalle.pagos?.length,
+          pagosNoAnuladosLength: pagosNoAnulados.length,
+        });
       }
     }
 
-    // ── CA6: Recálculo e Interés por Mora ─────────────────────────────────────
-    console.log('\n--- CA6: Cálculo de Recargo e Interés por Mora ---');
+    // ── CA6: Cálculo Idempotente de Recargo e Interés por Mora ────────────────
+    console.log('\n--- CA6-1: Cálculo Idempotente de Mora (2 corridas consecutivas sin duplicar recargo) ---');
     // Crear una expensa vencida manualmente para probar mora
     const expVencida = await prisma.expensa.create({
       data: {
@@ -207,16 +477,105 @@ async function main() {
     });
     expensa2Id = expVencida.idExpensa;
 
-    const resMora = await fetch(`${baseUrl}/calcular-mora`, {
+    // Crear una expensa vencida pero ya pagada (saldo = 0, estado = 'Pagado')
+    const expPagadaVencida = await prisma.expensa.create({
+      data: {
+        idDepartamento: depto2Id!,
+        periodo: new Date('2026-07-01'),
+        monto: 250,
+        saldoPendiente: 0,
+        tasaInteresMora: 10,
+        fechaVencimiento: new Date('2026-07-15'), // fecha pasada
+        estado: 'Pagado',
+      },
+    });
+
+    // 1ra corrida de cálculo de mora
+    const resMora1 = await fetch(`${baseUrl}/calcular-mora`, {
       method: 'POST',
       headers: { Authorization: `Bearer ${adminToken}` },
     });
-    const jsonMora = await resMora.json();
-    console.log('Status Mora:', resMora.status, 'Actualizadas:', jsonMora.actualizadasCount);
-    if (resMora.status === 200 && jsonMora.actualizadasCount > 0) {
-      console.log('✅ CA6 PASS: Recargo de mora aplicado a expensas vencidas.');
+    const jsonMora1 = await resMora1.json();
+    console.log('Status Mora 1:', resMora1.status, 'Actualizadas:', jsonMora1.actualizadasCount);
+
+    const expVencida1 = await prisma.expensa.findUnique({ where: { idExpensa: expensa2Id } });
+    const montoMora1 = Number(expVencida1?.montoMora);
+    const saldo1 = Number(expVencida1?.saldoPendiente);
+
+    // 2da corrida de cálculo de mora consecutiva
+    const resMora2 = await fetch(`${baseUrl}/calcular-mora`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${adminToken}` },
+    });
+    const jsonMora2 = await resMora2.json();
+    console.log('Status Mora 2:', resMora2.status, 'Actualizadas:', jsonMora2.actualizadasCount);
+
+    const expVencida2 = await prisma.expensa.findUnique({ where: { idExpensa: expensa2Id } });
+    const montoMora2 = Number(expVencida2?.montoMora);
+    const saldo2 = Number(expVencida2?.saldoPendiente);
+
+    if (
+      resMora1.status === 200 &&
+      resMora2.status === 200 &&
+      montoMora1 === 30 &&
+      montoMora2 === 30 &&
+      saldo1 === 330 &&
+      saldo2 === 330 &&
+      expVencida2?.estado === 'Moroso'
+    ) {
+      console.log(`✅ CA6-1 PASS: Mora idempotente verificada (MontoMora: ${montoMora2}, Saldo: ${saldo2}, Estado: Moroso en ambas corridas).`);
     } else {
-      console.error('❌ CA6 FAIL:', jsonMora);
+      console.error('❌ CA6-1 FAIL: La mora no fue idempotente:', { montoMora1, montoMora2, saldo1, saldo2 });
+    }
+
+    console.log('\n--- CA6-2: Expensa ya pagada no recibe mora ni cambia a Moroso ---');
+    const expPagadaCheck = await prisma.expensa.findUnique({ where: { idExpensa: expPagadaVencida.idExpensa } });
+    if (
+      Number(expPagadaCheck?.montoMora) === 0 &&
+      Number(expPagadaCheck?.saldoPendiente) === 0 &&
+      expPagadaCheck?.estado === 'Pagado'
+    ) {
+      console.log('✅ CA6-2 PASS: Expensa con saldo 0 no fue afectada por cálculo de mora (montoMora=0, estado=Pagado).');
+    } else {
+      console.error('❌ CA6-2 FAIL: Expensa pagada fue alterada por cálculo de mora:', expPagadaCheck);
+    }
+
+    console.log('\n--- CA6-3: Anulación de Pago en Expensa con Mora recalcula saldo incluyendo mora vigente ---');
+    // Registrar un pago parcial de 100 sobre la expensa en mora (saldo era 330: 300 base + 30 mora)
+    const resPagoMora = await fetch(`${baseUrl}/${expensa2Id}/pagos`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${adminToken}` },
+      body: JSON.stringify({
+        montoPagado: 100,
+        metodoPago: 'Efectivo',
+      }),
+    });
+    const jsonPagoMora = await resPagoMora.json();
+    const pagoMoraId = jsonPagoMora.pago?.idPago;
+
+    // Anular el pago de 100
+    const resAnularPagoMora = await fetch(`${baseUrl}/pagos/${pagoMoraId}`, {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${adminToken}` },
+      body: JSON.stringify({ motivo: 'Error en pago sobre expensa con mora' }),
+    });
+    const jsonAnularPagoMora = await resAnularPagoMora.json();
+
+    const expVencidaTrasAnulacion = await prisma.expensa.findUnique({ where: { idExpensa: expensa2Id } });
+    const saldoTrasAnulacion = Number(expVencidaTrasAnulacion?.saldoPendiente);
+
+    if (
+      resAnularPagoMora.status === 200 &&
+      saldoTrasAnulacion === 330 &&
+      expVencidaTrasAnulacion?.estado === 'Moroso'
+    ) {
+      console.log(`✅ CA6-3 PASS: Tras anulación, el saldo de la expensa vuelve exactamente a ${saldoTrasAnulacion} conservando la mora y estado Moroso.`);
+    } else {
+      console.error('❌ CA6-3 FAIL: Saldo o estado incorrecto tras anulación en expensa con mora:', {
+        status: resAnularPagoMora.status,
+        saldoTrasAnulacion,
+        expensa: expVencidaTrasAnulacion,
+      });
     }
 
     // ── CA07: Listado de Morosos ──────────────────────────────────────────────
@@ -243,47 +602,215 @@ async function main() {
       console.error('❌ CA08 FAIL:', jsonEstadoCuenta);
     }
 
-    // ── CA09: Corrección / Anulación de Pago con Recálculo de Saldo ──────────
-    console.log('\n--- CA09: Anular Pago y Recalcular Saldo ---');
-    if (pagoId) {
-      const resAnular = await fetch(`${baseUrl}/pagos/${pagoId}`, {
-        method: 'DELETE',
-        headers: { Authorization: `Bearer ${adminToken}` },
-      });
-      const jsonAnular = await resAnular.json();
-      console.log('Status Anular:', resAnular.status, 'Message:', jsonAnular.message);
-      if (resAnular.status === 200 && jsonAnular.pagoAnulado) {
-        console.log('✅ CA09 PASS: Pago anulado exitosamente y saldo recalculado en el departamento.');
-      } else {
-        console.error('❌ CA09 FAIL:', jsonAnular);
-      }
+    // ── CA09: Corrección / Anulación de Pago con Recálculo de Saldo y Soft-Delete ──
+    console.log('\n--- CA09-1: Anular un Pago y Verificar que el Saldo Vuelve Exactamente al Valor Previo ---');
+    // Obtenemos saldo previo de expensa1 antes de crear un nuevo pago para probar anulación pura
+    const resExpPre = await fetch(`${baseUrl}/${expensa1Id}`, {
+      headers: { Authorization: `Bearer ${adminToken}` },
+    });
+    const expPreJson = await resExpPre.json();
+    const saldoAntesAnulacion = Number(expPreJson.saldoPendiente);
+
+    // Registramos un pago de prueba de 150
+    const resPagoPrueba = await fetch(`${baseUrl}/${expensa1Id}/pagos`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${adminToken}` },
+      body: JSON.stringify({
+        montoPagado: 150,
+        metodoPago: 'Efectivo',
+      }),
+    });
+    const jsonPagoPrueba = await resPagoPrueba.json();
+    const pagoPruebaId = jsonPagoPrueba.pago?.idPago;
+
+    // Anulamos el pago con motivo obligatorio
+    const resAnular = await fetch(`${baseUrl}/pagos/${pagoPruebaId}`, {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${adminToken}` },
+      body: JSON.stringify({ motivo: 'Error en digitación de comprobante de caja' }),
+    });
+    const jsonAnular = await resAnular.json();
+    console.log('Status Anular:', resAnular.status, 'Message:', jsonAnular.message);
+
+    // Verificar que el saldo volvió exactamente al valor previo
+    const resExpPost = await fetch(`${baseUrl}/${expensa1Id}`, {
+      headers: { Authorization: `Bearer ${adminToken}` },
+    });
+    const expPostJson = await resExpPost.json();
+    const saldoDespuesAnulacion = Number(expPostJson.saldoPendiente);
+
+    if (
+      resAnular.status === 200 &&
+      jsonAnular.pagoAnulado?.anulado === true &&
+      jsonAnular.pagoAnulado?.motivoAnulacion === 'Error en digitación de comprobante de caja' &&
+      saldoDespuesAnulacion === saldoAntesAnulacion
+    ) {
+      console.log(`✅ CA09-1 PASS: Pago anulado (soft-delete) y saldo restaurado exactamente a ${saldoDespuesAnulacion}.`);
+    } else {
+      console.error('❌ CA09-1 FAIL: Error al anular pago y restaurar saldo:', { jsonAnular, saldoAntesAnulacion, saldoDespuesAnulacion });
     }
 
-    // ── CA10: Trazabilidad y Registro de Auditoría ────────────────────────────
-    console.log('\n--- CA10: Verificar Registro de Auditoría ---');
-    const auditoriaRegistros = await prisma.auditoria.findMany({
+    console.log('\n--- CA09-2: Intentar Anular el Mismo Pago Dos Veces (Debe responder 409) ---');
+    const resReAnular = await fetch(`${baseUrl}/pagos/${pagoPruebaId}`, {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${adminToken}` },
+      body: JSON.stringify({ motivo: 'Intento duplicado de anulación' }),
+    });
+    const jsonReAnular = await resReAnular.json();
+    console.log('Status Re-Anular:', resReAnular.status, 'Error Code:', jsonReAnular.code || jsonReAnular.error);
+    if (resReAnular.status === 409 && (jsonReAnular.code === 'PAGO_YA_ANULADO' || jsonReAnular.error === 'PAGO_YA_ANULADO')) {
+      console.log('✅ CA09-2 PASS: Intento de doble anulación rechazado con 409 (PAGO_YA_ANULADO).');
+    } else {
+      console.error('❌ CA09-2 FAIL: Se esperaba 409 PAGO_YA_ANULADO pero se obtuvo', resReAnular.status, jsonReAnular);
+    }
+
+    console.log('\n--- CA09-3: Corregir un Pago (PATCH /pagos/:idPago/corregir) ---');
+    // Creamos un pago original de 100
+    const resPagoOriginal = await fetch(`${baseUrl}/${expensa1Id}/pagos`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${adminToken}` },
+      body: JSON.stringify({
+        montoPagado: 100,
+        metodoPago: 'Efectivo',
+      }),
+    });
+    const jsonPagoOriginal = await resPagoOriginal.json();
+    const idOriginal = jsonPagoOriginal.pago?.idPago;
+
+    // Al corregir con 180, el pago original (100) se anula y se crea uno nuevo de 180
+    const resCorregir = await fetch(`${baseUrl}/pagos/${idOriginal}/corregir`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${adminToken}` },
+      body: JSON.stringify({
+        montoPagado: 180,
+        metodoPago: 'Transferencia',
+        motivo: 'Monto real era 180 según voucher bancario',
+      }),
+    });
+    const jsonCorregir = await resCorregir.json();
+    console.log('Status Corregir:', resCorregir.status, 'Message:', jsonCorregir.message);
+
+    // Consultamos ambos pagos en la base de datos para verificar vínculos y anulado
+    const pagoOriginalDb = await prisma.pago.findUnique({ where: { idPago: idOriginal } });
+    const pagoNuevoDb = jsonCorregir.nuevoPago?.idPago
+      ? await prisma.pago.findUnique({ where: { idPago: jsonCorregir.nuevoPago.idPago } })
+      : null;
+
+    const pagoOriginalOk = pagoOriginalDb?.anulado === true && pagoOriginalDb?.idPagoOriginal === null;
+    const pagoNuevoOk = pagoNuevoDb?.anulado === false && pagoNuevoDb?.idPagoOriginal === idOriginal;
+
+    if (resCorregir.status === 200 && pagoOriginalOk && pagoNuevoOk) {
+      console.log('✅ CA09-3 PASS: Pago corregido exitosamente. Original anulado (idPagoOriginal=null), nuevo pago apunta al anulado y expensa refleja solo el pago nuevo.');
+    } else {
+      console.error('❌ CA09-3 FAIL: Error en corrección de pago:', {
+        status: resCorregir.status,
+        pagoOriginalOk,
+        pagoNuevoOk,
+        pagoOriginalDb,
+        pagoNuevoDb,
+      });
+    }
+
+    // ── CA10: Trazabilidad y Registro de Auditoría (ANULACION_PAGO) ────────────
+    console.log('\n--- CA10: Verificar Registro de Auditoría de Tipo ANULACION_PAGO ---');
+    const auditoriaAnulaciones = await prisma.auditoria.findMany({
       where: {
-        tablaAfectada: { in: ['expensas', 'pagos'] },
+        tablaAfectada: 'pagos',
+        accion: 'ANULACION_PAGO',
       },
-      take: 5,
       orderBy: { fechaHora: 'desc' },
     });
 
-    if (auditoriaRegistros.length > 0) {
-      console.log(`✅ CA10 PASS: Se encontraron ${auditoriaRegistros.length} registros de auditoría para operaciones de expensas.`);
+    const tieneAnulacionDirecta = auditoriaAnulaciones.some((a) => a.idRegistro === String(pagoPruebaId));
+    const tieneAnulacionCorregir = auditoriaAnulaciones.some((a) => a.idRegistro === String(idOriginal));
+
+    if (auditoriaAnulaciones.length >= 2 && tieneAnulacionDirecta && tieneAnulacionCorregir) {
+      console.log(`✅ CA10 PASS: Se verificaron registros de auditoría ANULACION_PAGO para anulación directa (Pago ${pagoPruebaId}) y por corrección (Pago ${idOriginal}).`);
     } else {
-      console.error('❌ CA10 FAIL: No se registraron datos de auditoría.');
+      console.error('❌ CA10 FAIL: No se encontraron todos los registros de auditoría ANULACION_PAGO:', {
+        total: auditoriaAnulaciones.length,
+        tieneAnulacionDirecta,
+        tieneAnulacionCorregir,
+      });
+    }
+
+    // ── RBAC / Control de Acceso: Copropietario y Regresión Administrador ─────
+    console.log('\n--- RBAC: Copropietario de Depto A pide estado de cuenta de Depto B ---');
+    const resAjeno = await fetch(`${baseUrl}/estado-cuenta/${depto2Id}`, {
+      headers: { Authorization: `Bearer ${copropietarioToken}` },
+    });
+    console.log('Status Ajeno:', resAjeno.status);
+    if (resAjeno.status === 403) {
+      console.log('✅ RBAC PASS: Copropietario del departamento A bloqueado con 403 al solicitar departamento B.');
+    } else {
+      console.error('❌ RBAC FAIL: Se esperaba 403 pero se obtuvo', resAjeno.status);
+    }
+
+    console.log('\n--- RBAC: Copropietario de Depto A pide estado de cuenta de su propio Depto A ---');
+    const resPropio = await fetch(`${baseUrl}/estado-cuenta/${depto1Id}`, {
+      headers: { Authorization: `Bearer ${copropietarioToken}` },
+    });
+    console.log('Status Propio:', resPropio.status);
+    if (resPropio.status === 200) {
+      console.log('✅ RBAC PASS: Copropietario del departamento A accede con 200 a su propio estado de cuenta.');
+    } else {
+      console.error('❌ RBAC FAIL: Se esperaba 200 pero se obtuvo', resPropio.status);
+    }
+
+    console.log('\n--- Regresión RBAC: Administrador accede sin restricción a los 4 endpoints GET ---');
+    const [resAdminList, resAdminMorosos, resAdminDetalle, resAdminEstado] = await Promise.all([
+      fetch(`${baseUrl}`, { headers: { Authorization: `Bearer ${adminToken}` } }),
+      fetch(`${baseUrl}/morosos`, { headers: { Authorization: `Bearer ${adminToken}` } }),
+      fetch(`${baseUrl}/${expensa1Id}`, { headers: { Authorization: `Bearer ${adminToken}` } }),
+      fetch(`${baseUrl}/estado-cuenta/${depto1Id}`, { headers: { Authorization: `Bearer ${adminToken}` } }),
+    ]);
+
+    if (
+      resAdminList.status === 200 &&
+      resAdminMorosos.status === 200 &&
+      resAdminDetalle.status === 200 &&
+      resAdminEstado.status === 200
+    ) {
+      console.log('✅ Regresión PASS: Administrador accede exitosamente con 200 a los 4 endpoints GET.');
+    } else {
+      console.error('❌ Regresión FAIL: Acceso de administrador denegado en endpoints GET:', {
+        list: resAdminList.status,
+        morosos: resAdminMorosos.status,
+        detalle: resAdminDetalle.status,
+        estado: resAdminEstado.status,
+      });
     }
 
   } finally {
     // Limpieza de datos de prueba
-    if (depto1Id || depto2Id) {
-      await prisma.pago.deleteMany({ where: { idDepartamento: { in: [depto1Id!, depto2Id!].filter(Boolean) } } });
-      await prisma.expensa.deleteMany({ where: { idDepartamento: { in: [depto1Id!, depto2Id!].filter(Boolean) } } });
-      await prisma.departamento.deleteMany({ where: { idDepartamento: { in: [depto1Id!, depto2Id!].filter(Boolean) } } });
+    if (usuarioCopropietarioId) {
+      await prisma.usuario.deleteMany({ where: { idUsuario: usuarioCopropietarioId } });
     }
-    if (personaId) {
-      await prisma.persona.deleteMany({ where: { idPersona: personaId } });
+    if (personaId || persona2Id) {
+      await prisma.ocupanteDepartamento.deleteMany({ where: { idPersona: { in: [personaId, persona2Id].filter(Boolean) as number[] } } });
+    }
+    const deptosAClean = [depto1Id, depto2Id, deptoRegresionId].filter(Boolean) as number[];
+    if (deptosAClean.length > 0) {
+      try {
+        await prisma.aplicacionAnticipo.deleteMany({
+          where: {
+            OR: [
+              { pago: { idDepartamento: { in: deptosAClean } } },
+              { expensa: { idDepartamento: { in: deptosAClean } } },
+            ],
+          },
+        });
+      } catch (_) {}
+      await prisma.pago.updateMany({
+        where: { idDepartamento: { in: deptosAClean } },
+        data: { idPagoOriginal: null },
+      });
+      await prisma.pago.deleteMany({ where: { idDepartamento: { in: deptosAClean } } });
+      await prisma.expensa.deleteMany({ where: { idDepartamento: { in: deptosAClean } } });
+      await prisma.departamento.deleteMany({ where: { idDepartamento: { in: deptosAClean } } });
+    }
+    if (personaId || persona2Id) {
+      await prisma.persona.deleteMany({ where: { idPersona: { in: [personaId, persona2Id].filter(Boolean) as number[] } } });
     }
 
     server.close();

@@ -43,11 +43,13 @@ export interface UnidadItem {
   alicuota?: number
   estado: EstadoOcupacionDepto | string // 'Ocupado por Propietario' | 'Alquilado' | 'Desocupado' | 'Asignado' | 'Disponible'
   propietario?: PropietarioInfo | null
+  ocupanteActual?: PropietarioInfo | null
+  tipoOcupante?: string | null
   inquilinoActual?: InquilinoInfo | null
   idDepartamento?: number | null
   departamento?: { idDepartamento?: number; numero?: string } | null
   idPersona?: number | null
-  persona?: { idPersona?: number; nombres?: string; apellidos?: string } | null
+  persona?: { idPersona?: number; nombres?: string; apellidos?: string; ciNit?: string } | null
   parqueos?: any[]
   bauleras?: any[]
   parqueo?: string

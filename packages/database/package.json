@@ -10,7 +10,8 @@
     "db:push": "prisma db push",
     "db:migrate": "prisma migrate dev",
     "db:seed": "tsx prisma/seed.ts",
-    "db:studio": "prisma studio"
+    "db:studio": "prisma studio",
+    "db:sync-all": "tsx scripts/sync-all.ts"
   },
   "dependencies": {
     "@prisma/client": "^6.4.1",
