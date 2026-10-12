@@ -839,6 +839,88 @@ Configuración de monto de expensa por tipo:
   "datosNuevos": { "idTipo": 1, "nombre": "A", "montoExpensa": 320.0 }
 }
 ```
+6.4 Consulta de auditoría (US1.3)
+`GET /api/v1/auditoria` · Roles: Administrador, Directorio.
+Lista cronológica de eventos de auditoría con soporte de paginación y filtros multicriterio.
+Parámetros de consulta (Query params):
+- `page`: Número de página (entero >= 1, por defecto 1).
+- `limit`: Cantidad de registros por página (entero entre 1 y 100, por defecto 50).
+- `tablaAfectada`: Nombre exacto de la tabla (ej. `expensas`, `usuarios`, `personas`, `tipos_departamento`).
+- `accion`: Nombre de la acción o evento (ej. `LOGIN_EXITOSO`, `REGISTRO_PAGO_EXPENSA`, `CONFIGURAR_MONTO_EXPENSA`).
+- `idUsuario`: Identificador numérico del usuario que realizó la acción.
+- `idRegistro`: Identificador de la entidad afectada (string o numérico).
+- `resultado`: Resultado de la operación (`EXITO`, `CREDENCIALES_INVALIDAS`, `BLOQUEO_TEMPORAL`).
+- `fechaDesde`: Fecha inicial para acotar la búsqueda (`YYYY-MM-DD` o formato ISO).
+- `fechaHasta`: Fecha final para acotar la búsqueda (`YYYY-MM-DD` o formato ISO).
+Ordenamiento: cronológico descendente (`fechaHora` desc).
+Seguridad y enmascaramiento: los campos sensibles (`password`, `hash`, `token`, `contrasena`) dentro de `datosAnteriores` y `datosNuevos` son sustituidos automáticamente por `"***"` antes de enviar la respuesta.
+Respuesta 200:
+```json
+{
+  "data": [
+    {
+      "idAuditoria": 105,
+      "tablaAfectada": "expensas",
+      "idRegistro": "14",
+      "accion": "REGISTRO_PAGO_EXPENSA",
+      "fechaHora": "2026-10-11T19:30:00.000Z",
+      "idUsuario": 1,
+      "resultado": "EXITO",
+      "datosAnteriores": null,
+      "datosNuevos": {
+        "idPago": 45,
+        "montoPagado": 300.0,
+        "idPersonaPagador": 1
+      },
+      "usuario": {
+        "idUsuario": 1,
+        "nombre": "Admin Principal"
+      }
+    }
+  ],
+  "meta": {
+    "total": 1,
+    "page": 1,
+    "limit": 50,
+    "totalPages": 1
+  }
+}
+```
+
+`GET /api/v1/auditoria/:id` · Roles: Administrador, Directorio.
+Detalle completo de un evento de auditoría específico por su identificador primario (`idAuditoria`).
+- Aplica el mismo enmascaramiento de confidencialidad en `datosAnteriores` y `datosNuevos`.
+- Responde `404 Not Found` si el registro no existe.
+Respuesta 200:
+```json
+{
+  "idAuditoria": 105,
+  "tablaAfectada": "expensas",
+  "idRegistro": "14",
+  "accion": "REGISTRO_PAGO_EXPENSA",
+  "fechaHora": "2026-10-11T19:30:00.000Z",
+  "idUsuario": 1,
+  "resultado": "EXITO",
+  "datosAnteriores": null,
+  "datosNuevos": {
+    "idPago": 45,
+    "montoPagado": 300.0,
+    "idPersonaPagador": 1
+  },
+  "usuario": {
+    "idUsuario": 1,
+    "nombre": "Admin Principal"
+  }
+}
+```
+Errores comunes:
+- Error 401: `{ "error": "Unauthorized", "message": "Token de autenticación no proporcionado" }` (petición sin token Bearer válido).
+- Error 403: `{ "error": "Forbidden", "message": "No tiene permisos para acceder a este recurso" }` (rol Consulta u otros roles sin permiso).
+- Error 404: `{ "error": "Not Found", "message": "Registro de auditoría no encontrado" }` (cuando no existe el ID).
+
+Inmutabilidad de la auditoría:
+El subsistema de auditoría es estrictamente de solo lectura en la API pública. No se exponen endpoints `POST`, `PUT`, `PATCH` ni `DELETE` bajo `/api/v1/auditoria`. Los eventos se registran de manera programática únicamente desde la capa de servicios y repositorios del backend mediante transacciones atómicas.
+
 ---
 ## 7. Matriz de Control de Acceso por Roles (RBAC)
 Módulo	Endpoint	Método	Administrador	Directorio	Consulta
@@ -881,6 +963,9 @@ Movimientos	/movimientos/:id	GET	✅	✅	❌
 Movimientos	/movimientos	POST	✅	❌	❌
 Movimientos	/movimientos/:id	PUT	✅	❌	❌
 Movimientos	/movimientos/:id	DELETE	✅	❌	❌
+Auditoria	/auditoria	GET	✅	✅	❌
+Auditoria	/auditoria/:id	GET	✅	✅	❌
+
 * Pendiente de confirmar contra el código y con el Scrum si Consulta tendrá lectura de expensas y estado de cuenta (requisito mínimo del cliente: emisión de estados de cuenta).
 ---
 ## 8. Trazabilidad US ↔ Criterio ↔ Endpoint
@@ -911,6 +996,15 @@ CA	Estado	Nota
 10 Historial cronológico	Pendiente	
 11 Sin movimientos	Pendiente	
 12 Totales consistentes	Parcial	Falta prueba automatizada de consistencia.
+
+US1.3: Subsistema de auditoría y trazabilidad
+CA	Endpoint(s)	Estado	Nota
+01 Registro transversal	`registrarAuditoria`	Cumple	Eventos semánticos en transacciones críticas (probado en pg-test).
+02 Consulta paginada y filtros	`GET /auditoria`	Cumple	Filtros por tabla, acción, usuario, registro, resultado, fechas y paginación {data, meta} (probado en pg-test).
+03 Detalle individual	`GET /auditoria/:id`	Cumple	Detalle con datosAnteriores y datosNuevos, 404 si no existe (probado en pg-test).
+04 Seguridad y enmascarado	`GET /auditoria`, `GET /auditoria/:id`	Cumple	Enmascara credenciales/tokens; RBAC Administrador y Directorio (403 Consulta, 401 sin token) (probado en pg-test).
+05 Inmutabilidad	API solo lectura	Cumple	Sin endpoints mutadores en la API (probado en pg-test); pendiente trigger/REVOKE en base de datos.
+
 ---
 ## 9. Pendientes conocidos
 - Quién pagó: `idPersonaPagador` obligatorio en pagos y correcciones implementado y probado en pg-test; la columna `id_persona_pagador` en `edificio.pagos` NO existe en la BD real y su creación en producción/desarrollo compartido depende de DevOps (ver `docs/cambios_bd_para_devops.md`).
@@ -920,3 +1014,4 @@ CA	Estado	Nota
 - US2.2: filtros (`periodo`, `desde`, `hasta`), concepto, línea de tiempo y caso sin movimientos (Pendiente).
 - US2.3 y US2.4: criterios pendientes de recibir (Caja y Bancos, conciliación) (Pendiente).
 - Montos provisionales: regla de mora (5 %, 0 días) y montos por tipo (300/350/400) pendientes de confirmar con el Scrum (Pendiente).
+- Inmutabilidad de auditoría a nivel de base de datos: En el backend los endpoints son estrictamente de solo lectura (`GET /auditoria` y `GET /auditoria/:id`, sin rutas PUT/PATCH/DELETE). En la base de datos física PostgreSQL (`001_initial_schema.sql`), la tabla `edificio.auditoria` no cuenta con triggers de protección contra UPDATE o DELETE ni con REVOKE; se deja como recomendación técnica para DevOps implementar triggers o restringir permisos para garantizar inmutabilidad a nivel de motor.
