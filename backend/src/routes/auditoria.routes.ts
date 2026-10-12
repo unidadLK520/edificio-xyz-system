@@ -52,3 +52,41 @@ auditoriaRouter.get(
     }
   }
 );
+
+/**
+ * GET /api/v1/auditoria/:id
+ * Detalle individual de un evento de auditoría (Administrador, Directorio)
+ * Enmascara campos sensibles en datosAnteriores y datosNuevos. 404 si no existe.
+ */
+auditoriaRouter.get(
+  '/:id',
+  authorizeRoles('Administrador', 'Directorio'),
+  async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const id = Number(req.params.id);
+      if (isNaN(id) || id <= 0) {
+        res.status(400).json({
+          error: 'Validation Error',
+          message: 'El ID de auditoría debe ser un número entero positivo',
+        });
+        return;
+      }
+
+      const detalle = await auditoriaService.obtenerDetalle(id);
+      if (!detalle) {
+        res.status(404).json({
+          error: 'Not Found',
+          message: 'Registro de auditoría no encontrado',
+        });
+        return;
+      }
+
+      res.json({
+        data: detalle,
+      });
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
