@@ -31,3 +31,42 @@ export interface RegistrarAuditoriaParams {
   tx?: Prisma.TransactionClient;
 }
 
+export interface FiltrosAuditoria {
+  tablaAfectada?: string;
+  accion?: string;
+  idUsuario?: number;
+  idRegistro?: string;
+  resultado?: string;
+  fechaDesde?: string;
+  fechaHasta?: string;
+  page?: number;
+  limit?: number;
+}
+
+export interface DetalleAuditoriaDTO {
+  idAuditoria: number;
+  tablaAfectada: string;
+  idRegistro: string | null;
+  accion: string;
+  resultado: string | null;
+  fechaHora: Date;
+  idUsuario: number | null;
+  usuario?: {
+    idUsuario: number;
+    nombreUsuario: string;
+    correo: string;
+    rol?: string;
+  } | null;
+  datosAnteriores: any;
+  datosNuevos: any;
+}
+
+export interface RespuestaPaginadaAuditoria {
+  data: DetalleAuditoriaDTO[];
+  meta: {
+    total: number;
+    page: number;
+    limit: number;
+    totalPages: number;
+  };
+}

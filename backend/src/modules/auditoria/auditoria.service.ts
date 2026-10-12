@@ -4,7 +4,15 @@
 
 import { Auditoria } from '@edificio-xyz/database';
 import { auditoriaRepository, AuditoriaRepository } from './auditoria.repository';
-import { RegistrarAuditoriaParams, ResultadoAuditoria, TipoEventoAuditoria } from './auditoria.types';
+import {
+  FiltrosAuditoria,
+  DetalleAuditoriaDTO,
+  RespuestaPaginadaAuditoria,
+  RegistrarAuditoriaParams,
+  ResultadoAuditoria,
+  TipoEventoAuditoria,
+} from './auditoria.types';
+import { enmascararDatosSensibles } from './auditoria.mask';
 
 export class AuditoriaService {
   constructor(private readonly repository: AuditoriaRepository = auditoriaRepository) {}
@@ -140,6 +148,120 @@ export class AuditoriaService {
    */
   async registrarEvento(params: RegistrarAuditoriaParams): Promise<Auditoria> {
     return this.repository.crear(params);
+  }
+
+  /**
+   * Consulta paginada y filtrada de auditoría con enmascaramiento de datos sensibles
+   */
+  async consultarAuditoria(filtros: FiltrosAuditoria): Promise<RespuestaPaginadaAuditoria> {
+    const page = Math.max(1, Number(filtros.page) || 1);
+    const limit = Math.min(100, Math.max(1, Number(filtros.limit) || 20));
+    const skip = (page - 1) * limit;
+
+    const where: any = {};
+
+    if (filtros.tablaAfectada) {
+      where.tablaAfectada = {
+        equals: filtros.tablaAfectada,
+        mode: 'insensitive',
+      };
+    }
+
+    if (filtros.accion) {
+      where.accion = {
+        equals: filtros.accion,
+        mode: 'insensitive',
+      };
+    }
+
+    if (filtros.idUsuario !== undefined && filtros.idUsuario !== null && !isNaN(Number(filtros.idUsuario))) {
+      where.idUsuario = Number(filtros.idUsuario);
+    }
+
+    if (filtros.idRegistro) {
+      where.idRegistro = String(filtros.idRegistro);
+    }
+
+    if (filtros.resultado) {
+      where.resultado = {
+        equals: filtros.resultado,
+        mode: 'insensitive',
+      };
+    }
+
+    if (filtros.fechaDesde || filtros.fechaHasta) {
+      where.fechaHora = {};
+      if (filtros.fechaDesde) {
+        where.fechaHora.gte = new Date(filtros.fechaDesde + 'T00:00:00.000Z');
+      }
+      if (filtros.fechaHasta) {
+        where.fechaHora.lte = new Date(filtros.fechaHasta + 'T23:59:59.999Z');
+      }
+    }
+
+    const { items, total } = await this.repository.findPaginado({
+      where,
+      skip,
+      take: limit,
+    });
+
+    const data: DetalleAuditoriaDTO[] = items.map((item) => ({
+      idAuditoria: Number(item.idAuditoria),
+      tablaAfectada: item.tablaAfectada,
+      idRegistro: item.idRegistro,
+      accion: item.accion,
+      resultado: item.resultado,
+      fechaHora: item.fechaHora,
+      idUsuario: item.idUsuario,
+      usuario: item.usuario
+        ? {
+            idUsuario: item.usuario.idUsuario,
+            nombreUsuario: item.usuario.nombreUsuario,
+            correo: item.usuario.correo,
+            rol: item.usuario.rol?.nombre,
+          }
+        : null,
+      datosAnteriores: enmascararDatosSensibles(item.datosAnteriores),
+      datosNuevos: enmascararDatosSensibles(item.datosNuevos),
+    }));
+
+    return {
+      data,
+      meta: {
+        total,
+        page,
+        limit,
+        totalPages: Math.ceil(total / limit) || 1,
+      },
+    };
+  }
+
+  /**
+   * Obtiene el detalle de un registro específico de auditoría con enmascaramiento
+   */
+  async obtenerDetalle(idAuditoria: number): Promise<DetalleAuditoriaDTO | null> {
+    const item = await this.repository.findById(idAuditoria);
+    if (!item) return null;
+
+    return {
+      idAuditoria: Number(item.idAuditoria),
+      tablaAfectada: item.tablaAfectada,
+      idRegistro: item.idRegistro,
+      accion: item.accion,
+      resultado: item.resultado,
+      fechaHora: item.fechaHora,
+      idUsuario: item.idUsuario,
+      usuario: item.usuario
+        ? {
+            idUsuario: item.usuario.idUsuario,
+            nombreUsuario: item.usuario.nombreUsuario,
+            correo: item.usuario.correo,
+            rol: item.usuario.rol?.nombre,
+          }
+        : null,
+      datosAnteriores: enmascararDatosSensibles(item.datosAnteriores),
+      datosNuevos: enmascararDatosSensibles(item.datosNuevos),
+    };
   }
 }
 

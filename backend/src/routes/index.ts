@@ -10,6 +10,7 @@ import { movimientosRouter } from './movimientos.routes';
 import { comunicadosRouter } from './comunicados.routes';
 import { personalRouter } from './personal.routes';
 import { unidadesRouter } from './unidades.routes';
+import { auditoriaRouter } from './auditoria.routes';
 import { usuariosRouter } from '../modules/usuarios/usuarios.routes';
 import { personasRouter } from '../modules/personas';
 
@@ -29,5 +30,6 @@ router.use('/expensas', expensasRouter);
 router.use('/movimientos', movimientosRouter);
 router.use('/comunicados', comunicadosRouter);
 router.use('/personal', personalRouter);
+router.use('/auditoria', auditoriaRouter);
 
 
