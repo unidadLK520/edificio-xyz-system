@@ -256,4 +256,90 @@ describe('US2.1 - Punto 1: Bug mora vs anticipos aplicados y precisión de capit
     expect(Number(expDespues!.saldoPendiente)).toBe(0);
     expect(expDespues!.estado).toBe('Pagado');
   });
+
+  it('6. Un mismo departamento con dos expensas vencidas (febrero y marzo) recibe mora independiente en cada una (5 % de su propio capital) y /morosos suma ambas en totalDeuda', async () => {
+    const depto = await prisma.departamento.create({
+      data: {
+        numero: `MORA-${Date.now().toString().slice(-4)}`,
+        piso: 2,
+        estado: 'Ocupado',
+      },
+    });
+
+    const fechaVencida = new Date();
+    fechaVencida.setDate(fechaVencida.getDate() - 15);
+
+    // Expensa Febrero: monto 300, capital 300, tasa 5%
+    const expFebrero = await prisma.expensa.create({
+      data: {
+        idDepartamento: depto.idDepartamento,
+        periodo: new Date('2026-02-01T00:00:00.000Z'),
+        monto: 300,
+        montoMora: 0,
+        tasaInteresMora: 5,
+        fechaVencimiento: fechaVencida,
+        saldoPendiente: 300,
+        estado: 'Pendiente',
+      },
+    });
+
+    // Expensa Marzo: monto 300, capital 300, tasa 5%
+    const expMarzo = await prisma.expensa.create({
+      data: {
+        idDepartamento: depto.idDepartamento,
+        periodo: new Date('2026-03-01T00:00:00.000Z'),
+        monto: 300,
+        montoMora: 0,
+        tasaInteresMora: 5,
+        fechaVencimiento: fechaVencida,
+        saldoPendiente: 300,
+        estado: 'Pendiente',
+      },
+    });
+
+    try {
+      const calcRes = await request(app)
+        .post('/api/v1/expensas/calcular-mora')
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send();
+      expect(calcRes.status).toBe(200);
+
+      // Cada expensa recibe 5% de su propio capital: 300 * 0.05 = 15.00 de mora, saldo = 315.00
+      const febActualizada = await prisma.expensa.findUnique({
+        where: { idExpensa: expFebrero.idExpensa },
+      });
+      const marActualizada = await prisma.expensa.findUnique({
+        where: { idExpensa: expMarzo.idExpensa },
+      });
+
+      expect(Number(febActualizada!.montoMora)).toBe(15.00);
+      expect(Number(febActualizada!.saldoPendiente)).toBe(315.00);
+      expect(febActualizada!.estado).toBe('Moroso');
+
+      expect(Number(marActualizada!.montoMora)).toBe(15.00);
+      expect(Number(marActualizada!.saldoPendiente)).toBe(315.00);
+      expect(marActualizada!.estado).toBe('Moroso');
+
+      // /morosos consolida ambas obligaciones en totalDeuda = 630.00 (315.00 + 315.00)
+      const morososRes = await request(app)
+        .get('/api/v1/expensas/morosos')
+        .set('Authorization', `Bearer ${adminToken}`);
+
+      expect(morososRes.status).toBe(200);
+      const morosoDepto = morososRes.body.data.find(
+        (m: any) => m.idDepartamento === depto.idDepartamento
+      );
+      expect(morosoDepto).toBeDefined();
+      expect(morosoDepto.expensasMoraCount).toBe(2);
+      expect(morosoDepto.totalDeuda).toBe(630.00);
+      expect(morosoDepto.detalleExpensas).toHaveLength(2);
+    } finally {
+      await prisma.expensa.deleteMany({
+        where: { idExpensa: { in: [expFebrero.idExpensa, expMarzo.idExpensa] } },
+      });
+      await prisma.departamento.deleteMany({
+        where: { idDepartamento: depto.idDepartamento },
+      });
+    }
+  });
 });
