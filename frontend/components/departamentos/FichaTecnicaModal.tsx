@@ -186,6 +186,48 @@ export default function FichaTecnicaModal({ isOpen, depto, totalAreaConstruida, 
             </div>
           )}
 
+          {/* Extracto de Expensa y Gastos Comunes */}
+          <div className="p-3.5 rounded-xl bg-blue-50/70 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-900/50 space-y-2">
+            <div className="flex items-center justify-between">
+              <span className="font-bold text-blue-900 dark:text-blue-300 uppercase tracking-wider text-[10px] flex items-center gap-1">
+                <Building2 className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
+                Extracto de Cuota Mensual de Expensa
+              </span>
+              <span className="font-extrabold text-blue-900 dark:text-blue-200 font-mono text-sm">
+                Bs. {((15500 * (Number(depto.alicuota || ((Number(depto.areaM2 || 0) / 1600) * 100)))) / 100).toFixed(2)} / mes
+              </span>
+            </div>
+            <p className="text-[11px] text-[#5c5750] dark:text-slate-400">
+              Calculado según alícuota del <span className="font-bold">{depto.alicuota || ((Number(depto.areaM2 || 0) / 1600) * 100).toFixed(2)}%</span> sobre el Presupuesto General de Gastos Comunes (Bs. 15,500.00/mes).
+            </p>
+            <div className="grid grid-cols-2 gap-1.5 pt-1 text-[10px]">
+              <div className="p-1.5 rounded-lg bg-white/70 dark:bg-slate-900/70 border border-blue-100 dark:border-blue-900 flex justify-between">
+                <span className="text-[#66615b] dark:text-slate-400">Seguridad 24/7:</span>
+                <span className="font-mono font-bold text-[#262422] dark:text-white">Bs. {(5600 * (Number(depto.alicuota || ((Number(depto.areaM2 || 0) / 1600) * 100))) / 100).toFixed(2)}</span>
+              </div>
+              <div className="p-1.5 rounded-lg bg-white/70 dark:bg-slate-900/70 border border-blue-100 dark:border-blue-900 flex justify-between">
+                <span className="text-[#66615b] dark:text-slate-400">Administración:</span>
+                <span className="font-mono font-bold text-[#262422] dark:text-white">Bs. {(3500 * (Number(depto.alicuota || ((Number(depto.areaM2 || 0) / 1600) * 100))) / 100).toFixed(2)}</span>
+              </div>
+              <div className="p-1.5 rounded-lg bg-white/70 dark:bg-slate-900/70 border border-blue-100 dark:border-blue-900 flex justify-between">
+                <span className="text-[#66615b] dark:text-slate-400">Limpieza Común:</span>
+                <span className="font-mono font-bold text-[#262422] dark:text-white">Bs. {(2200 * (Number(depto.alicuota || ((Number(depto.areaM2 || 0) / 1600) * 100))) / 100).toFixed(2)}</span>
+              </div>
+              <div className="p-1.5 rounded-lg bg-white/70 dark:bg-slate-900/70 border border-blue-100 dark:border-blue-900 flex justify-between">
+                <span className="text-[#66615b] dark:text-slate-400">Mantenimiento:</span>
+                <span className="font-mono font-bold text-[#262422] dark:text-white">Bs. {(1500 * (Number(depto.alicuota || ((Number(depto.areaM2 || 0) / 1600) * 100))) / 100).toFixed(2)}</span>
+              </div>
+              <div className="p-1.5 rounded-lg bg-white/70 dark:bg-slate-900/70 border border-blue-100 dark:border-blue-900 flex justify-between">
+                <span className="text-[#66615b] dark:text-slate-400">Luz/Agua Común:</span>
+                <span className="font-mono font-bold text-[#262422] dark:text-white">Bs. {(1100 * (Number(depto.alicuota || ((Number(depto.areaM2 || 0) / 1600) * 100))) / 100).toFixed(2)}</span>
+              </div>
+              <div className="p-1.5 rounded-lg bg-white/70 dark:bg-slate-900/70 border border-blue-100 dark:border-blue-900 flex justify-between">
+                <span className="text-[#66615b] dark:text-slate-400">Ascensor/Reserva:</span>
+                <span className="font-mono font-bold text-[#262422] dark:text-white">Bs. {(1600 * (Number(depto.alicuota || ((Number(depto.areaM2 || 0) / 1600) * 100))) / 100).toFixed(2)}</span>
+              </div>
+            </div>
+          </div>
+
           {/* Historial de ocupación */}
           {depto.historialOcupantes && depto.historialOcupantes.length > 0 && (
             <div className="space-y-1.5 pt-1">

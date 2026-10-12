@@ -567,15 +567,14 @@ async function proxyRequest(
     if (targetPath.startsWith('movimientos')) {
       const CATEGORIAS_MOCK = [
         { idCategoria: 1, nombre: 'Mantenimiento y Reparaciones', tipo: 'Egreso' },
-        { idCategoria: 2, nombre: 'Servicios Básicos (Luz/Agua)', tipo: 'Egreso' },
+        { idCategoria: 2, nombre: 'Servicios Básicos Comunes (Luz/Agua)', tipo: 'Egreso' },
         { idCategoria: 3, nombre: 'Seguridad y Vigilancia', tipo: 'Egreso' },
         { idCategoria: 4, nombre: 'Limpieza y Desinfección', tipo: 'Egreso' },
-        { idCategoria: 5, nombre: 'Administrativo y Legal', tipo: 'Egreso' },
-        { idCategoria: 6, nombre: 'Ingreso Extraordinario', tipo: 'Ingreso' },
-        { idCategoria: 7, nombre: 'Alquiler Áreas Comunes / Salón', tipo: 'Ingreso' },
-        { idCategoria: 8, nombre: 'Multas y Penalidades', tipo: 'Ingreso' },
-        { idCategoria: 9, nombre: 'Donación o Aporte Voluntario', tipo: 'Ingreso' },
-        { idCategoria: 10, nombre: 'Intereses y Rendimientos', tipo: 'Ingreso' },
+        { idCategoria: 5, nombre: 'Administrativo y Operativo', tipo: 'Egreso' },
+        { idCategoria: 6, nombre: 'Cobro de Expensas Ordinarias', tipo: 'Ingreso' },
+        { idCategoria: 7, nombre: 'Fondo de Reserva / Cuota Extraordinaria', tipo: 'Ingreso' },
+        { idCategoria: 8, nombre: 'Multas y Penalidades Reglamentarias', tipo: 'Ingreso' },
+        { idCategoria: 9, nombre: 'Intereses y Rendimientos', tipo: 'Ingreso' },
       ]
 
       if (targetPath === 'movimientos/categorias') {
@@ -682,12 +681,12 @@ async function proxyRequest(
           {
             idMovimiento: 7,
             tipo: 'Ingreso',
-            idCategoria: 7,
-            monto: 1800.0,
-            descripcion: 'Sra. Mariana Flores (Dpto 302) | Alquiler del Salón de Eventos y Churrasquera fin de semana.',
+            idCategoria: 6,
+            monto: 775.0,
+            descripcion: 'María López (Inquilina Dpto 305) | Cobro de Expensa mensual Dpto 305 (Tipo B, 80 m²). Propietario: Juan Pérez.',
             fecha: '2026-09-16T00:00:00.000Z',
-            comprobanteUrl: 'REC-SALON-44',
-            categoria: { idCategoria: 7, nombre: 'Alquiler Áreas Comunes / Salón', tipo: 'Ingreso' },
+            comprobanteUrl: 'REC-EXP-305',
+            categoria: { idCategoria: 6, nombre: 'Cobro de Expensas Ordinarias', tipo: 'Ingreso' },
             usuarioRegistro: { idUsuario: 1, nombreUsuario: 'admin' }
           },
           {

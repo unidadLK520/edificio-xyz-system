@@ -1,6 +1,6 @@
 // frontend/app/(admin)/departamentos/page.tsx
-// HU03: Módulo de Gestión de Unidades (Departamentos, Parqueos y Bauleras) y Asignaciones
-// Arquitectura modular con integración a la API unificada de unidades /api/v1/unidades
+// HU03: Módulo de Gestión de Unidades (Departamentos, Parqueos y Bauleras) y Catastro
+// Modelo Edificio XYZ: 20 Departamentos (Tipos A, B y C), 20 Parqueos, 10 Bauleras
 
 'use client'
 
@@ -15,9 +15,12 @@ import {
   Edit,
   Car,
   Box,
+  Layers,
   Percent,
   CheckCircle2,
-  UserCheck
+  UserCheck,
+  KeyRound,
+  AlertCircle
 } from 'lucide-react'
 import { UnidadItem, DepartamentoFormData, TipoUnidad } from '@/components/departamentos/types'
 import DepartamentosKpis from '@/components/departamentos/DepartamentosKpis'
@@ -26,22 +29,20 @@ import EditarDepartamentoModal from '@/components/departamentos/EditarDepartamen
 import FichaTecnicaModal from '@/components/departamentos/FichaTecnicaModal'
 import AsignarUnidadModal from '@/components/departamentos/AsignarUnidadModal'
 
+// Semilla basada en el modelo administrativo real de 20 departamentos (1,600 m² totales)
 const UNIDADES_SEED: UnidadItem[] = [
+  // Piso 1
   {
     id: 1,
     tipoUnidad: 'Departamento',
     numero: '101',
     piso: 1,
-    areaM2: 110.5,
-    alicuota: 4.16,
-    estado: 'Ocupado',
-    propietario: {
-      id: 1,
-      nombre: 'Carlos Mendoza Rojas',
-      ci: '4829103 CBBA',
-      telefono: '+591 71234567',
-      correo: 'carlos.mendoza@email.com'
-    },
+    areaM2: 60.0,
+    tipologia: 'Tipo A (60 m²)',
+    alicuota: 3.75,
+    estado: 'Alquilado',
+    propietario: { id: 1, nombre: 'Ana Valdivia Morales', ci: '4829103 CBBA', telefono: '+591 71234567', correo: 'ana.valdivia@email.com' },
+    inquilinoActual: { id: 101, nombre: 'Pedro Ramírez Soto', telefono: '+591 79876543' },
     parqueo: 'P-01',
     baulera: 'B-01',
     fechaRegistro: '2023-01-15'
@@ -51,55 +52,293 @@ const UNIDADES_SEED: UnidadItem[] = [
     tipoUnidad: 'Departamento',
     numero: '102',
     piso: 1,
-    areaM2: 85.0,
-    alicuota: 3.2,
-    estado: 'Ocupado',
-    propietario: {
-      id: 2,
-      nombre: 'Mariana Flores Soliz',
-      ci: '5920144 SCZ',
-      telefono: '+591 79876543',
-      correo: 'mariana.flores@email.com'
-    },
+    areaM2: 80.0,
+    tipologia: 'Tipo B (80 m²)',
+    alicuota: 5.0,
+    estado: 'Alquilado',
+    propietario: { id: 2, nombre: 'Carlos Mendoza Rojas', ci: '5920144 SCZ', telefono: '+591 79876543', correo: 'carlos.mendoza@email.com' },
+    inquilinoActual: { id: 102, nombre: 'María Fernández Arce', telefono: '+591 67123980' },
     parqueo: 'P-02',
     baulera: 'Sin baulera',
     fechaRegistro: '2023-02-01'
   },
   {
     id: 3,
-    tipoUnidad: 'Parqueo',
-    numero: 'P-01',
-    estado: 'Asignado',
-    departamento: { idDepartamento: 1, numero: '101' },
-    fechaRegistro: '2023-01-15'
+    tipoUnidad: 'Departamento',
+    numero: '103',
+    piso: 1,
+    areaM2: 100.0,
+    tipologia: 'Tipo C (100 m²)',
+    alicuota: 6.25,
+    estado: 'Desocupado',
+    propietario: { id: 3, nombre: 'Laura Céspedes Villarroel', ci: '3948120 LPZ', telefono: '+591 67123980', correo: 'laura.cespedes@email.com' },
+    inquilinoActual: null,
+    parqueo: 'P-03',
+    baulera: 'B-02',
+    fechaRegistro: '2023-01-20'
   },
   {
     id: 4,
-    tipoUnidad: 'Parqueo',
-    numero: 'P-02',
-    estado: 'Disponible',
-    fechaRegistro: '2023-01-15'
+    tipoUnidad: 'Departamento',
+    numero: '104',
+    piso: 1,
+    areaM2: 60.0,
+    tipologia: 'Tipo A (60 m²)',
+    alicuota: 3.75,
+    estado: 'Alquilado',
+    propietario: { id: 4, nombre: 'José Vargas Quiroga', ci: '6129841 CBBA', telefono: '+591 75432198', correo: 'jose.vargas@email.com' },
+    inquilinoActual: { id: 104, nombre: 'Roberto Daza Méndez', telefono: '+591 76543210' },
+    parqueo: 'P-04',
+    baulera: 'Sin baulera',
+    fechaRegistro: '2023-03-01'
   },
   {
     id: 5,
-    tipoUnidad: 'Baulera',
-    numero: 'B-01',
-    estado: 'Asignado',
-    departamento: { idDepartamento: 1, numero: '101' },
-    fechaRegistro: '2023-01-15'
+    tipoUnidad: 'Departamento',
+    numero: '105',
+    piso: 1,
+    areaM2: 80.0,
+    tipologia: 'Tipo B (80 m²)',
+    alicuota: 5.0,
+    estado: 'Desocupado',
+    propietario: { id: 5, nombre: 'Sofía Romero Paz', ci: '4918230 CBBA', telefono: '+591 72198450', correo: 'sofia.romero@email.com' },
+    inquilinoActual: null,
+    parqueo: 'Sin parqueo',
+    baulera: 'Sin baulera',
+    fechaRegistro: '2023-01-10'
   },
+  // Piso 2
   {
     id: 6,
-    tipoUnidad: 'Baulera',
-    numero: 'B-02',
-    estado: 'Disponible',
+    tipoUnidad: 'Departamento',
+    numero: '201',
+    piso: 2,
+    areaM2: 60.0,
+    tipologia: 'Tipo A (60 m²)',
+    alicuota: 3.75,
+    estado: 'Ocupado por Propietario',
+    propietario: { id: 6, nombre: 'Gabriel Romero Soria', ci: '4829104 LPZ', telefono: '+591 71239988', correo: 'gabriel.romero@email.com' },
+    inquilinoActual: null,
+    parqueo: 'P-05',
+    baulera: 'B-03',
+    fechaRegistro: '2023-02-15'
+  },
+  {
+    id: 7,
+    tipoUnidad: 'Departamento',
+    numero: '202',
+    piso: 2,
+    areaM2: 80.0,
+    tipologia: 'Tipo B (80 m²)',
+    alicuota: 5.0,
+    estado: 'Alquilado',
+    propietario: { id: 7, nombre: 'Patricia Quiroga Daza', ci: '3920194 CBBA', telefono: '+591 79871122', correo: 'patricia.quiroga@email.com' },
+    inquilinoActual: { id: 105, nombre: 'Martín Suárez Flores', telefono: '+591 77334455' },
+    parqueo: 'P-06',
+    baulera: 'B-04',
+    fechaRegistro: '2023-01-18'
+  },
+  {
+    id: 8,
+    tipoUnidad: 'Departamento',
+    numero: '203',
+    piso: 2,
+    areaM2: 80.0,
+    tipologia: 'Tipo B (80 m²)',
+    alicuota: 5.0,
+    estado: 'Alquilado',
+    propietario: { id: 8, nombre: 'Diego Claros Torrico', ci: '5192843 CBBA', telefono: '+591 60123456', correo: 'diego.claros@email.com' },
+    inquilinoActual: { id: 106, nombre: 'Andrea Mercado Bellot', telefono: '+591 71987654' },
+    parqueo: 'P-07',
+    baulera: 'Sin baulera',
+    fechaRegistro: '2023-03-10'
+  },
+  {
+    id: 9,
+    tipoUnidad: 'Departamento',
+    numero: '204',
+    piso: 2,
+    areaM2: 80.0,
+    tipologia: 'Tipo B (80 m²)',
+    alicuota: 5.0,
+    estado: 'Ocupado por Propietario',
+    propietario: { id: 9, nombre: 'Alejandro Gómez Salces', ci: '6192834 SCZ', telefono: '+591 60123987', correo: 'alejandro.gomez@email.com' },
+    inquilinoActual: null,
+    parqueo: 'P-08',
+    baulera: 'B-05',
+    fechaRegistro: '2023-01-25'
+  },
+  {
+    id: 10,
+    tipoUnidad: 'Departamento',
+    numero: '205',
+    piso: 2,
+    areaM2: 100.0,
+    tipologia: 'Tipo C (100 m²)',
+    alicuota: 6.25,
+    estado: 'Desocupado',
+    propietario: { id: 10, nombre: 'Elena Bellot Mercado', ci: '7192834 CBBA', telefono: '+591 73456789', correo: 'elena.bellot@email.com' },
+    inquilinoActual: null,
+    parqueo: 'P-09',
+    baulera: 'B-06',
+    fechaRegistro: '2023-04-01'
+  },
+  // Piso 3
+  {
+    id: 11,
+    tipoUnidad: 'Departamento',
+    numero: '301',
+    piso: 3,
+    areaM2: 60.0,
+    tipologia: 'Tipo A (60 m²)',
+    alicuota: 3.75,
+    estado: 'Alquilado',
+    propietario: { id: 11, nombre: 'Fernando Castro Ortiz', ci: '4918231 CBBA', telefono: '+591 72198451', correo: 'fernando.castro@email.com' },
+    inquilinoActual: { id: 107, nombre: 'Camila Rojas Rios', telefono: '+591 74567890' },
+    parqueo: 'P-10',
+    baulera: 'B-07',
+    fechaRegistro: '2023-01-12'
+  },
+  {
+    id: 12,
+    tipoUnidad: 'Departamento',
+    numero: '302',
+    piso: 3,
+    areaM2: 80.0,
+    tipologia: 'Tipo B (80 m²)',
+    alicuota: 5.0,
+    estado: 'Alquilado',
+    propietario: { id: 12, nombre: 'Mariana Flores Soliz', ci: '5920145 SCZ', telefono: '+591 79876544', correo: 'mariana.flores@email.com' },
+    inquilinoActual: { id: 108, nombre: 'Lucía Gutiérrez Daza', telefono: '+591 78901234' },
+    parqueo: 'P-11',
+    baulera: 'Sin baulera',
+    fechaRegistro: '2023-02-20'
+  },
+  {
+    id: 13,
+    tipoUnidad: 'Departamento',
+    numero: '303',
+    piso: 3,
+    areaM2: 80.0,
+    tipologia: 'Tipo B (80 m²)',
+    alicuota: 5.0,
+    estado: 'Alquilado',
+    propietario: { id: 13, nombre: 'Rodrigo Heredia Zalles', ci: '8291044 CBBA', telefono: '+591 71239900', correo: 'rodrigo.heredia@email.com' },
+    inquilinoActual: { id: 109, nombre: 'Gonzalo Navia Ramos', telefono: '+591 65432109' },
+    parqueo: 'P-12',
+    baulera: 'B-08',
+    fechaRegistro: '2023-01-30'
+  },
+  {
+    id: 14,
+    tipoUnidad: 'Departamento',
+    numero: '304',
+    piso: 3,
+    areaM2: 80.0,
+    tipologia: 'Tipo B (80 m²)',
+    alicuota: 5.0,
+    estado: 'Desocupado',
+    propietario: { id: 14, nombre: 'Beatriz Salazar Camacho', ci: '9182045 LPZ', telefono: '+591 70123456', correo: 'beatriz.salazar@email.com' },
+    inquilinoActual: null,
+    parqueo: 'P-13',
+    baulera: 'Sin baulera',
+    fechaRegistro: '2023-03-05'
+  },
+  {
+    id: 15,
+    tipoUnidad: 'Departamento',
+    numero: '305',
+    piso: 3,
+    areaM2: 80.0,
+    tipologia: 'Tipo B (80 m²)',
+    alicuota: 5.0,
+    estado: 'Alquilado',
+    propietario: { id: 15, nombre: 'Juan Pérez Montaño', ci: '3819204 CBBA', telefono: '+591 76543219', correo: 'juan.perez@email.com' },
+    inquilinoActual: { id: 110, nombre: 'María López Arteaga', telefono: '+591 79123456' },
+    parqueo: 'P-14',
+    baulera: 'B-09',
     fechaRegistro: '2023-01-15'
+  },
+  // Piso 4
+  {
+    id: 16,
+    tipoUnidad: 'Departamento',
+    numero: '401',
+    piso: 4,
+    areaM2: 60.0,
+    tipologia: 'Tipo A (60 m²)',
+    alicuota: 3.75,
+    estado: 'Ocupado por Propietario',
+    propietario: { id: 16, nombre: 'Javier Torrico Alba', ci: '4729103 CBBA', telefono: '+591 71234411', correo: 'javier.torrico@email.com' },
+    inquilinoActual: null,
+    parqueo: 'P-15',
+    baulera: 'Sin baulera',
+    fechaRegistro: '2023-02-10'
+  },
+  {
+    id: 17,
+    tipoUnidad: 'Departamento',
+    numero: '402',
+    piso: 4,
+    areaM2: 100.0,
+    tipologia: 'Tipo C (100 m²)',
+    alicuota: 6.25,
+    estado: 'Ocupado por Propietario',
+    propietario: { id: 17, nombre: 'Claudia Daza Mendez', ci: '5819204 SCZ', telefono: '+591 79872233', correo: 'claudia.daza@email.com' },
+    inquilinoActual: null,
+    parqueo: 'P-16',
+    baulera: 'B-10',
+    fechaRegistro: '2023-01-14'
+  },
+  {
+    id: 18,
+    tipoUnidad: 'Departamento',
+    numero: '403',
+    piso: 4,
+    areaM2: 100.0,
+    tipologia: 'Tipo C (100 m²)',
+    alicuota: 6.25,
+    estado: 'Alquilado',
+    propietario: { id: 18, nombre: 'Marcelo Rios Quiroga', ci: '6918234 CBBA', telefono: '+591 67124455', correo: 'marcelo.rios@email.com' },
+    inquilinoActual: { id: 111, nombre: 'Esteban Morales Zeballos', telefono: '+591 76549988' },
+    parqueo: 'P-17',
+    baulera: 'Sin baulera',
+    fechaRegistro: '2023-02-28'
+  },
+  {
+    id: 19,
+    tipoUnidad: 'Departamento',
+    numero: '404',
+    piso: 4,
+    areaM2: 100.0,
+    tipologia: 'Tipo C (100 m²)',
+    alicuota: 6.25,
+    estado: 'Desocupado',
+    propietario: { id: 19, nombre: 'Valeria Soliz Mercado', ci: '7182934 LPZ', telefono: '+591 75439900', correo: 'valeria.soliz@email.com' },
+    inquilinoActual: null,
+    parqueo: 'P-18',
+    baulera: 'Sin baulera',
+    fechaRegistro: '2023-03-15'
+  },
+  {
+    id: 20,
+    tipoUnidad: 'Departamento',
+    numero: '405',
+    piso: 4,
+    areaM2: 80.0,
+    tipologia: 'Tipo B (80 m²)',
+    alicuota: 5.0,
+    estado: 'Ocupado por Propietario',
+    propietario: { id: 20, nombre: 'Rubén Guzmán Villarroel', ci: '8192044 CBBA', telefono: '+591 72199911', correo: 'ruben.guzman@email.com' },
+    inquilinoActual: null,
+    parqueo: 'P-19',
+    baulera: 'Sin baulera',
+    fechaRegistro: '2023-01-08'
   }
 ]
 
 export default function DepartamentosPage() {
-  // Universo completo de unidades del edificio (para KPIs globales y persistencia)
-  const [allUnidades, setAllUnidades] = useState<UnidadItem[]>(UNIDADES_SEED)
+  const [unidades, setUnidades] = useState<UnidadItem[]>(UNIDADES_SEED)
   const [searchTerm, setSearchTerm] = useState('')
   const [filtroTipo, setFiltroTipo] = useState<string>('Todos')
   const [filtroEstado, setFiltroEstado] = useState('Todos')
@@ -115,10 +354,10 @@ export default function DepartamentosPage() {
   const [createErrorMessage, setCreateErrorMessage] = useState<string | null>(null)
   const [successToast, setSuccessToast] = useState<string | null>(null)
 
-  // Fetch todas las unidades desde la API (obtiene el universo global para mantener KPIs consistentes)
+  // Fetch unidades desde la API con fallback inteligente
   const fetchUnidades = useCallback(async () => {
     try {
-      const res = await fetch('/api/v1/unidades?tipo=Todos&limit=500')
+      const res = await fetch(`/api/v1/unidades?tipo=${filtroTipo}&estado=${filtroEstado}&search=${encodeURIComponent(searchTerm)}`)
       if (res.ok) {
         const json = await res.json()
         if (json.data && Array.isArray(json.data) && json.data.length > 0) {
@@ -128,86 +367,52 @@ export default function DepartamentosPage() {
             numero: item.numero,
             piso: item.piso,
             areaM2: item.areaM2,
-            alicuota: item.alicuota || (item.areaM2 ? Number(((item.areaM2 / 2650) * 100).toFixed(2)) : undefined),
-            estado: item.estado || 'Disponible',
-            parqueo: item.parqueos?.[0]?.numero || 'Sin parqueo',
-            baulera: item.bauleras?.[0]?.numero || 'Sin baulera',
+            tipologia:
+              item.areaM2 === 60 ? 'Tipo A (60 m²)' :
+              item.areaM2 === 80 ? 'Tipo B (80 m²)' :
+              item.areaM2 === 100 ? 'Tipo C (100 m²)' : undefined,
+            alicuota: item.alicuota || (item.areaM2 ? Number(((item.areaM2 / 1600) * 100).toFixed(2)) : undefined),
+            estado: item.estado || 'Desocupado',
+            parqueo: item.parqueos?.[0]?.numero || item.parqueo || 'Sin parqueo',
+            baulera: item.bauleras?.[0]?.numero || item.baulera || 'Sin baulera',
             propietario: item.propietario
               ? {
                   id: item.propietario.idPersona,
-                  nombre: `${item.propietario.nombres || ''} ${item.propietario.apellidos || ''}`.trim(),
-                  ci: item.propietario.ciNit,
+                  nombre: `${item.propietario.nombres || ''} ${item.propietario.apellidos || ''}`.trim() || item.propietario.nombre,
+                  ci: item.propietario.ciNit || item.propietario.ci,
                   telefono: item.propietario.telefono,
                   correo: item.propietario.correo
                 }
               : null,
-            ocupanteActual: item.ocupanteActual
-              ? {
-                  id: item.ocupanteActual.idPersona,
-                  nombre: `${item.ocupanteActual.nombres || ''} ${item.ocupanteActual.apellidos || ''}`.trim(),
-                  ci: item.ocupanteActual.ciNit,
-                  telefono: item.ocupanteActual.telefono,
-                  correo: item.ocupanteActual.correo
-                }
-              : null,
-            tipoOcupante: item.tipoOcupante || null,
+            inquilinoActual: item.inquilinoActual || null,
             persona: item.persona,
             departamento: item.departamento,
-            fechaRegistro: item.fechaRegistro || '2024-01-01'
+            fechaRegistro: item.fechaRegistro || '2023-01-01'
           }))
-          setAllUnidades(mapped)
+          setUnidades(mapped)
         }
       }
     } catch {}
-  }, [])
+  }, [filtroTipo, filtroEstado, searchTerm])
 
   useEffect(() => {
     fetchUnidades()
   }, [fetchUnidades])
 
-  // KPIs globales del edificio calculados a partir de allUnidades (no se resetean al cambiar de pestaña)
-  const totalDeptos = useMemo(() => {
-    return allUnidades.filter((u) => u.tipoUnidad === 'Departamento').length
-  }, [allUnidades])
-
   const totalAreaConstruida = useMemo(() => {
-    return allUnidades
-      .filter((u) => u.tipoUnidad === 'Departamento')
-      .reduce((acc, d) => acc + (d.areaM2 || 0), 0)
-  }, [allUnidades])
+    return unidades.filter((u) => u.tipoUnidad === 'Departamento').reduce((acc, d) => acc + (d.areaM2 || 0), 0)
+  }, [unidades])
 
-  const ocupados = useMemo(() => {
-    return allUnidades.filter((u) => u.tipoUnidad === 'Departamento' && u.estado === 'Ocupado').length
-  }, [allUnidades])
-
-  const disponibles = useMemo(() => {
-    return allUnidades.filter(
-      (u) => u.tipoUnidad === 'Departamento' && (u.estado === 'Disponible' || u.estado === 'En Alquiler')
-    ).length
-  }, [allUnidades])
-
-  const conParqueo = useMemo(() => {
-    const tieneParqueos = allUnidades.some((u) => u.tipoUnidad === 'Parqueo')
-    if (tieneParqueos) {
-      return allUnidades.filter((u) => u.tipoUnidad === 'Parqueo' && (u.estado === 'Asignado' || !!u.departamento)).length
-    }
-    return allUnidades.filter((u) => u.tipoUnidad === 'Departamento' && u.parqueo && u.parqueo !== 'Sin parqueo').length
-  }, [allUnidades])
-
-  // Filtrado reactivo en la tabla
+  // Filtrado reactivo
   const unidadesFiltradas = useMemo(() => {
-    return allUnidades.filter((u) => {
+    return unidades.filter((u) => {
       const searchLower = searchTerm.toLowerCase()
       const matchSearch =
         u.numero.toLowerCase().includes(searchLower) ||
         (u.propietario &&
           (u.propietario.nombre.toLowerCase().includes(searchLower) ||
-            u.propietario.ci?.toLowerCase().includes(searchLower))) ||
-        (u.ocupanteActual &&
-          (u.ocupanteActual.nombre.toLowerCase().includes(searchLower) ||
-            u.ocupanteActual.ci?.toLowerCase().includes(searchLower))) ||
-        (u.persona &&
-          `${u.persona.nombres || ''} ${u.persona.apellidos || ''}`.toLowerCase().includes(searchLower))
+            u.propietario.ci.toLowerCase().includes(searchLower))) ||
+        (u.inquilinoActual && u.inquilinoActual.nombre.toLowerCase().includes(searchLower))
 
       const matchTipo = filtroTipo === 'Todos' || u.tipoUnidad === filtroTipo
       const matchEstado = filtroEstado === 'Todos' || u.estado === filtroEstado
@@ -215,14 +420,21 @@ export default function DepartamentosPage() {
 
       return matchSearch && matchTipo && matchEstado && matchPiso
     })
-  }, [allUnidades, searchTerm, filtroTipo, filtroEstado, filtroPiso])
+  }, [unidades, searchTerm, filtroTipo, filtroEstado, filtroPiso])
+
+  // KPIs reales del modelo (20 unidades)
+  const deptos = unidades.filter((u) => u.tipoUnidad === 'Departamento')
+  const totalDeptos = deptos.length
+  const ocupadosPropietario = deptos.filter((u) => u.estado === 'Ocupado por Propietario').length
+  const alquilados = deptos.filter((u) => u.estado === 'Alquilado').length
+  const desocupados = deptos.filter((u) => u.estado === 'Desocupado' || u.estado === 'Disponible').length
+  const conParqueo = deptos.filter((u) => u.parqueo !== 'Sin parqueo').length
 
   const showToast = (msg: string) => {
     setSuccessToast(msg)
     setTimeout(() => setSuccessToast(null), 4000)
   }
 
-  // CA1 & CA4: Crear unidad con verificación de duplicado
   const handleCreateSubmit = async (formData: DepartamentoFormData) => {
     setCreateErrorMessage(null)
 
@@ -242,8 +454,6 @@ export default function DepartamentosPage() {
       })
 
       const json = await res.json()
-
-      // CA4: Manejo de error duplicado
       if (!res.ok) {
         if (res.status === 409 || json.message?.includes('utilizado')) {
           setCreateErrorMessage('El identificador ya se encuentra utilizado')
@@ -254,18 +464,6 @@ export default function DepartamentosPage() {
       }
 
       await fetchUnidades()
-      setAllUnidades((prev) => [
-        ...prev,
-        {
-          id: json.data?.id || Date.now(),
-          tipoUnidad: payload.tipoUnidad as TipoUnidad,
-          numero: payload.numero,
-          piso: payload.piso,
-          areaM2: payload.areaM2,
-          estado: payload.estado,
-          fechaRegistro: new Date().toISOString().split('T')[0]
-        }
-      ])
       setIsCreateModalOpen(false)
       showToast(`¡Unidad ${payload.tipoUnidad} ${payload.numero} registrada exitosamente!`)
     } catch {
@@ -273,41 +471,33 @@ export default function DepartamentosPage() {
     }
   }
 
-  // CA3: Modificar datos de unidad
-  const handleUpdateSubmit = async (updated: UnidadItem) => {
-    try {
-      const payload: any = {
-        numero: updated.numero,
-        piso: updated.piso,
-        areaM2: updated.areaM2
-      }
-      // Para departamento el estado Ocupado/Disponible es automático según asignaciones
-      if (updated.tipoUnidad !== 'Departamento') {
-        payload.estado = updated.estado
-      }
+  const handleEditSubmit = async (formData: DepartamentoFormData) => {
+    if (!unidadToEdit) return
 
-      const res = await fetch(`/api/v1/unidades/${updated.tipoUnidad}/${updated.id}`, {
-        method: 'PUT',
+    try {
+      const res = await fetch(`/api/v1/unidades/${unidadToEdit.id}`, {
+        method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
+        body: JSON.stringify({
+          numero: formData.numero,
+          piso: formData.piso,
+          areaM2: formData.areaM2,
+          estado: formData.estado
+        })
       })
 
       if (res.ok) {
         await fetchUnidades()
+        setIsEditModalOpen(false)
+        setUnidadToEdit(null)
+        showToast(`¡Unidad ${formData.numero} actualizada correctamente!`)
       }
     } catch {}
-
-    // Actualización inmediata en estado reactivo
-    setAllUnidades((prev) =>
-      prev.map((u) => (u.tipoUnidad === updated.tipoUnidad && u.id === updated.id ? { ...u, ...updated } : u))
-    )
-    setIsEditModalOpen(false)
-    showToast(`¡${updated.tipoUnidad} ${updated.numero} actualizado correctamente!`)
   }
 
   return (
     <div className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto space-y-6">
-      {/* Toast */}
+      {/* Toast de confirmación */}
       {successToast && (
         <div className="p-4 bg-emerald-100 dark:bg-emerald-950/70 border border-emerald-300 dark:border-emerald-800 text-emerald-900 dark:text-emerald-200 rounded-2xl flex items-center gap-3 shadow-md animate-in fade-in slide-in-from-top-3 duration-300">
           <CheckCircle2 className="w-5 h-5 text-emerald-600 dark:text-emerald-400 shrink-0" />
@@ -316,273 +506,220 @@ export default function DepartamentosPage() {
       )}
 
       {/* HEADER */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-[#ede9e1]/90 dark:bg-slate-900/90 p-5 rounded-2xl border border-[#cec8bc] dark:border-slate-800 shadow-sm backdrop-blur-md">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-[#cec8bc] dark:border-slate-800">
         <div>
-          <div className="flex items-center gap-2 text-blue-700 dark:text-indigo-400 text-xs font-bold uppercase tracking-wider mb-1">
-            <Building2 className="w-4 h-4" />
-            HU03: Catastro & Gestión de Unidades Inmobiliarias
+          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-blue-500/10 border border-blue-500/20 text-blue-800 dark:text-blue-400 text-xs font-semibold mb-2">
+            <Building2 className="w-3.5 h-3.5" />
+            Catastro de Departamentos & Alícuotas
           </div>
-          <h1 className="text-xl sm:text-2xl font-black text-[#262422] dark:text-white tracking-tight">
-            Departamentos, Parqueos y Bauleras
+          <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-[#262422] dark:text-white">
+            Unidades, Propietarios e Inquilinos
           </h1>
-          <p className="text-xs sm:text-sm text-[#7d776f] dark:text-slate-400">
-            Administración unificada de departamentos, espacios de parqueo y bauleras con historial de antecedentes de asignación.
+          <p className="text-xs sm:text-sm text-[#66615b] dark:text-slate-400 mt-1">
+            Catastro del Edificio XYZ (20 departamentos, 1,600 m²). Todas las unidades generan expensas sin importar si están ocupadas o vacías.
           </p>
         </div>
 
         <button
-          onClick={() => {
-            setCreateErrorMessage(null)
-            setIsCreateModalOpen(true)
-          }}
-          className="flex items-center justify-center gap-2 bg-blue-700 hover:bg-blue-800 dark:bg-indigo-600 dark:hover:bg-indigo-700 text-white px-4 py-2.5 rounded-xl text-xs font-bold transition-all shadow-md shadow-blue-900/20 active:scale-95 cursor-pointer"
+          onClick={() => setIsCreateModalOpen(true)}
+          className="inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-rose-700 hover:bg-rose-600 active:bg-rose-800 text-white text-xs sm:text-sm font-bold rounded-xl shadow-lg shadow-rose-800/20 transition-all cursor-pointer"
         >
           <Plus className="w-4 h-4" />
           Registrar Nueva Unidad
         </button>
       </div>
 
-      {/* TARJETAS KPI MODULAR (Métricas globales del edificio) */}
+      {/* KPIS DE OCUPACIÓN REAL */}
       <DepartamentosKpis
         totalDeptos={totalDeptos}
-        ocupados={ocupados}
-        disponibles={disponibles}
+        ocupadosPropietario={ocupadosPropietario}
+        alquilados={alquilados}
+        desocupados={desocupados}
         conParqueo={conParqueo}
         totalAreaConstruida={totalAreaConstruida}
       />
 
-      {/* PESTAÑAS DE TIPO DE UNIDAD (CA1, CA08) */}
-      <div className="flex border-b border-[#cec8bc] dark:border-slate-800 gap-2 overflow-x-auto pb-1">
-        {[
-          { label: 'Todas las Unidades', value: 'Todos', icon: Building2 },
-          { label: 'Departamentos', value: 'Departamento', icon: Building2 },
-          { label: 'Parqueos', value: 'Parqueo', icon: Car },
-          { label: 'Bauleras', value: 'Baulera', icon: Box }
-        ].map((tab) => {
-          const IconComponent = tab.icon
-          const isActive = filtroTipo === tab.value
-          return (
-            <button
-              key={tab.value}
-              onClick={() => setFiltroTipo(tab.value)}
-              className={`flex items-center gap-2 px-4 py-2.5 rounded-t-xl font-bold text-xs transition-all cursor-pointer border-b-2 whitespace-nowrap ${
-                isActive
-                  ? 'border-blue-700 text-blue-700 dark:border-indigo-400 dark:text-indigo-400 bg-[#ede9e1]/50 dark:bg-slate-800/40'
-                  : 'border-transparent text-[#7d776f] dark:text-slate-400 hover:text-[#262422] dark:hover:text-white'
-              }`}
-            >
-              <IconComponent className="w-4 h-4" />
-              {tab.label}
-            </button>
-          )
-        })}
-      </div>
-
       {/* BUSCADOR Y FILTROS */}
-      <div className="p-4 rounded-2xl bg-[#ede9e1]/80 dark:bg-slate-900/80 border border-[#cec8bc] dark:border-slate-800 flex flex-col md:flex-row gap-3 items-stretch md:items-center justify-between shadow-xs">
+      <div className="p-4 rounded-2xl bg-[#ede9e1] dark:bg-slate-900 border border-[#cec8bc] dark:border-slate-800 flex flex-col md:flex-row gap-3 items-stretch md:items-center justify-between shadow-sm">
         <div className="relative flex-1">
           <Search className="w-4 h-4 text-[#7d776f] dark:text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
           <input
             type="text"
-            placeholder="Buscar por identificador (ej. 101, P-01, B-01) o titular..."
+            placeholder="Buscar por número, propietario o inquilino..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full pl-10 pr-4 py-2 bg-[#ded8cc] dark:bg-slate-800 border border-[#cec8bc] dark:border-slate-700 rounded-xl text-xs text-[#262422] dark:text-slate-100 placeholder-[#7d776f] focus:outline-none focus:ring-2 focus:ring-blue-600 transition-all font-medium"
+            className="w-full pl-10 pr-4 py-2 bg-[#dfd9ce] dark:bg-slate-950 border border-[#cec8bc] dark:border-slate-700 rounded-xl text-xs sm:text-sm text-[#1c1917] dark:text-white placeholder-[#857f76] focus:outline-none focus:ring-2 focus:ring-rose-600"
           />
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
-          {/* CA08: Filtro Estado */}
-          <div className="flex items-center gap-1.5 bg-[#ded8cc] dark:bg-slate-800 px-3 py-2 rounded-xl border border-[#cec8bc] dark:border-slate-700 text-xs">
-            <Filter className="w-3.5 h-3.5 text-[#7d776f] dark:text-slate-400" />
+          {/* Filtro Estado de Ocupación */}
+          <div className="flex items-center gap-1.5 bg-[#dfd9ce] dark:bg-slate-950 px-3 py-2 rounded-xl border border-[#cec8bc] dark:border-slate-700 text-xs">
+            <Filter className="w-3.5 h-3.5 text-[#7d776f]" />
             <select
               value={filtroEstado}
               onChange={(e) => setFiltroEstado(e.target.value)}
-              className="bg-transparent text-[#262422] dark:text-white focus:outline-none cursor-pointer font-bold"
+              className="bg-transparent text-[#262422] dark:text-white focus:outline-none cursor-pointer font-medium"
             >
-              <option value="Todos">Estado: Todos</option>
-              <option value="Disponible">Disponible</option>
-              <option value="Asignado">Asignado</option>
-              <option value="Ocupado">Ocupado</option>
-              <option value="Desocupado">Desocupado</option>
-              <option value="En Alquiler">En Alquiler</option>
-              <option value="Inactivo">Inactivo</option>
+              <option value="Todos">Ocupación: Todas</option>
+              <option value="Ocupado por Propietario">Ocupado por Dueño</option>
+              <option value="Alquilado">Alquilado a Inquilino</option>
+              <option value="Desocupado">Desocupado / Vacío</option>
+            </select>
+          </div>
+
+          {/* Filtro Piso */}
+          <div className="flex items-center gap-1.5 bg-[#dfd9ce] dark:bg-slate-950 px-3 py-2 rounded-xl border border-[#cec8bc] dark:border-slate-700 text-xs">
+            <Layers className="w-3.5 h-3.5 text-[#7d776f]" />
+            <select
+              value={filtroPiso}
+              onChange={(e) => setFiltroPiso(e.target.value)}
+              className="bg-transparent text-[#262422] dark:text-white focus:outline-none cursor-pointer font-medium"
+            >
+              <option value="Todos">Piso: Todos</option>
+              <option value="1">Piso 1</option>
+              <option value="2">Piso 2</option>
+              <option value="3">Piso 3</option>
+              <option value="4">Piso 4</option>
             </select>
           </div>
         </div>
       </div>
 
-      {/* TABLA DE UNIDADES */}
-      <div className="rounded-2xl bg-[#ede9e1]/80 dark:bg-slate-900/80 border border-[#cec8bc] dark:border-slate-800 overflow-hidden shadow-xs">
+      {/* TABLA CATASTRAL DE UNIDADES */}
+      <div className="rounded-2xl bg-[#ede9e1] dark:bg-slate-900 border border-[#cec8bc] dark:border-slate-800 overflow-hidden shadow-sm">
         <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse text-xs">
+          <table className="w-full text-left border-collapse text-xs sm:text-sm">
             <thead>
-              <tr className="border-b border-[#cec8bc] dark:border-slate-800 bg-[#dfd9ce]/70 dark:bg-slate-800/70 text-[11px] font-bold uppercase tracking-wider text-[#7d776f] dark:text-slate-400">
-                <th className="py-3.5 px-4">Tipo & Identificador</th>
-                <th className="py-3.5 px-4">Detalle / Superficie</th>
-                <th className="py-3.5 px-4">Titular / Asignado A</th>
-                <th className="py-3.5 px-4">Estado Actual</th>
-                <th className="py-3.5 px-4 text-right">Acciones</th>
+              <tr className="border-b border-[#cec8bc] dark:border-slate-800 bg-[#dfd9ce]/60 dark:bg-slate-950/60 text-[#7d776f] dark:text-slate-400 uppercase text-[11px] font-bold">
+                <th className="py-3 px-4">Unidad / Tipología</th>
+                <th className="py-3 px-4">Propietario Responsable</th>
+                <th className="py-3 px-4">Ocupante / Inquilino</th>
+                <th className="py-3 px-4">Superficie & Alícuota</th>
+                <th className="py-3 px-4">Parqueo / Baulera</th>
+                <th className="py-3 px-4">Estado Ocupación</th>
+                <th className="py-3 px-4 text-right">Acciones</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-[#cec8bc]/50 dark:divide-slate-800/60">
+            <tbody className="divide-y divide-[#cec8bc] dark:divide-slate-800">
               {unidadesFiltradas.length === 0 ? (
                 <tr>
-                  <td colSpan={5} className="py-10 text-center text-[#7d776f] dark:text-slate-500">
-                    No se encontraron unidades registradas con los criterios seleccionados.
+                  <td colSpan={7} className="py-8 text-center text-[#7d776f] dark:text-slate-500">
+                    No se encontraron departamentos con los filtros aplicados.
                   </td>
                 </tr>
               ) : (
                 unidadesFiltradas.map((unidad) => (
                   <tr
-                    key={`${unidad.tipoUnidad}-${unidad.id}`}
-                    className="hover:bg-[#e4ded4]/60 dark:hover:bg-slate-800/40 transition-colors"
+                    key={unidad.id}
+                    className="hover:bg-[#dfd9ce]/40 dark:hover:bg-slate-800/40 transition-colors"
                   >
-                    <td className="py-3.5 px-4">
-                      <div className="flex items-center gap-2.5">
-                        <div
-                          className={`w-9 h-9 rounded-xl font-extrabold flex items-center justify-center border text-xs ${
-                            unidad.tipoUnidad === 'Departamento'
-                              ? 'bg-blue-700/15 text-blue-900 border-blue-600/30'
-                              : unidad.tipoUnidad === 'Parqueo'
-                                ? 'bg-amber-600/15 text-amber-900 border-amber-600/30'
-                                : 'bg-emerald-600/15 text-emerald-900 border-emerald-600/30'
-                          }`}
-                        >
-                          {unidad.numero}
-                        </div>
-                        <div>
-                          <div className="font-bold text-[#262422] dark:text-white text-sm">
-                            {unidad.tipoUnidad} {unidad.numero}
-                          </div>
-                          <div className="text-[11px] text-[#7d776f] dark:text-slate-400">
-                            {unidad.tipoUnidad === 'Departamento' ? `Piso ${unidad.piso || '-'}` : 'Espacio de Edificio'}
-                          </div>
-                        </div>
+                    <td className="py-3 px-4">
+                      <div className="font-extrabold text-[#262422] dark:text-white flex items-center gap-1.5">
+                        <Building2 className="w-4 h-4 text-rose-700 dark:text-rose-400 shrink-0" />
+                        <span>Dpto. {unidad.numero}</span>
+                      </div>
+                      <div className="text-[11px] text-[#7d776f] dark:text-slate-400">
+                        {unidad.tipologia || (unidad.areaM2 === 60 ? 'Tipo A (60 m²)' : unidad.areaM2 === 80 ? 'Tipo B (80 m²)' : 'Tipo C (100 m²)')} • Piso {unidad.piso || '-'}
                       </div>
                     </td>
 
-                    <td className="py-3.5 px-4">
-                      {unidad.tipoUnidad === 'Departamento' ? (
-                        <div>
-                          <div className="font-bold text-[#262422] dark:text-slate-200 font-mono">
-                            {unidad.areaM2} m²
-                          </div>
-                          <div className="text-[10px] text-blue-700 dark:text-indigo-400 font-semibold flex items-center gap-0.5">
-                            <Percent className="w-3 h-3" />
-                            Alícuota:{' '}
-                            {totalAreaConstruida > 0 && unidad.areaM2
-                              ? `${((Number(unidad.areaM2) / totalAreaConstruida) * 100).toFixed(2)}%`
-                              : `${unidad.alicuota || 0}%`}
-                          </div>
-                        </div>
-                      ) : (
-                        <div className="text-[#7d776f] dark:text-slate-400 font-medium">
-                          {unidad.departamento ? `Asignado a Dpto ${unidad.departamento.numero}` : 'Sin depto asignado'}
-                        </div>
-                      )}
-                    </td>
-
-                    <td className="py-3.5 px-4">
+                    <td className="py-3 px-4">
                       {unidad.propietario ? (
                         <div>
-                          <div className="font-bold text-[#262422] dark:text-white flex items-center gap-1.5 flex-wrap">
-                            <Users className="w-3.5 h-3.5 text-blue-700 dark:text-indigo-400 shrink-0" />
-                            <span>{unidad.propietario.nombre}</span>
-                            <span className="text-[9px] px-1.5 py-0.2 bg-blue-100 dark:bg-blue-950/70 text-blue-800 dark:text-blue-300 rounded font-bold uppercase tracking-wider">
-                              Propietario
-                            </span>
+                          <div className="font-bold text-[#262422] dark:text-white flex items-center gap-1">
+                            <UserCheck className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                            {unidad.propietario.nombre}
                           </div>
-                          <div className="text-[11px] text-[#7d776f] dark:text-slate-400 font-mono">
-                            CI: {unidad.propietario.ci || 'S/N'} • {unidad.propietario.telefono || 'Sin tel'}
+                          <div className="text-[11px] text-[#7d776f] dark:text-slate-400">
+                            CI: {unidad.propietario.ci}
                           </div>
-                          {unidad.ocupanteActual && unidad.ocupanteActual.id !== unidad.propietario.id && (
-                            <div className="text-[11px] text-[#5c5750] dark:text-slate-300 mt-0.5 flex items-center gap-1">
-                              <span className="text-[9px] px-1.5 py-0.2 bg-purple-100 dark:bg-purple-950/70 text-purple-800 dark:text-purple-300 rounded font-bold">
-                                Inquilino:
-                              </span>
-                              <span>{unidad.ocupanteActual.nombre}</span>
-                            </div>
-                          )}
-                        </div>
-                      ) : unidad.ocupanteActual ? (
-                        <div>
-                          <div className="font-bold text-[#262422] dark:text-white flex items-center gap-1.5 flex-wrap">
-                            <Users className="w-3.5 h-3.5 text-purple-700 dark:text-purple-400 shrink-0" />
-                            <span>{unidad.ocupanteActual.nombre}</span>
-                            <span className="text-[9px] px-1.5 py-0.5 bg-purple-100 dark:bg-purple-950/70 text-purple-800 dark:text-purple-300 rounded font-bold uppercase tracking-wider">
-                              {unidad.tipoOcupante || 'Inquilino / Ocupante'}
-                            </span>
-                          </div>
-                          <div className="text-[11px] text-[#7d776f] dark:text-slate-400 font-mono">
-                            CI: {unidad.ocupanteActual.ci || 'S/N'} • {unidad.ocupanteActual.telefono || 'Sin tel'}
-                          </div>
-                        </div>
-                      ) : unidad.persona ? (
-                        <div>
-                          <div className="font-bold text-[#262422] dark:text-white flex items-center gap-1.5">
-                            <Users className="w-3.5 h-3.5 text-amber-700 dark:text-amber-400 shrink-0" />
-                            <span>{unidad.persona.nombres} {unidad.persona.apellidos}</span>
-                          </div>
-                          {unidad.persona.ciNit && (
-                            <div className="text-[11px] text-[#7d776f] dark:text-slate-400 font-mono">
-                              CI: {unidad.persona.ciNit}
-                            </div>
-                          )}
                         </div>
                       ) : (
-                        <span className="text-[#7d776f] dark:text-slate-500 italic">
-                          Sin titular asignado
+                        <span className="text-amber-700 dark:text-amber-400 italic text-xs">
+                          Sin Propietario Asignado
                         </span>
                       )}
                     </td>
 
-                    {/* CA08: Distinción visual de estados */}
-                    <td className="py-3.5 px-4">
+                    <td className="py-3 px-4">
+                      {unidad.estado === 'Alquilado' && unidad.inquilinoActual ? (
+                        <div>
+                          <div className="font-bold text-[#262422] dark:text-white flex items-center gap-1">
+                            <KeyRound className="w-3.5 h-3.5 text-purple-600 shrink-0" />
+                            {unidad.inquilinoActual.nombre}
+                          </div>
+                          <span className="text-[10px] px-2 py-0.2 rounded-md bg-purple-100 text-purple-800 font-bold">
+                            Inquilino (Contrato Privado)
+                          </span>
+                        </div>
+                      ) : unidad.estado === 'Ocupado por Propietario' ? (
+                        <span className="text-[11px] text-emerald-700 dark:text-emerald-400 font-semibold">
+                          Vive el Propietario
+                        </span>
+                      ) : (
+                        <span className="text-[11px] text-[#7d776f] dark:text-slate-400 italic">
+                          Desocupado / Vacío
+                        </span>
+                      )}
+                    </td>
+
+                    <td className="py-3 px-4">
+                      <div className="font-bold text-[#262422] dark:text-white font-mono">
+                        {unidad.areaM2 ? `${unidad.areaM2} m²` : '—'}
+                      </div>
+                      <div className="text-[11px] text-[#7d776f] dark:text-slate-400">
+                        Alícuota: <span className="font-bold">{unidad.alicuota ? `${unidad.alicuota}%` : '—'}</span>
+                      </div>
+                      <div className="text-[11px] text-blue-700 dark:text-blue-400 font-mono font-bold mt-0.5">
+                        Bs. {(15500 * ((unidad.alicuota || (unidad.areaM2 ? (unidad.areaM2 / 16) : 0))) / 100).toFixed(2)}/mes
+                      </div>
+                    </td>
+
+                    <td className="py-3 px-4">
+                      <div className="text-xs text-[#262422] dark:text-white flex items-center gap-1">
+                        <Car className="w-3.5 h-3.5 text-[#7d776f]" />
+                        <span>{unidad.parqueo || 'Sin parqueo'}</span>
+                      </div>
+                      <div className="text-[11px] text-[#7d776f] dark:text-slate-400 flex items-center gap-1">
+                        <Box className="w-3.5 h-3.5 text-[#7d776f]" />
+                        <span>{unidad.baulera || 'Sin baulera'}</span>
+                      </div>
+                    </td>
+
+                    <td className="py-3 px-4">
                       <span
-                        className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-bold ${
-                          unidad.estado === 'Ocupado' || unidad.estado === 'Asignado'
-                            ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-400'
-                            : unidad.estado === 'Disponible'
-                              ? 'bg-blue-100 text-blue-800 dark:bg-blue-950/60 dark:text-blue-400'
-                              : unidad.estado === 'En Alquiler'
-                                ? 'bg-purple-100 text-purple-800 dark:bg-purple-950/60 dark:text-purple-400'
-                                : 'bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-400'
+                        className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-extrabold ${
+                          unidad.estado === 'Ocupado por Propietario'
+                            ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-400 border border-emerald-300'
+                            : unidad.estado === 'Alquilado'
+                              ? 'bg-purple-100 text-purple-800 dark:bg-purple-950/60 dark:text-purple-400 border border-purple-300'
+                              : 'bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-400 border border-amber-300'
                         }`}
                       >
                         {unidad.estado}
                       </span>
                     </td>
 
-                    <td className="py-3.5 px-4 text-right">
-                      <div className="flex items-center justify-end gap-1">
-                        {/* CA5, CA6: Botón de Asignación */}
+                    <td className="py-3 px-4 text-right">
+                      <div className="flex items-center justify-end gap-1.5">
                         <button
-                          onClick={() => {
-                            setUnidadToAssign(unidad)
-                            setIsAssignModalOpen(true)
-                          }}
-                          className="p-1.5 rounded-lg text-[#5c5750] hover:text-emerald-700 dark:text-slate-400 dark:hover:text-emerald-400 hover:bg-[#ded8cc] dark:hover:bg-slate-800 transition-colors cursor-pointer"
-                          title="Gestionar Asignación"
+                          onClick={() => setSelectedUnidad(unidad)}
+                          className="px-2 py-1 rounded-lg bg-blue-100 text-blue-800 hover:bg-blue-200 dark:bg-blue-950/60 dark:text-blue-300 text-xs font-bold transition-all cursor-pointer flex items-center gap-1"
+                          title="Ver Ficha y Extracto de Expensa"
                         >
-                          <UserCheck className="w-4 h-4" />
+                          <Eye className="w-3.5 h-3.5" />
+                          Extracto
                         </button>
                         <button
                           onClick={() => {
-                            setUnidadToEdit({ ...unidad })
+                            setUnidadToEdit(unidad)
                             setIsEditModalOpen(true)
                           }}
-                          className="p-1.5 rounded-lg text-[#5c5750] hover:text-blue-700 dark:text-slate-400 dark:hover:text-blue-400 hover:bg-[#ded8cc] dark:hover:bg-slate-800 transition-colors cursor-pointer"
+                          className="p-1.5 rounded-lg text-[#5c5750] hover:text-[#262422] hover:bg-[#ded8cc] dark:text-slate-400 dark:hover:text-white dark:hover:bg-slate-800 transition-colors"
                           title="Editar Unidad"
                         >
                           <Edit className="w-4 h-4" />
-                        </button>
-                        <button
-                          onClick={() => setSelectedUnidad(unidad)}
-                          className="p-1.5 rounded-lg text-[#5c5750] hover:text-blue-700 dark:text-slate-400 dark:hover:text-blue-400 hover:bg-[#ded8cc] dark:hover:bg-slate-800 transition-colors cursor-pointer"
-                          title="Ver Ficha Técnica & Historial"
-                        >
-                          <Eye className="w-4 h-4" />
                         </button>
                       </div>
                     </td>
@@ -594,7 +731,7 @@ export default function DepartamentosPage() {
         </div>
       </div>
 
-      {/* MODALES */}
+      {/* MODAL CREAR DEPARTAMENTO */}
       <CrearDepartamentoModal
         isOpen={isCreateModalOpen}
         onClose={() => setIsCreateModalOpen(false)}
@@ -603,29 +740,52 @@ export default function DepartamentosPage() {
         errorMessage={createErrorMessage}
       />
 
-      <EditarDepartamentoModal
-        isOpen={isEditModalOpen}
-        depto={unidadToEdit}
-        onClose={() => setIsEditModalOpen(false)}
-        onUpdate={handleUpdateSubmit}
-        onChange={(u) => setUnidadToEdit(u)}
-      />
+      {/* MODAL EDITAR DEPARTAMENTO */}
+      {unidadToEdit && (
+        <EditarDepartamentoModal
+          isOpen={isEditModalOpen}
+          onClose={() => {
+            setIsEditModalOpen(false)
+            setUnidadToEdit(null)
+          }}
+          depto={unidadToEdit}
+          onChange={(updated) => setUnidadToEdit(updated)}
+          onUpdate={async (updated) => {
+            await handleEditSubmit({
+              numero: updated.numero,
+              piso: updated.piso || 1,
+              areaM2: updated.areaM2 || 0,
+              estado: updated.estado,
+              parqueo: updated.parqueo,
+              baulera: updated.baulera
+            })
+            setIsEditModalOpen(false)
+            setUnidadToEdit(null)
+          }}
+        />
+      )}
 
-      <FichaTecnicaModal
-        isOpen={!!selectedUnidad}
-        depto={selectedUnidad}
-        totalAreaConstruida={totalAreaConstruida}
-        onClose={() => setSelectedUnidad(null)}
-      />
+      {/* MODAL FICHA TÉCNICA */}
+      {selectedUnidad && (
+        <FichaTecnicaModal
+          isOpen={!!selectedUnidad}
+          depto={selectedUnidad}
+          onClose={() => setSelectedUnidad(null)}
+        />
+      )}
 
+      {/* MODAL ASIGNAR RESIDENTE / UNIDAD */}
       <AsignarUnidadModal
         isOpen={isAssignModalOpen}
-        unidad={unidadToAssign}
-        onClose={() => setIsAssignModalOpen(false)}
-        onSuccess={() => {
-          fetchUnidades()
-          showToast(`¡Asignación de ${unidadToAssign?.tipoUnidad} ${unidadToAssign?.numero} actualizada correctamente!`)
+        onClose={() => {
+          setIsAssignModalOpen(false)
+          setUnidadToAssign(null)
         }}
+        onSuccess={async () => {
+          await fetchUnidades()
+          showToast('¡Asignación actualizada correctamente!')
+        }}
+        unidad={unidadToAssign}
       />
     </div>
   )
