@@ -6,6 +6,7 @@ import request from 'supertest';
 import { prisma } from '@edificio-xyz/database';
 import { app } from '../src/index';
 import { generarTokenPrueba } from './setup';
+import { crearDepartamentoTest, crearPersonaTest, generarNumeroDeptoTest, limpiar } from './test.helpers';
 
 describe('Expensas por Tipo de Departamento y Pagador Obligatorio (RN10)', () => {
   let adminToken: string;
@@ -18,144 +19,123 @@ describe('Expensas por Tipo de Departamento y Pagador Obligatorio (RN10)', () =>
   let deptoC: any;
   let deptoSinTipo: any;
   let deptoFifo: any;
+  let excluirReal: number[] = [];
 
   const cleanupDeptoIds: number[] = [];
   const cleanupPersonaIds: number[] = [];
   const cleanupExpensaIds: number[] = [];
   const cleanupPagoIds: number[] = [];
-  const ts = Date.now().toString().slice(-6);
+  const cleanupAppIds: number[] = [];
 
   beforeAll(async () => {
-    const adminUser = await prisma.usuario.findUnique({ where: { correo: 'admin@edificioxyz.com' } });
+    const adminUser = await prisma.usuario.findFirst({ where: { rol: { nombre: 'Administrador' } } });
     adminToken = await generarTokenPrueba(adminUser!.idUsuario, adminUser!.correo, 'Administrador');
 
-    // 1. Asegurar tipos A, B, C con 300, 350, 400
-    tipoA = await prisma.tipoDepartamento.upsert({
-      where: { nombre: 'A' },
-      update: { montoExpensa: 300.00 },
-      create: { nombre: 'A', montoExpensa: 300.00 },
-    });
-    tipoB = await prisma.tipoDepartamento.upsert({
-      where: { nombre: 'B' },
-      update: { montoExpensa: 350.00 },
-      create: { nombre: 'B', montoExpensa: 350.00 },
-    });
-    tipoC = await prisma.tipoDepartamento.upsert({
-      where: { nombre: 'C' },
-      update: { montoExpensa: 400.00 },
-      create: { nombre: 'C', montoExpensa: 400.00 },
-    });
+    // 1. Obtener tipos A, B, C de la BD compartida
+    tipoA = await prisma.tipoDepartamento.findFirst({ where: { nombre: 'A' } });
+    tipoB = await prisma.tipoDepartamento.findFirst({ where: { nombre: 'B' } });
+    tipoC = await prisma.tipoDepartamento.findFirst({ where: { nombre: 'C' } });
 
-    // 2. Crear persona de prueba
-    personaTest = await prisma.persona.create({
-      data: {
-        nombres: 'Pagador',
-        apellidos: 'Prueba',
-        ciNit: `CI-PAG-${ts}`,
-        correo: `pagador_${ts}@test.com`,
-      },
+    // 2. Obtener departamentos reales para excluirlos en generar-masivo y aislar la prueba
+    const realDeptos = await prisma.departamento.findMany({
+      where: { numero: { not: { startsWith: 'TST-' } } },
+      select: { idDepartamento: true },
+    });
+    excluirReal = realDeptos.map((d) => d.idDepartamento);
+
+    // 3. Crear persona de prueba con prefijo TST-
+    personaTest = await crearPersonaTest({
+      nombres: 'Pagador',
+      apellidos: 'Prueba',
     });
     cleanupPersonaIds.push(personaTest.idPersona);
 
-    // 3. Crear departamentos para la prueba
-    deptoA = await prisma.departamento.create({
-      data: {
-        numero: `TA-${ts}`,
-        piso: 1,
-        idTipo: tipoA.idTipo,
-        idPropietario: personaTest.idPersona,
-        estado: 'Ocupado',
-      },
+    // 4. Crear departamentos para la prueba con prefijo TST-
+    deptoA = await crearDepartamentoTest({
+      numero: generarNumeroDeptoTest('A'),
+      piso: 1,
+      idTipo: tipoA.idTipo,
+      idPropietario: personaTest.idPersona,
     });
     cleanupDeptoIds.push(deptoA.idDepartamento);
 
-    deptoB = await prisma.departamento.create({
-      data: {
-        numero: `TB-${ts}`,
-        piso: 2,
-        idTipo: tipoB.idTipo,
-        idPropietario: personaTest.idPersona,
-        estado: 'Ocupado',
-      },
+    deptoB = await crearDepartamentoTest({
+      numero: generarNumeroDeptoTest('B'),
+      piso: 2,
+      idTipo: tipoB.idTipo,
+      idPropietario: personaTest.idPersona,
     });
     cleanupDeptoIds.push(deptoB.idDepartamento);
 
-    deptoC = await prisma.departamento.create({
-      data: {
-        numero: `TC-${ts}`,
-        piso: 3,
-        idTipo: tipoC.idTipo,
-        idPropietario: personaTest.idPersona,
-        estado: 'Ocupado',
-      },
+    deptoC = await crearDepartamentoTest({
+      numero: generarNumeroDeptoTest('C'),
+      piso: 3,
+      idTipo: tipoC.idTipo,
+      idPropietario: personaTest.idPersona,
     });
     cleanupDeptoIds.push(deptoC.idDepartamento);
 
-    deptoSinTipo = await prisma.departamento.create({
-      data: {
-        numero: `ST-${ts}`,
-        piso: 4,
-        idTipo: null, // Sin tipo asignado
-        idPropietario: personaTest.idPersona,
-        estado: 'Disponible',
-      },
+    deptoSinTipo = await crearDepartamentoTest({
+      numero: generarNumeroDeptoTest('S'),
+      piso: 4,
+      idTipo: undefined,
+      idPropietario: personaTest.idPersona,
     });
     cleanupDeptoIds.push(deptoSinTipo.idDepartamento);
 
-    deptoFifo = await prisma.departamento.create({
-      data: {
-        numero: `TF-${ts}`,
-        piso: 5,
-        idTipo: tipoA.idTipo,
-        idPropietario: personaTest.idPersona,
-        estado: 'Ocupado',
-      },
+    deptoFifo = await crearDepartamentoTest({
+      numero: generarNumeroDeptoTest('F'),
+      piso: 5,
+      idTipo: tipoA.idTipo,
+      idPropietario: personaTest.idPersona,
     });
     cleanupDeptoIds.push(deptoFifo.idDepartamento);
   });
 
   afterAll(async () => {
-    // Limpieza de datos creados en orden para respetar FKs
-    await prisma.aplicacionAnticipo.deleteMany({
-      where: { pago: { idDepartamento: { in: cleanupDeptoIds } } },
-    });
-    await prisma.pago.deleteMany({
+    // Buscar cualquier expensa creada para estos deptos de prueba para limpieza exhaustiva
+    const expensasGeneradas = await prisma.expensa.findMany({
       where: { idDepartamento: { in: cleanupDeptoIds } },
+      select: { idExpensa: true },
     });
-    await prisma.expensa.deleteMany({
-      where: { idDepartamento: { in: cleanupDeptoIds } },
-    });
-    await prisma.departamento.deleteMany({
-      where: { idDepartamento: { in: cleanupDeptoIds } },
-    });
-    await prisma.persona.deleteMany({
-      where: { idPersona: { in: cleanupPersonaIds } },
+    const allExpensaIds = Array.from(new Set([...cleanupExpensaIds, ...expensasGeneradas.map((e) => e.idExpensa)]));
+
+    await limpiar({
+      aplicacionesAnticipos: cleanupAppIds,
+      pagos: cleanupPagoIds,
+      expensas: allExpensaIds,
+      departamentos: cleanupDeptoIds,
+      personas: cleanupPersonaIds,
     });
   });
 
-  // ── 1. Generación masiva: A/B/C generan 300/350/400 ─────────────────────────
+  // ── 1. Generación masiva: A/B/C generan 300/350/400 (período en rango 2090-2099)
   it('1. generar-masivo: tipos A, B y C generan montos fijos 300, 350 y 400', async () => {
-    const periodo = '2027-01-01';
+    const periodo = '2090-01-01';
     const res = await request(app)
       .post('/api/v1/expensas/generar-masivo')
       .set('Authorization', `Bearer ${adminToken}`)
       .send({
         periodo,
-        fechaVencimiento: '2027-01-15',
+        fechaVencimiento: '2090-01-15',
         montoBase: 999, // Debe ignorarse para el cálculo
+        excluirDepartamentos: excluirReal,
       });
 
     expect(res.status).toBe(201);
+    if (res.body.generadas) {
+      res.body.generadas.forEach((g: any) => cleanupExpensaIds.push(g.idExpensa));
+    }
 
     // Consultar las expensas generadas para los deptos de prueba
     const expA = await prisma.expensa.findFirst({
-      where: { idDepartamento: deptoA.idDepartamento, periodo: new Date('2027-01-01T00:00:00.000Z') },
+      where: { idDepartamento: deptoA.idDepartamento, periodo: new Date('2090-01-01T00:00:00.000Z') },
     });
     const expB = await prisma.expensa.findFirst({
-      where: { idDepartamento: deptoB.idDepartamento, periodo: new Date('2027-01-01T00:00:00.000Z') },
+      where: { idDepartamento: deptoB.idDepartamento, periodo: new Date('2090-01-01T00:00:00.000Z') },
     });
     const expC = await prisma.expensa.findFirst({
-      where: { idDepartamento: deptoC.idDepartamento, periodo: new Date('2027-01-01T00:00:00.000Z') },
+      where: { idDepartamento: deptoC.idDepartamento, periodo: new Date('2090-01-01T00:00:00.000Z') },
     });
 
     expect(expA).not.toBeNull();
@@ -170,16 +150,20 @@ describe('Expensas por Tipo de Departamento y Pagador Obligatorio (RN10)', () =>
 
   // ── 2. Departamento sin tipo va a excepciones[] ──────────────────────────────
   it('2. generar-masivo: departamento sin tipo asignado va a excepciones[] con motivo claro', async () => {
-    const periodo = '2027-02-01';
+    const periodo = '2090-02-01';
     const res = await request(app)
       .post('/api/v1/expensas/generar-masivo')
       .set('Authorization', `Bearer ${adminToken}`)
       .send({
         periodo,
-        fechaVencimiento: '2027-02-15',
+        fechaVencimiento: '2090-02-15',
+        excluirDepartamentos: excluirReal,
       });
 
     expect(res.status).toBe(201);
+    if (res.body.generadas) {
+      res.body.generadas.forEach((g: any) => cleanupExpensaIds.push(g.idExpensa));
+    }
     expect(Array.isArray(res.body.excepciones)).toBe(true);
 
     const excepcionSinTipo = res.body.excepciones.find(
@@ -191,20 +175,21 @@ describe('Expensas por Tipo de Departamento y Pagador Obligatorio (RN10)', () =>
 
     // Verificar que no se creó expensa para el departamento sin tipo
     const expSinTipo = await prisma.expensa.findFirst({
-      where: { idDepartamento: deptoSinTipo.idDepartamento, periodo: new Date('2027-02-01T00:00:00.000Z') },
+      where: { idDepartamento: deptoSinTipo.idDepartamento, periodo: new Date('2090-02-01T00:00:00.000Z') },
     });
     expect(expSinTipo).toBeNull();
   });
 
   // ── 3. Duplicado omitido ───────────────────────────────────────────────────
   it('3. generar-masivo: expensas duplicadas en el mismo período son omitidas e incluidas en excepciones[]', async () => {
-    // Ejecutar nuevamente para el período 2027-01-01 (ya generado en test 1)
+    // Ejecutar nuevamente para el período 2090-01-01 (ya generado en test 1)
     const res = await request(app)
       .post('/api/v1/expensas/generar-masivo')
       .set('Authorization', `Bearer ${adminToken}`)
       .send({
-        periodo: '2027-01-01',
-        fechaVencimiento: '2027-01-15',
+        periodo: '2090-01-01',
+        fechaVencimiento: '2090-01-15',
+        excluirDepartamentos: excluirReal,
       });
 
     expect(res.status).toBe(201);
@@ -234,19 +219,23 @@ describe('Expensas por Tipo de Departamento y Pagador Obligatorio (RN10)', () =>
     });
     cleanupPagoIds.push(anticipo.idPago);
 
-    const periodo = '2027-03-01';
+    const periodo = '2090-03-01';
     const res = await request(app)
       .post('/api/v1/expensas/generar-masivo')
       .set('Authorization', `Bearer ${adminToken}`)
       .send({
         periodo,
-        fechaVencimiento: '2027-03-15',
+        fechaVencimiento: '2090-03-15',
+        excluirDepartamentos: excluirReal,
       });
 
     expect(res.status).toBe(201);
+    if (res.body.generadas) {
+      res.body.generadas.forEach((g: any) => cleanupExpensaIds.push(g.idExpensa));
+    }
 
     const expFifo = await prisma.expensa.findFirst({
-      where: { idDepartamento: deptoFifo.idDepartamento, periodo: new Date('2027-03-01T00:00:00.000Z') },
+      where: { idDepartamento: deptoFifo.idDepartamento, periodo: new Date('2090-03-01T00:00:00.000Z') },
       include: { aplicacionesAnticipos: true },
     });
 
@@ -256,13 +245,14 @@ describe('Expensas por Tipo de Departamento y Pagador Obligatorio (RN10)', () =>
     expect(Number(expFifo!.saldoPendiente)).toBe(200.00);
     expect(expFifo!.estado).toBe('Parcial');
     expect(expFifo!.aplicacionesAnticipos.length).toBeGreaterThanOrEqual(1);
+    expFifo!.aplicacionesAnticipos.forEach((a: any) => cleanupAppIds.push(a.idAplicacion));
   });
 
   // ── 5. PUT /montos-tipo audita y no altera expensas viejas ──────────────────
   it('5. PUT /api/v1/expensas/montos-tipo actualiza monto, audita CONFIGURAR_MONTO_EXPENSA y NO altera expensas viejas', async () => {
     // 5.1 Consultar monto anterior de expensa emitida de tipo A
     const expPrevia = await prisma.expensa.findFirst({
-      where: { idDepartamento: deptoA.idDepartamento, periodo: new Date('2027-01-01T00:00:00.000Z') },
+      where: { idDepartamento: deptoA.idDepartamento, periodo: new Date('2090-01-01T00:00:00.000Z') },
     });
     expect(Number(expPrevia!.monto)).toBe(300.00);
 
@@ -350,5 +340,6 @@ describe('Expensas por Tipo de Departamento y Pagador Obligatorio (RN10)', () =>
 
     expect(resValido.status).toBe(201);
     expect(resValido.body.pago.idPersonaPagador).toBe(personaTest.idPersona);
+    cleanupPagoIds.push(resValido.body.pago.idPago);
   });
 });

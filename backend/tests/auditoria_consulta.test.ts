@@ -30,11 +30,11 @@ describe('Consulta de Auditoría (GET /api/v1/auditoria y GET /:id)', () => {
       create: { nombre: 'Directorio', descripcion: 'Directorio' },
     });
     const dirUser = await prisma.usuario.upsert({
-      where: { correo: 'directorio_auditoria@test.com' },
+      where: { correo: 'tst-dir_audit@test.com' },
       update: {},
       create: {
-        nombreUsuario: 'dir_audit',
-        correo: 'directorio_auditoria@test.com',
+        nombreUsuario: 'tst_dir_audit',
+        correo: 'tst-dir_audit@test.com',
         passwordHash: '$2a$10$dummy',
         idRol: rolDir.idRol,
       },
@@ -47,11 +47,11 @@ describe('Consulta de Auditoría (GET /api/v1/auditoria y GET /:id)', () => {
       create: { nombre: 'Consulta', descripcion: 'Consulta' },
     });
     const consUser = await prisma.usuario.upsert({
-      where: { correo: 'consulta_auditoria@test.com' },
+      where: { correo: 'tst-cons_audit@test.com' },
       update: {},
       create: {
-        nombreUsuario: 'cons_audit',
-        correo: 'consulta_auditoria@test.com',
+        nombreUsuario: 'tst_cons_audit',
+        correo: 'tst-cons_audit@test.com',
         passwordHash: '$2a$10$dummy',
         idRol: rolCons.idRol,
       },

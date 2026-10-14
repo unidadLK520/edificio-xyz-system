@@ -6,6 +6,7 @@ import request from 'supertest';
 import { prisma } from '@edificio-xyz/database';
 import { app } from '../src/index';
 import { generarTokenPrueba } from './setup';
+import { crearDepartamentoTest, generarNumeroDeptoTest, limpiar } from './test.helpers';
 
 describe('US2.1 - Punto 2: Reglas de Mora (CA09)', () => {
   let adminToken: string;
@@ -14,27 +15,29 @@ describe('US2.1 - Punto 2: Reglas de Mora (CA09)', () => {
   const createdExpensasIds: number[] = [];
 
   beforeAll(async () => {
-    const adminUser = await prisma.usuario.findUnique({ where: { correo: 'admin@edificioxyz.com' } });
+    const adminUser = await prisma.usuario.findFirst({ where: { rol: { nombre: 'Administrador' } } });
     adminToken = await generarTokenPrueba(adminUser!.idUsuario, adminUser!.correo, 'Administrador');
-    copropietarioToken = await generarTokenPrueba(999, 'vecino@edificioxyz.com', 'Copropietario');
+    copropietarioToken = await generarTokenPrueba(999, 'tst-vecino@edificioxyz.com', 'Copropietario');
 
-    const depto = await prisma.departamento.create({
-      data: {
-        numero: `RM-${Date.now().toString().slice(-4)}`,
-        piso: 2,
-        estado: 'Ocupado',
-      },
+    const depto = await crearDepartamentoTest({
+      numero: generarNumeroDeptoTest('RM'),
+      piso: 2,
+      estado: 'Ocupado',
     });
     testDepartamentoId = depto.idDepartamento;
   });
 
   afterAll(async () => {
-    if (createdExpensasIds.length > 0) {
-      await prisma.expensa.deleteMany({ where: { idExpensa: { in: createdExpensasIds } } });
-    }
-    if (testDepartamentoId) {
-      await prisma.departamento.deleteMany({ where: { idDepartamento: testDepartamentoId } });
-    }
+    // Asegurar regla activa estándar para el sistema
+    await prisma.reglaMora.updateMany({ data: { activa: false } });
+    await prisma.reglaMora.create({
+      data: { tasaInteres: 5.0, diasGracia: 0, activa: true },
+    });
+
+    await limpiar({
+      expensas: createdExpensasIds,
+      departamentos: testDepartamentoId ? [testDepartamentoId] : [],
+    });
   });
 
   it('1. POST /reglas-mora debe rechazar a roles no autorizados (ej. Copropietario)', async () => {
@@ -164,11 +167,11 @@ describe('US2.1 - Punto 2: Reglas de Mora (CA09)', () => {
     });
     createdExpensasIds.push(expFuera.idExpensa);
 
-    // Ejecutar recálculo
+    // Ejecutar recálculo filtrando por el departamento de test
     await request(app)
       .post('/api/v1/expensas/calcular-mora')
       .set('Authorization', `Bearer ${adminToken}`)
-      .send();
+      .send({ idDepartamentos: [testDepartamentoId] });
 
     // Comprobar Caso A (dentro de gracia): NO debe tener mora
     const expDentroPost = await prisma.expensa.findUnique({
@@ -210,7 +213,7 @@ describe('US2.1 - Punto 2: Reglas de Mora (CA09)', () => {
     const res = await request(app)
       .post('/api/v1/expensas/calcular-mora')
       .set('Authorization', `Bearer ${adminToken}`)
-      .send();
+      .send({ idDepartamentos: [testDepartamentoId] });
 
     expect(res.status).toBe(400);
     expect(res.body.message).toContain('No existe una regla de mora activa configurada');

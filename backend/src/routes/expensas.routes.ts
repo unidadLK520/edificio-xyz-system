@@ -814,9 +814,14 @@ expensasRouter.post(
   authorizeRoles('Administrador', 'Directorio'),
   async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
     try {
+      const idDepartamentos = Array.isArray(req.body?.idDepartamentos)
+        ? req.body.idDepartamentos.map(Number).filter((n: number) => !isNaN(n))
+        : undefined;
+
       const resultado = await ejecutarCalculoMora({
         idUsuario: req.user?.idUsuario || null,
         origen: 'MANUAL',
+        idDepartamentos: idDepartamentos && idDepartamentos.length > 0 ? idDepartamentos : undefined,
       });
 
       res.json({

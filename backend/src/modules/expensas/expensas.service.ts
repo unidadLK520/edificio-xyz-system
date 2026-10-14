@@ -168,6 +168,7 @@ export interface EjecutarCalculoMoraParams {
   idUsuario?: number | null;
   origen?: 'MANUAL' | 'SISTEMA_CRON';
   fechaReferencia?: Date;
+  idDepartamentos?: number[];
 }
 
 export interface CalculoMoraResultado {
@@ -202,13 +203,18 @@ export async function ejecutarCalculoMora(
       orderBy: { fechaCreacion: 'desc' },
     });
 
-    // 2. Buscar expensas vencidas con saldo pendiente > 0 que no estén ya pagadas
+    // 2. Buscar expensas vencidas con saldo pendiente > 0 que no estén ya pagadas (con filtro opcional de departamentos)
+    const whereClause: any = {
+      fechaVencimiento: { lt: ahora },
+      saldoPendiente: { gt: 0 },
+      estado: { not: 'Pagado' },
+    };
+    if (params.idDepartamentos && params.idDepartamentos.length > 0) {
+      whereClause.idDepartamento = { in: params.idDepartamentos };
+    }
+
     const expensasCandidatas = await tx.expensa.findMany({
-      where: {
-        fechaVencimiento: { lt: ahora },
-        saldoPendiente: { gt: 0 },
-        estado: { not: 'Pagado' },
-      },
+      where: whereClause,
       include: {
         pagos: {
           where: { anulado: false },

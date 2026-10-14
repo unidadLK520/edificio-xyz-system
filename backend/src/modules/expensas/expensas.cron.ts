@@ -11,12 +11,13 @@ let scheduledTask: ScheduledTask | null = null;
  * Ejecución aislada de la tarea de cálculo de mora programada.
  * Audita la operación con idUsuario: null y marca de 'SISTEMA_CRON' / 'sistema'.
  */
-export async function tareaCronCalculoMora(): Promise<CalculoMoraResultado> {
+export async function tareaCronCalculoMora(params?: { idDepartamentos?: number[] }): Promise<CalculoMoraResultado> {
   console.log('[CRON-MORA] Ejecutando cálculo programado de mora...');
   try {
     const resultado = await ejecutarCalculoMora({
       idUsuario: null,
       origen: 'SISTEMA_CRON',
+      idDepartamentos: params?.idDepartamentos,
     });
     console.log(`[CRON-MORA] ${resultado.mensaje} exitosamente.`);
     return resultado;

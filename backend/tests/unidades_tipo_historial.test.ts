@@ -7,6 +7,7 @@ import request from 'supertest';
 import { prisma } from '@edificio-xyz/database';
 import { app } from '../src/index';
 import { generarTokenPrueba } from './setup';
+import { crearPersonaTest, generarNumeroDeptoTest, limpiar } from './test.helpers';
 
 describe('Gestión de Unidades - Tipos de Departamento e Historial Derivado', () => {
   let adminToken: string;
@@ -21,41 +22,19 @@ describe('Gestión de Unidades - Tipos de Departamento e Historial Derivado', ()
   const cleanupPersonaIds: number[] = [];
 
   beforeAll(async () => {
-    const adminUser = await prisma.usuario.findUnique({ where: { correo: 'admin@edificioxyz.com' } });
+    const adminUser = await prisma.usuario.findFirst({ where: { rol: { nombre: 'Administrador' } } });
     adminToken = await generarTokenPrueba(adminUser!.idUsuario, adminUser!.correo, 'Administrador');
 
-    // Asegurar que tipos_departamento existan en la base local (A=300, B=350, C=400)
-    await prisma.tipoDepartamento.upsert({
-      where: { idTipo: 1 },
-      update: { nombre: 'A', montoExpensa: 300.0 },
-      create: { idTipo: 1, nombre: 'A', montoExpensa: 300.0 },
-    });
-    await prisma.tipoDepartamento.upsert({
-      where: { idTipo: 2 },
-      update: { nombre: 'B', montoExpensa: 350.0 },
-      create: { idTipo: 2, nombre: 'B', montoExpensa: 350.0 },
-    });
-    await prisma.tipoDepartamento.upsert({
-      where: { idTipo: 3 },
-      update: { nombre: 'C', montoExpensa: 400.0 },
-      create: { idTipo: 3, nombre: 'C', montoExpensa: 400.0 },
-    });
-
-    // Persona de prueba
-    const persona = await prisma.persona.create({
-      data: {
-        nombres: 'Carlos',
-        apellidos: 'UnitTest',
-        ciNit: `CI-TEST-${Date.now().toString().slice(-6)}`,
-        telefono: '70012345',
-        correo: 'carlos.test@edificioxyz.com',
-      },
+    // Persona de prueba con prefijo TST-
+    const persona = await crearPersonaTest({
+      nombres: 'Carlos',
+      apellidos: 'UnitTest',
     });
     testPersonaId = persona.idPersona;
     cleanupPersonaIds.push(testPersonaId);
 
-    // Parqueo de prueba (max 10 chars)
-    const pNum = `P${Math.floor(1000 + Math.random() * 9000)}`;
+    // Parqueo de prueba con prefijo TST- (máx 10 chars)
+    const pNum = `TST-P${Math.floor(1000 + Math.random() * 9000)}`.slice(0, 10);
     const parqueo = await prisma.parqueo.create({
       data: {
         numero: pNum,
@@ -65,8 +44,8 @@ describe('Gestión de Unidades - Tipos de Departamento e Historial Derivado', ()
     testParqueoId = parqueo.idParqueo;
     cleanupParqueoIds.push(testParqueoId);
 
-    // Baulera de prueba (max 10 chars)
-    const bNum = `B${Math.floor(1000 + Math.random() * 9000)}`;
+    // Baulera de prueba con prefijo TST- (máx 10 chars)
+    const bNum = `TST-B${Math.floor(1000 + Math.random() * 9000)}`.slice(0, 10);
     const baulera = await prisma.baulera.create({
       data: {
         numero: bNum,
@@ -78,22 +57,13 @@ describe('Gestión de Unidades - Tipos de Departamento e Historial Derivado', ()
   });
 
   afterAll(async () => {
-    for (const deptoId of cleanupDeptoIds) {
-      await prisma.ocupanteDepartamento.deleteMany({ where: { idDepartamento: deptoId } });
-      await prisma.auditoria.deleteMany({ where: { tablaAfectada: 'departamentos', idRegistro: String(deptoId) } });
-      await prisma.departamento.deleteMany({ where: { idDepartamento: deptoId } });
-    }
-    for (const pId of cleanupParqueoIds) {
-      await prisma.auditoria.deleteMany({ where: { tablaAfectada: 'parqueos', idRegistro: String(pId) } });
-      await prisma.parqueo.deleteMany({ where: { idParqueo: pId } });
-    }
-    for (const bId of cleanupBauleraIds) {
-      await prisma.auditoria.deleteMany({ where: { tablaAfectada: 'bauleras', idRegistro: String(bId) } });
-      await prisma.baulera.deleteMany({ where: { idBaulera: bId } });
-    }
-    for (const pId of cleanupPersonaIds) {
-      await prisma.persona.deleteMany({ where: { idPersona: pId } });
-    }
+    // Limpieza estricta borrando SOLO por IDs creados. Las filas de auditoria no se eliminan.
+    await limpiar({
+      departamentos: cleanupDeptoIds,
+      parqueos: cleanupParqueoIds,
+      bauleras: cleanupBauleraIds,
+      personas: cleanupPersonaIds,
+    });
   });
 
   // ── Punto 3: idTipo en POST /unidades y PUT /unidades/Departamento/:id ──────────
@@ -104,7 +74,7 @@ describe('Gestión de Unidades - Tipos de Departamento e Historial Derivado', ()
         .set('Authorization', `Bearer ${adminToken}`)
         .send({
           tipoUnidad: 'Departamento',
-          numero: `E${Math.floor(1000 + Math.random() * 9000)}`,
+          numero: generarNumeroDeptoTest('E'),
           piso: 1,
           areaM2: 80,
           idTipo: 99999, // Inexistente
@@ -116,7 +86,7 @@ describe('Gestión de Unidades - Tipos de Departamento e Historial Derivado', ()
     });
 
     it('POST /unidades debe crear Departamento con idTipo válido y auditarlo', async () => {
-      const numDepto = `D${Math.floor(1000 + Math.random() * 9000)}`;
+      const numDepto = generarNumeroDeptoTest('D');
       const res = await request(app)
         .post('/api/v1/unidades')
         .set('Authorization', `Bearer ${adminToken}`)

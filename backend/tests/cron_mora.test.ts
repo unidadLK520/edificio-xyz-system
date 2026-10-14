@@ -10,6 +10,7 @@ import {
   obtenerEstadoCronMora,
   configurarReglaMora,
 } from '../src/modules/expensas';
+import { crearDepartamentoTest, generarNumeroDeptoTest, limpiar } from './test.helpers';
 
 describe('US2.1 - Punto 3: Scheduler Cron de Mora (CA10) - Configuración y Timezone', () => {
   it('1. Control de configuración: MORA_CRON_ENABLED=false no inicia el cron, MORA_CRON_ENABLED=true sí lo inicia con America/La_Paz', () => {
@@ -39,34 +40,24 @@ describe('US2.1 - Punto 3: Scheduler Cron de Mora (CA10) - Ejecución y Auditor�
   const createdExpensasIds: number[] = [];
 
   beforeAll(async () => {
-    try {
-      // Asegurar departamento de prueba
-      const depto = await prisma.departamento.create({
-        data: {
-          numero: `CRON-${Date.now().toString().slice(-4)}`,
-          piso: 3,
-          estado: 'Ocupado',
-        },
-      });
-      testDepartamentoId = depto.idDepartamento;
+    // Asegurar departamento de prueba con prefijo TST-
+    const depto = await crearDepartamentoTest({
+      numero: generarNumeroDeptoTest('CR'),
+      piso: 3,
+      estado: 'Ocupado',
+    });
+    testDepartamentoId = depto.idDepartamento;
 
-      // Asegurar regla activa: 5% tasa, 0 días de gracia
-      await configurarReglaMora({ tasaInteres: 5.0, diasGracia: 0 });
-    } catch {
-      // Si no hay BD local disponible, se omite
-    }
+    // Asegurar regla activa: 5% tasa, 0 días de gracia
+    await configurarReglaMora({ tasaInteres: 5.0, diasGracia: 0 });
   });
 
   afterAll(async () => {
     detenerCronMora();
-    try {
-      if (createdExpensasIds.length > 0) {
-        await prisma.expensa.deleteMany({ where: { idExpensa: { in: createdExpensasIds } } });
-      }
-      if (testDepartamentoId) {
-        await prisma.departamento.deleteMany({ where: { idDepartamento: testDepartamentoId } });
-      }
-    } catch {}
+    await limpiar({
+      expensas: createdExpensasIds,
+      departamentos: testDepartamentoId ? [testDepartamentoId] : [],
+    });
   });
 
   it('1. Tarea programada Cron debe reutilizar el servicio de mora y auditar como sistema (idUsuario: null, ejecutadoPor: sistema)', async () => {
@@ -87,8 +78,8 @@ describe('US2.1 - Punto 3: Scheduler Cron de Mora (CA10) - Ejecución y Auditor�
     });
     createdExpensasIds.push(expensa.idExpensa);
 
-    // Ejecutar tarea cron
-    const resultado = await tareaCronCalculoMora();
+    // Ejecutar tarea cron filtrando exclusivamente por el departamento de prueba
+    const resultado = await tareaCronCalculoMora({ idDepartamentos: [testDepartamentoId] });
     expect(resultado).toBeDefined();
     expect(resultado.actualizadasCount).toBeGreaterThanOrEqual(1);
 

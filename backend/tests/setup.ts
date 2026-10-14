@@ -1,106 +1,37 @@
 // backend/tests/setup.ts
-// Configuración global y verificación estricta de aislamiento de BD para pruebas Vitest
+// Configuración global y verificación estricta de entorno para pruebas Vitest
 
 import * as path from 'path';
 import * as dotenv from 'dotenv';
 import { SignJWT } from 'jose';
 import { beforeAll, afterAll } from 'vitest';
 
-// 1. Cargar .env
+// 1. Cargar variables de entorno
 dotenv.config({ path: path.resolve(__dirname, '../.env') });
 
-const devDbUrl = process.env.DATABASE_URL;
-const testDbUrl = process.env.TEST_DATABASE_URL;
-
-// 2. Verificación estricta de aislamiento de BD de pruebas (Condición 1)
-if (!testDbUrl) {
-  console.error('\n🛑 ERROR DE SEGURIDAD CRÍTICO: TEST_DATABASE_URL no está definida.');
-  console.error('Abortando ejecución de pruebas para evitar alterar bases de datos de desarrollo o producción.\n');
+// 2. Nueva guarda de seguridad: exige ALLOW_SHARED_DB_TESTS=true y nunca imprime credenciales
+if (process.env.ALLOW_SHARED_DB_TESTS !== 'true') {
+  console.error('\n🛑 ERROR DE SEGURIDAD: ALLOW_SHARED_DB_TESTS no está establecida en "true".');
+  console.error('Para ejecutar pruebas contra la base de datos compartida se requiere explícitamente ALLOW_SHARED_DB_TESTS=true.\n');
   process.exit(1);
 }
 
-// Validación de Host: DEBE ser estrictamente localhost o 127.0.0.1
-let testHost = '';
-try {
-  const urlObj = new URL(testDbUrl.replace(/^postgresql:\/\//, 'http://'));
-  testHost = urlObj.hostname;
-} catch {
-  console.error('\n🛑 ERROR DE SEGURIDAD CRÍTICO: TEST_DATABASE_URL tiene un formato inválido.\n');
+if (!process.env.DATABASE_URL) {
+  console.error('\n🛑 ERROR: DATABASE_URL no está definida en el entorno de pruebas.\n');
   process.exit(1);
 }
 
-const isLocalHost = testHost === 'localhost' || testHost === '127.0.0.1';
-if (!isLocalHost && process.env.ALLOW_REMOTE_TEST_DB !== 'true') {
-  console.error(`\n🛑 ABORTANDO PRUEBAS: El host de TEST_DATABASE_URL ("${testHost}") NO es localhost ni 127.0.0.1.`);
-  console.error('Por seguridad absoluta, las pruebas no pueden ejecutarse contra servidores remotos.\n');
-  process.exit(1);
-}
-
-if (testDbUrl === devDbUrl) {
-  console.error('\n🛑 ERROR DE SEGURIDAD CRÍTICO: TEST_DATABASE_URL es IDÉNTICA a la DATABASE_URL de desarrollo.');
-  console.error('Abortando ejecución de pruebas para evitar sobreescritura de datos.\n');
-  process.exit(1);
-}
-
-if (!testDbUrl.includes('edificio_test') && !testDbUrl.includes('test')) {
-  console.error('\n🛑 ERROR DE SEGURIDAD CRÍTICO: TEST_DATABASE_URL no contiene un identificador de prueba válido ("test" o "edificio_test").');
-  console.error(`URL detectada: ${testDbUrl}`);
-  process.exit(1);
-}
-
-// 3. Forzar DATABASE_URL a la base de datos de prueba aislada
-process.env.DATABASE_URL = testDbUrl;
-if (process.env.TEST_DIRECT_URL) {
-  process.env.DIRECT_URL = process.env.TEST_DIRECT_URL;
-}
 process.env.NODE_ENV = 'test';
 
-// 4. Importar prisma después de configurar las variables de entorno
+// 3. Importar prisma después de configurar las variables de entorno
 import { prisma } from '@edificio-xyz/database';
 
 beforeAll(async () => {
   try {
-    // Verificar conectividad con la BD de pruebas aislada
-    const result: any[] = await prisma.$queryRawUnsafe('SELECT current_database() as db, current_schema() as schema');
-    const activeDb = result[0]?.db;
-    if (activeDb !== 'edificio_test' && !activeDb.includes('test')) {
-      console.error(`\n🛑 ABORTANDO: La base de datos conectada es "${activeDb}", NO es la base de datos de pruebas.\n`);
-      process.exit(1);
-    }
-
-    // Asegurar roles y usuario admin de pruebas
-    const rolAdmin = await prisma.rol.upsert({
-      where: { nombre: 'Administrador' },
-      update: {},
-      create: { nombre: 'Administrador', descripcion: 'Administrador de pruebas' },
-    });
-
-    await prisma.rol.upsert({
-      where: { nombre: 'Directorio' },
-      update: {},
-      create: { nombre: 'Directorio', descripcion: 'Directorio de pruebas' },
-    });
-
-    await prisma.rol.upsert({
-      where: { nombre: 'Copropietario' },
-      update: {},
-      create: { nombre: 'Copropietario', descripcion: 'Copropietario de pruebas' },
-    });
-
-    await prisma.usuario.upsert({
-      where: { correo: 'admin@edificioxyz.com' },
-      update: { activo: true },
-      create: {
-        nombreUsuario: 'admin',
-        correo: 'admin@edificioxyz.com',
-        passwordHash: '$2a$10$dummyhashfortestenvironmentonly1234567890',
-        idRol: rolAdmin.idRol,
-        activo: true,
-      },
-    });
+    // Verificar conectividad básica con la base de datos compartida
+    await prisma.$queryRawUnsafe('SELECT 1');
   } catch (dbErr: any) {
-    // Si la BD local no está levantada, advertir para permitir que corran pruebas unitarias puras
-    console.warn(`[TEST SETUP] Base de datos local no disponible (${dbErr.message}). Pruebas que requieran BD exigirán postgres local en marcha.`);
+    console.warn(`[TEST SETUP] Base de datos compartida no disponible (${dbErr.message}).`);
   }
 });
 

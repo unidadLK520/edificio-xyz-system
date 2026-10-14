@@ -1,45 +1,20 @@
 // backend/scripts/pruebas_volumen_concurrencia.ts
-// Pruebas de volumen y concurrencia para expensas (SOLO pg-test: localhost:5433/edificio_test)
+// Pruebas de volumen y concurrencia para expensas (BD compartida con prefijo TST-)
 
 import dotenv from 'dotenv';
 import path from 'path';
 
 dotenv.config({ path: path.resolve(__dirname, '../.env') });
 
-// En pruebas/scripts locales, la conexión debe ser estrictamente a pg-test
-if (process.env.TEST_DATABASE_URL) {
-  process.env.DATABASE_URL = process.env.TEST_DATABASE_URL;
-  process.env.DIRECT_URL = process.env.TEST_DIRECT_URL || process.env.TEST_DATABASE_URL;
-} else {
-  process.env.DATABASE_URL = 'postgresql://postgres:postgres@localhost:5433/edificio_test?schema=edificio';
-  process.env.DIRECT_URL = 'postgresql://postgres:postgres@localhost:5433/edificio_test?schema=edificio';
-}
-
-// ── Medida de seguridad estricta: abortar si no es pg-test local ─────────────
-const databaseUrl = process.env.DATABASE_URL || '';
-
-if (!databaseUrl) {
-  console.error('❌ ERROR FATAL: DATABASE_URL no está definida.');
+// Medida de seguridad estricta: abortar sin autorización explícita
+if (process.env.ALLOW_SHARED_DB_TESTS !== 'true') {
+  console.error('🛑 ABORTADO POR SEGURIDAD: Se requiere ALLOW_SHARED_DB_TESTS=true para ejecutar pruebas.');
   process.exit(1);
 }
 
-try {
-  const parsed = new URL(databaseUrl);
-  const host = parsed.hostname;
-  const port = parsed.port;
-  const dbName = parsed.pathname.replace(/^\//, '');
-
-  const isLocalHost = host === 'localhost' || host === '127.0.0.1';
-  const isPort5433 = port === '5433';
-  const isDbEdificioTest = dbName === 'edificio_test';
-
-  if (!isLocalHost || !isPort5433 || !isDbEdificioTest) {
-    console.error('🛑 ABORTADO POR SEGURIDAD: Este script SOLO puede ejecutarse contra localhost:5433/edificio_test.');
-    console.error(`Detectado: Host=${host}, Puerto=${port}, Base=${dbName}`);
-    process.exit(1);
-  }
-} catch (err: any) {
-  console.error('❌ ERROR FATAL: Error al analizar la URL de conexión a la base de datos.');
+const databaseUrl = process.env.DATABASE_URL || '';
+if (!databaseUrl) {
+  console.error('❌ ERROR FATAL: DATABASE_URL no está definida.');
   process.exit(1);
 }
 

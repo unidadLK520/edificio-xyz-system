@@ -6,37 +6,36 @@ import request from 'supertest';
 import { prisma } from '@edificio-xyz/database';
 import { app } from '../src/index';
 import { generarTokenPrueba } from './setup';
+import { crearDepartamentoTest, generarNumeroDeptoTest, limpiar } from './test.helpers';
 
 describe('US2.1 - Punto 1: Bug mora vs anticipos aplicados y precisión de capital pendiente', () => {
   let adminToken: string;
   let testDepartamentoId: number;
   const createdExpensasIds: number[] = [];
+  const createdPagosIds: number[] = [];
+  const createdAnticiposIds: number[] = [];
 
   beforeAll(async () => {
-    const adminUser = await prisma.usuario.findUnique({ where: { correo: 'admin@edificioxyz.com' } });
+    const adminUser = await prisma.usuario.findFirst({ where: { rol: { nombre: 'Administrador' } } });
     adminToken = await generarTokenPrueba(adminUser!.idUsuario, adminUser!.correo, 'Administrador');
 
-    // Crear departamento de prueba
-    const depto = await prisma.departamento.create({
-      data: {
-        numero: `TEST-${Date.now().toString().slice(-4)}`,
-        piso: 1,
-        estado: 'Ocupado',
-      },
+    // Crear departamento de prueba con prefijo TST-
+    const depto = await crearDepartamentoTest({
+      numero: generarNumeroDeptoTest('MA'),
+      piso: 1,
+      estado: 'Ocupado',
     });
     testDepartamentoId = depto.idDepartamento;
   });
 
   afterAll(async () => {
-    // Limpieza de datos creados en el test
-    if (createdExpensasIds.length > 0) {
-      await prisma.aplicacionAnticipo.deleteMany({ where: { idExpensa: { in: createdExpensasIds } } });
-      await prisma.pago.deleteMany({ where: { idDepartamento: testDepartamentoId } });
-      await prisma.expensa.deleteMany({ where: { idExpensa: { in: createdExpensasIds } } });
-    }
-    if (testDepartamentoId) {
-      await prisma.departamento.deleteMany({ where: { idDepartamento: testDepartamentoId } });
-    }
+    // Limpieza estricta de datos creados en el test por ID
+    await limpiar({
+      aplicacionesAnticipos: createdAnticiposIds,
+      pagos: createdPagosIds,
+      expensas: createdExpensasIds,
+      departamentos: testDepartamentoId ? [testDepartamentoId] : [],
+    });
   });
 
   it('1. Debe calcular mora sobre 550 sin pagos vencida (mora = 5% de 550 = 27.50, saldo = 577.50, estado = Moroso)', async () => {
@@ -60,7 +59,7 @@ describe('US2.1 - Punto 1: Bug mora vs anticipos aplicados y precisión de capit
     const res = await request(app)
       .post('/api/v1/expensas/calcular-mora')
       .set('Authorization', `Bearer ${adminToken}`)
-      .send();
+      .send({ idDepartamentos: [testDepartamentoId] });
 
     expect(res.status).toBe(200);
 
@@ -103,14 +102,16 @@ describe('US2.1 - Punto 1: Bug mora vs anticipos aplicados y precisión de capit
         metodoPago: 'Transferencia',
       },
     });
+    createdPagosIds.push(anticipo.idPago);
 
-    await prisma.aplicacionAnticipo.create({
+    const appAnt = await prisma.aplicacionAnticipo.create({
       data: {
         idPago: anticipo.idPago,
         idExpensa: expensa.idExpensa,
         monto: 250,
       },
     });
+    createdAnticiposIds.push(appAnt.idAplicacion);
 
     await prisma.expensa.update({
       where: { idExpensa: expensa.idExpensa },
@@ -120,7 +121,7 @@ describe('US2.1 - Punto 1: Bug mora vs anticipos aplicados y precisión de capit
     const res = await request(app)
       .post('/api/v1/expensas/calcular-mora')
       .set('Authorization', `Bearer ${adminToken}`)
-      .send();
+      .send({ idDepartamentos: [testDepartamentoId] });
 
     expect(res.status).toBe(200);
 
@@ -152,7 +153,7 @@ describe('US2.1 - Punto 1: Bug mora vs anticipos aplicados y precisión de capit
     createdExpensasIds.push(expensa.idExpensa);
 
     // Pago directo de 100
-    await prisma.pago.create({
+    const pagoDirecto = await prisma.pago.create({
       data: {
         idDepartamento: testDepartamentoId,
         idExpensa: expensa.idExpensa,
@@ -164,6 +165,7 @@ describe('US2.1 - Punto 1: Bug mora vs anticipos aplicados y precisión de capit
         metodoPago: 'Efectivo',
       },
     });
+    createdPagosIds.push(pagoDirecto.idPago);
 
     // Anticipo de 150 aplicado
     const anticipo = await prisma.pago.create({
@@ -178,14 +180,16 @@ describe('US2.1 - Punto 1: Bug mora vs anticipos aplicados y precisión de capit
         metodoPago: 'Transferencia',
       },
     });
+    createdPagosIds.push(anticipo.idPago);
 
-    await prisma.aplicacionAnticipo.create({
+    const appAnt = await prisma.aplicacionAnticipo.create({
       data: {
         idPago: anticipo.idPago,
         idExpensa: expensa.idExpensa,
         monto: 150,
       },
     });
+    createdAnticiposIds.push(appAnt.idAplicacion);
 
     // Capital pendiente restante = 550 - 100 - 150 = 300
     await prisma.expensa.update({
@@ -196,7 +200,7 @@ describe('US2.1 - Punto 1: Bug mora vs anticipos aplicados y precisión de capit
     const res = await request(app)
       .post('/api/v1/expensas/calcular-mora')
       .set('Authorization', `Bearer ${adminToken}`)
-      .send();
+      .send({ idDepartamentos: [testDepartamentoId] });
 
     expect(res.status).toBe(200);
 
@@ -209,14 +213,13 @@ describe('US2.1 - Punto 1: Bug mora vs anticipos aplicados y precisión de capit
   });
 
   it('4. Idempotencia: ejecutar 3 veces seguidas produce exactamente el mismo resultado financiero', async () => {
-    // Tomar la última expensa
     const idUltima = createdExpensasIds[createdExpensasIds.length - 1];
 
     for (let i = 0; i < 3; i++) {
       const res = await request(app)
         .post('/api/v1/expensas/calcular-mora')
         .set('Authorization', `Bearer ${adminToken}`)
-        .send();
+        .send({ idDepartamentos: [testDepartamentoId] });
       expect(res.status).toBe(200);
 
       const exp = await prisma.expensa.findUnique({ where: { idExpensa: idUltima } });
@@ -246,7 +249,7 @@ describe('US2.1 - Punto 1: Bug mora vs anticipos aplicados y precisión de capit
     await request(app)
       .post('/api/v1/expensas/calcular-mora')
       .set('Authorization', `Bearer ${adminToken}`)
-      .send();
+      .send({ idDepartamentos: [testDepartamentoId] });
 
     const expDespues = await prisma.expensa.findUnique({
       where: { idExpensa: expensaPagada.idExpensa },
@@ -258,12 +261,10 @@ describe('US2.1 - Punto 1: Bug mora vs anticipos aplicados y precisión de capit
   });
 
   it('6. Un mismo departamento con dos expensas vencidas (febrero y marzo) recibe mora independiente en cada una (5 % de su propio capital) y /morosos suma ambas en totalDeuda', async () => {
-    const depto = await prisma.departamento.create({
-      data: {
-        numero: `MORA-${Date.now().toString().slice(-4)}`,
-        piso: 2,
-        estado: 'Ocupado',
-      },
+    const depto = await crearDepartamentoTest({
+      numero: generarNumeroDeptoTest('M6'),
+      piso: 2,
+      estado: 'Ocupado',
     });
 
     const fechaVencida = new Date();
@@ -301,7 +302,7 @@ describe('US2.1 - Punto 1: Bug mora vs anticipos aplicados y precisión de capit
       const calcRes = await request(app)
         .post('/api/v1/expensas/calcular-mora')
         .set('Authorization', `Bearer ${adminToken}`)
-        .send();
+        .send({ idDepartamentos: [depto.idDepartamento] });
       expect(calcRes.status).toBe(200);
 
       // Cada expensa recibe 5% de su propio capital: 300 * 0.05 = 15.00 de mora, saldo = 315.00
@@ -334,11 +335,9 @@ describe('US2.1 - Punto 1: Bug mora vs anticipos aplicados y precisión de capit
       expect(morosoDepto.totalDeuda).toBe(630.00);
       expect(morosoDepto.detalleExpensas).toHaveLength(2);
     } finally {
-      await prisma.expensa.deleteMany({
-        where: { idExpensa: { in: [expFebrero.idExpensa, expMarzo.idExpensa] } },
-      });
-      await prisma.departamento.deleteMany({
-        where: { idDepartamento: depto.idDepartamento },
+      await limpiar({
+        expensas: [expFebrero.idExpensa, expMarzo.idExpensa],
+        departamentos: [depto.idDepartamento],
       });
     }
   });

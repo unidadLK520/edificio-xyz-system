@@ -4,7 +4,7 @@ Base de rutas: `/api/v1`. Autenticación: `Authorization: Bearer <token>`.
 ---
 ## 0. Contratos en cambio (leer antes de integrar)
 Esta sección avisa a Frontend y QA qué está vigente y qué cambiará según el requerimiento del ingeniero (expensa fija por tipo A/B/C).
-Ya vigente (implementado y probado en pg-test):
+Ya vigente (implementado y probado):
 - `generar-masivo`: el monto sale del tipo del departamento (`tipos_departamento.monto_expensa`: Tipo A = Bs 300, Tipo B = Bs 350, Tipo C = Bs 400). Se eliminó la fórmula por área y el filtro por estado "Inactivo". Los departamentos sin tipo van a `excepciones[]` con motivo claro. Omite duplicados y aplica FIFO de anticipos disponibles. `montoBase` y `excluirDepartamentos` se aceptan solo por compatibilidad hacia atrás. Cada expensa conserva su monto al emitirse.
 - `GET/PUT /expensas/montos-tipo` (Administrador, Directorio): lee y actualiza `tipos_departamento.monto_expensa`. Valida monto > 0. Auditoría `CONFIGURAR_MONTO_EXPENSA` con `datosAnteriores` y `datosNuevos`. Modificar el monto no altera expensas ya emitidas.
 - `POST /expensas/:id/pagos` (directo y anticipo) y `PATCH /expensas/pagos/:idPago/corregir`: `idPersonaPagador` es estrictamente obligatorio (número entero positivo y validación de existencia en la tabla `personas`; responde `422` si falta o no existe).
@@ -641,7 +641,7 @@ Corrección contra saldo sin el pago original	`PATCH .../corregir`	`422` si lo e
 Expensa duplicada (departamento + período)	`POST /expensas`	`409`
 Detección de vencidas	`GET /expensas`, `GET /expensas/:id`	Campo `vencida`; filtro `?vencida=true`
 Monto de expensa por tipo positivo	`PUT .../montos-tipo`	`400` si monto <= 0 o inválido
-Control de duplicados e integridad física: La BD real ya cuenta con la restricción `UNIQUE (id_departamento, periodo)`. El control de duplicados se realiza tanto por consulta previa como por restricción física de motor (el error de unicidad `P2002` se mapea y responde como `409 Conflict` en endpoints individuales y masivos, probado en pg-test).
+Control de duplicados e integridad física: La BD real ya cuenta con la restricción `UNIQUE (id_departamento, periodo)`. El control de duplicados se realiza tanto por consulta previa como por restricción física de motor (el error de unicidad `P2002` se mapea y responde como `409 Conflict` en endpoints individuales y masivos, probado).
 
 4.16 Montos de expensa por tipo de departamento
 `GET /api/v1/expensas/montos-tipo` · Roles: Administrador, Directorio.
@@ -972,26 +972,26 @@ Auditoria	/auditoria/:id	GET	✅	✅	❌
 ## 8. Trazabilidad US ↔ Criterio ↔ Endpoint
 US2.1: Generación y control de expensas
 CA	Endpoint(s)	Estado	Nota
-01 Generación	`generar-masivo`	Cumple	Monto fijo por tipo de departamento A/B/C (probado en pg-test).
-02 Asociación a la unidad	`generar-masivo`, `POST /expensas`	Cumple	Asociación a departamento (probado en pg-test).
-03 Unidades aplicables	`generar-masivo`	Cumple	Departamentos sin tipo van a excepciones[] con motivo claro (probado en pg-test).
-04 Duplicados	`POST /expensas`, `generar-masivo`	Cumple	Omite duplicados en masivo y 409 en creación individual; respaldado por la restricción `UNIQUE (id_departamento, periodo)` de la BD real con error P2002 convertido a 409 (probado en pg-test).
-05-07 Pagos (parcial/total)	`POST .../pagos`	Cumple	Validaciones 422 e idPersonaPagador obligatorio (probado en pg-test).
-08 Anticipo	`POST .../pagos`, `aplicar-anticipo`	Cumple	FIFO automático y aplicación manual (probado en pg-test).
-09 Configuración de mora	`reglas-mora`	Cumple	Regla activa e historial cronológico (probado en pg-test).
-10 Mora automática	`calcular-mora`, cron	Cumple	Cálculo sobre capital pendiente y cron en background (probado en pg-test).
-11 Vencidas	campo `vencida`, `?vencida=true`, `morosos`	Cumple	Detección aditiva por fecha y saldo (probado en pg-test).
-12 Saldo actualizado	pagos, anulación, corrección	Cumple	Saldo actualizado con pagos y anticipos (probado en pg-test).
-13 Corrección o cancelación	`DELETE`, `PATCH corregir`	Parcial	DELETE y PATCH corregir con idPersonaPagador probados en pg-test; pendiente anulación de anticipo ya aplicado.
-14 Trazabilidad	auditoría	Cumple	Auditoría transversal, CONFIGURAR_MONTO_EXPENSA y detalle de expensas {idExpensa, moraAnterior, moraNueva, saldoAnterior, saldoNuevo} (máx 200, truncado:true) en CALCULO_MORA_EXPENSAS probados en pg-test.
+01 Generación	`generar-masivo`	Cumple	Monto fijo por tipo de departamento A/B/C (probado).
+02 Asociación a la unidad	`generar-masivo`, `POST /expensas`	Cumple	Asociación a departamento (probado).
+03 Unidades aplicables	`generar-masivo`	Cumple	Departamentos sin tipo van a excepciones[] con motivo claro (probado).
+04 Duplicados	`POST /expensas`, `generar-masivo`	Cumple	Omite duplicados en masivo y 409 en creación individual; respaldado por la restricción `UNIQUE (id_departamento, periodo)` de la BD real con error P2002 convertido a 409 (probado).
+05-07 Pagos (parcial/total)	`POST .../pagos`	Cumple	Validaciones 422 e idPersonaPagador obligatorio (probado).
+08 Anticipo	`POST .../pagos`, `aplicar-anticipo`	Cumple	FIFO automático y aplicación manual (probado).
+09 Configuración de mora	`reglas-mora`	Cumple	Regla activa e historial cronológico (probado).
+10 Mora automática	`calcular-mora`, cron	Cumple	Cálculo sobre capital pendiente y cron en background (probado).
+11 Vencidas	campo `vencida`, `?vencida=true`, `morosos`	Cumple	Detección aditiva por fecha y saldo (probado).
+12 Saldo actualizado	pagos, anulación, corrección	Cumple	Saldo actualizado con pagos y anticipos (probado).
+13 Corrección o cancelación	`DELETE`, `PATCH corregir`	Parcial	DELETE y PATCH corregir con idPersonaPagador probados; pendiente anulación de anticipo ya aplicado.
+14 Trazabilidad	auditoría	Cumple	Auditoría transversal, CONFIGURAR_MONTO_EXPENSA y detalle de expensas {idExpensa, moraAnterior, moraNueva, saldoAnterior, saldoNuevo} (máx 200, truncado:true) en CALCULO_MORA_EXPENSAS probados.
 US2.2: Estados de cuenta y saldos
 CA	Estado	Nota
-01-02 Departamento y propietario	Cumple	Probado en pg-test.
+01-02 Departamento y propietario	Cumple	Probado.
 03 Períodos, conceptos, montos	Parcial	Falta `concepto`.
-04 Pagos	Cumple	Probado en pg-test.
+04 Pagos	Cumple	Probado.
 05 Anticipos y su aplicación	Parcial	Falta historial detallado de aplicaciones.
-06 Mora por obligación	Cumple	Probado en pg-test.
-07 Saldo actualizado	Cumple	Probado en pg-test.
+06 Mora por obligación	Cumple	Probado.
+07 Saldo actualizado	Cumple	Probado.
 08 Estados	Parcial	"Moroso" convive con `vencida`.
 09 Filtro por período	Pendiente	
 10 Historial cronológico	Pendiente	
@@ -1000,11 +1000,11 @@ CA	Estado	Nota
 
 US1.3: Subsistema de auditoría y trazabilidad
 CA	Endpoint(s)	Estado	Nota
-01 Registro transversal	`registrarAuditoria`	Cumple	Eventos semánticos en transacciones críticas (probado en pg-test).
-02 Consulta paginada y filtros	`GET /auditoria`	Cumple	Filtros por tabla, acción, usuario, registro, resultado, fechas y paginación {data, meta} (probado en pg-test).
-03 Detalle individual	`GET /auditoria/:id`	Cumple	Detalle con datosAnteriores y datosNuevos, 404 si no existe (probado en pg-test).
-04 Seguridad y enmascarado	`GET /auditoria`, `GET /auditoria/:id`	Cumple	Enmascara credenciales/tokens; RBAC Administrador y Directorio (403 Consulta, 401 sin token) (probado en pg-test).
-05 Inmutabilidad	API solo lectura	Cumple	Sin endpoints mutadores en la API (probado en pg-test); pendiente trigger/REVOKE en base de datos.
+01 Registro transversal	`registrarAuditoria`	Cumple	Eventos semánticos en transacciones críticas (probado).
+02 Consulta paginada y filtros	`GET /auditoria`	Cumple	Filtros por tabla, acción, usuario, registro, resultado, fechas y paginación {data, meta} (probado).
+03 Detalle individual	`GET /auditoria/:id`	Cumple	Detalle con datosAnteriores y datosNuevos, 404 si no existe (probado).
+04 Seguridad y enmascarado	`GET /auditoria`, `GET /auditoria/:id`	Cumple	Enmascara credenciales/tokens; RBAC Administrador y Directorio (403 Consulta, 401 sin token) (probado).
+05 Inmutabilidad	API solo lectura	Cumple	Sin endpoints mutadores en la API (probado); pendiente trigger/REVOKE en base de datos.
 
 ---
 ## 9. Pendientes conocidos
