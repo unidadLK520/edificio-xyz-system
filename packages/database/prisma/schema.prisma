@@ -44,6 +44,9 @@ model Usuario {
   documentosSubidos   Documento[]
   auditorias          Auditoria[]
   reglasMoraCreadas   ReglaMora[]
+  tarifasAguaCreadas  TarifaAgua[]
+  lecturasAguaRegistradas LecturaAgua[]
+  sesiones            Sesion[]
 
   @@map("usuarios")
   @@schema("edificio")
@@ -73,8 +76,10 @@ model Persona {
 
 model TipoDepartamento {
   idTipo        Int            @id @default(autoincrement()) @map("id_tipo")
-  nombre        String         @unique @db.VarChar(10)
+  nombre        String         @unique @db.VarChar(60)
   montoExpensa  Decimal        @map("monto_expensa") @db.Decimal(10, 2)
+  activo        Boolean        @default(true)
+  areaM2        Decimal?       @map("area_m2") @db.Decimal(8, 2)
   departamentos Departamento[]
 
   @@map("tipos_departamento")
@@ -97,6 +102,7 @@ model Departamento {
   ocupantes      OcupanteDepartamento[]
   expensas       Expensa[]
   pagos          Pago[]
+  lecturasAgua   LecturaAgua[]
 
   @@index([idTipo], map: "idx_departamentos_tipo")
   @@map("departamentos")
@@ -154,6 +160,8 @@ model Expensa {
   idDepartamento       Int                  @map("id_departamento")
   periodo              DateTime             @db.Date
   monto                Decimal              @db.Decimal(10, 2)
+  montoBase            Decimal?             @map("monto_base") @db.Decimal(10, 2)
+  montoAgua            Decimal              @default(0) @map("monto_agua") @db.Decimal(10, 2)
   montoMora            Decimal              @default(0) @map("monto_mora") @db.Decimal(10, 2)
   tasaInteresMora      Decimal              @default(0) @map("tasa_interes_mora") @db.Decimal(5, 2)
   fechaVencimiento     DateTime             @map("fecha_vencimiento") @db.Date
@@ -183,6 +191,58 @@ model ReglaMora {
   usuarioCreacion   Usuario?  @relation(fields: [idUsuarioCreacion], references: [idUsuario])
 
   @@map("reglas_mora")
+  @@schema("edificio")
+}
+
+model TarifaAgua {
+  idTarifa          Int       @id @default(autoincrement()) @map("id_tarifa")
+  precioM3          Decimal   @map("precio_m3") @db.Decimal(10, 2)
+  activa            Boolean   @default(true)
+  fechaCreacion     DateTime  @default(now()) @map("fecha_creacion") @db.Timestamp(6)
+  idUsuarioCreacion Int?      @map("id_usuario_creacion")
+
+  usuarioCreacion   Usuario?  @relation(fields: [idUsuarioCreacion], references: [idUsuario])
+
+  @@index([activa], map: "idx_tarifas_agua_activa")
+  @@map("tarifas_agua")
+  @@schema("edificio")
+}
+
+model LecturaAgua {
+  idLectura          Int          @id @default(autoincrement()) @map("id_lectura")
+  idDepartamento     Int          @map("id_departamento")
+  periodo            DateTime     @db.Date
+  lecturaAnterior    Decimal      @default(0) @map("lectura_anterior") @db.Decimal(10, 2)
+  lecturaActual      Decimal      @map("lectura_actual") @db.Decimal(10, 2)
+  consumoM3          Decimal      @map("consumo_m3") @db.Decimal(10, 2)
+  precioM3           Decimal      @map("precio_m3") @db.Decimal(10, 2)
+  montoAgua          Decimal      @default(0) @map("monto_agua") @db.Decimal(10, 2)
+  idUsuarioRegistro  Int?         @map("id_usuario_registro")
+  fechaRegistro      DateTime     @default(now()) @map("fecha_registro") @db.Timestamp(6)
+
+  departamento       Departamento @relation(fields: [idDepartamento], references: [idDepartamento])
+  usuarioRegistro    Usuario?     @relation(fields: [idUsuarioRegistro], references: [idUsuario])
+
+  @@unique([idDepartamento, periodo], map: "uq_lecturas_agua_departamento_periodo")
+  @@index([idDepartamento], map: "idx_lecturas_agua_departamento")
+  @@index([periodo], map: "idx_lecturas_agua_periodo")
+  @@map("lecturas_agua")
+  @@schema("edificio")
+}
+
+model Sesion {
+  idSesion     String   @id @default(dbgenerated("gen_random_uuid()")) @map("id_sesion") @db.Uuid
+  idUsuario    Int      @map("id_usuario")
+  fechaInicio  DateTime @default(now()) @map("fecha_inicio") @db.Timestamp(6)
+  ultimoAcceso DateTime @default(now()) @map("ultimo_acceso") @db.Timestamp(6)
+  activa       Boolean  @default(true)
+  ip           String?  @db.VarChar(45)
+  userAgent    String?  @map("user_agent") @db.Text
+
+  usuario      Usuario  @relation(fields: [idUsuario], references: [idUsuario], onDelete: Cascade)
+
+  @@index([idUsuario], map: "idx_sesiones_usuario")
+  @@map("sesiones")
   @@schema("edificio")
 }
 
@@ -238,7 +298,7 @@ model Pago {
   
   expensa              Expensa?             @relation(fields: [idExpensa], references: [idExpensa])
   departamento         Departamento         @relation(fields: [idDepartamento], references: [idDepartamento])
-  pagador              Persona?             @relation(fields: [idPersonaPagador], references: [idPersona], onUpdate: NoAction, onDelete: SetNull, map: "fk_pagos_persona_pagador")
+  pagador              Persona?             @relation(fields: [idPersonaPagador], references: [idPersona], onUpdate: Cascade, onDelete: SetNull, map: "fk_pagos_persona_pagador")
   usuarioRegistro      Usuario?             @relation(fields: [idUsuarioRegistro], references: [idUsuario])
   cuentaBancaria       CuentaBancaria?      @relation(fields: [idCuenta], references: [idCuenta])
   cajaMovimiento       Caja?                @relation(fields: [idMovimientoCaja], references: [idMovimientoCaja])
