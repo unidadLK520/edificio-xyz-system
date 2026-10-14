@@ -1008,7 +1008,7 @@ CA	Endpoint(s)	Estado	Nota
 
 ---
 ## 9. Pendientes conocidos
-- Quién pagó: `idPersonaPagador` obligatorio en pagos y correcciones implementado y probado en pg-test; la columna `id_persona_pagador` en `edificio.pagos` NO existe en la BD real y su creación en producción/desarrollo compartido depende de DevOps (ver `docs/cambios_bd_para_devops.md`).
+- Quién pagó: `idPersonaPagador` obligatorio en pagos y correcciones implementado y probado; la columna `id_persona_pagador` en `edificio.pagos` fue creada formalmente en la BD compartida y versionada en `database/migrations/003_expensas_agua_sesiones_pagos.sql`.
 - Control de duplicados en expensas: resuelto; la BD real ya cuenta con la restricción `UNIQUE (id_departamento, periodo)` y el backend maneja P2002 como 409 Conflict.
 - Pagos de expensa e ingresos: hoy un pago de expensa no genera un Ingreso en Movimientos (Pendiente).
 - Anulación de anticipo ya aplicado: pendiente bloquear con `409 Conflict` (Parcial / Pendiente).
