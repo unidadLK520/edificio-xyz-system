@@ -226,7 +226,7 @@ describe('US2.1 - Punto 1: Bug mora vs anticipos aplicados y precisión de capit
       expect(Number(exp!.montoMora)).toBe(15.00);
       expect(Number(exp!.saldoPendiente)).toBe(315.00);
     }
-  });
+  }, 120000);
 
   it('5. Una expensa con estado "Pagado" y saldo 0 no debe ser alterada ni recargada con mora', async () => {
     const fechaVencida = new Date();

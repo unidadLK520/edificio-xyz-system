@@ -321,5 +321,5 @@ export async function ejecutarCalculoMora(
       actualizadasCount: count,
       mensaje: `Se aplicó el recargo de mora a ${count} expensas vencidas`,
     };
-  }, { timeout: 30000, maxWait: 15000 });
+  }, { timeout: 120000, maxWait: 30000 });
 }
