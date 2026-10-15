@@ -15,6 +15,7 @@ describe('Consulta de Auditoría (GET /api/v1/auditoria y GET /:id)', () => {
   let idAuditoriaCreada: number;
 
   const cleanupAuditoriaIds: bigint[] = [];
+  const createdUserIds: number[] = [];
 
   beforeAll(async () => {
     // 1. Obtener o crear usuarios con roles Administrador, Directorio y Consulta
@@ -24,38 +25,36 @@ describe('Consulta de Auditoría (GET /api/v1/auditoria y GET /:id)', () => {
     idUsuarioAdmin = adminUser!.idUsuario;
     adminToken = await generarTokenPrueba(idUsuarioAdmin, adminUser!.correo, 'Administrador');
 
-    const rolDir = await prisma.rol.upsert({
-      where: { nombre: 'Directorio' },
-      update: {},
-      create: { nombre: 'Directorio', descripcion: 'Directorio' },
-    });
-    const dirUser = await prisma.usuario.upsert({
-      where: { correo: 'tst-dir_audit@test.com' },
-      update: {},
-      create: {
-        nombreUsuario: 'tst_dir_audit',
-        correo: 'tst-dir_audit@test.com',
+    const rolDir =
+      (await prisma.rol.findFirst({ where: { nombre: 'Directorio' } })) ||
+      (await prisma.rol.create({ data: { nombre: 'Directorio', descripcion: 'Directorio' } }));
+
+    const ts = `${Date.now().toString().slice(-4)}${Math.floor(Math.random() * 1000)}`;
+
+    const dirUser = await prisma.usuario.create({
+      data: {
+        nombreUsuario: `TST-dir-${ts}`,
+        correo: `tst-dir-${ts}@edificioxyz.com`,
         passwordHash: '$2a$10$dummy',
         idRol: rolDir.idRol,
       },
     });
+    createdUserIds.push(dirUser.idUsuario);
     directorioToken = await generarTokenPrueba(dirUser.idUsuario, dirUser.correo, 'Directorio');
 
-    const rolCons = await prisma.rol.upsert({
-      where: { nombre: 'Consulta' },
-      update: {},
-      create: { nombre: 'Consulta', descripcion: 'Consulta' },
-    });
-    const consUser = await prisma.usuario.upsert({
-      where: { correo: 'tst-cons_audit@test.com' },
-      update: {},
-      create: {
-        nombreUsuario: 'tst_cons_audit',
-        correo: 'tst-cons_audit@test.com',
+    const rolCons =
+      (await prisma.rol.findFirst({ where: { nombre: 'Consulta' } })) ||
+      (await prisma.rol.create({ data: { nombre: 'Consulta', descripcion: 'Consulta' } }));
+
+    const consUser = await prisma.usuario.create({
+      data: {
+        nombreUsuario: `TST-cons-${ts}`,
+        correo: `tst-cons-${ts}@edificioxyz.com`,
         passwordHash: '$2a$10$dummy',
         idRol: rolCons.idRol,
       },
     });
+    createdUserIds.push(consUser.idUsuario);
     consultaToken = await generarTokenPrueba(consUser.idUsuario, consUser.correo, 'Consulta');
 
     // 2. Crear registros de prueba en edificio.auditoria con datos sensibles para verificar filtros y enmascaramiento
@@ -120,6 +119,15 @@ describe('Consulta de Auditoría (GET /api/v1/auditoria y GET /:id)', () => {
     if (cleanupAuditoriaIds.length > 0) {
       await prisma.auditoria.deleteMany({
         where: { idAuditoria: { in: cleanupAuditoriaIds } },
+      });
+    }
+
+    if (createdUserIds.length > 0) {
+      await prisma.sesion.deleteMany({
+        where: { idUsuario: { in: createdUserIds } },
+      });
+      await prisma.usuario.deleteMany({
+        where: { idUsuario: { in: createdUserIds } },
       });
     }
   });

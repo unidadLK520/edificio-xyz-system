@@ -144,8 +144,8 @@ async function main() {
 
     const usuarioCopropietario = await prisma.usuario.create({
       data: {
-        nombreUsuario: `copropietario_${ts}`,
-        correo: `copropietario_${ts}@edificioxyz.com`,
+        nombreUsuario: `TST-copropietario_${ts}`,
+        correo: `tst-copropietario_${ts}@edificioxyz.com`,
         passwordHash: '$2a$10$abcdefghijklmnopqrstuv',
         idRol: rolCopropietario ? rolCopropietario.idRol : 3,
         idPersona: personaId,
@@ -792,6 +792,7 @@ async function main() {
   } finally {
     // Limpieza de datos de prueba
     if (usuarioCopropietarioId) {
+      await prisma.sesion.deleteMany({ where: { idUsuario: usuarioCopropietarioId } });
       await prisma.usuario.deleteMany({ where: { idUsuario: usuarioCopropietarioId } });
     }
     if (personaId || persona2Id) {

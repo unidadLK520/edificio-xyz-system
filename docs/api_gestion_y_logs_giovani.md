@@ -32,9 +32,16 @@ Fuera del sistema (según el ingeniero): gastos comunes como base de cálculo, s
 ## 1. Módulo de Autenticación, Control de Acceso y Sesiones
 Ubicación en el código: `backend/src/modules/auth/`
 Prefijo de ruta: `/api/v1/auth`
-1.1 Iniciar Sesión (Login)
+
+### 1.1 Iniciar Sesión (Login)
 Método y Ruta: `POST /api/v1/auth/login`
-Propósito: Autentica con correo y contraseña (bcrypt). Protección contra fuerza bruta: máximo 3 intentos; al 3.º se bloquea la cuenta 10 minutos. Genera el JWT con rol y expiración. Audita `LOGIN_EXITOSO`, `LOGIN_FALLIDO` o `USUARIO_BLOQUEADO`.
+Propósito: Autentica con correo y contraseña (bcrypt). Protección contra fuerza bruta: máximo 3 intentos; al 3.º se bloquea la cuenta 10 minutos. Genera el JWT con rol, expiración y claim `sid` de sesión. Audita `LOGIN_EXITOSO`, `LOGIN_FALLIDO`, `USUARIO_BLOQUEADO` o `SESION_RECHAZADA`.
+Política de Sesión Única:
+- Si el usuario ya cuenta con una sesión activa (`edificio.sesiones.activa = true` y `ultimo_acceso < 30 min`), la petición es rechazada con código `409 Conflict` y mensaje `"Esta cuenta ya tiene una sesión activa"`, auditando el evento `SESION_RECHAZADA`.
+- Si la sesión activa previa venció por inactividad (`ultimo_acceso >= 30 min`), se cierra automáticamente (`activa = false`) y se crea la nueva sesión.
+- El `INSERT` en la tabla `edificio.sesiones` respeta el índice único parcial `idx_sesiones_usuario_activa` (`WHERE activa = true`). Frente a intentos de login simultáneos o condiciones de carrera, el error de unicidad (`P2002`) es interceptado y retorna `409 Conflict` con auditoría `SESION_RECHAZADA`.
+- El JWT generado incluye el claim `sid` con el identificador único UUID de la sesión creada (`id_sesion`).
+
 Rol requerido: Público.
 Request:
 ```json
@@ -43,7 +50,6 @@ Request:
 Respuesta 200:
 ```json
 {
-  "success": true,
   "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
   "usuario": {
     "idUsuario": 1,
@@ -55,32 +61,64 @@ Respuesta 200:
 }
 ```
 Errores:
-`401`: `{ "error": "Unauthorized", "message": "Credenciales inválidas. Le quedan 2 intentos antes del bloqueo temporal." }`
-`423`: `{ "error": "Locked", "message": "Cuenta bloqueada temporalmente por múltiples intentos fallidos. Intente nuevamente después de 2026-09-27T21:45:00.000Z." }`
-1.2 Cerrar Sesión (Logout)
+- `400`: `{ "error": "Validation Error", "message": "Datos inválidos o faltantes" }`
+- `401`: `{ "error": "Unauthorized", "message": "Credenciales inválidas" }`
+- `409`: `{ "error": "Conflict", "message": "Esta cuenta ya tiene una sesión activa" }` (sesión activa concurrente o concurrencia P2002).
+
+### 1.2 Cerrar Sesión (Logout)
 Método y Ruta: `POST /api/v1/auth/logout`
-Propósito: Invalida la sesión en el cliente y audita `LOGOUT` con IP y metadatos.
+Propósito: Marca la sesión en la base de datos como inactiva (`activa = false`), agrega el token a la lista negra en memoria y audita `LOGOUT` con IP y metadatos. Permite que el usuario pueda volver a iniciar sesión sin conflicto.
 Rol requerido: Autenticado.
-Respuesta 200: `{ "success": true, "message": "Sesión cerrada correctamente" }`
-1.3 Consultar Sesión Actual (Me)
+Respuesta 200: `{ "message": "Sesión cerrada exitosamente" }`
+
+### 1.3 Consultar Sesión Actual (Me) & Middleware de Sesión
 Método y Ruta: `GET /api/v1/auth/me`
-Propósito: Verifica el JWT, que el usuario siga activo y la expiración por inactividad (30 minutos). Devuelve perfil y rol.
+Propósito: Verifica el JWT, que el usuario siga activo y el estado de la sesión en base de datos.
+Control de Middleware:
+- Si el JWT incluye el claim `sid`: valida contra `edificio.sesiones` que la sesión exista y permanezca activa (`activa = true`). Si la sesión fue forzada o cerrada, retorna `401 Unauthorized`.
+- Expiración por inactividad: valida que `Date.now() - ultimo_acceso <= 30 min`. Si venció, marca la sesión inactiva y retorna `401 Unauthorized` (`"Sesión expirada por inactividad. Vuelva a iniciar sesión."`).
+- Actualización de actividad (`ultimo_acceso`): se actualiza en base de datos como máximo **una vez por minuto** por sesión (con un mecanismo de throttling en memoria), protegiendo la base de datos de saturación por consultas repetidas.
+- Retrocompatibilidad: los tokens emitidos antes del despliegue (sin claim `sid`) se mantienen válidos en el middleware hasta su expiración natural.
+
 Rol requerido: Autenticado (Administrador, Directorio, Consulta).
 Respuesta 200:
 ```json
 {
-  "authenticated": true,
-  "usuario": {
-    "idUsuario": 1,
-    "nombreUsuario": "admin",
-    "correo": "admin@edificioxyz.com",
-    "activo": true,
-    "fechaCreacion": "2026-09-07T02:47:37.990Z",
-    "ultimoAcceso": "2026-09-27T21:32:43.630Z",
-    "rol": { "idRol": 1, "nombre": "Administrador", "descripcion": "Control total del sistema" }
+  "idUsuario": 1,
+  "nombreUsuario": "admin",
+  "correo": "admin@edificioxyz.com",
+  "activo": true,
+  "fechaCreacion": "2026-09-07T02:47:37.990Z",
+  "ultimoAcceso": "2026-09-27T21:32:43.630Z",
+  "rol": { "idRol": 1, "nombre": "Administrador", "descripcion": "Control total del sistema" }
+}
+```
+
+### 1.4 Forzar Cierre de Sesión (Sesión Forzada)
+Método y Ruta: `DELETE /api/v1/auth/sesiones/:idUsuario`
+Propósito: Permite al Administrador cerrar inmediatamente y de forma forzada la sesión activa de cualquier cuenta en el sistema (ej. por bloqueo, cambio de permisos o actividad sospechosa).
+Rol requerido: **Administrador** exclusivamente (retorna `403 Forbidden` si cualquier otro rol intenta ejecutarlo).
+Parámetros:
+- `:idUsuario` (en la URL): ID del usuario cuya sesión se desea revocar.
+Comportamiento:
+- Marca todas las sesiones activas de dicho usuario como inactivas (`activa = false`).
+- Registra el evento de auditoría `SESION_FORZADA` indicando el operador que forzó el cierre, el usuario afectado y la cantidad de sesiones finalizadas.
+- La víctima recibirá `401 Unauthorized` en su siguiente petición al detectar que su sesión ya no está activa en la base de datos.
+Respuesta 200:
+```json
+{
+  "success": true,
+  "message": "Sesión cerrada exitosamente",
+  "data": {
+    "idUsuario": 5,
+    "sesionesCerradas": 1
   }
 }
 ```
+Errores:
+- `400`: `{ "error": "Bad Request", "message": "ID de usuario inválido" }`
+- `401`: `{ "error": "Unauthorized", "message": "Token de autenticación requerido..." }`
+- `403`: `{ "error": "Forbidden", "message": "No tiene permisos para realizar esta acción" }`
 ---
 ## 2. Módulo de Administración de Personas (US1.4)
 Padrón de propietarios, inquilinos y ocupantes, asignación de unidades e historial de ocupación.
@@ -914,6 +952,8 @@ Campo	Tipo	Descripción
 Evento	Tabla	Origen	Descripción / Datos Capturados
 `LOGIN_EXITOSO`	usuarios	`POST /auth/login`	Inicio de sesión exitoso (correo, rol, IP, user-agent).
 `LOGIN_FALLIDO`	usuarios	`POST /auth/login`	Credenciales incorrectas (motivo, intentos acumulados, IP).
+`SESION_RECHAZADA`	sesiones	`POST /auth/login`	Rechazo de login por sesión concurrente activa o conflicto de índice único parcial (409 Conflict).
+`SESION_FORZADA`	sesiones	`DELETE /auth/sesiones/:idUsuario`	Cierre forzado de sesión por Administrador (idOperador, idUsuarioAfectado, cerradas, IP, user-agent).
 `USUARIO_BLOQUEADO`	usuarios	Al 3.º intento fallido	Bloqueo por fuerza bruta (10 minutos, fecha desbloqueo).
 `LOGOUT`	usuarios	`POST /auth/logout`	Cierre de sesión.
 `USUARIO_MODIFICADO`	usuarios	`PUT /usuarios/:id`	Modificación de cuenta.
@@ -1075,6 +1115,7 @@ Módulo	Endpoint	Método	Administrador	Directorio	Consulta
 Auth	/auth/login	POST	✅	✅	✅
 Auth	/auth/logout	POST	✅	✅	✅
 Auth	/auth/me	GET	✅	✅	✅
+Auth	/auth/sesiones/:idUsuario	DELETE	✅	❌	❌
 Personas	/personas	GET	✅	✅	✅
 Personas	/personas/:id	GET	✅	✅	✅
 Personas	/personas/:id/historial	GET	✅	✅	✅

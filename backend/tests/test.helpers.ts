@@ -17,6 +17,7 @@ export interface LimpiarIdsOptions {
   tarifasAgua?: number[];
   tiposDepartamento?: number[];
   lecturasAgua?: number[];
+  sesiones?: string[];
 }
 
 let counter = 0;
@@ -209,6 +210,15 @@ export async function limpiar(ids: LimpiarIdsOptions): Promise<void> {
     }
   }
 
+  if (ids.sesiones && ids.sesiones.length > 0) {
+    const valid = ids.sesiones.filter(Boolean);
+    if (valid.length > 0) {
+      await prisma.sesion.deleteMany({
+        where: { idSesion: { in: valid } },
+      });
+    }
+  }
+
   if (ids.usuarios && ids.usuarios.length > 0) {
     const valid = ids.usuarios.filter(Boolean);
     if (valid.length > 0) {
@@ -306,3 +316,38 @@ export async function contarFilasNoTest(): Promise<{
     auditoria: Number(row.auditoria || 0),
   };
 }
+
+/**
+ * Crea un usuario de prueba garantizando el prefijo TST- en nombre y correo
+ */
+export async function crearUsuarioTest(
+  data: Partial<{
+    nombreUsuario: string;
+    correo: string;
+    passwordHash: string;
+    idRol: number;
+    activo: boolean;
+  }> = {}
+) {
+  const suffix = uniqueSuffix();
+  const nombreUsuario = data.nombreUsuario?.startsWith('TST-')
+    ? data.nombreUsuario
+    : `TST-usr-${Date.now().toString().slice(-4)}-${suffix}`;
+  const correo = data.correo?.startsWith('tst-')
+    ? data.correo
+    : `tst-auth-${Date.now().toString().slice(-4)}-${suffix}@edificioxyz.com`;
+
+  return await prisma.usuario.create({
+    data: {
+      nombreUsuario,
+      correo,
+      passwordHash: data.passwordHash ?? '$2a$10$abcdefghijklmnopqrstuu',
+      idRol: data.idRol ?? 1,
+      activo: data.activo ?? true,
+    },
+    include: {
+      rol: true,
+    },
+  });
+}
+

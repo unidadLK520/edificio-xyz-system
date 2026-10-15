@@ -144,6 +144,62 @@ export class AuditoriaService {
   }
 
   /**
+   * Registra rechazo de login por sesión concurrente o activa (Prompt 5)
+   */
+  async registrarSesionRechazada(
+    idUsuario: number,
+    metadata: {
+      correo: string;
+      motivo?: string;
+      idSesionActiva?: string;
+      ip?: string;
+      userAgent?: string;
+    }
+  ): Promise<Auditoria> {
+    return this.repository.crear({
+      tablaAfectada: 'sesiones',
+      idRegistro: metadata.idSesionActiva ? String(metadata.idSesionActiva) : null,
+      accion: TipoEventoAuditoria.SESION_RECHAZADA,
+      resultado: 'FALLO',
+      idUsuario,
+      datosNuevos: {
+        correo: metadata.correo,
+        motivo: metadata.motivo || 'Esta cuenta ya tiene una sesión activa',
+        ip: metadata.ip,
+        userAgent: metadata.userAgent,
+      },
+    });
+  }
+
+  /**
+   * Registra el cierre forzado de sesión por un Administrador (Prompt 5)
+   */
+  async registrarSesionForzada(
+    idOperador: number,
+    idAfectado: number,
+    metadata?: {
+      ip?: string;
+      userAgent?: string;
+      cerradas?: number;
+    }
+  ): Promise<Auditoria> {
+    return this.repository.crear({
+      tablaAfectada: 'sesiones',
+      idRegistro: String(idAfectado),
+      accion: TipoEventoAuditoria.SESION_FORZADA,
+      resultado: 'EXITO',
+      idUsuario: idOperador,
+      datosNuevos: {
+        idUsuarioAfectado: idAfectado,
+        motivo: 'Cierre forzado de sesión por Administrador',
+        cerradas: metadata?.cerradas ?? 1,
+        ip: metadata?.ip,
+        userAgent: metadata?.userAgent,
+      },
+    });
+  }
+
+  /**
    * Registro genérico de auditoría
    */
   async registrarEvento(params: RegistrarAuditoriaParams): Promise<Auditoria> {
