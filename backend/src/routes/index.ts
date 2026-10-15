@@ -11,6 +11,7 @@ import { comunicadosRouter } from './comunicados.routes';
 import { personalRouter } from './personal.routes';
 import { unidadesRouter } from './unidades.routes';
 import { auditoriaRouter } from './auditoria.routes';
+import { tiposDepartamentoRouter } from './tipos-departamento.routes';
 import { usuariosRouter } from '../modules/usuarios/usuarios.routes';
 import { personasRouter } from '../modules/personas';
 
@@ -25,6 +26,7 @@ router.use('/usuarios', usuariosRouter);
 //-----------------------------Giovani Quiroz------------------------
 router.use('/personas', personasRouter);
 router.use('/departamentos', departamentosRouter);
+router.use('/tipos-departamento', tiposDepartamentoRouter);
 router.use('/unidades', unidadesRouter);
 router.use('/expensas', expensasRouter);
 router.use('/movimientos', movimientosRouter);
