@@ -39,6 +39,7 @@ async function main() {
 
     // 1.2 Tipos de departamento
     console.log('\n--- 2. TABLA: tipos_departamento ---');
+    console.log(`Filas tipos_departamento: ANTES: ${baseline.tipos_departamento.length} | DESPUÉS: ${tiposActuales.length}`);
     console.log('Snapshot ANTES:');
     console.log(JSON.stringify(baseline.tipos_departamento, null, 2));
     console.log('Estado DESPUÉS:');
@@ -66,6 +67,9 @@ async function main() {
     console.log('\n===============================================================');
     console.log('             FILAS TST- REMANENTES (DEBE SER 0)                ');
     console.log('===============================================================');
+    const tstTiposCount = await prisma.tipoDepartamento.count({
+      where: { nombre: { startsWith: 'TST-' } },
+    });
     const tstRes = await prisma.$queryRawUnsafe<any[]>(`
       SELECT 
         (SELECT count(*)::text FROM edificio.departamentos WHERE numero LIKE 'TST-%' OR numero LIKE 'TEST-%' OR numero LIKE 'CRON-%' OR numero LIKE 'RM-%' OR numero LIKE 'TA-%' OR numero LIKE 'TB-%' OR numero LIKE 'TC-%') as tst_deptos,
@@ -74,10 +78,11 @@ async function main() {
         (SELECT count(*)::text FROM edificio.pagos p JOIN edificio.departamentos d ON d.id_departamento = p.id_departamento WHERE d.numero LIKE 'TST-%' OR d.numero LIKE 'TEST-%' OR d.numero LIKE 'CRON-%' OR d.numero LIKE 'RM-%' OR d.numero LIKE 'TA-%' OR d.numero LIKE 'TB-%' OR d.numero LIKE 'TC-%') as tst_pagos;
     `);
     const tstRow = tstRes[0] || {};
-    console.log(`Departamentos TST- remanentes: ${tstRow.tst_deptos} (${tstRow.tst_deptos === '0' ? '✅ 0' : '❌ NO ES 0'})`);
-    console.log(`Personas TST- remanentes:      ${tstRow.tst_personas} (${tstRow.tst_personas === '0' ? '✅ 0' : '❌ NO ES 0'})`);
-    console.log(`Expensas TST- remanentes:      ${tstRow.tst_expensas} (${tstRow.tst_expensas === '0' ? '✅ 0' : '❌ NO ES 0'})`);
-    console.log(`Pagos TST- remanentes:         ${tstRow.tst_pagos} (${tstRow.tst_pagos === '0' ? '✅ 0' : '❌ NO ES 0'})`);
+    console.log(`Departamentos TST- remanentes:      ${tstRow.tst_deptos} (${tstRow.tst_deptos === '0' ? '✅ 0' : '❌ NO ES 0'})`);
+    console.log(`Personas TST- remanentes:           ${tstRow.tst_personas} (${tstRow.tst_personas === '0' ? '✅ 0' : '❌ NO ES 0'})`);
+    console.log(`Expensas TST- remanentes:           ${tstRow.tst_expensas} (${tstRow.tst_expensas === '0' ? '✅ 0' : '❌ NO ES 0'})`);
+    console.log(`Pagos TST- remanentes:              ${tstRow.tst_pagos} (${tstRow.tst_pagos === '0' ? '✅ 0' : '❌ NO ES 0'})`);
+    console.log(`Tipos departamento TST- remanentes: ${tstTiposCount} (${tstTiposCount === 0 ? '✅ 0' : '❌ NO ES 0'})`);
 
     // 4. Filas de auditoria generadas
     console.log('\n===============================================================');
