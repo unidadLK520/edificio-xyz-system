@@ -88,12 +88,10 @@ export async function configurarReglaMora(input: ConfigurarReglaMoraInput) {
     });
 
     // 2. Desactivar cualquier regla activa previa
-    if (reglaAnterior) {
-      await tx.reglaMora.update({
-        where: { idRegla: reglaAnterior.idRegla },
-        data: { activa: false },
-      });
-    }
+    await tx.reglaMora.updateMany({
+      where: { activa: true },
+      data: { activa: false },
+    });
 
     // 3. Crear la nueva regla de mora activa
     const nuevaRegla = await tx.reglaMora.create({
