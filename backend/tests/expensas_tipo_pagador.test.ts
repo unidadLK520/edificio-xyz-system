@@ -127,7 +127,7 @@ describe('Expensas por Tipo de Departamento y Pagador Obligatorio (RN10)', () =>
         periodo,
         fechaVencimiento: '2090-01-15',
         montoBase: 999, // Debe ignorarse para el cálculo
-        excluirDepartamentos: excluirReal,
+        idDepartamentos: [deptoA.idDepartamento, deptoB.idDepartamento, deptoC.idDepartamento],
       });
 
     expect(res.status).toBe(201);
@@ -165,7 +165,7 @@ describe('Expensas por Tipo de Departamento y Pagador Obligatorio (RN10)', () =>
       .send({
         periodo,
         fechaVencimiento: '2090-02-15',
-        excluirDepartamentos: excluirReal,
+        idDepartamentos: [deptoSinTipo.idDepartamento],
       });
 
     expect(res.status).toBe(201);
@@ -197,7 +197,7 @@ describe('Expensas por Tipo de Departamento y Pagador Obligatorio (RN10)', () =>
       .send({
         periodo: '2090-01-01',
         fechaVencimiento: '2090-01-15',
-        excluirDepartamentos: excluirReal,
+        idDepartamentos: [deptoA.idDepartamento],
       });
 
     expect(res.status).toBe(201);
@@ -234,7 +234,7 @@ describe('Expensas por Tipo de Departamento y Pagador Obligatorio (RN10)', () =>
       .send({
         periodo,
         fechaVencimiento: '2090-03-15',
-        excluirDepartamentos: excluirReal,
+        idDepartamentos: [deptoFifo.idDepartamento],
       });
 
     expect(res.status).toBe(201);

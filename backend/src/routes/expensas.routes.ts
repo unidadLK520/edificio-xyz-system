@@ -60,6 +60,7 @@ const generarMasivoSchema = z.object({
   montoBase: z.number().positive().optional().default(500),
   tasaInteresMora: z.number().min(0).max(100).optional(),
   excluirDepartamentos: z.array(z.number().int()).optional().default([]),
+  idDepartamentos: z.array(z.number().int()).optional(),
 });
 
 const pagoSchema = z.object({
@@ -708,19 +709,28 @@ expensasRouter.post(
         return;
       }
 
-      const { periodo, fechaVencimiento, montoBase, tasaInteresMora, excluirDepartamentos } = parsed.data;
+      const { periodo, fechaVencimiento, montoBase, tasaInteresMora, excluirDepartamentos, idDepartamentos } = parsed.data;
       // Normalizar periodo al primer día del mes en formato UTC para evitar discrepancias de zona horaria
       const [pYear, pMonth] = periodo.split('-');
       const periodoNormalizado = `${pYear}-${pMonth}-01`;
       const periodoDate = new Date(`${periodoNormalizado}T00:00:00.000Z`);
       const vencimientoDate = new Date(`${fechaVencimiento}T00:00:00.000Z`);
 
-      // CA2: Obtener unidades aplicables (excluir departamentos especificados)
+      // CA2: Obtener unidades aplicables (excluir departamentos especificados o filtrar por idDepartamentos)
       const { generadas, excepciones } = await prisma.$transaction(async (tx) => {
+        const whereClause: any = {};
+        if (excluirDepartamentos && excluirDepartamentos.length > 0) {
+          whereClause.idDepartamento = { notIn: excluirDepartamentos };
+        }
+        if (idDepartamentos && idDepartamentos.length > 0) {
+          whereClause.idDepartamento = {
+            ...(whereClause.idDepartamento || {}),
+            in: idDepartamentos,
+          };
+        }
+
         const departamentos = await tx.departamento.findMany({
-          where: excluirDepartamentos && excluirDepartamentos.length > 0
-            ? { idDepartamento: { notIn: excluirDepartamentos } }
-            : {},
+          where: whereClause,
           include: {
             tipo: true,
           },
