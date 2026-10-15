@@ -35,10 +35,14 @@ vi.mock('@edificio-xyz/database', () => {
       create: vi.fn(),
     },
     lecturaAgua: {
-      findUnique: vi.fn(),
+      findUnique: vi.fn().mockResolvedValue(null),
       findFirst: vi.fn().mockResolvedValue(null),
       findMany: vi.fn().mockResolvedValue([]),
       count: vi.fn().mockResolvedValue(0),
+      create: vi.fn(),
+      update: vi.fn(),
+      delete: vi.fn(),
+      deleteMany: vi.fn(),
     },
     $transaction: vi.fn(),
   };
@@ -262,6 +266,8 @@ describe('BLOQUE 3: Reglas de Negocio de Pagos, Expensas Vencidas y Control de D
 
       (prisma.expensa.findUnique as any).mockResolvedValue({
         idExpensa: 20,
+        idDepartamento: 1,
+        periodo: new Date('2026-05-01T00:00:00.000Z'),
         monto: 500,
         saldoPendiente: 500,
         fechaVencimiento: fechaAyer,
@@ -284,6 +290,8 @@ describe('BLOQUE 3: Reglas de Negocio de Pagos, Expensas Vencidas y Control de D
       (prisma.expensa.findMany as any).mockResolvedValue([
         {
           idExpensa: 21,
+          idDepartamento: 1,
+          periodo: new Date('2026-05-01T00:00:00.000Z'),
           monto: 400,
           saldoPendiente: 400,
           fechaVencimiento: fechaAyer,

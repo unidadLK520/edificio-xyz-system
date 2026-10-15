@@ -214,13 +214,11 @@ expensasRouter.get(
         prisma.expensa.count({ where }),
       ]);
 
-      const deptosPeriodos = expensas
-        .filter((e) => e.idDepartamento && e.periodo)
-        .map((e) => ({
-          idDepartamento: e.idDepartamento,
-          periodo: e.periodo,
-        }));
-      const lecturas = deptosPeriodos.length > 0 && prisma.lecturaAgua
+      const deptosPeriodos = expensas.map((e) => ({
+        idDepartamento: e.idDepartamento,
+        periodo: e.periodo,
+      }));
+      const lecturas = deptosPeriodos.length > 0
         ? await prisma.lecturaAgua.findMany({
             where: { OR: deptosPeriodos },
             select: { idDepartamento: true, periodo: true, consumoM3: true },
@@ -228,16 +226,13 @@ expensasRouter.get(
         : [];
       const lecturasMap = new Map<string, number>();
       for (const l of lecturas) {
-        const pStr = l.periodo ? new Date(l.periodo).toISOString().split('T')[0] : '';
-        const key = `${l.idDepartamento}_${pStr}`;
+        const key = `${l.idDepartamento}_${new Date(l.periodo).toISOString().split('T')[0]}`;
         lecturasMap.set(key, Number(l.consumoM3));
       }
 
       const expensasConVencida = expensas.map((e) => {
-        const pDate = e.periodo ? new Date(e.periodo) : null;
-        const pStr = pDate && !isNaN(pDate.getTime()) ? pDate.toISOString().split('T')[0] : '';
-        const key = `${e.idDepartamento}_${pStr}`;
-        const consumo = pStr ? lecturasMap.get(key) : undefined;
+        const key = `${e.idDepartamento}_${new Date(e.periodo).toISOString().split('T')[0]}`;
+        const consumo = lecturasMap.get(key);
         const formateada = formatearExpensaConConcepto(e, e.departamento?.tipo?.nombre, consumo);
         return {
           ...formateada,
@@ -413,25 +408,18 @@ expensasRouter.get(
           include: { aplicacionesAnticipo: true },
           orderBy: { fechaPago: 'desc' },
         }),
-        prisma.lecturaAgua
-          ? prisma.lecturaAgua.findMany({
-              where: { idDepartamento },
-            })
-          : Promise.resolve([]),
+        prisma.lecturaAgua.findMany({
+          where: { idDepartamento },
+        }),
       ]);
 
       const lecturasMap = new Map<string, number>(
-        lecturas.map((l) => {
-          const pDate = l.periodo ? new Date(l.periodo) : null;
-          const pStr = pDate && !isNaN(pDate.getTime()) ? pDate.toISOString().split('T')[0] : '';
-          return [pStr, Number(l.consumoM3)];
-        })
+        lecturas.map((l) => [new Date(l.periodo).toISOString().split('T')[0], Number(l.consumoM3)])
       );
 
       const expensasConCapital = expensas.map((e) => {
-        const pDate = e.periodo ? new Date(e.periodo) : null;
-        const pKey = pDate && !isNaN(pDate.getTime()) ? pDate.toISOString().split('T')[0] : '';
-        const consumo = pKey ? lecturasMap.get(pKey) : undefined;
+        const pKey = new Date(e.periodo).toISOString().split('T')[0];
+        const consumo = lecturasMap.get(pKey);
         const conConcepto = formatearExpensaConConcepto(e, departamento.tipo?.nombre, consumo);
         return {
           ...conConcepto,
@@ -732,11 +720,9 @@ expensasRouter.get(
       const ahora = new Date();
       const vencida = new Date(expensa.fechaVencimiento) < ahora && Number(expensa.saldoPendiente) > 0;
 
-      const lectura = prisma.lecturaAgua
-        ? await prisma.lecturaAgua.findFirst({
-            where: { idDepartamento: expensa.idDepartamento, periodo: expensa.periodo },
-          })
-        : null;
+      const lectura = await prisma.lecturaAgua.findFirst({
+        where: { idDepartamento: expensa.idDepartamento, periodo: expensa.periodo },
+      });
 
       const expensaFormateada = formatearExpensaConConcepto(
         expensa,

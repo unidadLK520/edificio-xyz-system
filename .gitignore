@@ -20,3 +20,11 @@ Thumbs.db
 .idea/
 *.log
 *.tsbuildinfo
+
+# Scripts de snapshot y diagnosticos temporales
+backend/scripts/snapshot_baseline.json
+backend/scripts/verificar_conexiones_bloqueadas.ts
+backend/scripts/remanentes_tst.ts
+scripts/snapshot_baseline.json
+scripts/verificar_conexiones_bloqueadas.ts
+scripts/remanentes_tst.ts
