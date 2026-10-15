@@ -726,6 +726,13 @@ expensasRouter.post(
           },
         });
 
+        // Consultar expensas existentes para el período en una sola consulta
+        const expensasExistentes = await tx.expensa.findMany({
+          where: { periodo: periodoDate },
+          select: { idDepartamento: true },
+        });
+        const deptosConExpensa = new Set(expensasExistentes.map((e) => e.idDepartamento));
+
         // Copiar tasa de la regla activa a expensas.tasa_interes_mora
         const reglaActiva = await tx.reglaMora.findFirst({
           where: { activa: true },
@@ -748,14 +755,7 @@ expensasRouter.post(
           }
 
           // Verificar si ya existe expensa para el departamento en este período
-          const existente = await tx.expensa.findFirst({
-            where: {
-              idDepartamento: depto.idDepartamento,
-              periodo: periodoDate,
-            },
-          });
-
-          if (existente) {
+          if (deptosConExpensa.has(depto.idDepartamento)) {
             excepcionesArr.push({
               idDepartamento: depto.idDepartamento,
               numero: depto.numero,
