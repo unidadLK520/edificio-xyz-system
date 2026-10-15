@@ -50,7 +50,7 @@ const expensaSchema = z.object({
   idDepartamento: z.number().int().positive(),
   periodo: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Formato: YYYY-MM-DD'),
   monto: z.number().positive(),
-  tasaInteresMora: z.number().min(0).max(100).default(0),
+  tasaInteresMora: z.number().min(0).max(100).optional(),
   fechaVencimiento: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Formato: YYYY-MM-DD'),
 });
 
@@ -58,7 +58,7 @@ const generarMasivoSchema = z.object({
   periodo: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Formato: YYYY-MM-DD'),
   fechaVencimiento: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Formato: YYYY-MM-DD'),
   montoBase: z.number().positive().optional().default(500),
-  tasaInteresMora: z.number().min(0).max(100).optional().default(5),
+  tasaInteresMora: z.number().min(0).max(100).optional(),
   excluirDepartamentos: z.array(z.number().int()).optional().default([]),
 });
 
@@ -726,6 +726,13 @@ expensasRouter.post(
           },
         });
 
+        // Copiar tasa de la regla activa a expensas.tasa_interes_mora
+        const reglaActiva = await tx.reglaMora.findFirst({
+          where: { activa: true },
+          orderBy: { fechaCreacion: 'desc' },
+        });
+        const tasaAplicar = tasaInteresMora !== undefined ? tasaInteresMora : (reglaActiva ? Number(reglaActiva.tasaInteres) : 0);
+
         const generadasArr: any[] = [];
         const excepcionesArr: any[] = [];
 
@@ -766,7 +773,7 @@ expensasRouter.post(
               periodo: periodoDate,
               monto: montoFinal,
               saldoPendiente: montoFinal,
-              tasaInteresMora,
+              tasaInteresMora: tasaAplicar,
               fechaVencimiento: vencimientoDate,
               estado: 'Pendiente',
             },
@@ -882,12 +889,19 @@ expensasRouter.post(
       }
 
       const expensaFinal = await prisma.$transaction(async (tx) => {
+        // Copiar tasa de la regla activa a expensas.tasa_interes_mora si no se especifica explícitamente
+        const reglaActiva = await tx.reglaMora.findFirst({
+          where: { activa: true },
+          orderBy: { fechaCreacion: 'desc' },
+        });
+        const tasaAplicar = tasaInteresMora !== undefined ? tasaInteresMora : (reglaActiva ? Number(reglaActiva.tasaInteres) : 0);
+
         const expensaCreada = await tx.expensa.create({
           data: {
             idDepartamento,
             periodo: periodoDate,
             monto,
-            tasaInteresMora,
+            tasaInteresMora: tasaAplicar,
             fechaVencimiento: vencimientoDate,
             saldoPendiente: monto,
             estado: 'Pendiente',

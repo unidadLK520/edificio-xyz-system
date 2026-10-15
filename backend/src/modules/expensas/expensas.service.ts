@@ -77,7 +77,8 @@ export interface ConfigurarReglaMoraInput {
  * Desactiva la regla previa de forma atómica en transacción y audita el cambio.
  */
 export async function configurarReglaMora(input: ConfigurarReglaMoraInput) {
-  const diasGracia = input.diasGracia ?? 0;
+  // Regla: POST reglas-mora acepta pero ignora diasGracia y devuelve 0
+  const diasGracia = 0;
 
   return await prisma.$transaction(async (tx) => {
     // 1. Obtener la regla activa anterior
@@ -98,7 +99,7 @@ export async function configurarReglaMora(input: ConfigurarReglaMoraInput) {
     const nuevaRegla = await tx.reglaMora.create({
       data: {
         tasaInteres: input.tasaInteres,
-        diasGracia,
+        diasGracia: 0,
         activa: true,
         idUsuarioCreacion: input.idUsuario || null,
       },
@@ -225,9 +226,6 @@ export async function ejecutarCalculoMora(
       },
     });
 
-    // Validar si alguna expensa requiere regla activa pero no existe
-    const diasGracia = reglaActiva ? reglaActiva.diasGracia : 0;
-
     let count = 0;
     const detallesExpensas: Array<{
       idExpensa: number;
@@ -238,12 +236,9 @@ export async function ejecutarCalculoMora(
     }> = [];
 
     for (const exp of expensasCandidatas) {
-      // Regla de días de gracia: No hay mora si hoy <= fechaVencimiento + diasGracia
+      // Regla de mora: sin días de espera (vencida si hoy > fechaVencimiento)
       const fechaVenc = new Date(exp.fechaVencimiento);
-      const fechaLimiteGracia = new Date(fechaVenc.getTime() + diasGracia * 24 * 60 * 60 * 1000);
-
-      if (ahora.getTime() <= fechaLimiteGracia.getTime()) {
-        // Aún se encuentra dentro del período de gracia permitido
+      if (ahora.getTime() <= fechaVenc.getTime()) {
         continue;
       }
 
@@ -313,7 +308,7 @@ export async function ejecutarCalculoMora(
         fechaEjecucion: ahora.toISOString(),
         origen: esCron ? 'SISTEMA_CRON' : 'MANUAL',
         ejecutadoPor: esCron ? 'sistema' : (params.idUsuario ? `usuario:${params.idUsuario}` : 'sistema'),
-        diasGraciaAplicados: diasGracia,
+        diasGraciaAplicados: 0,
         tasaGeneralUsada: reglaActiva ? Number(reglaActiva.tasaInteres) : null,
         expensas: expensasGuardadas,
         ...(truncado ? { truncado: true } : {}),
