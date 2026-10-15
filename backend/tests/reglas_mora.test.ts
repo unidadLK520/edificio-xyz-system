@@ -83,24 +83,26 @@ describe('US2.1 - Punto 2: Reglas de Mora (CA09)', () => {
     expect(res3.status).toBe(400);
   });
 
-  it('3. POST /reglas-mora debe activar la nueva regla y desactivar cualquier regla anterior dejando SOLO UNA activa', async () => {
-    // Primera regla con valor reconocible de prueba: 7.77% con 2 días de gracia
+  it('3. POST /reglas-mora debe activar la nueva regla, desactivar previa, ignorar diasGracia y devolver 0', async () => {
+    // Primera regla con valor reconocible de prueba: 7.77% con 2 días de gracia enviados
     const res1 = await request(app)
       .post('/api/v1/expensas/reglas-mora')
       .set('Authorization', `Bearer ${adminToken}`)
       .send({ tasaInteres: 7.77, diasGracia: 2 });
     expect(res1.status).toBe(201);
     expect(Number(res1.body.regla.tasaInteres)).toBe(7.77);
+    expect(res1.body.regla.diasGracia).toBe(0); // Acepta pero ignora y devuelve 0
     expect(res1.body.regla.activa).toBe(true);
     if (res1.body?.regla?.idRegla) createdReglaIds.push(res1.body.regla.idRegla);
 
-    // Segunda regla con valor reconocible de prueba: 7.77% con 5 días de gracia
+    // Segunda regla con valor reconocible de prueba: 7.77% con 5 días de gracia enviados
     const res2 = await request(app)
       .post('/api/v1/expensas/reglas-mora')
       .set('Authorization', `Bearer ${adminToken}`)
       .send({ tasaInteres: 7.77, diasGracia: 5 });
     expect(res2.status).toBe(201);
     expect(Number(res2.body.regla.tasaInteres)).toBe(7.77);
+    expect(res2.body.regla.diasGracia).toBe(0); // Acepta pero ignora y devuelve 0
     expect(res2.body.regla.activa).toBe(true);
     if (res2.body?.regla?.idRegla) createdReglaIds.push(res2.body.regla.idRegla);
 
@@ -123,6 +125,7 @@ describe('US2.1 - Punto 2: Reglas de Mora (CA09)', () => {
     expect(auditoria).toBeDefined();
     expect((auditoria!.datosNuevos as any).tasaInteres).toBe(7.77);
     expect((auditoria!.datosAnteriores as any).tasaInteres).toBe(7.77);
+    expect((auditoria!.datosNuevos as any).diasGracia).toBe(0);
   });
 
   it('4. GET /reglas-mora debe devolver la regla activa actual y el historial completo', async () => {
@@ -137,70 +140,86 @@ describe('US2.1 - Punto 2: Reglas de Mora (CA09)', () => {
     expect(res.body.historial.length).toBeGreaterThanOrEqual(2);
   });
 
-  it('5. Días de gracia: si hoy <= fechaVencimiento + diasGracia no hay mora; si hoy > fechaVencimiento + diasGracia se aplica mora', async () => {
-    // Configurar regla activa con tasa reconocible de prueba: 7.77% con 3 días de gracia
-    const resRegla = await request(app)
+  it('5. Mora sin días de espera, conserva tasa de expensas emitidas tras cambio de regla y no crece con el tiempo', async () => {
+    // 1. Configurar regla activa inicial: 7.77%
+    const resRegla1 = await request(app)
       .post('/api/v1/expensas/reglas-mora')
       .set('Authorization', `Bearer ${adminToken}`)
       .send({ tasaInteres: 7.77, diasGracia: 3 });
-    if (resRegla.body?.regla?.idRegla) createdReglaIds.push(resRegla.body.regla.idRegla);
+    expect(resRegla1.status).toBe(201);
+    if (resRegla1.body?.regla?.idRegla) createdReglaIds.push(resRegla1.body.regla.idRegla);
 
-    // Caso A: Expensa vencida hace 2 días (dentro del período de 3 días de gracia)
-    const vencidaDentroDeGracia = new Date();
-    vencidaDentroDeGracia.setDate(vencidaDentroDeGracia.getDate() - 2);
+    // Expensa A: emitida bajo la regla 7.77%, vencida ayer (sin días de espera)
+    const vencidaAyer = new Date();
+    vencidaAyer.setDate(vencidaAyer.getDate() - 1);
 
-    const expDentro = await prisma.expensa.create({
-      data: {
+    const resExpA = await request(app)
+      .post('/api/v1/expensas')
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({
         idDepartamento: testDepartamentoId,
-        periodo: new Date('2026-02-01T00:00:00.000Z'),
+        periodo: '2026-02-01',
         monto: 100,
-        montoMora: 0,
-        tasaInteresMora: 0, // Usa regla activa (7.77%)
-        fechaVencimiento: vencidaDentroDeGracia,
-        saldoPendiente: 100,
-        estado: 'Pendiente',
-      },
-    });
-    createdExpensasIds.push(expDentro.idExpensa);
+        fechaVencimiento: vencidaAyer.toISOString().split('T')[0],
+      });
+    expect(resExpA.status).toBe(201);
+    expect(Number(resExpA.body.tasaInteresMora)).toBe(7.77); // Copia tasa de regla activa
+    createdExpensasIds.push(resExpA.body.idExpensa);
 
-    // Caso B: Expensa vencida hace 5 días (fuera del período de 3 días de gracia)
-    const vencidaFueraDeGracia = new Date();
-    vencidaFueraDeGracia.setDate(vencidaFueraDeGracia.getDate() - 5);
+    // 2. Cambiar la regla activa del sistema a 9.99%
+    const resRegla2 = await request(app)
+      .post('/api/v1/expensas/reglas-mora')
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({ tasaInteres: 9.99, diasGracia: 0 });
+    expect(resRegla2.status).toBe(201);
+    if (resRegla2.body?.regla?.idRegla) createdReglaIds.push(resRegla2.body.regla.idRegla);
 
-    const expFuera = await prisma.expensa.create({
-      data: {
+    // Expensa B: emitida bajo la nueva regla 9.99%, vencida ayer
+    const resExpB = await request(app)
+      .post('/api/v1/expensas')
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({
         idDepartamento: testDepartamentoId,
-        periodo: new Date('2026-03-01T00:00:00.000Z'),
-        monto: 100,
-        montoMora: 0,
-        tasaInteresMora: 0, // Usa regla activa (7.77%)
-        fechaVencimiento: vencidaFueraDeGracia,
-        saldoPendiente: 100,
-        estado: 'Pendiente',
-      },
-    });
-    createdExpensasIds.push(expFuera.idExpensa);
+        periodo: '2026-03-01',
+        monto: 200,
+        fechaVencimiento: vencidaAyer.toISOString().split('T')[0],
+      });
+    expect(resExpB.status).toBe(201);
+    expect(Number(resExpB.body.tasaInteresMora)).toBe(9.99); // Copia nueva tasa activa
+    createdExpensasIds.push(resExpB.body.idExpensa);
 
-    // Ejecutar recálculo filtrando por el departamento de test
+    // 3. Ejecutar cálculo de mora
     await request(app)
       .post('/api/v1/expensas/calcular-mora')
       .set('Authorization', `Bearer ${adminToken}`)
       .send({ idDepartamentos: [testDepartamentoId] });
 
-    // Comprobar Caso A (dentro de gracia): NO debe tener mora
-    const expDentroPost = await prisma.expensa.findUnique({
-      where: { idExpensa: expDentro.idExpensa },
+    // 4. Verificar que Expensa A conserva su 7.77% y Expensa B usa 9.99%
+    const expAPost = await prisma.expensa.findUnique({
+      where: { idExpensa: resExpA.body.idExpensa },
     });
-    expect(Number(expDentroPost!.montoMora)).toBe(0);
-    expect(Number(expDentroPost!.saldoPendiente)).toBe(100);
+    expect(Number(expAPost!.montoMora)).toBe(7.77); // 100 * 7.77%
+    expect(Number(expAPost!.saldoPendiente)).toBe(107.77);
+    expect(expAPost!.estado).toBe('Moroso');
 
-    // Comprobar Caso B (fuera de gracia): debe tener mora del 7.77% (7.77) y saldo 107.77
-    const expFueraPost = await prisma.expensa.findUnique({
-      where: { idExpensa: expFuera.idExpensa },
+    const expBPost = await prisma.expensa.findUnique({
+      where: { idExpensa: resExpB.body.idExpensa },
     });
-    expect(Number(expFueraPost!.montoMora)).toBe(7.77);
-    expect(Number(expFueraPost!.saldoPendiente)).toBe(107.77);
-    expect(expFueraPost!.estado).toBe('Moroso');
+    expect(Number(expBPost!.montoMora)).toBe(19.98); // 200 * 9.99%
+    expect(Number(expBPost!.saldoPendiente)).toBe(219.98);
+    expect(expBPost!.estado).toBe('Moroso');
+
+    // 5. Un solo % por expensa vencida, sin crecer con el tiempo (idempotencia)
+    await request(app)
+      .post('/api/v1/expensas/calcular-mora')
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({ idDepartamentos: [testDepartamentoId] });
+
+    const expAPost2 = await prisma.expensa.findUnique({
+      where: { idExpensa: resExpA.body.idExpensa },
+    });
+    expect(Number(expAPost2!.montoMora)).toBe(7.77);
+    expect(Number(expAPost2!.saldoPendiente)).toBe(107.77);
   });
 
   it('6. Sin regla activa ni tasa en la expensa -> debe retornar error claro sin fallback a 5%', async () => {

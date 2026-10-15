@@ -15,6 +15,7 @@ export interface LimpiarIdsOptions {
   usuarios?: number[];
   reglasMora?: number[];
   tarifasAgua?: number[];
+  tiposDepartamento?: number[];
 }
 
 let counter = 0;
@@ -220,6 +221,41 @@ export async function limpiar(ids: LimpiarIdsOptions): Promise<void> {
       });
     }
   }
+
+  if (ids.tiposDepartamento && ids.tiposDepartamento.length > 0) {
+    const valid = ids.tiposDepartamento.filter(Boolean);
+    if (valid.length > 0) {
+      await prisma.tipoDepartamento.deleteMany({
+        where: { idTipo: { in: valid } },
+      });
+    }
+  }
+}
+
+/**
+ * Crea un tipo de departamento de prueba garantizando el prefijo TST- (máx 60 caracteres)
+ */
+export async function crearTipoDepartamentoTest(
+  data: Partial<{
+    nombre: string;
+    montoExpensa: number;
+    areaM2: number;
+    activo: boolean;
+  }> = {}
+) {
+  const baseNombre = data.nombre || `TST-Tipo-${uniqueSuffix()}`;
+  const nombre = baseNombre.startsWith('TST-')
+    ? baseNombre.slice(0, 60)
+    : `TST-${baseNombre}`.slice(0, 60);
+
+  return await prisma.tipoDepartamento.create({
+    data: {
+      nombre,
+      montoExpensa: data.montoExpensa ?? 500,
+      areaM2: data.areaM2,
+      activo: data.activo ?? true,
+    },
+  });
 }
 
 /**
