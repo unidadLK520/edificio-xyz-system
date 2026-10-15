@@ -16,6 +16,7 @@ export interface LimpiarIdsOptions {
   reglasMora?: number[];
   tarifasAgua?: number[];
   tiposDepartamento?: number[];
+  lecturasAgua?: number[];
 }
 
 let counter = 0;
@@ -156,6 +157,15 @@ export async function limpiar(ids: LimpiarIdsOptions): Promise<void> {
     if (valid.length > 0) {
       await prisma.ocupanteDepartamento.deleteMany({
         where: { idOcupacion: { in: valid } },
+      });
+    }
+  }
+
+  if (ids.lecturasAgua && ids.lecturasAgua.length > 0) {
+    const valid = ids.lecturasAgua.filter(Boolean);
+    if (valid.length > 0) {
+      await prisma.lecturaAgua.deleteMany({
+        where: { idLectura: { in: valid } },
       });
     }
   }

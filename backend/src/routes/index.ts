@@ -12,6 +12,7 @@ import { personalRouter } from './personal.routes';
 import { unidadesRouter } from './unidades.routes';
 import { auditoriaRouter } from './auditoria.routes';
 import { tiposDepartamentoRouter } from './tipos-departamento.routes';
+import { aguaRouter } from './agua.routes';
 import { usuariosRouter } from '../modules/usuarios/usuarios.routes';
 import { personasRouter } from '../modules/personas';
 
@@ -33,5 +34,6 @@ router.use('/movimientos', movimientosRouter);
 router.use('/comunicados', comunicadosRouter);
 router.use('/personal', personalRouter);
 router.use('/auditoria', auditoriaRouter);
+router.use('/agua', aguaRouter);
 
 

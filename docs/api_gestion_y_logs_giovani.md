@@ -5,13 +5,18 @@ Base de rutas: `/api/v1`. Autenticación: `Authorization: Bearer <token>`.
 ## 0. Contratos en cambio (leer antes de integrar)
 Esta sección avisa a Frontend y QA qué está vigente y qué cambiará según el requerimiento del ingeniero (expensa fija por tipo A/B/C).
 Ya vigente (implementado y probado):
-- `generar-masivo`: el monto sale del tipo del departamento (`tipos_departamento.monto_expensa`: Tipo A = Bs 300, Tipo B = Bs 350, Tipo C = Bs 400). Se eliminó la fórmula por área y el filtro por estado "Inactivo". Los departamentos sin tipo van a `excepciones[]` con motivo claro. Omite duplicados y aplica FIFO de anticipos disponibles. `montoBase` y `excluirDepartamentos` se aceptan solo por compatibilidad hacia atrás. Cada expensa conserva su monto al emitirse.
+- `generar-masivo`: el monto_base sale del tipo del departamento (`tipos_departamento.monto_expensa`: Tipo A = Bs 300, Tipo B = Bs 350, Tipo C = Bs 400), `monto_agua` sale de la lectura de agua del período (`lecturas_agua`), `monto = monto_base + monto_agua`, `saldo = monto`. Sin lectura: se emite solo con el monto base y se reporta en `advertencias[]`. Omite duplicados y aplica FIFO de anticipos disponibles. `montoBase` y `excluirDepartamentos` se aceptan solo por compatibilidad hacia atrás. Cada expensa conserva su monto al emitirse de forma inmutable.
+- `GET/POST /api/v1/agua/tarifa` (Administrador, Directorio): `precio_m3 >= 0`; una activa a la vez de forma atómica en transacción; auditoría `CONFIGURAR_TARIFA_AGUA` con `datosAnteriores` y `datosNuevos`.
+- `POST /api/v1/agua/lecturas` (Administrador, Directorio): `{ idDepartamento, periodo, lecturaActual, lecturaAnterior? }`. Lectura anterior = la última registrada del departamento (si no hay, exige `lecturaAnterior`). Devuelve `422` si `actual < anterior` o no hay tarifa activa. `consumo = actual - anterior`; `monto_agua = round(consumo * precio, 2)` guardando el precio unitario aplicado. Devuelve `409` si ya existe para el departamento y período. Auditoría `REGISTRO_LECTURA_AGUA`.
+- `GET /api/v1/agua/lecturas` (Administrador, Directorio, Consulta): listado con filtros opcionales por `periodo` e `idDepartamento`.
+- `PUT /api/v1/agua/lecturas/:id` y `PUT /api/v1/agua/:id` (Administrador, Directorio): corrige lectura recalculando consumo y monto; devuelve `409` si ya se utilizó en una expensa emitida. Auditoría `REGISTRO_LECTURA_AGUA`.
+- Respuestas de expensas (`GET /expensas`, `GET /expensas/:id`, `POST /expensas`, `POST /expensas/generar-masivo`) y estado de cuenta (`GET /expensas/estado-cuenta/:idDepartamento`): devuelven `montoBase`, `montoAgua`, `monto` (total) y `concepto` ("Expensa mensual Tipo B" y "Agua X m3" si aplica).
 - `GET/PUT /expensas/montos-tipo` (Administrador, Directorio): lee y actualiza `tipos_departamento.monto_expensa`. Valida monto > 0. Auditoría `CONFIGURAR_MONTO_EXPENSA` con `datosAnteriores` y `datosNuevos`. Modificar el monto no altera expensas ya emitidas.
 - `POST /expensas/:id/pagos` (directo y anticipo) y `PATCH /expensas/pagos/:idPago/corregir`: `idPersonaPagador` es estrictamente obligatorio (número entero positivo y validación de existencia en la tabla `personas`; responde `422` si falta o no existe).
 - `POST /expensas/:id/pagos` y `PATCH /expensas/pagos/:idPago/corregir`: devuelven `422` si `montoPagado <= 0`, si la expensa ya está Pagada o si el monto excede el saldo.
 - `POST /expensas`: devuelve `409` si ya existe expensa del mismo departamento y período.
 - `GET /expensas` y `GET /expensas/:id`: incluyen el campo `vencida`; el listado acepta `?vencida=true`.
-- `calcular-mora`: sin días de espera (vencida si hoy > fechaVencimiento). La mora se calcula sobre el capital pendiente (monto − pagos directos − anticipos aplicados). Un solo % por expensa vencida, sin crecer con el tiempo. La tasa de la expensa manda; si es 0, toma la regla activa.
+- `calcular-mora`: sin días de espera (vencida si hoy > fechaVencimiento). La mora se calcula sobre el capital pendiente (monto − pagos directos − anticipos aplicados) sobre el total (fijo + agua). Un solo % por expensa vencida, sin crecer con el tiempo. La tasa de la expensa manda; si es 0, toma la regla activa.
 - `GET/POST /expensas/reglas-mora`: mora configurable (tasa de interés). Ya no existe el fallback fijo al 5 %. `POST` acepta pero ignora `diasGracia` y devuelve 0.
 - `generar-masivo` y `POST /expensas`: copian la tasa de la regla activa a `expensas.tasa_interes_mora` (la de la expensa manda; si cambia la regla activa, las expensas emitidas conservan su tasa).
 - `GET/POST/PUT /api/v1/tipos-departamento` (Administrador, Directorio): nombre libre hasta 60 caracteres y único (ej. "Suite Presidencial Premium"), `montoExpensa > 0`, `areaM2` opcional, `activo`. `PUT` con `activo=false` devuelve `409` si hay departamentos asignados. Auditorías `CREAR_TIPO_DEPARTAMENTO` y `ACTUALIZAR_TIPO_DEPARTAMENTO`. `GET/PUT /expensas/montos-tipo` se mantienen como alias compatibles.
@@ -20,9 +25,9 @@ Ya vigente (implementado y probado):
 - Historial de unidades: derivado de `ocupantes_departamento` (departamentos) y de `auditoria` (parqueos y bauleras), sin modelo físico `historial_asignacion_unidades`. Asignaciones y liberaciones atómicas en `$transaction`.
 - `POST /unidades` y `PUT /unidades/Departamento/:id` aceptan `idTipo` opcional con validación de existencia en `tipos_departamento` (422 si no existe). `GET /unidades` devuelve `tipo` y `monto`.
 Por implementar (cambiará, no construir sobre lo anterior):
-- `GET /expensas/estado-cuenta/:idDepartamento`: se agregarán filtros `periodo`, `desde`, `hasta`, `concepto`, `movimientos`, `sinMovimientos`, pagador y ocupante actual.
+- `GET /expensas/estado-cuenta/:idDepartamento`: filtros `periodo`, `desde`, `hasta`, `movimientos`, `sinMovimientos`, pagador y ocupante actual.
 - Emisión y lectura de expensas y estado de cuenta para rol Consulta: queda como "Pendiente" según el código actual y la matriz RBAC.
-Fuera del sistema (según el ingeniero): gastos comunes como base de cálculo, servicios (agua variable, luz, gas), monto y contratos de alquiler. El registro de inquilinos y el historial de ocupantes sí permanece.
+Fuera del sistema (según el ingeniero): gastos comunes como base de cálculo, servicios de luz y gas, monto y contratos de alquiler. El registro de inquilinos y el historial de ocupantes sí permanece.
 ---
 ## 1. Módulo de Autenticación, Control de Acceso y Sesiones
 Ubicación en el código: `backend/src/modules/auth/`
@@ -344,18 +349,48 @@ Respuesta 200:
 }
 ```
 ---
-## 4. Módulo de Expensas, Pagos y Mora (US2.1 / US2.2, HU04)
-Ciclo de vida de las obligaciones de expensas: generación mensual, pagos, anticipos con aplicación FIFO, mora configurable, estado de cuenta y corrección o anulación de pagos con recálculo y auditoría.
-Ubicación: `backend/src/modules/expensas/` y `backend/src/routes/expensas.routes.ts` · Prefijo: `/api/v1/expensas`
-4.1 Generación masiva de expensas (CA01-CA04)
+---
+## 4. Módulo de Expensas, Pagos, Mora y Agua (US2.1 / US2.2, HU04)
+Ciclo de vida de las obligaciones de expensas: tarifas y lecturas de agua, generación mensual fija más consumo de agua, pagos, anticipos con aplicación FIFO, mora configurable sobre el total, estado de cuenta y corrección o anulación con recálculo y auditoría.
+Ubicación: `backend/src/modules/expensas/`, `backend/src/modules/agua/` · Prefijos: `/api/v1/expensas` y `/api/v1/agua`
+
+### 4.0 Gestión de Agua: Tarifas y Lecturas (Prompt 4)
+4.0.1 Configurar y consultar tarifa de agua
+- `POST /api/v1/agua/tarifa` · Roles: Administrador, Directorio.
+  Configura la tarifa activa (`precioM3 >= 0`). Desactiva de forma atómica en transacción cualquier tarifa previa (una sola activa a la vez). Registra auditoría `CONFIGURAR_TARIFA_AGUA`.
+  Request: `{ "precioM3": 7.77 }`
+  Respuesta 201: `{ "message": "Tarifa de agua configurada exitosamente", "tarifa": { "idTarifa": 1, "precioM3": 7.77, "activa": true, ... } }`
+- `GET /api/v1/agua/tarifa` · Roles: Administrador, Directorio.
+  Devuelve la tarifa activa actual y el historial completo ordenado.
+  Respuesta 200: `{ "activa": { "idTarifa": 1, "precioM3": 7.77, ... }, "historial": [ ... ] }`
+
+4.0.2 Registro, consulta y corrección de lecturas de agua
+- `POST /api/v1/agua/lecturas` · Roles: Administrador, Directorio.
+  Registra la lectura del período (`periodo`: YYYY-MM o YYYY-MM-DD). La lectura anterior es la última registrada del departamento (si no hay ninguna previa, exige obligatoriamente `lecturaAnterior`). Devuelve `422` si `lecturaActual < lecturaAnterior` o si no hay tarifa activa. Calcula `consumo = actual - anterior` y `monto_agua = round(consumo * precio, 2)` guardando el precio unitario aplicado. Devuelve `409 Conflict` si ya existe lectura para el mismo departamento y período. Audita `REGISTRO_LECTURA_AGUA`.
+  Request: `{ "idDepartamento": 1, "periodo": "2090-01-01", "lecturaAnterior": 100, "lecturaActual": 110 }`
+  Respuesta 201:
+  ```json
+  {
+    "message": "Lectura de agua registrada exitosamente",
+    "lectura": { "idLectura": 1, "idDepartamento": 1, "periodo": "2090-01-01T00:00:00.000Z", "lecturaAnterior": 100, "lecturaActual": 110, "consumoM3": 10, "precioM3": 7.77, "montoAgua": 77.7 }
+  }
+  ```
+- `GET /api/v1/agua/lecturas` · Roles: Administrador, Directorio, Consulta (A, D, C).
+  Listado paginado con filtros opcionales por `periodo` e `idDepartamento`.
+  Respuesta 200: `{ "data": [ ... ], "meta": { "total": 1, "page": 1, "limit": 50, "totalPages": 1 } }`
+- `PUT /api/v1/agua/lecturas/:id` y `PUT /api/v1/agua/:id` · Roles: Administrador, Directorio.
+  Corrige una lectura recalculando consumo y monto. Devuelve `409 Conflict` si ya fue utilizada en una expensa emitida. Audita `REGISTRO_LECTURA_AGUA`.
+  Request: `{ "lecturaActual": 115 }`
+  Respuesta 200: `{ "message": "Lectura de agua corregida exitosamente", "lectura": { ... } }`
+
+### 4.1 Generación masiva de expensas (CA01-CA04)
 `POST /api/v1/expensas/generar-masivo` · Roles: Administrador, Directorio.
-Genera en una transacción las expensas del período para los departamentos aplicables, tomando el monto fijo de `tipos_departamento.monto_expensa` según el tipo configurado de cada unidad (Tipo A = Bs 300, Tipo B = Bs 350, Tipo C = Bs 400).
-- Se eliminó definitivamente el cálculo por área (`montoBase * areaM2 / 100`) y el filtro por estado "Inactivo". El monto sale directo del tipo asignado al departamento.
-- Los departamentos sin tipo asignado en `tipos_departamento` se omiten de la emisión y se derivan al arreglo de `excepciones[]` con motivo claro: `"El departamento no tiene un tipo asignado en tipos_departamento"`.
-- Omite los departamentos que ya cuentan con expensa generada para dicho período (motivo: `"Expensa ya fue generada previamente para este período"`).
+Genera en una transacción las expensas del período:
+- `monto_base`: del tipo de departamento (`tipos_departamento.monto_expensa`: Tipo A = Bs 300, Tipo B = Bs 350, Tipo C = Bs 400).
+- `monto_agua`: de la lectura del período (`lecturas_agua`). Si no hay lectura registrada, emite únicamente con monto base y agrega el departamento al listado de `advertencias[]`.
+- `monto = monto_base + monto_agua`, `saldo = monto`.
 - Aplica de inmediato los anticipos disponibles en orden FIFO dentro de la misma transacción.
-- Los parámetros `montoBase` y `excluirDepartamentos` se aceptan solo por compatibilidad hacia atrás.
-- Cada expensa conserva su monto al emitirse de forma inmutable. Audita `GENERACION_MASIVA_EXPENSAS`.
+- Una expensa emitida nunca se modifica tras su emisión. Audita `GENERACION_MASIVA_EXPENSAS`.
 Request:
 ```json
 { "periodo": "2026-10-01", "fechaVencimiento": "2026-10-15", "tasaInteresMora": 5 }
@@ -366,61 +401,71 @@ Respuesta 201:
   "message": "Se generaron 12 expensas para el período 2026-10-01",
   "generadasCount": 12,
   "excepcionesCount": 2,
+  "advertenciasCount": 1,
   "excepciones": [
-    { "idDepartamento": 1, "numero": "101", "motivo": "Expensa ya fue generada previamente para este período" },
-    { "idDepartamento": 8, "numero": "302", "motivo": "El departamento no tiene un tipo asignado en tipos_departamento" }
+    { "idDepartamento": 1, "numero": "101", "motivo": "Expensa ya fue generada previamente para este período" }
+  ],
+  "advertencias": [
+    { "idDepartamento": 8, "numero": "302", "advertencia": "Sin lectura de agua registrada para el período; se emitió únicamente con monto base" }
   ]
 }
 ```
 4.2 Cálculo de mora (CA10, CA12)
 `POST /api/v1/expensas/calcular-mora` · Roles: Administrador, Directorio.
-Evalúa expensas vencidas (hoy > `fechaVencimiento`, sin días de espera) con saldo pendiente. Calcula la mora sobre el capital pendiente, actualiza `montoMora`, `saldoPendiente` y el estado `Moroso`. Audita `CALCULO_MORA_EXPENSAS`. Tasa: la de la expensa manda; si es 0, la regla activa; si no hay ninguna, error explícito. Un solo % por expensa vencida, sin crecer con el tiempo.
-Request: vacío.
+Evalúa expensas vencidas (hoy > `fechaVencimiento`, sin días de espera) con saldo pendiente. Calcula la mora sobre el capital pendiente (monto total − pagos − anticipos), por lo que la mora se aplica sobre el total (fijo + agua). Actualiza `montoMora`, `saldoPendiente` y el estado `Moroso`. Audita `CALCULO_MORA_EXPENSAS`.
+Request: vacío o `{ "idDepartamentos": [1, 2] }`.
 ```json
 { "message": "Se aplicó el recargo de mora a 3 expensas vencidas", "actualizadasCount": 3 }
 ```
 4.3 Listado paginado (CA11)
-`GET /api/v1/expensas` · Roles: Administrador, Directorio (verificar contra el código si Consulta tiene lectura).
-Query: `estado` (Pendiente, Parcial, Pagado, Moroso, Todos), `idDepartamento`, `periodo` (YYYY-MM-DD), `vencida` (`true`), `page` (1), `limit` (50).
-Cada expensa incluye el campo aditivo `vencida` (`fechaVencimiento < ahora && saldoPendiente > 0`).
+`GET /api/v1/expensas` · Roles: Administrador, Directorio.
+Query: `estado`, `idDepartamento`, `periodo`, `vencida`, `page`, `limit`.
+Cada expensa incluye `montoBase`, `montoAgua`, `monto` (total), `concepto` ("Expensa mensual Tipo B" y "Agua X m3" si aplica) y `vencida`.
 ```json
 {
   "data": [
     {
       "idExpensa": 1, "idDepartamento": 1, "periodo": "2026-10-01T00:00:00.000Z",
-      "monto": 552.5, "montoMora": 0, "saldoPendiente": 0, "tasaInteresMora": 5,
-      "fechaVencimiento": "2026-10-15T00:00:00.000Z", "estado": "Pagado", "vencida": false,
-      "departamento": { "numero": "101", "piso": 1, "propietario": { "idPersona": 1, "nombres": "Carlos", "apellidos": "Mendoza Rojas", "ciNit": "4829103 CBBA", "telefono": "+591 71234567" } },
-      "pagos": [{ "idPago": 10, "montoPagado": 552.5, "fechaPago": "2026-10-05T14:30:00.000Z", "anulado": false }],
-      "_count": { "pagos": 1 }
+      "montoBase": 350.0, "montoAgua": 77.7, "monto": 427.7, "montoMora": 0, "saldoPendiente": 427.7,
+      "concepto": "Expensa mensual Tipo B y Agua 10 m3",
+      "tasaInteresMora": 5, "fechaVencimiento": "2026-10-15T00:00:00.000Z", "estado": "Pendiente", "vencida": false,
+      "departamento": { "numero": "101", "piso": 1, "tipo": { "nombre": "B" }, "propietario": { "idPersona": 1, "nombres": "Carlos", "apellidos": "Mendoza Rojas" } },
+      "pagos": [],
+      "_count": { "pagos": 0 }
     }
   ],
   "meta": { "total": 1, "page": 1, "limit": 50, "totalPages": 1 }
 }
 ```
 4.4 Detalle de expensa
-`GET /api/v1/expensas/:id` · Roles: Administrador, Directorio (verificar Consulta).
-Incluye departamento, titular, pagos directos, `aplicacionesAnticipos` y `vencida`.
+`GET /api/v1/expensas/:id` · Roles: Administrador, Directorio.
+Incluye departamento con tipo, titular, pagos directos, `aplicacionesAnticipos`, `montoBase`, `montoAgua`, `monto`, `concepto` y `vencida`.
 ```json
 {
   "idExpensa": 1, "idDepartamento": 1, "periodo": "2026-10-01T00:00:00.000Z",
-  "monto": 552.5, "montoMora": 0, "saldoPendiente": 0, "tasaInteresMora": 5,
-  "fechaVencimiento": "2026-10-15T00:00:00.000Z", "estado": "Pagado", "vencida": false,
-  "departamento": { "numero": "101", "propietario": { "nombres": "Carlos", "apellidos": "Mendoza Rojas" } },
-  "pagos": [{ "idPago": 10, "montoPagado": 552.5, "metodoPago": "Transferencia", "fechaPago": "2026-10-05T14:30:00.000Z", "anulado": false }],
+  "montoBase": 350.0, "montoAgua": 77.7, "monto": 427.7, "montoMora": 0, "saldoPendiente": 427.7,
+  "concepto": "Expensa mensual Tipo B y Agua 10 m3",
+  "tasaInteresMora": 5, "fechaVencimiento": "2026-10-15T00:00:00.000Z", "estado": "Pendiente", "vencida": false,
+  "departamento": { "numero": "101", "tipo": { "nombre": "B" }, "propietario": { "nombres": "Carlos", "apellidos": "Mendoza Rojas" } },
+  "pagos": [],
   "aplicacionesAnticipos": []
 }
 ```
 4.5 Creación individual (CA04)
 `POST /api/v1/expensas` · Roles: Administrador, Directorio.
-Emite una expensa y aplica en la misma transacción los anticipos disponibles (FIFO). Audita `CREAR_EXPENSA`.
-Si ya existe expensa del departamento en el período: `409 Conflict` ("Ya existe una expensa registrada para el departamento en el período YYYY-MM").
+Emite una expensa calculando `montoBase` del tipo y `montoAgua` de la lectura si existe. Si no hay lectura, reporta advertencia en `advertencias[]`. Si ya existe expensa para el departamento en el período: `409 Conflict`. Devuelve `montoBase`, `montoAgua`, `monto` y `concepto`.
 ```json
-{ "idDepartamento": 1, "periodo": "2026-11-01", "monto": 550.0, "tasaInteresMora": 5, "fechaVencimiento": "2026-11-15" }
+{ "idDepartamento": 1, "periodo": "2026-11-01", "fechaVencimiento": "2026-11-15" }
 ```
 Respuesta 201:
 ```json
-{ "idExpensa": 14, "idDepartamento": 1, "periodo": "2026-11-01T00:00:00.000Z", "monto": 550.0, "montoMora": 0, "saldoPendiente": 550.0, "tasaInteresMora": 5, "fechaVencimiento": "2026-11-15T00:00:00.000Z", "estado": "Pendiente" }
+{
+  "idExpensa": 14, "idDepartamento": 1, "periodo": "2026-11-01T00:00:00.000Z",
+  "montoBase": 350.0, "montoAgua": 77.7, "monto": 427.7, "saldoPendiente": 427.7,
+  "concepto": "Expensa mensual Tipo B y Agua 10 m3",
+  "tasaInteresMora": 5, "fechaVencimiento": "2026-11-15T00:00:00.000Z", "estado": "Pendiente",
+  "advertencias": []
+}
 ```
 4.6 Registro de pagos y anticipos (CA05-CA08, RN10)
 `POST /api/v1/expensas/:id/pagos` · Roles: Administrador, Directorio.
@@ -530,16 +575,16 @@ Agrupa por departamento las expensas vencidas con saldo pendiente. Cada detalle 
 }
 ```
 4.9 Estado de cuenta por departamento (US2.2)
-`GET /api/v1/expensas/estado-cuenta/:idDepartamento` · Roles: Administrador, Directorio (decisión pendiente: añadir Consulta, lectura).
-Resumen financiero cronológico: obligaciones, pagos vigentes, saldo pendiente, anticipos totales y disponibles. Cada expensa incluye `capitalPendiente`.
+`GET /api/v1/expensas/estado-cuenta/:idDepartamento` · Roles: Administrador, Directorio, Copropietario.
+Resumen financiero cronológico: obligaciones, pagos vigentes, saldo pendiente, anticipos totales y disponibles. Cada expensa incluye `montoBase`, `montoAgua`, `monto` (total), `concepto` ("Expensa mensual Tipo B" y "Agua X m3" si aplica) y `capitalPendiente`.
 ```json
 {
-  "departamento": { "idDepartamento": 1, "numero": "101", "piso": 1, "propietario": { "nombres": "Carlos", "apellidos": "Mendoza Rojas" } },
+  "departamento": { "idDepartamento": 1, "numero": "101", "piso": 1, "tipo": { "nombre": "B" }, "propietario": { "nombres": "Carlos", "apellidos": "Mendoza Rojas" } },
   "resumen": { "totalObligaciones": 1102.5, "totalPagado": 852.5, "saldoPendienteTotal": 250.0, "totalAnticipos": 1000.0, "totalAnticiposDisponibles": 750.0, "estadoGlobal": "Deuda Pendiente" },
   "expensas": [], "pagos": [], "anticipos": [], "anticiposDisponibles": []
 }
 ```
-> **Por implementar:** filtros `periodo`/`desde`/`hasta`, `concepto`, `movimientos` (línea de tiempo), `sinMovimientos`, pagador y ocupante actual.
+> **Por implementar:** filtros `periodo`/`desde`/`hasta`, `movimientos` (línea de tiempo), `sinMovimientos`, pagador y ocupante actual.
 4.10 Anulación de pago (CA13)
 `DELETE /api/v1/expensas/pagos/:idPago` · Roles: Administrador, Directorio.
 Anulación lógica con motivo obligatorio; recalcula saldo y estado de la expensa. Audita `ANULACION_PAGO`.
@@ -1094,7 +1139,7 @@ CA	Endpoint(s)	Estado	Nota
 US2.2: Estados de cuenta y saldos
 CA	Estado	Nota
 01-02 Departamento y propietario	Cumple	Probado.
-03 Períodos, conceptos, montos	Parcial	Falta `concepto`.
+03 Períodos, conceptos, montos	Cumple	montoBase, montoAgua, monto y concepto ("Expensa mensual Tipo B" y "Agua X m3" si aplica) implementados y probados.
 04 Pagos	Cumple	Probado.
 05 Anticipos y su aplicación	Parcial	Falta historial detallado de aplicaciones.
 06 Mora por obligación	Cumple	Probado.
@@ -1119,7 +1164,7 @@ CA	Endpoint(s)	Estado	Nota
 - Control de duplicados en expensas: resuelto; la BD real ya cuenta con la restricción `UNIQUE (id_departamento, periodo)` y el backend maneja P2002 como 409 Conflict.
 - Pagos de expensa e ingresos: hoy un pago de expensa no genera un Ingreso en Movimientos (Pendiente).
 - Anulación de anticipo ya aplicado: pendiente bloquear con `409 Conflict` (Parcial / Pendiente).
-- US2.2: filtros (`periodo`, `desde`, `hasta`), concepto, línea de tiempo y caso sin movimientos (Pendiente).
+- US2.2: filtros (`periodo`, `desde`, `hasta`), línea de tiempo y caso sin movimientos (Pendiente).
 - US2.3 y US2.4: criterios pendientes de recibir (Caja y Bancos, conciliación) (Pendiente).
 - Montos provisionales: regla de mora (5 %, sin días de espera) y montos por tipo (300/350/400) pendientes de confirmar con el Scrum (Pendiente).
 - Inmutabilidad de auditoría a nivel de base de datos: En el backend los endpoints son estrictamente de solo lectura (`GET /auditoria` y `GET /auditoria/:id`, sin rutas PUT/PATCH/DELETE). En la base de datos física PostgreSQL (`001_initial_schema.sql`), la tabla `edificio.auditoria` no cuenta con triggers de protección contra UPDATE o DELETE ni con REVOKE; se deja como recomendación técnica para DevOps implementar triggers o restringir permisos para garantizar inmutabilidad a nivel de motor.

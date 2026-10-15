@@ -12,6 +12,7 @@ import {
   configurarReglaMora,
   obtenerReglasMora,
   ejecutarCalculoMora,
+  formatearExpensaConConcepto,
 } from '../modules/expensas';
 
 export const expensasRouter: IRouter = Router();
@@ -48,8 +49,10 @@ async function registrarAuditoria(
 // ── Validation Schemas ────────────────────────────────────────────────────────
 const expensaSchema = z.object({
   idDepartamento: z.number().int().positive(),
-  periodo: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Formato: YYYY-MM-DD'),
-  monto: z.number().positive(),
+  periodo: z.string().regex(/^\d{4}-\d{2}(-\d{2})?$/, 'Formato: YYYY-MM o YYYY-MM-DD'),
+  monto: z.number().positive().optional(),
+  montoBase: z.number().positive().optional(),
+  montoAgua: z.number().min(0).optional(),
   tasaInteresMora: z.number().min(0).max(100).optional(),
   fechaVencimiento: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Formato: YYYY-MM-DD'),
 });
@@ -198,6 +201,7 @@ expensasRouter.get(
             departamento: {
               include: {
                 propietario: { select: { idPersona: true, nombres: true, apellidos: true, ciNit: true, telefono: true } },
+                tipo: true,
               },
             },
             pagos: {
@@ -210,10 +214,36 @@ expensasRouter.get(
         prisma.expensa.count({ where }),
       ]);
 
-      const expensasConVencida = expensas.map((e) => ({
-        ...e,
-        vencida: new Date(e.fechaVencimiento) < ahora && Number(e.saldoPendiente) > 0,
-      }));
+      const deptosPeriodos = expensas
+        .filter((e) => e.idDepartamento && e.periodo)
+        .map((e) => ({
+          idDepartamento: e.idDepartamento,
+          periodo: e.periodo,
+        }));
+      const lecturas = deptosPeriodos.length > 0 && prisma.lecturaAgua
+        ? await prisma.lecturaAgua.findMany({
+            where: { OR: deptosPeriodos },
+            select: { idDepartamento: true, periodo: true, consumoM3: true },
+          })
+        : [];
+      const lecturasMap = new Map<string, number>();
+      for (const l of lecturas) {
+        const pStr = l.periodo ? new Date(l.periodo).toISOString().split('T')[0] : '';
+        const key = `${l.idDepartamento}_${pStr}`;
+        lecturasMap.set(key, Number(l.consumoM3));
+      }
+
+      const expensasConVencida = expensas.map((e) => {
+        const pDate = e.periodo ? new Date(e.periodo) : null;
+        const pStr = pDate && !isNaN(pDate.getTime()) ? pDate.toISOString().split('T')[0] : '';
+        const key = `${e.idDepartamento}_${pStr}`;
+        const consumo = pStr ? lecturasMap.get(key) : undefined;
+        const formateada = formatearExpensaConConcepto(e, e.departamento?.tipo?.nombre, consumo);
+        return {
+          ...formateada,
+          vencida: new Date(e.fechaVencimiento) < ahora && Number(e.saldoPendiente) > 0,
+        };
+      });
 
       res.json({
         data: expensasConVencida,
@@ -354,7 +384,7 @@ expensasRouter.get(
 
       const departamento = await prisma.departamento.findUnique({
         where: { idDepartamento },
-        include: { propietario: true },
+        include: { propietario: true, tipo: true },
       });
 
       if (!departamento) {
@@ -362,7 +392,7 @@ expensasRouter.get(
         return;
       }
 
-      const [expensas, pagos, anticipos] = await Promise.all([
+      const [expensas, pagos, anticipos, lecturas] = await Promise.all([
         prisma.expensa.findMany({
           where: { idDepartamento },
           orderBy: { periodo: 'desc' },
@@ -383,12 +413,31 @@ expensasRouter.get(
           include: { aplicacionesAnticipo: true },
           orderBy: { fechaPago: 'desc' },
         }),
+        prisma.lecturaAgua
+          ? prisma.lecturaAgua.findMany({
+              where: { idDepartamento },
+            })
+          : Promise.resolve([]),
       ]);
 
-      const expensasConCapital = expensas.map((e) => ({
-        ...e,
-        capitalPendiente: calcularCapitalPendiente(e),
-      }));
+      const lecturasMap = new Map<string, number>(
+        lecturas.map((l) => {
+          const pDate = l.periodo ? new Date(l.periodo) : null;
+          const pStr = pDate && !isNaN(pDate.getTime()) ? pDate.toISOString().split('T')[0] : '';
+          return [pStr, Number(l.consumoM3)];
+        })
+      );
+
+      const expensasConCapital = expensas.map((e) => {
+        const pDate = e.periodo ? new Date(e.periodo) : null;
+        const pKey = pDate && !isNaN(pDate.getTime()) ? pDate.toISOString().split('T')[0] : '';
+        const consumo = pKey ? lecturasMap.get(pKey) : undefined;
+        const conConcepto = formatearExpensaConConcepto(e, departamento.tipo?.nombre, consumo);
+        return {
+          ...conConcepto,
+          capitalPendiente: calcularCapitalPendiente(e),
+        };
+      });
 
       const anticiposConSaldo = anticipos.map((ant) => {
         const totalAplicado = ant.aplicacionesAnticipo.reduce(
@@ -657,6 +706,7 @@ expensasRouter.get(
           departamento: {
             include: {
               propietario: { select: { nombres: true, apellidos: true, telefono: true, correo: true, ciNit: true } },
+              tipo: true,
             },
           },
           pagos: {
@@ -682,8 +732,20 @@ expensasRouter.get(
       const ahora = new Date();
       const vencida = new Date(expensa.fechaVencimiento) < ahora && Number(expensa.saldoPendiente) > 0;
 
+      const lectura = prisma.lecturaAgua
+        ? await prisma.lecturaAgua.findFirst({
+            where: { idDepartamento: expensa.idDepartamento, periodo: expensa.periodo },
+          })
+        : null;
+
+      const expensaFormateada = formatearExpensaConConcepto(
+        expensa,
+        expensa.departamento?.tipo?.nombre,
+        lectura ? Number(lectura.consumoM3) : null
+      );
+
       res.json({
-        ...expensa,
+        ...expensaFormateada,
         vencida,
       });
     } catch (err) {
@@ -717,7 +779,7 @@ expensasRouter.post(
       const vencimientoDate = new Date(`${fechaVencimiento}T00:00:00.000Z`);
 
       // CA2: Obtener unidades aplicables (excluir departamentos especificados o filtrar por idDepartamentos)
-      const { generadas, excepciones } = await prisma.$transaction(async (tx) => {
+      const { generadas, excepciones, advertencias } = await prisma.$transaction(async (tx) => {
         const whereClause: any = {};
         if (excluirDepartamentos && excluirDepartamentos.length > 0) {
           whereClause.idDepartamento = { notIn: excluirDepartamentos };
@@ -743,6 +805,15 @@ expensasRouter.post(
         });
         const deptosConExpensa = new Set(expensasExistentes.map((e) => e.idDepartamento));
 
+        // Consultar lecturas de agua existentes para el período en una sola consulta
+        const lecturasExistentes = await tx.lecturaAgua.findMany({
+          where: { periodo: periodoDate },
+          select: { idDepartamento: true, montoAgua: true, consumoM3: true },
+        });
+        const lecturasMap = new Map<number, { montoAgua: number; consumoM3: number }>(
+          lecturasExistentes.map((l) => [l.idDepartamento, { montoAgua: Number(l.montoAgua), consumoM3: Number(l.consumoM3) }])
+        );
+
         // Copiar tasa de la regla activa a expensas.tasa_interes_mora
         const reglaActiva = await tx.reglaMora.findFirst({
           where: { activa: true },
@@ -752,6 +823,7 @@ expensasRouter.post(
 
         const generadasArr: any[] = [];
         const excepcionesArr: any[] = [];
+        const advertenciasArr: any[] = [];
 
         for (const depto of departamentos) {
           // Si el departamento no tiene tipo asignado, va a excepciones
@@ -774,15 +846,30 @@ expensasRouter.post(
             continue;
           }
 
-          // Monto fijo del tipo de departamento (tipos_departamento.monto_expensa)
-          const montoFinal = Number(depto.tipo.montoExpensa);
+          // Monto base del tipo de departamento y monto de agua si tiene lectura
+          const montoBase = Number(depto.tipo.montoExpensa);
+          const lectura = lecturasMap.get(depto.idDepartamento);
+          let montoAgua = 0;
+          if (lectura) {
+            montoAgua = lectura.montoAgua;
+          } else {
+            advertenciasArr.push({
+              idDepartamento: depto.idDepartamento,
+              numero: depto.numero,
+              advertencia: 'Sin lectura de agua registrada para el período; se emitió únicamente con monto base',
+            });
+          }
+
+          const montoTotal = Math.round((montoBase + montoAgua) * 100) / 100;
 
           const nuevaExpensa = await tx.expensa.create({
             data: {
               idDepartamento: depto.idDepartamento,
               periodo: periodoDate,
-              monto: montoFinal,
-              saldoPendiente: montoFinal,
+              montoBase: montoBase,
+              montoAgua: montoAgua,
+              monto: montoTotal,
+              saldoPendiente: montoTotal,
               tasaInteresMora: tasaAplicar,
               fechaVencimiento: vencimientoDate,
               estado: 'Pendiente',
@@ -791,7 +878,12 @@ expensasRouter.post(
 
           // Aplicación automática FIFO de anticipos disponibles en la misma transacción
           const expensaConAnticipos = await aplicarAnticiposFIFO(tx, nuevaExpensa, req.user?.idUsuario);
-          generadasArr.push(expensaConAnticipos);
+          const expensaFormateada = formatearExpensaConConcepto(
+            expensaConAnticipos,
+            depto.tipo.nombre,
+            lectura ? lectura.consumoM3 : null
+          );
+          generadasArr.push(expensaFormateada);
         }
 
         // Auditoría dentro de la misma transacción
@@ -804,19 +896,22 @@ expensasRouter.post(
             periodo,
             generadasCount: generadasArr.length,
             excepcionesCount: excepcionesArr.length,
+            advertenciasCount: advertenciasArr.length,
           },
           idUsuario: req.user?.idUsuario || null,
           tx,
         });
 
-        return { generadas: generadasArr, excepciones: excepcionesArr };
+        return { generadas: generadasArr, excepciones: excepcionesArr, advertencias: advertenciasArr };
       }, { timeout: 120000, maxWait: 30000 });
 
       res.status(201).json({
         message: `Se generaron ${generadas.length} expensas para el período ${periodo}`,
         generadasCount: generadas.length,
         excepcionesCount: excepciones.length,
+        advertenciasCount: advertencias.length,
         excepciones,
+        advertencias,
       });
     } catch (err) {
       next(err);
@@ -876,7 +971,7 @@ expensasRouter.post(
         return;
       }
 
-      const { idDepartamento, periodo, monto, tasaInteresMora, fechaVencimiento } = result.data;
+      const { idDepartamento, periodo, monto, montoBase: inputMontoBase, tasaInteresMora, fechaVencimiento } = result.data;
       const [pYear, pMonth] = periodo.split('-');
       const periodoNormalizado = `${pYear}-${pMonth}-01`;
       const periodoDate = new Date(`${periodoNormalizado}T00:00:00.000Z`);
@@ -898,7 +993,7 @@ expensasRouter.post(
         return;
       }
 
-      const expensaFinal = await prisma.$transaction(async (tx) => {
+      const { expensaFinal, advertencias } = await prisma.$transaction(async (tx) => {
         // Copiar tasa de la regla activa a expensas.tasa_interes_mora si no se especifica explícitamente
         const reglaActiva = await tx.reglaMora.findFirst({
           where: { activa: true },
@@ -906,14 +1001,55 @@ expensasRouter.post(
         });
         const tasaAplicar = tasaInteresMora !== undefined ? tasaInteresMora : (reglaActiva ? Number(reglaActiva.tasaInteres) : 0);
 
+        // Obtener departamento y su tipo
+        const depto = await tx.departamento.findUnique({
+          where: { idDepartamento },
+          include: { tipo: true },
+        });
+
+        // Buscar lectura de agua para el período
+        const lectura = await tx.lecturaAgua.findFirst({
+          where: { idDepartamento, periodo: periodoDate },
+        });
+
+        const advertenciasArr: string[] = [];
+        let montoAgua = 0;
+        if (lectura) {
+          montoAgua = Number(lectura.montoAgua);
+        } else {
+          advertenciasArr.push('Sin lectura de agua registrada para el período; se emitió únicamente con monto base');
+        }
+
+        // Monto base: del tipo si existe, o inputMontoBase, o monto proporcionado
+        let montoBase = 0;
+        if (depto?.tipo) {
+          montoBase = Number(depto.tipo.montoExpensa);
+        } else if (inputMontoBase !== undefined) {
+          montoBase = Number(inputMontoBase);
+        } else if (monto !== undefined) {
+          montoBase = Number(monto);
+        }
+
+        // Monto total = monto_base + monto_agua
+        let montoTotal: number;
+        if (depto?.tipo || inputMontoBase !== undefined) {
+          montoTotal = Math.round((montoBase + montoAgua) * 100) / 100;
+        } else if (monto !== undefined) {
+          montoTotal = lectura ? Math.round((monto + montoAgua) * 100) / 100 : Number(monto);
+        } else {
+          montoTotal = Math.round((montoBase + montoAgua) * 100) / 100;
+        }
+
         const expensaCreada = await tx.expensa.create({
           data: {
             idDepartamento,
             periodo: periodoDate,
-            monto,
+            montoBase,
+            montoAgua,
+            monto: montoTotal,
             tasaInteresMora: tasaAplicar,
             fechaVencimiento: vencimientoDate,
-            saldoPendiente: monto,
+            saldoPendiente: montoTotal,
             estado: 'Pendiente',
           },
           include: {
@@ -935,10 +1071,19 @@ expensasRouter.post(
           tx,
         });
 
-        return expensaProcesada;
+        const expensaFormateada = formatearExpensaConConcepto(
+          expensaProcesada,
+          depto?.tipo?.nombre,
+          lectura ? Number(lectura.consumoM3) : null
+        );
+
+        return { expensaFinal: expensaFormateada, advertencias: advertenciasArr };
       }, { timeout: 30000, maxWait: 15000 });
 
-      res.status(201).json(expensaFinal);
+      res.status(201).json({
+        ...expensaFinal,
+        advertencias,
+      });
     } catch (err: any) {
       if (err.code === 'P2002') {
         res.status(409).json({

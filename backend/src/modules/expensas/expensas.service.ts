@@ -321,3 +321,60 @@ export async function ejecutarCalculoMora(
     };
   }, { timeout: 120000, maxWait: 30000 });
 }
+
+/**
+ * Formatea una expensa para respuesta de API y estado de cuenta, agregando:
+ * - montoBase (numérico)
+ * - montoAgua (numérico)
+ * - monto (numérico total)
+ * - concepto ("Expensa mensual Tipo B" y "Agua X m3" si aplica)
+ */
+export function formatearExpensaConConcepto(
+  expensa: any,
+  tipoNombre?: string | null,
+  consumoM3?: number | null
+): any {
+  const monto = Number(expensa.monto);
+  const montoAgua = Number(expensa.montoAgua || 0);
+  const montoBase = Number(
+    expensa.montoBase !== null && expensa.montoBase !== undefined
+      ? expensa.montoBase
+      : (monto - montoAgua > 0 ? Math.round((monto - montoAgua) * 100) / 100 : monto)
+  );
+
+  // Tipo de departamento para el concepto
+  const tipo = tipoNombre || expensa.departamento?.tipo?.nombre;
+  let conceptoBase = 'Expensa mensual';
+  if (tipo) {
+    const limpio = String(tipo).trim();
+    if (limpio.toLowerCase().startsWith('tipo')) {
+      conceptoBase = `Expensa mensual ${limpio}`;
+    } else {
+      conceptoBase = `Expensa mensual Tipo ${limpio}`;
+    }
+  }
+
+  // Agua si aplica
+  let concepto = conceptoBase;
+  const consumo = consumoM3 !== undefined && consumoM3 !== null
+    ? Number(consumoM3)
+    : (expensa.lecturaAgua ? Number(expensa.lecturaAgua.consumoM3) : null);
+
+  if (consumo !== null && consumo > 0) {
+    concepto = `${conceptoBase} y Agua ${consumo} m3`;
+  } else if (montoAgua > 0) {
+    concepto = `${conceptoBase} y Agua`;
+  }
+
+  return {
+    ...expensa,
+    montoBase,
+    montoAgua,
+    monto,
+    saldoPendiente: Number(expensa.saldoPendiente),
+    montoMora: Number(expensa.montoMora || 0),
+    tasaInteresMora: Number(expensa.tasaInteresMora || 0),
+    concepto,
+  };
+}
+

@@ -53,6 +53,13 @@ async function main() {
     console.log(`Tarifas DESPUÉS: ${tarifasActuales.length} filas`);
     console.log(`¿Coincidencia exacta de tarifas_agua?: ${tarifasActuales.length === 0 ? '✅ SÍ (0 filas)' : '⚠️ DIFERENCIA'}`);
 
+    // 1.4 Lecturas de agua
+    const lecturasActuales = await prisma.lecturaAgua.count();
+    console.log('\n--- 4. TABLA: lecturas_agua ---');
+    console.log(`Lecturas ANTES:   0 filas`);
+    console.log(`Lecturas DESPUÉS: ${lecturasActuales} filas`);
+    console.log(`¿Coincidencia exacta de lecturas_agua?: ${lecturasActuales === 0 ? '✅ SÍ (0 filas)' : '⚠️ DIFERENCIA'}`);
+
     // 2. Conteos NO TST-
     console.log('\n===============================================================');
     console.log('             CONTEOS NO TST- (DATOS REALES)                    ');
@@ -98,6 +105,7 @@ async function main() {
     console.error('Error al comparar tablas:', err);
   } finally {
     await prisma.$disconnect();
+    process.exit(0);
   }
 }
 

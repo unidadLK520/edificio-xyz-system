@@ -5,8 +5,8 @@ export default defineConfig({
     globals: true,
     environment: 'node',
     setupFiles: ['./tests/setup.ts'],
-    testTimeout: 120000,
-    hookTimeout: 120000,
+    testTimeout: 60000,
+    hookTimeout: 60000,
     include: ['tests/**/*.test.ts'],
     fileParallelism: false,
     sequence: {
