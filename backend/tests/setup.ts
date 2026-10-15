@@ -41,7 +41,8 @@ beforeAll(async () => {
     snapshotTiposDepto = await prisma.tipoDepartamento.findMany();
     snapshotTarifasAgua = await prisma.tarifaAgua.findMany();
   } catch (dbErr: any) {
-    console.warn(`[TEST SETUP] Base de datos compartida no disponible (${dbErr.message}).`);
+    console.error(`\n🛑 [TEST SETUP ERROR] Fallo crítico de conexión a la base de datos compartida o captura de snapshot: ${dbErr.message}`);
+    throw new Error(`[TEST SETUP ERROR] Base de datos compartida no disponible o snapshot fallido: ${dbErr.message}. Abortando suite para proteger la integridad de los datos.`);
   }
 });
 

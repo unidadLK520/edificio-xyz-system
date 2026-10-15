@@ -28,3 +28,8 @@ backend/scripts/remanentes_tst.ts
 scripts/snapshot_baseline.json
 scripts/verificar_conexiones_bloqueadas.ts
 scripts/remanentes_tst.ts
+backend/scripts/escanear_puertos.ts
+backend/scripts/analizar_urls.ts
+backend/scripts/inspeccionar_lineas_env.ts
+backend/scripts/probar_respaldo.ts
+backend/scripts/ver_lineas_exactas.ts

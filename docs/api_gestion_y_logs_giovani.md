@@ -1209,3 +1209,86 @@ CA	Endpoint(s)	Estado	Nota
 - US2.3 y US2.4: criterios pendientes de recibir (Caja y Bancos, conciliación) (Pendiente).
 - Montos provisionales: regla de mora (5 %, sin días de espera) y montos por tipo (300/350/400) pendientes de confirmar con el Scrum (Pendiente).
 - Inmutabilidad de auditoría a nivel de base de datos: En el backend los endpoints son estrictamente de solo lectura (`GET /auditoria` y `GET /auditoria/:id`, sin rutas PUT/PATCH/DELETE). En la base de datos física PostgreSQL (`001_initial_schema.sql`), la tabla `edificio.auditoria` no cuenta con triggers de protección contra UPDATE o DELETE ni con REVOKE; se deja como recomendación técnica para DevOps implementar triggers o restringir permisos para garantizar inmutabilidad a nivel de motor.
+
+---
+## 10. Respaldo de Conexión y Conmutación de Base de Datos (Failover)
+
+### 10.1 Arquitectura del Cliente Prisma con BD Activa
+El backend implementa un mecanismo de conmutación de conexión transparente y seguro gestionado por `DatabaseFailoverService` en coordinación con el cliente dinámico Prisma (`@edificio-xyz/database`):
+- **Base de Datos Principal:** Apunta a la instancia primaria en la nube (`DATABASE_URL`).
+- **Base de Datos de Respaldo:** Apunta a la instancia de contingencia / réplica (`FALLBACK_DATABASE_URL`).
+- **Estado Activo:** El cliente opera con un estado unificado (`activeDb: 'principal' | 'respaldo'`), delegando todas las consultas del ORM al cliente correspondiente.
+
+### 10.2 Reglas Estrictas de Conmutación
+1. **Disparadores Exclusivos de Conexión:**
+   - La conmutación ocurre **ÚNICAMENTE** ante fallos de conexión de red o del motor de base de datos: códigos de error Prisma `P1001` (can't reach database server), `P1002` (timeout de conexión), `P1008` (operaciones expiradas), `P1017` (conexión cerrada por el servidor), y errores del sistema operativo `ECONNREFUSED`, `ETIMEDOUT`, `ECONNRESET` o timeouts.
+   - **NUNCA ante errores de negocio:** Violaciones de unicidad o restricciones de integridad (`P2002`, `P2003`, `P2025` y cualquier código `P2xxx`) y errores HTTP de validación/negocio (`400`, `401`, `403`, `404`, `409`, `422`) **NO** provocan conmutación ni alteran la BD activa.
+2. **Reintento Inmediato:** Ante un fallo de conexión en la principal, el sistema ejecuta **un solo reintento** contra la base principal para descartar micro-cortes transitorios de red. Si el reintento responde, la operación continúa sin conmutar.
+3. **Validación Previa del Esquema de Respaldo:**
+   - Antes de efectuar la conmutación, el servicio valida que `FALLBACK_DATABASE_URL` esté definida, que el servidor de respaldo sea alcanzable y que contenga las tablas requeridas para operar (`usuarios`, `roles`, `departamentos`, `personas`, `expensas`, `pagos`).
+   - Si el respaldo no está configurado, es inalcanzable o carece del esquema necesario, la conmutación se aborta y se responde `503 Service Unavailable`.
+4. **Protección Contra Doble Escritura (Sin Reenvío de Operación Fallida):**
+   - Para evitar duplicidad de transacciones críticas (como registros de pagos o aplicaciones de anticipos cuyo estado pudo quedar comprometido durante la interrupción), la petición en curso que detonó la caída **NUNCA** se reenvía automáticamente al respaldo.
+   - Dicha petición responde de inmediato `503 Service Unavailable` con mensaje descriptivo, y el cliente conmuta de inmediato para que todas las peticiones posteriores utilicen la base de respaldo activa.
+5. **Sin Regreso Automático:**
+   - Una vez conmutado al respaldo, el sistema no regresa automáticamente a la principal para evitar oscilaciones (*flapping*). La restauración se realiza de forma manual y controlada por un Administrador.
+
+### 10.3 Endpoints de Diagnóstico y Restauración
+
+#### `GET /api/v1/health/db`
+- **Roles autorizados:** `Administrador`.
+- **Descripción:** Devuelve el estado actual de la base de datos activa, la fecha del último cambio y el motivo de la conmutación.
+- **Respuesta 200 OK:**
+```json
+{
+  "status": "ok",
+  "bdActiva": "principal",
+  "activeDb": "principal",
+  "ultimoCambio": {
+    "fecha": "2026-10-15T18:30:00.000Z",
+    "motivo": "Inicialización del servicio de base de datos"
+  },
+  "fechaUltimoCambio": "2026-10-15T18:30:00.000Z",
+  "motivoUltimoCambio": "Inicialización del servicio de base de datos"
+}
+```
+- **Errores:** `401 Unauthorized` si no hay token; `403 Forbidden` para roles no Administradores (Directorio, Consulta, etc.).
+
+#### `POST /api/v1/health/db/principal`
+- **Roles autorizados:** `Administrador`.
+- **Descripción:** Comprueba la conectividad con la base de datos principal (`SELECT 1`). Si la prueba es exitosa, restaura la principal como la base activa y registra el log del evento. Si la principal sigue caída, rechaza la operación con `503 Service Unavailable` y mantiene el cliente en el respaldo.
+- **Respuesta 200 OK (Comprobada y Restaurada):**
+```json
+{
+  "status": "ok",
+  "message": "Base de datos principal comprobada y restaurada como activa.",
+  "bdActiva": "principal",
+  "activeDb": "principal",
+  "ultimoCambio": {
+    "fecha": "2026-10-15T19:45:00.000Z",
+    "motivo": "Restauración manual a la base de datos principal solicitada por Administrador"
+  }
+}
+```
+- **Respuesta 503 Service Unavailable (Principal Inalcanzable):**
+```json
+{
+  "error": "Service Unavailable",
+  "message": "La base de datos principal no está disponible o no respondió a la prueba de conectividad."
+}
+```
+
+### 10.4 Advertencias Críticas de Operación y Conciliación
+
+> [!WARNING]
+> **Divergencia de Datos y Conciliación Requerida:**
+> Al conmutar al respaldo, ambas bases de datos divergen operativamente. Todas las operaciones realizadas en el respaldo (pagos, lecturas de agua, generación de expensas, registros de auditoría) no se sincronizan automáticamente con la base de datos principal.
+> **Procedimiento de Conciliación Requerido:** Antes de reanudar el uso de la principal mediante `POST /api/v1/health/db/principal` o inmediatamente después, el equipo de administración y DevOps debe ejecutar un proceso de conciliación y sincronización de datos entre ambas bases para evitar pérdidas de información financiera.
+
+> [!IMPORTANT]
+> **Invalidez de Sesiones Activas (Tabla `sesiones`):**
+> La tabla `edificio.sesiones` que respalda el mecanismo de sesión única e identificación de sesión (`sid`) almacena los estados de sesión emitidos en la base principal. Al conmutar al respaldo:
+> 1. Las sesiones activas previas no existen en la base de respaldo (o la tabla carece de los registros vigentes).
+> 2. Por diseño del middleware de autenticación, las peticiones autenticadas subsiguientes de los usuarios recibirán un error `401 Unauthorized` con el mensaje: *"Sesión inválida o cerrada. Vuelva a iniciar sesión."*
+> 3. Los usuarios deben volver a ingresar sus credenciales para generar una nueva sesión válida en la base de datos actualmente activa.
+
