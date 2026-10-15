@@ -24,12 +24,16 @@ function uniqueSuffix(): string {
   return `${Date.now().toString().slice(-4)}${counter.toString().padStart(4, '0')}`.slice(-6);
 }
 
+let deptoCounter = Math.floor(Math.random() * 1000);
+
 /**
  * Genera un número de departamento con prefijo TST- (máx 10 caracteres)
  */
 export function generarNumeroDeptoTest(prefix = 'D'): string {
-  const suffix = uniqueSuffix().slice(-4);
-  return `TST-${prefix}${suffix}`.slice(0, 10);
+  deptoCounter = (deptoCounter + 1) % 9000 + 1000;
+  const p = prefix.replace(/[^a-zA-Z0-9]/g, '').slice(0, 1);
+  const randDigit = Math.floor(Math.random() * 9 + 1);
+  return `TST-${p}${randDigit}${deptoCounter}`.slice(0, 10);
 }
 
 /**

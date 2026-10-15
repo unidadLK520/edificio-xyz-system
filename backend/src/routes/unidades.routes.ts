@@ -919,7 +919,7 @@ unidadesRouter.post(
         }
 
         return { status: 400, body: { error: 'Bad Request', message: 'Tipo de unidad no soportado' } };
-      });
+      }, { timeout: 30000, maxWait: 15000 });
 
       res.status(result.status).json(result.body);
     } catch (err) {
@@ -1053,7 +1053,7 @@ unidadesRouter.post(
         }
 
         return { status: 400, body: { error: 'Bad Request', message: 'Tipo de unidad no soportado' } };
-      });
+      }, { timeout: 30000, maxWait: 15000 });
 
       res.status(result.status).json(result.body);
     } catch (err) {
