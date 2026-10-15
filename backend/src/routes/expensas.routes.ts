@@ -618,7 +618,7 @@ expensasRouter.put(
         }
 
         return resultados;
-      });
+      }, { timeout: 30000, maxWait: 15000 });
 
       res.json({
         message: 'Montos de expensa por tipo actualizados exitosamente',
@@ -793,7 +793,7 @@ expensasRouter.post(
         });
 
         return { generadas: generadasArr, excepciones: excepcionesArr };
-      }, { timeout: 30000, maxWait: 15000 });
+      }, { timeout: 120000, maxWait: 30000 });
 
       res.status(201).json({
         message: `Se generaron ${generadas.length} expensas para el período ${periodo}`,
