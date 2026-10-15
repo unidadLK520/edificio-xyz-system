@@ -13,6 +13,8 @@ export interface LimpiarIdsOptions {
   bauleras?: number[];
   personas?: number[];
   usuarios?: number[];
+  reglasMora?: number[];
+  tarifasAgua?: number[];
 }
 
 let counter = 0;
@@ -200,6 +202,24 @@ export async function limpiar(ids: LimpiarIdsOptions): Promise<void> {
       });
     }
   }
+
+  if (ids.reglasMora && ids.reglasMora.length > 0) {
+    const valid = ids.reglasMora.filter(Boolean);
+    if (valid.length > 0) {
+      await prisma.reglaMora.deleteMany({
+        where: { idRegla: { in: valid } },
+      });
+    }
+  }
+
+  if (ids.tarifasAgua && ids.tarifasAgua.length > 0) {
+    const valid = ids.tarifasAgua.filter(Boolean);
+    if (valid.length > 0) {
+      await prisma.tarifaAgua.deleteMany({
+        where: { idTarifa: { in: valid } },
+      });
+    }
+  }
 }
 
 /**
@@ -212,35 +232,27 @@ export async function contarFilasNoTest(): Promise<{
   pagos: number;
   auditoria: number;
 }> {
-  const [deptos, personas, expensas, pagos, auditoria] = await Promise.all([
-    prisma.$queryRawUnsafe<any[]>(`
-      SELECT count(*)::text as cnt FROM edificio.departamentos 
-      WHERE numero NOT LIKE 'TST-%' AND numero NOT LIKE 'TEST-%' AND numero NOT LIKE 'CRON-%' AND numero NOT LIKE 'RM-%' AND numero NOT LIKE 'TA-%' AND numero NOT LIKE 'TB-%' AND numero NOT LIKE 'TC-%';
-    `),
-    prisma.$queryRawUnsafe<any[]>(`
-      SELECT count(*)::text as cnt FROM edificio.personas 
-      WHERE ci_nit NOT LIKE 'TST-%' AND ci_nit NOT LIKE 'CI-PAG-%' AND ci_nit NOT LIKE 'CI-TEST-%';
-    `),
-    prisma.$queryRawUnsafe<any[]>(`
-      SELECT count(*)::text as cnt FROM edificio.expensas e
-      JOIN edificio.departamentos d ON d.id_departamento = e.id_departamento
-      WHERE d.numero NOT LIKE 'TST-%' AND d.numero NOT LIKE 'TEST-%' AND d.numero NOT LIKE 'CRON-%' AND d.numero NOT LIKE 'RM-%' AND d.numero NOT LIKE 'TA-%' AND d.numero NOT LIKE 'TB-%' AND d.numero NOT LIKE 'TC-%';
-    `),
-    prisma.$queryRawUnsafe<any[]>(`
-      SELECT count(*)::text as cnt FROM edificio.pagos p
-      JOIN edificio.departamentos d ON d.id_departamento = p.id_departamento
-      WHERE d.numero NOT LIKE 'TST-%' AND d.numero NOT LIKE 'TEST-%' AND d.numero NOT LIKE 'CRON-%' AND d.numero NOT LIKE 'RM-%' AND d.numero NOT LIKE 'TA-%' AND d.numero NOT LIKE 'TB-%' AND d.numero NOT LIKE 'TC-%';
-    `),
-    prisma.$queryRawUnsafe<any[]>(`
-      SELECT count(*)::text as cnt FROM edificio.auditoria;
-    `),
-  ]);
+  const res = await prisma.$queryRawUnsafe<any[]>(`
+    SELECT 
+      (SELECT count(*)::text FROM edificio.departamentos 
+       WHERE numero NOT LIKE 'TST-%' AND numero NOT LIKE 'TEST-%' AND numero NOT LIKE 'CRON-%' AND numero NOT LIKE 'RM-%' AND numero NOT LIKE 'TA-%' AND numero NOT LIKE 'TB-%' AND numero NOT LIKE 'TC-%') as deptos,
+      (SELECT count(*)::text FROM edificio.personas 
+       WHERE ci_nit NOT LIKE 'TST-%' AND ci_nit NOT LIKE 'CI-PAG-%' AND ci_nit NOT LIKE 'CI-TEST-%') as personas,
+      (SELECT count(*)::text FROM edificio.expensas e
+       JOIN edificio.departamentos d ON d.id_departamento = e.id_departamento
+       WHERE d.numero NOT LIKE 'TST-%' AND d.numero NOT LIKE 'TEST-%' AND d.numero NOT LIKE 'CRON-%' AND d.numero NOT LIKE 'RM-%' AND d.numero NOT LIKE 'TA-%' AND d.numero NOT LIKE 'TB-%' AND d.numero NOT LIKE 'TC-%') as expensas,
+      (SELECT count(*)::text FROM edificio.pagos p
+       JOIN edificio.departamentos d ON d.id_departamento = p.id_departamento
+       WHERE d.numero NOT LIKE 'TST-%' AND d.numero NOT LIKE 'TEST-%' AND d.numero NOT LIKE 'CRON-%' AND d.numero NOT LIKE 'RM-%' AND d.numero NOT LIKE 'TA-%' AND d.numero NOT LIKE 'TB-%' AND d.numero NOT LIKE 'TC-%') as pagos,
+      (SELECT count(*)::text FROM edificio.auditoria) as auditoria;
+  `);
 
+  const row = res[0] || {};
   return {
-    departamentos: Number(deptos[0]?.cnt || 0),
-    personas: Number(personas[0]?.cnt || 0),
-    expensas: Number(expensas[0]?.cnt || 0),
-    pagos: Number(pagos[0]?.cnt || 0),
-    auditoria: Number(auditoria[0]?.cnt || 0),
+    departamentos: Number(row.deptos || 0),
+    personas: Number(row.personas || 0),
+    expensas: Number(row.expensas || 0),
+    pagos: Number(row.pagos || 0),
+    auditoria: Number(row.auditoria || 0),
   };
 }

@@ -12,12 +12,18 @@ describe('US2.1 - Punto 2: Reglas de Mora (CA09)', () => {
   let adminToken: string;
   let copropietarioToken: string;
   let testDepartamentoId: number;
+  let originalActiveRuleId: number = 2;
+  const createdReglaIds: number[] = [];
   const createdExpensasIds: number[] = [];
 
   beforeAll(async () => {
     const adminUser = await prisma.usuario.findFirst({ where: { rol: { nombre: 'Administrador' } } });
     adminToken = await generarTokenPrueba(adminUser!.idUsuario, adminUser!.correo, 'Administrador');
     copropietarioToken = await generarTokenPrueba(999, 'tst-vecino@edificioxyz.com', 'Copropietario');
+
+    // Registrar la regla activa inicial
+    const activeRule = await prisma.reglaMora.findFirst({ where: { activa: true } });
+    if (activeRule) originalActiveRuleId = activeRule.idRegla;
 
     const depto = await crearDepartamentoTest({
       numero: generarNumeroDeptoTest('RM'),
@@ -28,16 +34,21 @@ describe('US2.1 - Punto 2: Reglas de Mora (CA09)', () => {
   });
 
   afterAll(async () => {
-    // Asegurar regla activa estándar para el sistema
-    await prisma.reglaMora.updateMany({ data: { activa: false } });
-    await prisma.reglaMora.create({
-      data: { tasaInteres: 5.0, diasGracia: 0, activa: true },
-    });
-
+    // 1. Eliminar ÚNICAMENTE las reglas creadas por esta prueba por sus IDs específicos
     await limpiar({
+      reglasMora: createdReglaIds,
       expensas: createdExpensasIds,
       departamentos: testDepartamentoId ? [testDepartamentoId] : [],
     });
+
+    // 2. Restaurar exactamente la regla activa inicial
+    await prisma.reglaMora.updateMany({ data: { activa: false } });
+    if (originalActiveRuleId) {
+      await prisma.reglaMora.update({
+        where: { idRegla: originalActiveRuleId },
+        data: { activa: true },
+      });
+    }
   });
 
   it('1. POST /reglas-mora debe rechazar a roles no autorizados (ej. Copropietario)', async () => {
@@ -73,23 +84,25 @@ describe('US2.1 - Punto 2: Reglas de Mora (CA09)', () => {
   });
 
   it('3. POST /reglas-mora debe activar la nueva regla y desactivar cualquier regla anterior dejando SOLO UNA activa', async () => {
-    // Primera regla: 4% con 2 días de gracia
+    // Primera regla con valor reconocible de prueba: 7.77% con 2 días de gracia
     const res1 = await request(app)
       .post('/api/v1/expensas/reglas-mora')
       .set('Authorization', `Bearer ${adminToken}`)
-      .send({ tasaInteres: 4, diasGracia: 2 });
+      .send({ tasaInteres: 7.77, diasGracia: 2 });
     expect(res1.status).toBe(201);
-    expect(Number(res1.body.regla.tasaInteres)).toBe(4);
+    expect(Number(res1.body.regla.tasaInteres)).toBe(7.77);
     expect(res1.body.regla.activa).toBe(true);
+    if (res1.body?.regla?.idRegla) createdReglaIds.push(res1.body.regla.idRegla);
 
-    // Segunda regla: 6% con 5 días de gracia
+    // Segunda regla con valor reconocible de prueba: 7.77% con 5 días de gracia
     const res2 = await request(app)
       .post('/api/v1/expensas/reglas-mora')
       .set('Authorization', `Bearer ${adminToken}`)
-      .send({ tasaInteres: 6, diasGracia: 5 });
+      .send({ tasaInteres: 7.77, diasGracia: 5 });
     expect(res2.status).toBe(201);
-    expect(Number(res2.body.regla.tasaInteres)).toBe(6);
+    expect(Number(res2.body.regla.tasaInteres)).toBe(7.77);
     expect(res2.body.regla.activa).toBe(true);
+    if (res2.body?.regla?.idRegla) createdReglaIds.push(res2.body.regla.idRegla);
 
     // Verificar en la BD que solo hay UNA regla activa
     const reglasActivas = await prisma.reglaMora.findMany({
@@ -108,8 +121,8 @@ describe('US2.1 - Punto 2: Reglas de Mora (CA09)', () => {
       orderBy: { fechaHora: 'desc' },
     });
     expect(auditoria).toBeDefined();
-    expect((auditoria!.datosNuevos as any).tasaInteres).toBe(6);
-    expect((auditoria!.datosAnteriores as any).tasaInteres).toBe(4);
+    expect((auditoria!.datosNuevos as any).tasaInteres).toBe(7.77);
+    expect((auditoria!.datosAnteriores as any).tasaInteres).toBe(7.77);
   });
 
   it('4. GET /reglas-mora debe devolver la regla activa actual y el historial completo', async () => {
@@ -125,11 +138,12 @@ describe('US2.1 - Punto 2: Reglas de Mora (CA09)', () => {
   });
 
   it('5. Días de gracia: si hoy <= fechaVencimiento + diasGracia no hay mora; si hoy > fechaVencimiento + diasGracia se aplica mora', async () => {
-    // Configurar regla activa: 10% con 3 días de gracia
-    await request(app)
+    // Configurar regla activa con tasa reconocible de prueba: 7.77% con 3 días de gracia
+    const resRegla = await request(app)
       .post('/api/v1/expensas/reglas-mora')
       .set('Authorization', `Bearer ${adminToken}`)
-      .send({ tasaInteres: 10, diasGracia: 3 });
+      .send({ tasaInteres: 7.77, diasGracia: 3 });
+    if (resRegla.body?.regla?.idRegla) createdReglaIds.push(resRegla.body.regla.idRegla);
 
     // Caso A: Expensa vencida hace 2 días (dentro del período de 3 días de gracia)
     const vencidaDentroDeGracia = new Date();
@@ -139,11 +153,11 @@ describe('US2.1 - Punto 2: Reglas de Mora (CA09)', () => {
       data: {
         idDepartamento: testDepartamentoId,
         periodo: new Date('2026-02-01T00:00:00.000Z'),
-        monto: 500,
+        monto: 100,
         montoMora: 0,
-        tasaInteresMora: 0, // Usa regla activa
+        tasaInteresMora: 0, // Usa regla activa (7.77%)
         fechaVencimiento: vencidaDentroDeGracia,
-        saldoPendiente: 500,
+        saldoPendiente: 100,
         estado: 'Pendiente',
       },
     });
@@ -157,11 +171,11 @@ describe('US2.1 - Punto 2: Reglas de Mora (CA09)', () => {
       data: {
         idDepartamento: testDepartamentoId,
         periodo: new Date('2026-03-01T00:00:00.000Z'),
-        monto: 500,
+        monto: 100,
         montoMora: 0,
-        tasaInteresMora: 0, // Usa regla activa (10%)
+        tasaInteresMora: 0, // Usa regla activa (7.77%)
         fechaVencimiento: vencidaFueraDeGracia,
-        saldoPendiente: 500,
+        saldoPendiente: 100,
         estado: 'Pendiente',
       },
     });
@@ -178,14 +192,14 @@ describe('US2.1 - Punto 2: Reglas de Mora (CA09)', () => {
       where: { idExpensa: expDentro.idExpensa },
     });
     expect(Number(expDentroPost!.montoMora)).toBe(0);
-    expect(Number(expDentroPost!.saldoPendiente)).toBe(500);
+    expect(Number(expDentroPost!.saldoPendiente)).toBe(100);
 
-    // Comprobar Caso B (fuera de gracia): debe tener mora del 10% (50.00) y saldo 550
+    // Comprobar Caso B (fuera de gracia): debe tener mora del 7.77% (7.77) y saldo 107.77
     const expFueraPost = await prisma.expensa.findUnique({
       where: { idExpensa: expFuera.idExpensa },
     });
-    expect(Number(expFueraPost!.montoMora)).toBe(50.00);
-    expect(Number(expFueraPost!.saldoPendiente)).toBe(550.00);
+    expect(Number(expFueraPost!.montoMora)).toBe(7.77);
+    expect(Number(expFueraPost!.saldoPendiente)).toBe(107.77);
     expect(expFueraPost!.estado).toBe('Moroso');
   });
 
@@ -218,9 +232,12 @@ describe('US2.1 - Punto 2: Reglas de Mora (CA09)', () => {
     expect(res.status).toBe(400);
     expect(res.body.message).toContain('No existe una regla de mora activa configurada');
 
-    // Restaurar una regla activa para tests subsiguientes
-    await prisma.reglaMora.create({
-      data: { tasaInteres: 5.0, diasGracia: 0, activa: true },
-    });
+    // Restaurar la regla activa original en lugar de crear una fila nueva
+    if (originalActiveRuleId) {
+      await prisma.reglaMora.update({
+        where: { idRegla: originalActiveRuleId },
+        data: { activa: true },
+      });
+    }
   });
 });

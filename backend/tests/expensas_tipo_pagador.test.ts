@@ -107,6 +107,14 @@ describe('Expensas por Tipo de Departamento y Pagador Obligatorio (RN10)', () =>
       departamentos: cleanupDeptoIds,
       personas: cleanupPersonaIds,
     });
+
+    // Restaurar monto original de tipos de departamento
+    if (tipoA) {
+      await prisma.tipoDepartamento.update({
+        where: { idTipo: tipoA.idTipo },
+        data: { montoExpensa: 300.00 },
+      });
+    }
   });
 
   // ── 1. Generación masiva: A/B/C generan 300/350/400 (período en rango 2090-2099)
@@ -256,17 +264,17 @@ describe('Expensas por Tipo de Departamento y Pagador Obligatorio (RN10)', () =>
     });
     expect(Number(expPrevia!.monto)).toBe(300.00);
 
-    // 5.2 Actualizar monto de tipo A de 300 a 330
+    // 5.2 Actualizar monto de tipo A de 300 a 777.77 (valor reconocible de prueba)
     const resPut = await request(app)
       .put('/api/v1/expensas/montos-tipo')
       .set('Authorization', `Bearer ${adminToken}`)
       .send({
         idTipo: tipoA.idTipo,
-        monto: 330.00,
+        monto: 777.77,
       });
 
     expect(resPut.status).toBe(200);
-    expect(resPut.body.actualizados[0].montoExpensa).toBe(330.00);
+    expect(resPut.body.actualizados[0].montoExpensa).toBe(777.77);
 
     // 5.3 Verificar auditoría registrada
     const auditoria = await prisma.auditoria.findFirst({
@@ -281,7 +289,7 @@ describe('Expensas por Tipo de Departamento y Pagador Obligatorio (RN10)', () =>
     expect(auditoria).not.toBeNull();
     expect(auditoria!.accion).toBe('CONFIGURAR_MONTO_EXPENSA');
     expect((auditoria!.datosAnteriores as any).montoExpensa).toBe(300.00);
-    expect((auditoria!.datosNuevos as any).montoExpensa).toBe(330.00);
+    expect((auditoria!.datosNuevos as any).montoExpensa).toBe(777.77);
 
     // 5.4 Verificar que la expensa previa conserva su monto original (300)
     const expDespues = await prisma.expensa.findUnique({

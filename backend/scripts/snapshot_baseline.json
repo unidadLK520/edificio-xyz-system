@@ -1,0 +1,50 @@
+{
+  "reglas_mora": [
+    {
+      "idRegla": 1,
+      "tasaInteres": "5",
+      "diasGracia": 0,
+      "activa": false,
+      "fechaCreacion": "2026-10-05T01:08:16.728Z",
+      "idUsuarioCreacion": null
+    },
+    {
+      "idRegla": 2,
+      "tasaInteres": "5",
+      "diasGracia": 0,
+      "activa": true,
+      "fechaCreacion": "2026-10-14T23:58:03.283Z",
+      "idUsuarioCreacion": null
+    }
+  ],
+  "regla_activa": {
+    "idRegla": 2,
+    "tasaInteres": "5",
+    "diasGracia": 0
+  },
+  "tipos_departamento": [
+    {
+      "idTipo": 1,
+      "nombre": "A",
+      "montoExpensa": "300",
+      "activo": true,
+      "areaM2": null
+    },
+    {
+      "idTipo": 2,
+      "nombre": "B",
+      "montoExpensa": "350",
+      "activo": true,
+      "areaM2": null
+    },
+    {
+      "idTipo": 3,
+      "nombre": "C",
+      "montoExpensa": "400",
+      "activo": true,
+      "areaM2": null
+    }
+  ],
+  "tarifas_agua": [],
+  "auditoria_inicial": 2136
+}

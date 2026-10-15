@@ -26,17 +26,67 @@ process.env.NODE_ENV = 'test';
 // 3. Importar prisma después de configurar las variables de entorno
 import { prisma } from '@edificio-xyz/database';
 
+// Variables de snapshot capturadas al inicio de la corrida de pruebas
+let snapshotReglasMora: any[] = [];
+let snapshotTiposDepto: any[] = [];
+let snapshotTarifasAgua: any[] = [];
+
 beforeAll(async () => {
   try {
     // Verificar conectividad básica con la base de datos compartida
     await prisma.$queryRawUnsafe('SELECT 1');
+
+    // Tomar snapshot dinámico al inicio de la corrida
+    snapshotReglasMora = await prisma.reglaMora.findMany();
+    snapshotTiposDepto = await prisma.tipoDepartamento.findMany();
+    snapshotTarifasAgua = await prisma.tarifaAgua.findMany();
   } catch (dbErr: any) {
     console.warn(`[TEST SETUP] Base de datos compartida no disponible (${dbErr.message}).`);
   }
 });
 
 afterAll(async () => {
-  await prisma.$disconnect();
+  try {
+    // 1. Restaurar reglas_mora según el snapshot original (mismos IDs y valores)
+    for (const regla of snapshotReglasMora) {
+      await prisma.reglaMora.update({
+        where: { idRegla: regla.idRegla },
+        data: {
+          tasaInteres: regla.tasaInteres,
+          diasGracia: regla.diasGracia,
+          activa: regla.activa,
+        },
+      });
+    }
+
+    // 2. Restaurar tipos_departamento según el snapshot original (mismos IDs y montos)
+    for (const tipo of snapshotTiposDepto) {
+      await prisma.tipoDepartamento.update({
+        where: { idTipo: tipo.idTipo },
+        data: {
+          nombre: tipo.nombre,
+          montoExpensa: tipo.montoExpensa,
+          activo: tipo.activo,
+          areaM2: tipo.areaM2,
+        },
+      });
+    }
+
+    // 3. Restaurar tarifas_agua según el snapshot original (mismos IDs y valores)
+    for (const tarifa of snapshotTarifasAgua) {
+      await prisma.tarifaAgua.update({
+        where: { idTarifa: tarifa.idTarifa },
+        data: {
+          precioM3: tarifa.precioM3,
+          activa: tarifa.activa,
+        },
+      });
+    }
+  } catch (err: any) {
+    console.warn('[TEST SETUP] Error en restauración de estado de prueba:', err.message);
+  } finally {
+    await prisma.$disconnect();
+  }
 });
 
 // Helper para generar tokens de prueba
