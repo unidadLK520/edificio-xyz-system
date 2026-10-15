@@ -11,8 +11,11 @@ Ya vigente (implementado y probado):
 - `POST /expensas/:id/pagos` y `PATCH /expensas/pagos/:idPago/corregir`: devuelven `422` si `montoPagado <= 0`, si la expensa ya está Pagada o si el monto excede el saldo.
 - `POST /expensas`: devuelve `409` si ya existe expensa del mismo departamento y período.
 - `GET /expensas` y `GET /expensas/:id`: incluyen el campo `vencida`; el listado acepta `?vencida=true`.
-- `calcular-mora`: la mora se calcula sobre el capital pendiente (monto − pagos directos − anticipos aplicados). Antes ignoraba los anticipos.
-- `GET/POST /expensas/reglas-mora`: mora configurable (tasa y días de gracia). Ya no existe el fallback fijo al 5 %.
+- `calcular-mora`: sin días de espera (vencida si hoy > fechaVencimiento). La mora se calcula sobre el capital pendiente (monto − pagos directos − anticipos aplicados). Un solo % por expensa vencida, sin crecer con el tiempo. La tasa de la expensa manda; si es 0, toma la regla activa.
+- `GET/POST /expensas/reglas-mora`: mora configurable (tasa de interés). Ya no existe el fallback fijo al 5 %. `POST` acepta pero ignora `diasGracia` y devuelve 0.
+- `generar-masivo` y `POST /expensas`: copian la tasa de la regla activa a `expensas.tasa_interes_mora` (la de la expensa manda; si cambia la regla activa, las expensas emitidas conservan su tasa).
+- `GET/POST/PUT /api/v1/tipos-departamento` (Administrador, Directorio): nombre libre hasta 60 caracteres y único (ej. "Suite Presidencial Premium"), `montoExpensa > 0`, `areaM2` opcional, `activo`. `PUT` con `activo=false` devuelve `409` si hay departamentos asignados. Auditorías `CREAR_TIPO_DEPARTAMENTO` y `ACTUALIZAR_TIPO_DEPARTAMENTO`. `GET/PUT /expensas/montos-tipo` se mantienen como alias compatibles.
+- Asignación de tipos a departamentos: `PUT /api/v1/departamentos/:id/tipo` y `PUT /api/v1/departamentos/asignar-tipo` (Administrador, Directorio). Asignación en transacción atómica (todo o nada). Solo tipos activos (`422` si inactivo o inexistente). Hereda `area_m2` del tipo si el departamento no tiene. Auditoría `ASIGNAR_TIPO_DEPARTAMENTO`.
 - Cron de mora (apagado por defecto, timezone America/La_Paz).
 - Historial de unidades: derivado de `ocupantes_departamento` (departamentos) y de `auditoria` (parqueos y bauleras), sin modelo físico `historial_asignacion_unidades`. Asignaciones y liberaciones atómicas en `$transaction`.
 - `POST /unidades` y `PUT /unidades/Departamento/:id` aceptan `idTipo` opcional con validación de existencia en `tipos_departamento` (422 si no existe). `GET /unidades` devuelve `tipo` y `monto`.
@@ -371,7 +374,7 @@ Respuesta 201:
 ```
 4.2 Cálculo de mora (CA10, CA12)
 `POST /api/v1/expensas/calcular-mora` · Roles: Administrador, Directorio.
-Evalúa expensas vencidas (más allá de `fechaVencimiento + diasGracia`) con saldo pendiente. Calcula la mora sobre el capital pendiente, actualiza `montoMora`, `saldoPendiente` y el estado `Moroso`. Audita `CALCULO_MORA_EXPENSAS`. Tasa: la de la expensa si es > 0; si no, la regla activa; si no hay ninguna, error explícito.
+Evalúa expensas vencidas (hoy > `fechaVencimiento`, sin días de espera) con saldo pendiente. Calcula la mora sobre el capital pendiente, actualiza `montoMora`, `saldoPendiente` y el estado `Moroso`. Audita `CALCULO_MORA_EXPENSAS`. Tasa: la de la expensa manda; si es 0, la regla activa; si no hay ninguna, error explícito. Un solo % por expensa vencida, sin crecer con el tiempo.
 Request: vacío.
 ```json
 { "message": "Se aplicó el recargo de mora a 3 expensas vencidas", "actualizadasCount": 3 }
@@ -599,11 +602,11 @@ Respuesta 200:
 Capital pendiente (función única `calcularCapitalPendiente`, usada en mora, anulación/corrección, morosos y estado de cuenta):
 `capital = max(0, monto − pagos directos válidos − anticipos aplicados válidos)`, redondeado a 2 decimales. Pagos o anticipos anulados no cuentan.
 Mora:
-Aplica solo si `hoy > fechaVencimiento + diasGracia`.
-`montoMora = capital × tasa / 100` (único porcentaje, sin recargo periódico).
+Aplica si `hoy > fechaVencimiento` (sin días de espera).
+`montoMora = capital × tasa / 100` (único porcentaje por expensa vencida, sin recargo periódico ni crecer con el tiempo).
 `saldoPendiente = capital + montoMora`.
 Estado: `Moroso` si está vencida y el saldo > 0; `Pagado` si el saldo es 0.
-Tasa: la de la expensa si es > 0; si no, la de la regla activa; si no hay ninguna, error explícito (sin valor por defecto silencioso).
+Tasa: la de la expensa manda (si es > 0); si es 0, la de la regla activa; si no hay ninguna, error explícito (sin valor por defecto silencioso). Al emitirse (`generar-masivo` o `POST /expensas`), se copia la tasa de la regla activa a `tasaInteresMora` y se conserva inalterable aunque luego cambie la regla activa.
 FIFO de anticipos: al crear una expensa se consumen los anticipos activos (`idExpensa` nulo, `esAnticipado`, no anulados) ordenados por `fechaPago` e `idPago` ascendentes, hasta cubrir el saldo o agotarlos. Estado resultante: `Pagado` si el saldo es 0, `Parcial` si bajó, `Pendiente` si no se aplicó nada.
 Monto de expensa: el monto es fijo y sale directamente del tipo de departamento (`tipos_departamento.monto_expensa`: Tipo A = Bs 300, Tipo B = Bs 350, Tipo C = Bs 400). No hay cálculo por área ni factores de superficie. Cada expensa conserva su monto original emitido de forma inmutable.
 Recálculo dinámico y efecto de pagos posteriores: la mora se recalcula en cada ejecución sobre el capital vivo; un pago posterior reduce o elimina la mora ya calculada.
@@ -616,17 +619,17 @@ Ejemplo de independencia de mora por período (febrero y marzo): un mismo depart
 `GET /api/v1/expensas/reglas-mora` · Roles: Administrador, Directorio. Devuelve la regla activa y el historial.
 ```json
 {
-  "activa": { "idRegla": 1, "tasaInteres": "5", "diasGracia": 0, "activa": true, "fechaCreacion": "2026-10-05T01:08:16.728Z", "idUsuarioCreacion": null, "usuarioCreacion": null },
-  "historial": [{ "idRegla": 1, "tasaInteres": "5", "diasGracia": 0, "activa": true, "fechaCreacion": "2026-10-05T01:08:16.728Z", "idUsuarioCreacion": null, "usuarioCreacion": null }]
+  "activa": { "idRegla": 2, "tasaInteres": "5", "diasGracia": 0, "activa": true, "fechaCreacion": "2026-10-05T01:08:16.728Z", "idUsuarioCreacion": null, "usuarioCreacion": null },
+  "historial": [{ "idRegla": 2, "tasaInteres": "5", "diasGracia": 0, "activa": true, "fechaCreacion": "2026-10-05T01:08:16.728Z", "idUsuarioCreacion": null, "usuarioCreacion": null }]
 }
 ```
 `POST /api/v1/expensas/reglas-mora` · Roles: Administrador, Directorio.
-Crea y activa una regla; desactiva la anterior en la misma transacción (una sola activa). Valida `tasaInteres` entre 0 y 100 y `diasGracia >= 0`. Audita `CONFIGURAR_REGLA_MORA`.
+Crea y activa una regla; desactiva la anterior en la misma transacción (una sola activa). Valida `tasaInteres` entre 0 y 100. Acepta pero ignora `diasGracia` y almacena/devuelve siempre `0`. Audita `CONFIGURAR_REGLA_MORA`.
 ```json
-{ "tasaInteres": 6, "diasGracia": 2 }
+{ "tasaInteres": 6, "diasGracia": 0 }
 ```
 Errores: `400/422` por valores fuera de rango; `401` sin token; `403` sin permiso.
-> Valores iniciales (5 %, 0 días) son provisionales, pendientes de definición por el Scrum Master.
+> Valor inicial: 5 %, sin días de espera.
 4.14 Tarea programada de mora (CA10)
 Tecnología: `node-cron`, zona horaria `America/La_Paz`.
 Variables: `MORA_CRON` (por defecto `"0 1 * * *"`) y `MORA_CRON_ENABLED` (por defecto `false`).
@@ -643,7 +646,55 @@ Detección de vencidas	`GET /expensas`, `GET /expensas/:id`	Campo `vencida`; fil
 Monto de expensa por tipo positivo	`PUT .../montos-tipo`	`400` si monto <= 0 o inválido
 Control de duplicados e integridad física: La BD real ya cuenta con la restricción `UNIQUE (id_departamento, periodo)`. El control de duplicados se realiza tanto por consulta previa como por restricción física de motor (el error de unicidad `P2002` se mapea y responde como `409 Conflict` en endpoints individuales y masivos, probado).
 
-4.16 Montos de expensa por tipo de departamento
+4.16 Gestión de Tipos de Departamento y Montos de Expensa
+`GET /api/v1/tipos-departamento` · Roles: Administrador, Directorio.
+Lista los tipos de departamento con `idTipo`, `nombre`, `montoExpensa`, `areaM2`, `activo` y `departamentosAsignados`.
+Respuesta 200:
+```json
+{
+  "data": [
+    { "idTipo": 1, "nombre": "A", "montoExpensa": 300.0, "areaM2": null, "activo": true, "departamentosAsignados": 10 },
+    { "idTipo": 2, "nombre": "B", "montoExpensa": 350.0, "areaM2": null, "activo": true, "departamentosAsignados": 5 },
+    { "idTipo": 3, "nombre": "C", "montoExpensa": 400.0, "areaM2": null, "activo": true, "departamentosAsignados": 5 }
+  ]
+}
+```
+
+`POST /api/v1/tipos-departamento` · Roles: Administrador, Directorio.
+Crea un nuevo tipo de departamento.
+- `nombre`: libre hasta 60 caracteres y único (ej. "Suite Presidencial Premium"). Responde `409 Conflict` si ya existe.
+- `montoExpensa`: mayor a cero obligatorio (`montoExpensa > 0`). Responde `400` si es `<= 0`.
+- `areaM2`: numérico opcional (puede ser nulo o mayor a cero).
+- `activo`: booleano opcional (por defecto `true`).
+- Auditoría: Registra `CREAR_TIPO_DEPARTAMENTO`.
+Request:
+```json
+{
+  "nombre": "Suite Presidencial Premium",
+  "montoExpensa": 850.0,
+  "areaM2": 120.5,
+  "activo": true
+}
+```
+Respuesta 201:
+```json
+{
+  "message": "Tipo de departamento creado exitosamente",
+  "idTipo": 4,
+  "nombre": "Suite Presidencial Premium",
+  "montoExpensa": 850.0,
+  "areaM2": 120.5,
+  "activo": true
+}
+```
+
+`PUT /api/v1/tipos-departamento/:id` o `PUT /api/v1/tipos-departamento` (con `{ idTipo, ... }`) · Roles: Administrador, Directorio.
+Actualiza nombre, montoExpensa, areaM2 o activo de un tipo.
+- Si `activo=false` y el tipo tiene departamentos asignados, responde `409 Conflict` (`No se puede desactivar el tipo porque tiene N departamento(s) asignado(s)`).
+- Auditoría: Registra `ACTUALIZAR_TIPO_DEPARTAMENTO` con `datosAnteriores` y `datosNuevos`.
+
+Alias compatibles de Frontend:
+`GET /api/v1/expensas/montos-tipo` y `PUT /api/v1/expensas/montos-tipo` se mantienen plenamente operativos como alias para asegurar compatibilidad con versiones previas del Front.
 `GET /api/v1/expensas/montos-tipo` · Roles: Administrador, Directorio.
 Lee la lista de tipos de departamento con sus montos de expensa asignados en `tipos_departamento`.
 Respuesta 200:
@@ -681,6 +732,54 @@ Respuesta 200:
 }
 ```
 Error 400: `{ "error": "Validation Error", "message": "El monto de la expensa debe ser mayor a cero" }`
+
+4.17 Asignación de tipo a departamentos (Ventana de Front)
+`PUT /api/v1/departamentos/:id/tipo` · Roles: Administrador, Directorio.
+Asigna un tipo a un departamento individual.
+Request: `{ "idTipo": 2 }`
+Reglas:
+- Solo tipos activos: si el tipo no existe o está inactivo (`activo: false`), responde `422 Unprocessable Entity`.
+- Herencia de área: si el departamento no tiene área (`areaM2` es nulo) y el tipo tiene `areaM2`, el departamento hereda automáticamente el área del tipo.
+- Auditoría: Registra `ASIGNAR_TIPO_DEPARTAMENTO`.
+Respuesta 200:
+```json
+{
+  "message": "Tipo de departamento asignado exitosamente",
+  "idDepartamento": 1,
+  "numero": "101",
+  "idTipo": 2,
+  "tipo": "B",
+  "monto": 350.0,
+  "areaM2": 85.0
+}
+```
+
+`PUT /api/v1/departamentos/asignar-tipo` · Roles: Administrador, Directorio.
+Asignación masiva en una única transacción atómica (todo o nada).
+Request:
+```json
+{
+  "asignaciones": [
+    { "idDepartamento": 1, "idTipo": 2 },
+    { "idDepartamento": 2, "idTipo": 3 }
+  ]
+}
+```
+Reglas:
+- Operación atómica: si cualquier asignación falla (tipo inexistente o inactivo `activo: false`), la transacción completa hace rollback y responde `422 Unprocessable Entity`.
+- Hereda `area_m2` del tipo si el departamento no tiene área asignada.
+- Auditoría por cada departamento modificado: `ASIGNAR_TIPO_DEPARTAMENTO`.
+Respuesta 200:
+```json
+{
+  "message": "Se asignó el tipo a 2 departamento(s) exitosamente",
+  "actualizados": 2,
+  "asignaciones": [
+    { "idDepartamento": 1, "numero": "101", "idTipo": 2, "tipo": "B", "monto": 350.0, "areaM2": 85.0 },
+    { "idDepartamento": 2, "numero": "102", "idTipo": 3, "tipo": "C", "monto": 400.0, "areaM2": 95.0 }
+  ]
+}
+```
 ---
 ## 5. Módulo de Ingresos y Egresos (US2.3, HU05)
 Movimientos financieros ordinarios y extraordinarios con balance y auditoría.
@@ -782,15 +881,18 @@ Evento	Tabla	Origen	Descripción / Datos Capturados
 `ASIGNACION_UNIDAD`	parqueos, bauleras, departamentos	`POST /unidades/asignaciones`	Asignación atómica de parqueo/baulera a depto/persona.
 `FINALIZACION_ASIGNACION`	parqueos, bauleras, departamentos	`POST /unidades/asignaciones/finalizar`	Liberación atómica de unidad.
 `CONFIGURAR_MONTO_EXPENSA`	tipos_departamento	`PUT /expensas/montos-tipo`	Configuración de monto de expensa por tipo (datosAnteriores y datosNuevos).
+`CREAR_TIPO_DEPARTAMENTO`	tipos_departamento	`POST /tipos-departamento`	Creación de tipo con nombre único, montoExpensa > 0 y areaM2 opcional.
+`ACTUALIZAR_TIPO_DEPARTAMENTO`	tipos_departamento	`PUT /tipos-departamento/:id`	Actualización de tipo (nombre, monto, área, activo; valida 409 si tiene deptos).
+`ASIGNAR_TIPO_DEPARTAMENTO`	departamentos	`PUT /departamentos/:id/tipo` y `PUT /departamentos/asignar-tipo`	Asignación de tipo activo a depto (individual o masiva atómica con herencia de área).
 `GENERACION_MASIVA_EXPENSAS`	expensas	`POST /expensas/generar-masivo`	Emisión mensual masiva fija por tipo (período, generadasCount, excepcionesCount).
 `CREAR_EXPENSA`	expensas	`POST /expensas`	Emisión individual de expensa.
-`CALCULO_MORA_EXPENSAS`	expensas	`POST /expensas/calcular-mora` y cron	Cálculo de mora sobre capital pendiente (origen `MANUAL` o `SISTEMA_CRON`).
+`CALCULO_MORA_EXPENSAS`	expensas	`POST /expensas/calcular-mora` y cron	Cálculo de mora sobre capital pendiente sin días de espera (origen `MANUAL` o `SISTEMA_CRON`).
 `REGISTRO_PAGO_EXPENSA`	pagos	`POST /expensas/:id/pagos`	Pago directo (monto, expensa, idPersonaPagador).
 `REGISTRO_ANTICIPO`	pagos	`POST /expensas/:id/pagos` (anticipo)	Pago a favor sin expensa asignada (idPersonaPagador, esAnticipado).
 `APLICACION_ANTICIPO_MANUAL`	aplicaciones_anticipos	`POST /expensas/:id/aplicar-anticipo/:idPago`	Consumo manual de anticipo.
 `ANULACION_PAGO`	pagos	`DELETE /expensas/pagos/:idPago`	Anulación con motivo y reversión de saldo.
 `CORRECCION_PAGO`	pagos	`PATCH /expensas/pagos/:idPago/corregir`	Corrección enlazada por idPagoOriginal con idPersonaPagador.
-`CONFIGURAR_REGLA_MORA`	reglas_mora	`POST /expensas/reglas-mora`	Configuración de tasa y días de gracia.
+`CONFIGURAR_REGLA_MORA`	reglas_mora	`POST /expensas/reglas-mora`	Configuración de tasa porcentual de mora (diasGracia = 0).
 `CREAR_MOVIMIENTO`	movimientos	`POST /movimientos`	Registro de ingreso/egreso.
 `MODIFICAR_MOVIMIENTO`	movimientos	`PUT /movimientos/:id`	Modificación de movimiento con delta.
 `ANULACION_MOVIMIENTO`	movimientos	`DELETE /movimientos/:id`	Anulación de movimiento con motivo.
@@ -827,7 +929,7 @@ Configuración de regla de mora:
   "idAuditoria": 9030, "tablaAfectada": "reglas_mora", "idRegistro": "2", "accion": "CONFIGURAR_REGLA_MORA",
   "fechaHora": "2026-10-04T12:00:00.000Z", "idUsuario": 1, "resultado": "EXITO",
   "datosAnteriores": { "idRegla": 1, "tasaInteres": 5.0, "diasGracia": 0, "activa": true },
-  "datosNuevos": { "idRegla": 2, "tasaInteres": 6.0, "diasGracia": 2, "activa": true }
+  "datosNuevos": { "idRegla": 2, "tasaInteres": 6.0, "diasGracia": 0, "activa": true }
 }
 ```
 
@@ -942,6 +1044,11 @@ Unidades	/unidades	POST	✅	✅	❌
 Unidades	/unidades/:tipo/:id	PUT	✅	✅	❌
 Unidades	/unidades/asignaciones	POST	✅	✅	❌
 Unidades	/unidades/asignaciones/finalizar	POST	✅	✅	❌
+Tipos Depto	/tipos-departamento	GET	✅	✅	❌
+Tipos Depto	/tipos-departamento	POST	✅	✅	❌
+Tipos Depto	/tipos-departamento/:id	PUT	✅	✅	❌
+Departamentos	/departamentos/:id/tipo	PUT	✅	✅	❌
+Departamentos	/departamentos/asignar-tipo	PUT	✅	✅	❌
 Expensas	/expensas	GET	✅	✅	❌ *
 Expensas	/expensas/:id	GET	✅	✅	❌ *
 Expensas	/expensas/morosos	GET	✅	✅	❌
@@ -983,7 +1090,7 @@ CA	Endpoint(s)	Estado	Nota
 11 Vencidas	campo `vencida`, `?vencida=true`, `morosos`	Cumple	Detección aditiva por fecha y saldo (probado).
 12 Saldo actualizado	pagos, anulación, corrección	Cumple	Saldo actualizado con pagos y anticipos (probado).
 13 Corrección o cancelación	`DELETE`, `PATCH corregir`	Parcial	DELETE y PATCH corregir con idPersonaPagador probados; pendiente anulación de anticipo ya aplicado.
-14 Trazabilidad	auditoría	Cumple	Auditoría transversal, CONFIGURAR_MONTO_EXPENSA y detalle de expensas {idExpensa, moraAnterior, moraNueva, saldoAnterior, saldoNuevo} (máx 200, truncado:true) en CALCULO_MORA_EXPENSAS probados.
+14 Trazabilidad	auditoría	Cumple	Auditoría transversal, CONFIGURAR_MONTO_EXPENSA, CREAR_TIPO_DEPARTAMENTO, ACTUALIZAR_TIPO_DEPARTAMENTO, ASIGNAR_TIPO_DEPARTAMENTO y detalle en CALCULO_MORA_EXPENSAS probados.
 US2.2: Estados de cuenta y saldos
 CA	Estado	Nota
 01-02 Departamento y propietario	Cumple	Probado.
@@ -1014,5 +1121,5 @@ CA	Endpoint(s)	Estado	Nota
 - Anulación de anticipo ya aplicado: pendiente bloquear con `409 Conflict` (Parcial / Pendiente).
 - US2.2: filtros (`periodo`, `desde`, `hasta`), concepto, línea de tiempo y caso sin movimientos (Pendiente).
 - US2.3 y US2.4: criterios pendientes de recibir (Caja y Bancos, conciliación) (Pendiente).
-- Montos provisionales: regla de mora (5 %, 0 días) y montos por tipo (300/350/400) pendientes de confirmar con el Scrum (Pendiente).
+- Montos provisionales: regla de mora (5 %, sin días de espera) y montos por tipo (300/350/400) pendientes de confirmar con el Scrum (Pendiente).
 - Inmutabilidad de auditoría a nivel de base de datos: En el backend los endpoints son estrictamente de solo lectura (`GET /auditoria` y `GET /auditoria/:id`, sin rutas PUT/PATCH/DELETE). En la base de datos física PostgreSQL (`001_initial_schema.sql`), la tabla `edificio.auditoria` no cuenta con triggers de protección contra UPDATE o DELETE ni con REVOKE; se deja como recomendación técnica para DevOps implementar triggers o restringir permisos para garantizar inmutabilidad a nivel de motor.
