@@ -38,6 +38,7 @@ describe('US2.1 - Punto 3: Scheduler Cron de Mora (CA10) - Configuración y Time
 describe('US2.1 - Punto 3: Scheduler Cron de Mora (CA10) - Ejecución y Auditoría', () => {
   let testDepartamentoId: number;
   const createdExpensasIds: number[] = [];
+  const createdReglasIds: number[] = [];
 
   beforeAll(async () => {
     // Asegurar departamento de prueba con prefijo TST-
@@ -48,8 +49,12 @@ describe('US2.1 - Punto 3: Scheduler Cron de Mora (CA10) - Ejecución y Auditor�
     });
     testDepartamentoId = depto.idDepartamento;
 
-    // Asegurar regla activa: 5% tasa, 0 días de gracia
-    await configurarReglaMora({ tasaInteres: 5.0, diasGracia: 0 });
+    // Asegurar regla activa: si ya existe una regla activa con tasa 5, reutilizarla
+    const activa = await prisma.reglaMora.findFirst({ where: { activa: true } });
+    if (!activa) {
+      const nueva = await configurarReglaMora({ tasaInteres: 5.0, diasGracia: 0 });
+      createdReglasIds.push(nueva.idRegla);
+    }
   });
 
   afterAll(async () => {
@@ -57,6 +62,7 @@ describe('US2.1 - Punto 3: Scheduler Cron de Mora (CA10) - Ejecución y Auditor�
     await limpiar({
       expensas: createdExpensasIds,
       departamentos: testDepartamentoId ? [testDepartamentoId] : [],
+      reglasMora: createdReglasIds,
     });
   });
 
