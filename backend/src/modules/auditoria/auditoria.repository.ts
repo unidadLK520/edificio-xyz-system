@@ -30,10 +30,56 @@ export class AuditoriaRepository {
     });
   }
 
-  async findRecientes(limit = 100): Promise<Auditoria[]> {
-    return prisma.auditoria.findMany({
-      orderBy: { fechaHora: 'desc' },
-      take: limit,
+  async findPaginado(filtros: {
+    where: any;
+    skip: number;
+    take: number;
+  }): Promise<{ items: any[]; total: number }> {
+    const [total, items] = await Promise.all([
+      prisma.auditoria.count({ where: filtros.where }),
+      prisma.auditoria.findMany({
+        where: filtros.where,
+        orderBy: { fechaHora: 'desc' },
+        skip: filtros.skip,
+        take: filtros.take,
+        include: {
+          usuario: {
+            select: {
+              idUsuario: true,
+              nombreUsuario: true,
+              correo: true,
+              rol: {
+                select: {
+                  idRol: true,
+                  nombre: true,
+                },
+              },
+            },
+          },
+        },
+      }),
+    ]);
+    return { items, total };
+  }
+
+  async findById(idAuditoria: number | bigint): Promise<any | null> {
+    return prisma.auditoria.findUnique({
+      where: { idAuditoria: BigInt(idAuditoria) },
+      include: {
+        usuario: {
+          select: {
+            idUsuario: true,
+            nombreUsuario: true,
+            correo: true,
+            rol: {
+              select: {
+                idRol: true,
+                nombre: true,
+              },
+            },
+          },
+        },
+      },
     });
   }
 }
