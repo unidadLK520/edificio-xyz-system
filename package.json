@@ -11,7 +11,8 @@
     "db:generate": "turbo db:generate",
     "db:push": "turbo db:push",
     "db:seed": "turbo db:seed",
-    "db:studio": "pnpm --filter @edificio-xyz/database db:studio"
+    "db:studio": "pnpm --filter @edificio-xyz/database db:studio",
+    "db:sync-all": "pnpm --filter @edificio-xyz/database db:sync-all"
   },
   "packageManager": "pnpm@10.33.0",
   "devDependencies": {
