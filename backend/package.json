@@ -6,7 +6,9 @@
     "dev": "tsx watch src/index.ts",
     "build": "pnpm --filter @edificio-xyz/database build && tsc --project tsconfig.json",
     "start": "node dist/index.js",
-    "lint": "tsc --noEmit"
+    "lint": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "dependencies": {
     "@edificio-xyz/database": "workspace:*",
@@ -16,6 +18,7 @@
     "express": "^4.18.2",
     "helmet": "^7.1.0",
     "jose": "^5.9.6",
+    "node-cron": "^4.6.0",
     "zod": "^3.22.4"
   },
   "devDependencies": {
@@ -24,7 +27,11 @@
     "@types/cors": "^2.8.17",
     "@types/express": "^4.17.21",
     "@types/node": "^22.13.9",
+    "@types/node-cron": "^3.0.11",
+    "@types/supertest": "^7.2.1",
+    "supertest": "^7.3.1",
     "tsx": "^4.19.3",
-    "typescript": "^5.8.2"
+    "typescript": "^5.8.2",
+    "vitest": "^5.0.3"
   }
 }

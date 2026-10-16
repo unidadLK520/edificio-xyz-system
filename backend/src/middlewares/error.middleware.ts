@@ -39,6 +39,24 @@ export function errorMiddleware(
     return;
   }
 
+  // Errores de conexión de Prisma
+  const prismaConnCodes = ['P1001', 'P1002', 'P1008', 'P1017'];
+  if (typeof err.code === 'string' && prismaConnCodes.includes(err.code)) {
+    res.status(503).json({
+      error: 'Service Unavailable',
+      message: 'Error de conexión con la base de datos.',
+    });
+    return;
+  }
+
+  if (statusCode === 503) {
+    res.status(503).json({
+      error: 'Service Unavailable',
+      message,
+    });
+    return;
+  }
+
   res.status(statusCode).json({
     error: statusCode === 500 ? 'Internal Server Error' : 'Error',
     message: config.isDev ? message : 'Ocurrió un error. Contacte al administrador.',

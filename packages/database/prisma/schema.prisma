@@ -43,8 +43,10 @@ model Usuario {
   comunicadosCreados  Comunicado[]
   documentosSubidos   Documento[]
   auditorias          Auditoria[]
-  reservasRegistradas      Reserva[]
-  solicitudesMantenimiento SolicitudMantenimiento[]
+  reglasMoraCreadas   ReglaMora[]
+  tarifasAguaCreadas  TarifaAgua[]
+  lecturasAguaRegistradas LecturaAgua[]
+  sesiones            Sesion[]
 
   @@map("usuarios")
   @@schema("edificio")
@@ -66,9 +68,21 @@ model Persona {
   usuarios             Usuario[]
   parqueosAsignados    Parqueo[]
   baulerasAsignadas    Baulera[]
-  historialAsignaciones HistorialAsignacionUnidad[]
+  pagosRealizados      Pago[]
 
   @@map("personas")
+  @@schema("edificio")
+}
+
+model TipoDepartamento {
+  idTipo        Int            @id @default(autoincrement()) @map("id_tipo")
+  nombre        String         @unique @db.VarChar(60)
+  montoExpensa  Decimal        @map("monto_expensa") @db.Decimal(10, 2)
+  activo        Boolean        @default(true)
+  areaM2        Decimal?       @map("area_m2") @db.Decimal(8, 2)
+  departamentos Departamento[]
+
+  @@map("tipos_departamento")
   @@schema("edificio")
 }
 
@@ -79,17 +93,18 @@ model Departamento {
   areaM2         Decimal?               @map("area_m2") @db.Decimal(8, 2)
   idPropietario  Int?                   @map("id_propietario")
   estado         String                 @default("Ocupado") @db.VarChar(20)
+  idTipo         Int?                   @map("id_tipo")
   
   propietario    Persona?               @relation("PropietarioDepartamentos", fields: [idPropietario], references: [idPersona])
+  tipo           TipoDepartamento?      @relation(fields: [idTipo], references: [idTipo], onDelete: Restrict)
   parqueos       Parqueo[]
   bauleras       Baulera[]
   ocupantes      OcupanteDepartamento[]
   expensas       Expensa[]
   pagos          Pago[]
-  reservas       Reserva[]
-  solicitudesMantenimiento SolicitudMantenimiento[]
-  historialAsignaciones HistorialAsignacionUnidad[]
+  lecturasAgua   LecturaAgua[]
 
+  @@index([idTipo], map: "idx_departamentos_tipo")
   @@map("departamentos")
   @@schema("edificio")
 }
@@ -111,7 +126,7 @@ model Parqueo {
 
 model Baulera {
   idBaulera      Int           @id @default(autoincrement()) @map("id_baulera")
-  numero         String        @unique @db.VarChar(10)
+  numero         String        @unique @db.VarChar(20)
   estado         String        @default("Disponible") @db.VarChar(20)
   idDepartamento Int?          @map("id_departamento")
   idPersona      Int?          @map("id_persona")
@@ -140,31 +155,13 @@ model OcupanteDepartamento {
   @@schema("edificio")
 }
 
-model HistorialAsignacionUnidad {
-  idHistorial    Int          @id @default(autoincrement()) @map("id_historial")
-  tipoUnidad     String       @map("tipo_unidad") @db.VarChar(20) // Departamento, Parqueo, Baulera
-  idUnidad       Int          @map("id_unidad")
-  numeroUnidad   String       @map("numero_unidad") @db.VarChar(20)
-  idPersona      Int?         @map("id_persona")
-  idDepartamento Int?         @map("id_departamento")
-  tipoRelacion   String       @map("tipo_relacion") @db.VarChar(30) // Propietario, Inquilino, Asignado
-  fechaInicio    DateTime     @default(now()) @map("fecha_inicio") @db.Timestamp(6)
-  fechaFin       DateTime?    @map("fecha_fin") @db.Timestamp(6)
-  notas          String?      @db.Text
-
-  persona        Persona?     @relation(fields: [idPersona], references: [idPersona])
-  departamento   Departamento? @relation(fields: [idDepartamento], references: [idDepartamento])
-
-  @@index([tipoUnidad, idUnidad], map: "idx_historial_unidad")
-  @@map("historial_asignacion_unidades")
-  @@schema("edificio")
-}
-
 model Expensa {
   idExpensa            Int                  @id @default(autoincrement()) @map("id_expensa")
   idDepartamento       Int                  @map("id_departamento")
   periodo              DateTime             @db.Date
   monto                Decimal              @db.Decimal(10, 2)
+  montoBase            Decimal?             @map("monto_base") @db.Decimal(10, 2)
+  montoAgua            Decimal              @default(0) @map("monto_agua") @db.Decimal(10, 2)
   montoMora            Decimal              @default(0) @map("monto_mora") @db.Decimal(10, 2)
   tasaInteresMora      Decimal              @default(0) @map("tasa_interes_mora") @db.Decimal(5, 2)
   fechaVencimiento     DateTime             @map("fecha_vencimiento") @db.Date
@@ -180,6 +177,72 @@ model Expensa {
   @@index([idDepartamento], map: "idx_expensas_departamento")
   @@index([estado], map: "idx_expensas_estado")
   @@map("expensas")
+  @@schema("edificio")
+}
+
+model ReglaMora {
+  idRegla           Int       @id @default(autoincrement()) @map("id_regla")
+  tasaInteres       Decimal   @map("tasa_interes") @db.Decimal(5, 2)
+  diasGracia        Int       @default(0) @map("dias_gracia")
+  activa            Boolean   @default(true)
+  fechaCreacion     DateTime  @default(now()) @map("fecha_creacion") @db.Timestamp(6)
+  idUsuarioCreacion Int?      @map("id_usuario_creacion")
+
+  usuarioCreacion   Usuario?  @relation(fields: [idUsuarioCreacion], references: [idUsuario])
+
+  @@map("reglas_mora")
+  @@schema("edificio")
+}
+
+model TarifaAgua {
+  idTarifa          Int       @id @default(autoincrement()) @map("id_tarifa")
+  precioM3          Decimal   @map("precio_m3") @db.Decimal(10, 2)
+  activa            Boolean   @default(true)
+  fechaCreacion     DateTime  @default(now()) @map("fecha_creacion") @db.Timestamp(6)
+  idUsuarioCreacion Int?      @map("id_usuario_creacion")
+
+  usuarioCreacion   Usuario?  @relation(fields: [idUsuarioCreacion], references: [idUsuario])
+
+  @@index([activa], map: "idx_tarifas_agua_activa")
+  @@map("tarifas_agua")
+  @@schema("edificio")
+}
+
+model LecturaAgua {
+  idLectura          Int          @id @default(autoincrement()) @map("id_lectura")
+  idDepartamento     Int          @map("id_departamento")
+  periodo            DateTime     @db.Date
+  lecturaAnterior    Decimal      @default(0) @map("lectura_anterior") @db.Decimal(10, 2)
+  lecturaActual      Decimal      @map("lectura_actual") @db.Decimal(10, 2)
+  consumoM3          Decimal      @map("consumo_m3") @db.Decimal(10, 2)
+  precioM3           Decimal      @map("precio_m3") @db.Decimal(10, 2)
+  montoAgua          Decimal      @default(0) @map("monto_agua") @db.Decimal(10, 2)
+  idUsuarioRegistro  Int?         @map("id_usuario_registro")
+  fechaRegistro      DateTime     @default(now()) @map("fecha_registro") @db.Timestamp(6)
+
+  departamento       Departamento @relation(fields: [idDepartamento], references: [idDepartamento])
+  usuarioRegistro    Usuario?     @relation(fields: [idUsuarioRegistro], references: [idUsuario])
+
+  @@unique([idDepartamento, periodo], map: "uq_lecturas_agua_departamento_periodo")
+  @@index([idDepartamento], map: "idx_lecturas_agua_departamento")
+  @@index([periodo], map: "idx_lecturas_agua_periodo")
+  @@map("lecturas_agua")
+  @@schema("edificio")
+}
+
+model Sesion {
+  idSesion     String   @id @default(dbgenerated("gen_random_uuid()")) @map("id_sesion") @db.Uuid
+  idUsuario    Int      @map("id_usuario")
+  fechaInicio  DateTime @default(now()) @map("fecha_inicio") @db.Timestamp(6)
+  ultimoAcceso DateTime @default(now()) @map("ultimo_acceso") @db.Timestamp(6)
+  activa       Boolean  @default(true)
+  ip           String?  @db.VarChar(45)
+  userAgent    String?  @map("user_agent") @db.Text
+
+  usuario      Usuario  @relation(fields: [idUsuario], references: [idUsuario], onDelete: Cascade)
+
+  @@index([idUsuario], map: "idx_sesiones_usuario")
+  @@map("sesiones")
   @@schema("edificio")
 }
 
@@ -216,6 +279,7 @@ model Pago {
   idPago              Int                  @id @default(autoincrement()) @map("id_pago")
   idExpensa           Int?                 @map("id_expensa")
   idDepartamento      Int                  @map("id_departamento")
+  idPersonaPagador    Int?                 @map("id_persona_pagador")
   montoPagado         Decimal              @map("monto_pagado") @db.Decimal(10, 2)
   interesPagado       Decimal              @default(0) @map("interes_pagado") @db.Decimal(10, 2)
   fechaPago           DateTime             @default(now()) @map("fecha_pago") @db.Timestamp(6)
@@ -234,6 +298,7 @@ model Pago {
   
   expensa              Expensa?             @relation(fields: [idExpensa], references: [idExpensa])
   departamento         Departamento         @relation(fields: [idDepartamento], references: [idDepartamento])
+  pagador              Persona?             @relation(fields: [idPersonaPagador], references: [idPersona], onUpdate: Cascade, onDelete: SetNull, map: "fk_pagos_persona_pagador")
   usuarioRegistro      Usuario?             @relation(fields: [idUsuarioRegistro], references: [idUsuario])
   cuentaBancaria       CuentaBancaria?      @relation(fields: [idCuenta], references: [idCuenta])
   cajaMovimiento       Caja?                @relation(fields: [idMovimientoCaja], references: [idMovimientoCaja])
@@ -241,10 +306,12 @@ model Pago {
   pagosCorreccion      Pago[]               @relation("CorreccionPago")
   aplicacionesAnticipo AplicacionAnticipo[]
 
-  @@index([idDepartamento], map: "idx_pagos_departamento")
+  @@index([idPersonaPagador], map: "idx_pagos_persona_pagador")
   @@index([idCuenta], map: "idx_pagos_cuenta")
   @@index([idMovimientoCaja], map: "idx_pagos_movimiento_caja")
   @@index([idPagoOriginal], map: "idx_pagos_pago_original")
+  @@index([idDepartamento, fechaPago(sort: Desc)], map: "idx_pagos_departamento_fecha")
+  @@index([idExpensa, fechaPago(sort: Desc)], map: "idx_pagos_expensa_fecha")
   @@map("pagos")
   @@schema("edificio")
 }
@@ -328,8 +395,7 @@ model Empleado {
   fechaIngreso DateTime       @map("fecha_ingreso") @db.Date
   activo       Boolean        @default(true)
   
-  pagos                    PagoEmpleado[]
-  solicitudesMantenimiento SolicitudMantenimiento[]
+  pagos        PagoEmpleado[]
 
   @@map("empleados")
   @@schema("edificio")
@@ -412,7 +478,8 @@ model Auditoria {
   usuario          Usuario?  @relation(fields: [idUsuario], references: [idUsuario])
 
   @@index([tablaAfectada], map: "idx_auditoria_tabla")
-  @@index([idUsuario], map: "idx_auditoria_usuario")
+  @@index([fechaHora(sort: Desc)], map: "idx_auditoria_fecha")
+  @@index([idUsuario, fechaHora(sort: Desc)], map: "idx_auditoria_usuario_fecha")
   @@map("auditoria")
   @@schema("edificio")
 }
@@ -426,75 +493,3 @@ model ConfiguracionGlobal {
   @@schema("edificio")
 }
 
-model AreaComun {
-  idArea        Int       @id @default(autoincrement()) @map("id_area")
-  nombre        String    @db.VarChar(100)
-  descripcion   String?   @db.Text
-  capacidadMax  Int?      @map("capacidad_max")
-  requierePago  Boolean   @default(false) @map("requiere_pago")
-  costoReserva  Decimal?  @map("costo_reserva") @db.Decimal(10, 2)
-  activa        Boolean   @default(true)
-
-  reservas      Reserva[]
-
-  @@map("areas_comunes")
-  @@schema("edificio")
-}
-
-model Reserva {
-  idReserva           Int          @id @default(autoincrement()) @map("id_reserva")
-  idArea              Int          @map("id_area")
-  idDepartamento      Int          @map("id_departamento")
-  fechaReserva        DateTime     @map("fecha_reserva") @db.Date
-  horaInicio           DateTime    @map("hora_inicio") @db.Time
-  horaFin              DateTime    @map("hora_fin") @db.Time
-  estado              String       @default("Confirmada") @db.VarChar(20)
-  idUsuarioRegistro   Int?         @map("id_usuario_registro")
-  fechaCreacion       DateTime     @default(now()) @map("fecha_creacion") @db.Timestamp(6)
-
-  area                AreaComun    @relation(fields: [idArea], references: [idArea])
-  departamento        Departamento @relation(fields: [idDepartamento], references: [idDepartamento])
-  usuarioRegistro     Usuario?     @relation(fields: [idUsuarioRegistro], references: [idUsuario])
-
-  @@index([idArea], map: "idx_reservas_area")
-  @@index([idDepartamento], map: "idx_reservas_departamento")
-  @@map("reservas")
-  @@schema("edificio")
-}
-
-model SolicitudMantenimiento {
-  idSolicitud           Int          @id @default(autoincrement()) @map("id_solicitud")
-  idDepartamento        Int?         @map("id_departamento")
-  titulo                String       @db.VarChar(150)
-  descripcion           String?      @db.Text
-  prioridad             String       @default("Media") @db.VarChar(20)
-  estado                String       @default("Pendiente") @db.VarChar(20)
-  fechaSolicitud        DateTime     @default(now()) @map("fecha_solicitud") @db.Timestamp(6)
-  fechaProgramada       DateTime?    @map("fecha_programada") @db.Date
-  fechaCompletado       DateTime?    @map("fecha_completado") @db.Timestamp(6)
-  idEmpleadoAsignado    Int?         @map("id_empleado_asignado")
-  idUsuarioRegistro     Int?         @map("id_usuario_registro")
-
-  departamento          Departamento? @relation(fields: [idDepartamento], references: [idDepartamento])
-  empleadoAsignado      Empleado?     @relation(fields: [idEmpleadoAsignado], references: [idEmpleado])
-  usuarioRegistro       Usuario?      @relation(fields: [idUsuarioRegistro], references: [idUsuario])
-
-  @@index([idDepartamento], map: "idx_solicitudes_departamento")
-  @@index([estado], map: "idx_solicitudes_estado")
-  @@index([idEmpleadoAsignado], map: "idx_solicitudes_empleado")
-  @@map("solicitudes_mantenimiento")
-  @@schema("edificio")
-}
-
-model ActivoInventario {
-  idActivo       Int       @id @default(autoincrement()) @map("id_activo")
-  nombre         String    @db.VarChar(150)
-  categoria      String?   @db.VarChar(50)
-  cantidad       Decimal   @default(0) @db.Decimal(10, 2)
-  unidadMedida   String?   @map("unidad_medida") @db.VarChar(20)
-  ubicacion      String?   @db.Text
-  fechaRegistro  DateTime  @default(now()) @map("fecha_registro") @db.Timestamp(6)
-
-  @@map("activos_inventario")
-  @@schema("edificio")
-}

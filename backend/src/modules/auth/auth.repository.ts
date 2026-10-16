@@ -53,6 +53,53 @@ export class AuthRepository {
       },
     });
   }
+
+  async findSesionActiva(idUsuario: number) {
+    return prisma.sesion.findFirst({
+      where: { idUsuario, activa: true },
+      orderBy: { fechaInicio: 'desc' },
+    });
+  }
+
+  async crearSesion(data: { idUsuario: number; ip?: string; userAgent?: string }) {
+    return prisma.sesion.create({
+      data: {
+        idUsuario: data.idUsuario,
+        ip: data.ip,
+        userAgent: data.userAgent,
+        activa: true,
+        fechaInicio: new Date(),
+        ultimoAcceso: new Date(),
+      },
+    });
+  }
+
+  async desactivarSesionesUsuario(idUsuario: number) {
+    return prisma.sesion.updateMany({
+      where: { idUsuario, activa: true },
+      data: { activa: false },
+    });
+  }
+
+  async desactivarSesion(idSesion: string) {
+    return prisma.sesion.updateMany({
+      where: { idSesion, activa: true },
+      data: { activa: false },
+    });
+  }
+
+  async findSesionById(idSesion: string) {
+    return prisma.sesion.findUnique({
+      where: { idSesion },
+    });
+  }
+
+  async actualizarUltimoAccesoSesion(idSesion: string, fecha: Date = new Date()) {
+    return prisma.sesion.update({
+      where: { idSesion },
+      data: { ultimoAcceso: fecha },
+    });
+  }
 }
 
 export const authRepository = new AuthRepository();

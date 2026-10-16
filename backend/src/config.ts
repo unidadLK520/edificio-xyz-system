@@ -16,4 +16,7 @@ export const config = {
   corsOrigin: process.env.CORS_ORIGIN || 'http://localhost:3000',
   isDev: (process.env.NODE_ENV || 'development') === 'development',
   sessionIdleTimeoutMinutes: parseFloat(process.env.SESSION_IDLE_TIMEOUT_MINUTES || '30'),
+  moraCron: process.env.MORA_CRON || '0 1 * * *',
+  moraCronEnabled: process.env.MORA_CRON_ENABLED === 'true',
+  moraCronTimezone: 'America/La_Paz',
 } as const;
