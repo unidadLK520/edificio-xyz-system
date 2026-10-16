@@ -16,8 +16,8 @@ Ya vigente (implementado y probado):
 - `POST /expensas/:id/pagos` y `PATCH /expensas/pagos/:idPago/corregir`: devuelven `422` si `montoPagado <= 0`, si la expensa ya está Pagada o si el monto excede el saldo.
 - `POST /expensas`: devuelve `409` si ya existe expensa del mismo departamento y período.
 - `GET /expensas` y `GET /expensas/:id`: incluyen el campo `vencida`; el listado acepta `?vencida=true`.
-- `calcular-mora`: sin días de espera (vencida si hoy > fechaVencimiento). La mora se calcula sobre el capital pendiente (monto − pagos directos − anticipos aplicados) sobre el total (fijo + agua). Un solo % por expensa vencida, sin crecer con el tiempo. La tasa de la expensa manda; si es 0, toma la regla activa.
-- `GET/POST /expensas/reglas-mora`: mora configurable (tasa de interés). Ya no existe el fallback fijo al 5 %. `POST` acepta pero ignora `diasGracia` y devuelve 0.
+- `calcular-mora`: sin días de espera ni días de gracia como campo activo (vencida si hoy > fechaVencimiento). La mora se calcula sobre el capital pendiente (monto − pagos directos − anticipos aplicados) sobre el total (fijo + agua). Un solo % por expensa vencida, sin crecer con el tiempo. La tasa de la expensa manda; si es 0, toma la regla activa.
+- `GET/POST /expensas/reglas-mora`: mora configurable (tasa de interés). Ya no existe el fallback fijo al 5 %. El concepto de "días de gracia" ya no es un campo activo de configuración de mora (la regla opera con aplicación inmediata al vencimiento; `POST` acepta `diasGracia` solo por compatibilidad hacia atrás pero se ignora y almacena/devuelve siempre 0).
 - `generar-masivo` y `POST /expensas`: copian la tasa de la regla activa a `expensas.tasa_interes_mora` (la de la expensa manda; si cambia la regla activa, las expensas emitidas conservan su tasa).
 - `GET/POST/PUT /api/v1/tipos-departamento` (Administrador, Directorio): nombre libre hasta 60 caracteres y único (ej. "Suite Presidencial Premium"), `montoExpensa > 0`, `areaM2` opcional, `activo`. `PUT` con `activo=false` devuelve `409` si hay departamentos asignados. Auditorías `CREAR_TIPO_DEPARTAMENTO` y `ACTUALIZAR_TIPO_DEPARTAMENTO`. `GET/PUT /expensas/montos-tipo` se mantienen como alias compatibles.
 - Asignación de tipos a departamentos: `PUT /api/v1/departamentos/:id/tipo` y `PUT /api/v1/departamentos/asignar-tipo` (Administrador, Directorio). Asignación en transacción atómica (todo o nada). Solo tipos activos (`422` si inactivo o inexistente). Hereda `area_m2` del tipo si el departamento no tiene. Auditoría `ASIGNAR_TIPO_DEPARTAMENTO`.
@@ -27,7 +27,7 @@ Ya vigente (implementado y probado):
 Por implementar (cambiará, no construir sobre lo anterior):
 - `GET /expensas/estado-cuenta/:idDepartamento`: filtros `periodo`, `desde`, `hasta`, `movimientos`, `sinMovimientos`, pagador y ocupante actual.
 - Emisión y lectura de expensas y estado de cuenta para rol Consulta: queda como "Pendiente" según el código actual y la matriz RBAC.
-Fuera del sistema (según el ingeniero): gastos comunes como base de cálculo, servicios de luz y gas, monto y contratos de alquiler. El registro de inquilinos y el historial de ocupantes sí permanece.
+Fuera del sistema (según el requerimiento formal): cálculo de expensas por alícuota sobre gastos comunes (reemplazado por expensa fija por tipo de departamento A/B/C más agua potable), rol "Copropietario" (los roles del sistema son exclusivamente Administrador, Directorio y Consulta), servicios de luz y gas, monto y contratos de alquiler. El registro de inquilinos y el historial de ocupantes sí permanece.
 ---
 ## 1. Módulo de Autenticación, Control de Acceso y Sesiones
 Ubicación en el código: `backend/src/modules/auth/`
@@ -613,7 +613,7 @@ Agrupa por departamento las expensas vencidas con saldo pendiente. Cada detalle 
 }
 ```
 4.9 Estado de cuenta por departamento (US2.2)
-`GET /api/v1/expensas/estado-cuenta/:idDepartamento` · Roles: Administrador, Directorio, Copropietario.
+`GET /api/v1/expensas/estado-cuenta/:idDepartamento` · Roles: Administrador, Directorio.
 Resumen financiero cronológico: obligaciones, pagos vigentes, saldo pendiente, anticipos totales y disponibles. Cada expensa incluye `montoBase`, `montoAgua`, `monto` (total), `concepto` ("Expensa mensual Tipo B" y "Agua X m3" si aplica) y `capitalPendiente`.
 ```json
 {
@@ -969,6 +969,8 @@ Evento	Tabla	Origen	Descripción / Datos Capturados
 `CREAR_TIPO_DEPARTAMENTO`	tipos_departamento	`POST /tipos-departamento`	Creación de tipo con nombre único, montoExpensa > 0 y areaM2 opcional.
 `ACTUALIZAR_TIPO_DEPARTAMENTO`	tipos_departamento	`PUT /tipos-departamento/:id`	Actualización de tipo (nombre, monto, área, activo; valida 409 si tiene deptos).
 `ASIGNAR_TIPO_DEPARTAMENTO`	departamentos	`PUT /departamentos/:id/tipo` y `PUT /departamentos/asignar-tipo`	Asignación de tipo activo a depto (individual o masiva atómica con herencia de área).
+`CONFIGURAR_TARIFA_AGUA`	tarifas_agua	`POST /agua/tarifa`	Configuración de precio por m3 de agua potable (datosAnteriores y datosNuevos).
+`REGISTRO_LECTURA_AGUA`	lecturas_agua	`POST /agua/lecturas` y `PUT /agua/lecturas/:id`	Registro o corrección de lectura mensual de agua (consumoM3, montoAgua, precioM3Aplicado).
 `GENERACION_MASIVA_EXPENSAS`	expensas	`POST /expensas/generar-masivo`	Emisión mensual masiva fija por tipo (período, generadasCount, excepcionesCount).
 `CREAR_EXPENSA`	expensas	`POST /expensas`	Emisión individual de expensa.
 `CALCULO_MORA_EXPENSAS`	expensas	`POST /expensas/calcular-mora` y cron	Cálculo de mora sobre capital pendiente sin días de espera (origen `MANUAL` o `SISTEMA_CRON`).
@@ -1135,6 +1137,11 @@ Tipos Depto	/tipos-departamento	POST	✅	✅	❌
 Tipos Depto	/tipos-departamento/:id	PUT	✅	✅	❌
 Departamentos	/departamentos/:id/tipo	PUT	✅	✅	❌
 Departamentos	/departamentos/asignar-tipo	PUT	✅	✅	❌
+Agua	/agua/tarifa	GET	✅	✅	❌
+Agua	/agua/tarifa	POST	✅	✅	❌
+Agua	/agua/lecturas	GET	✅	✅	✅
+Agua	/agua/lecturas	POST	✅	✅	❌
+Agua	/agua/lecturas/:id	PUT	✅	✅	❌
 Expensas	/expensas	GET	✅	✅	❌ *
 Expensas	/expensas/:id	GET	✅	✅	❌ *
 Expensas	/expensas/morosos	GET	✅	✅	❌
@@ -1159,6 +1166,8 @@ Movimientos	/movimientos/:id	PUT	✅	❌	❌
 Movimientos	/movimientos/:id	DELETE	✅	❌	❌
 Auditoria	/auditoria	GET	✅	✅	❌
 Auditoria	/auditoria/:id	GET	✅	✅	❌
+Health/Failover	/health/db	GET	✅	❌	❌
+Health/Failover	/health/db/principal	POST	✅	❌	❌
 
 * Pendiente de confirmar contra el código y con el Scrum si Consulta tendrá lectura de expensas y estado de cuenta (requisito mínimo del cliente: emisión de estados de cuenta).
 ---
@@ -1291,4 +1300,14 @@ El backend implementa un mecanismo de conmutación de conexión transparente y s
 > 1. Las sesiones activas previas no existen en la base de respaldo (o la tabla carece de los registros vigentes).
 > 2. Por diseño del middleware de autenticación, las peticiones autenticadas subsiguientes de los usuarios recibirán un error `401 Unauthorized` con el mensaje: *"Sesión inválida o cerrada. Vuelva a iniciar sesión."*
 > 3. Los usuarios deben volver a ingresar sus credenciales para generar una nueva sesión válida en la base de datos actualmente activa.
+
+### 10.5 Dependencia de Internos de Prisma (`requestTransaction`), Fijación de Versión y Regresión
+
+- **Dependencia de internos del runtime de Prisma Client:**
+  Para habilitar la conmutación dinámica transparente sin interferir con las transacciones por lotes (`prisma.$transaction([ ... ])`), el Proxy dinámico de `@edificio-xyz/database` envuelve las operaciones de modelo mediante `wrapPrismaPromise`. Dicho envoltorio preserva obligatoriamente el tag `[Symbol.toStringTag] === 'PrismaPromise'` y delega las llamadas a las propiedades y funciones internas del motor de Prisma, específicamente `.requestTransaction`.
+- **Fijación estricta de la versión de Prisma:**
+  Dado que la preservación de operaciones transaccionales en lote depende directamente de estructuras no públicas del runtime de Prisma (`requestTransaction` y el duck-typing de `Symbol.toStringTag`), **la versión de Prisma (`@prisma/client` y `prisma`, actualmente `v6.19.3`) debe mantenerse estrictamente fija**. No deben aplicarse actualizaciones mayores o intermedias sin antes validar rigurosamente la compatibilidad del Proxy contra estos métodos internos.
+- **Detección temprana con pruebas de regresión:**
+  La suite automatizada `backend/tests/database_failover.test.ts` incorpora pruebas de regresión dedicadas para ambas variantes de transacciones (`$transaction` por array de promesas y `$transaction` con callback interactivo). Estas pruebas aseguran que ante cualquier modificación en las dependencias o en el cliente Prisma, cualquier ruptura de compatibilidad interna sea detectada de forma inmediata.
+
 
