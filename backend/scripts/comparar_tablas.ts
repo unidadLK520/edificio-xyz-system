@@ -67,6 +67,13 @@ async function main() {
     console.log(`Sesiones DESPUÉS: ${sesionesActuales} filas`);
     console.log(`¿Coincidencia exacta de sesiones?: ${sesionesActuales === 0 ? '✅ SÍ (0 filas)' : '⚠️ DIFERENCIA'}`);
 
+    // 1.6 Montos de agua
+    const montosActuales = await prisma.montoAgua.count();
+    console.log('\n--- 6. TABLA: montos_agua ---');
+    console.log(`Montos ANTES:   0 filas`);
+    console.log(`Montos DESPUÉS: ${montosActuales} filas`);
+    console.log(`¿Coincidencia exacta de montos_agua?: ${montosActuales === 0 ? '✅ SÍ (0 filas)' : '⚠️ DIFERENCIA'}`);
+
     // 2. Conteos y Checksum NO TST-
     console.log('\n===============================================================');
     console.log('             CONTEOS Y CHECKSUM NO TST- (DATOS REALES)         ');

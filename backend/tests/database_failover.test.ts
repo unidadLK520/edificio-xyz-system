@@ -5,7 +5,7 @@
 // - Conmutación ante error de conexión: petición en curso da 503; siguiente funciona en respaldo
 // - 422 y 409 NO provocan conmutación (permanece en 'principal')
 // - En respaldo: solo lectura (SELECT/GET), sin escrituras ni datos TST-
-// - Esquema requerido ampliado: tablas sesiones, tarifas_agua, lecturas_agua, reglas_mora, tipos_departamento
+// - Esquema requerido ampliado: tablas sesiones, montos_agua, reglas_mora, tipos_departamento
 //   y columnas tipos_departamento.activo, expensas.monto_base, expensas.monto_agua, pagos.id_persona_pagador
 // - Prueba explícita cuando al respaldo le falta la tabla sesiones (no conmuta y da 503 con detalle)
 // - Endpoints: GET /api/v1/health/db y POST /api/v1/health/db/principal protegidos por rol Administrador
@@ -142,8 +142,7 @@ describe('Prompt 6: Respaldo de Conexión (Database Failover)', () => {
               { table_name: 'expensas' },
               { table_name: 'pagos' },
               { table_name: 'sesiones' },
-              { table_name: 'tarifas_agua' },
-              { table_name: 'lecturas_agua' },
+              { table_name: 'montos_agua' },
               { table_name: 'reglas_mora' },
               { table_name: 'tipos_departamento' },
             ];
@@ -226,8 +225,7 @@ describe('Prompt 6: Respaldo de Conexión (Database Failover)', () => {
               { table_name: 'expensas' },
               { table_name: 'pagos' },
               // FALTA 'sesiones'
-              { table_name: 'tarifas_agua' },
-              { table_name: 'lecturas_agua' },
+              { table_name: 'montos_agua' },
               { table_name: 'reglas_mora' },
               { table_name: 'tipos_departamento' },
             ];
@@ -283,8 +281,7 @@ describe('Prompt 6: Respaldo de Conexión (Database Failover)', () => {
               { table_name: 'expensas' },
               { table_name: 'pagos' },
               { table_name: 'sesiones' },
-              { table_name: 'tarifas_agua' },
-              { table_name: 'lecturas_agua' },
+              { table_name: 'montos_agua' },
               { table_name: 'reglas_mora' },
               { table_name: 'tipos_departamento' },
             ];

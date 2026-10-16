@@ -17,6 +17,7 @@ export interface LimpiarIdsOptions {
   tarifasAgua?: number[];
   tiposDepartamento?: number[];
   lecturasAgua?: number[];
+  montosAgua?: number[];
   sesiones?: string[];
 }
 
@@ -167,6 +168,15 @@ export async function limpiar(ids: LimpiarIdsOptions): Promise<void> {
     if (valid.length > 0) {
       await prisma.lecturaAgua.deleteMany({
         where: { idLectura: { in: valid } },
+      });
+    }
+  }
+
+  if (ids.montosAgua && ids.montosAgua.length > 0) {
+    const valid = ids.montosAgua.filter(Boolean);
+    if (valid.length > 0) {
+      await prisma.montoAgua.deleteMany({
+        where: { idMonto: { in: valid } },
       });
     }
   }

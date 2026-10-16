@@ -44,6 +44,16 @@ vi.mock('@edificio-xyz/database', () => {
       delete: vi.fn(),
       deleteMany: vi.fn(),
     },
+    montoAgua: {
+      findUnique: vi.fn().mockResolvedValue(null),
+      findFirst: vi.fn().mockResolvedValue(null),
+      findMany: vi.fn().mockResolvedValue([]),
+      count: vi.fn().mockResolvedValue(0),
+      create: vi.fn(),
+      update: vi.fn(),
+      delete: vi.fn(),
+      deleteMany: vi.fn(),
+    },
     $transaction: vi.fn(),
   };
   return { prisma: mockPrisma };

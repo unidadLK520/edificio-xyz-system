@@ -1,135 +1,83 @@
 // backend/src/routes/agua.routes.ts
-// Rutas de gestión de tarifas y lecturas de agua
+// Rutas de gestión de montos manuales de agua
 
 import { Router, Response, NextFunction, IRouter } from 'express';
 import { z } from 'zod';
 import { authMiddleware, AuthRequest } from '../middlewares/auth.middleware';
 import { authorizeRoles } from '../middlewares/role.middleware';
 import {
-  configurarTarifaAgua,
-  obtenerTarifaAgua,
-  registrarLecturaAgua,
-  obtenerLecturasAgua,
-  corregirLecturaAgua,
+  registrarOActualizarMontosAgua,
+  obtenerMontosAgua,
 } from '../modules/agua';
 
 export const aguaRouter: IRouter = Router();
 aguaRouter.use(authMiddleware);
 
-const tarifaSchema = z
+// Esquema para cada elemento de monto de agua
+const itemMontoAguaSchema = z
   .object({
-    precioM3: z.number().min(0, 'El precio por m3 debe ser mayor o igual a 0').optional(),
-    precio_m3: z.number().min(0, 'El precio por m3 debe ser mayor o igual a 0').optional(),
+    idDepartamento: z.number().int().positive().optional(),
+    id_departamento: z.number().int().positive().optional(),
+    montoAgua: z.number().min(0, 'El monto de agua debe ser mayor o igual a 0').optional(),
+    monto_agua: z.number().min(0, 'El monto de agua debe ser mayor o igual a 0').optional(),
   })
-  .refine((data) => data.precioM3 !== undefined || data.precio_m3 !== undefined, {
-    message: 'Debe especificar el precio por m3 (precioM3 o precio_m3)',
-  });
-
-// ── GET /api/v1/agua/tarifa ──────────────────────────────────────────────────
-// Consulta de tarifa de agua activa e historial (Administrador y Directorio)
-aguaRouter.get(
-  '/tarifa',
-  authorizeRoles('Administrador', 'Directorio'),
-  async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
-    try {
-      const resultado = await obtenerTarifaAgua();
-      res.json(resultado);
-    } catch (err) {
-      next(err);
+  .refine(
+    (d) =>
+      (d.idDepartamento !== undefined || d.id_departamento !== undefined) &&
+      (d.montoAgua !== undefined || d.monto_agua !== undefined),
+    {
+      message: 'Debe especificar el departamento (idDepartamento) y el monto de agua (montoAgua)',
     }
-  }
-);
+  );
 
-// ── POST /api/v1/agua/tarifa ─────────────────────────────────────────────────
-// Configurar nueva tarifa de agua activa (Administrador y Directorio)
-aguaRouter.post(
-  '/tarifa',
-  authorizeRoles('Administrador', 'Directorio'),
-  async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
-    try {
-      const parsed = tarifaSchema.safeParse(req.body);
-      if (!parsed.success) {
-        res.status(400).json({
-          error: 'Validation Error',
-          message: 'Parámetros de tarifa de agua inválidos',
-          details: parsed.error.flatten().fieldErrors,
-        });
-        return;
-      }
-
-      const precio = parsed.data.precioM3 !== undefined ? parsed.data.precioM3 : parsed.data.precio_m3!;
-      const nuevaTarifa = await configurarTarifaAgua({
-        precioM3: precio,
-        idUsuario: req.user?.idUsuario || null,
-      });
-
-      res.status(201).json({
-        message: 'Tarifa de agua configurada exitosamente',
-        tarifa: {
-          ...nuevaTarifa,
-          precioM3: Number(nuevaTarifa.precioM3),
-        },
-      });
-    } catch (err) {
-      next(err);
-    }
-  }
-);
-
-// ── Validación de Lecturas ───────────────────────────────────────────────────
-const registrarLecturaSchema = z.object({
-  idDepartamento: z.number().int().positive().optional(),
-  id_departamento: z.number().int().positive().optional(),
+// Esquema para el registro/actualización masivo por período
+const registrarMontosSchema = z.object({
   periodo: z.string().min(1, 'El período es obligatorio'),
-  lecturaActual: z.number().min(0, 'La lectura actual debe ser mayor o igual a 0').optional(),
-  lectura_actual: z.number().min(0, 'La lectura actual debe ser mayor o igual a 0').optional(),
-  lecturaAnterior: z.number().min(0, 'La lectura anterior debe ser mayor o igual a 0').optional(),
-  lectura_anterior: z.number().min(0, 'La lectura anterior debe ser mayor o igual a 0').optional(),
-}).refine(
-  (d) => (d.idDepartamento !== undefined || d.id_departamento !== undefined) &&
-         (d.lecturaActual !== undefined || d.lectura_actual !== undefined),
-  { message: 'Debe especificar idDepartamento y lecturaActual' }
-);
-
-const corregirLecturaSchema = z.object({
-  lecturaActual: z.number().min(0, 'La lectura actual debe ser mayor o igual a 0').optional(),
-  lectura_actual: z.number().min(0, 'La lectura actual debe ser mayor o igual a 0').optional(),
-  lecturaAnterior: z.number().min(0, 'La lectura anterior debe ser mayor o igual a 0').optional(),
-  lectura_anterior: z.number().min(0, 'La lectura anterior debe ser mayor o igual a 0').optional(),
+  montos: z
+    .array(itemMontoAguaSchema)
+    .min(1, 'Debe especificar al menos un monto de agua en la lista'),
 });
 
-// ── POST /api/v1/agua/lecturas ───────────────────────────────────────────────
-// Registrar lectura de agua del período (Administrador y Directorio)
-aguaRouter.post(
-  '/lecturas',
+// ── PUT /api/v1/agua/montos ──────────────────────────────────────────────────
+// Registra o actualiza montos manuales de agua por (departamento, periodo) en transacción (todo o nada)
+// Roles permitidos: Administrador, Directorio
+// Códigos de respuesta:
+// - 200: Registro/actualización exitoso
+// - 400: Monto negativo, formato de período inválido o datos malformados
+// - 409: Ya existe una expensa emitida para ese departamento y período
+// - 422: El departamento no existe
+aguaRouter.put(
+  '/montos',
   authorizeRoles('Administrador', 'Directorio'),
   async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
     try {
-      const parsed = registrarLecturaSchema.safeParse(req.body);
+      const parsed = registrarMontosSchema.safeParse(req.body);
       if (!parsed.success) {
         res.status(400).json({
           error: 'Validation Error',
-          message: 'Parámetros de lectura de agua inválidos',
+          message: 'Parámetros de montos de agua inválidos',
           details: parsed.error.flatten().fieldErrors,
         });
         return;
       }
 
-      const idDepartamento = parsed.data.idDepartamento !== undefined ? parsed.data.idDepartamento : parsed.data.id_departamento!;
-      const lecturaActual = parsed.data.lecturaActual !== undefined ? parsed.data.lecturaActual : parsed.data.lectura_actual!;
-      const lecturaAnterior = parsed.data.lecturaAnterior !== undefined ? parsed.data.lecturaAnterior : parsed.data.lectura_anterior;
+      const itemsNormalizados = parsed.data.montos.map((m) => {
+        const idDepartamento =
+          m.idDepartamento !== undefined ? m.idDepartamento : m.id_departamento!;
+        const montoAgua =
+          m.montoAgua !== undefined ? m.montoAgua : m.monto_agua!;
+        return { idDepartamento, montoAgua };
+      });
 
-      const nuevaLectura = await registrarLecturaAgua({
-        idDepartamento,
+      const resultado = await registrarOActualizarMontosAgua({
         periodo: parsed.data.periodo,
-        lecturaActual,
-        lecturaAnterior,
+        montos: itemsNormalizados,
         idUsuario: req.user?.idUsuario || null,
       });
 
-      res.status(201).json({
-        message: 'Lectura de agua registrada exitosamente',
-        lectura: nuevaLectura,
+      res.status(200).json({
+        message: 'Montos de agua registrados exitosamente',
+        ...resultado,
       });
     } catch (err: any) {
       if (err.statusCode) {
@@ -144,86 +92,32 @@ aguaRouter.post(
   }
 );
 
-// ── GET /api/v1/agua/lecturas ────────────────────────────────────────────────
-// Listar lecturas de agua con filtros por periodo e idDepartamento (A, D, C)
+// ── GET /api/v1/agua/montos ──────────────────────────────────────────────────
+// Consulta montos de agua registrados con filtros opcionales por periodo e idDepartamento
+// Roles permitidos: Administrador, Directorio, Consulta
 aguaRouter.get(
-  '/lecturas',
-  authorizeRoles('Administrador', 'Directorio', 'Consulta', 'Copropietario'),
+  '/montos',
+  authorizeRoles('Administrador', 'Directorio', 'Consulta'),
   async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
     try {
-      const { periodo, idDepartamento, page, limit } = req.query;
+      const { periodo, idDepartamento, id_departamento } = req.query;
+      const deptoId = idDepartamento || id_departamento;
 
-      const resultado = await obtenerLecturasAgua({
+      const resultado = await obtenerMontosAgua({
         periodo: periodo ? String(periodo) : undefined,
-        idDepartamento: idDepartamento ? Number(idDepartamento) : undefined,
-        page: page ? Number(page) : undefined,
-        limit: limit ? Number(limit) : undefined,
+        idDepartamento: deptoId ? Number(deptoId) : undefined,
       });
 
-      res.json(resultado);
-    } catch (err) {
+      res.status(200).json(resultado);
+    } catch (err: any) {
+      if (err.statusCode) {
+        res.status(err.statusCode).json({
+          error: err.code || 'Error',
+          message: err.message,
+        });
+        return;
+      }
       next(err);
     }
   }
 );
-
-// Handler común para corrección de lectura
-async function handleCorregirLectura(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
-  try {
-    const idLectura = parseInt(req.params.id);
-    if (isNaN(idLectura)) {
-      res.status(400).json({ error: 'Bad Request', message: 'ID de lectura inválido' });
-      return;
-    }
-
-    const parsed = corregirLecturaSchema.safeParse(req.body);
-    if (!parsed.success) {
-      res.status(400).json({
-        error: 'Validation Error',
-        message: 'Parámetros de corrección inválidos',
-        details: parsed.error.flatten().fieldErrors,
-      });
-      return;
-    }
-
-    const lecturaActual = parsed.data.lecturaActual !== undefined ? parsed.data.lecturaActual : parsed.data.lectura_actual;
-    const lecturaAnterior = parsed.data.lecturaAnterior !== undefined ? parsed.data.lecturaAnterior : parsed.data.lectura_anterior;
-
-    const lecturaCorregida = await corregirLecturaAgua({
-      idLectura,
-      lecturaActual,
-      lecturaAnterior,
-      idUsuario: req.user?.idUsuario || null,
-    });
-
-    res.json({
-      message: 'Lectura de agua corregida exitosamente',
-      lectura: lecturaCorregida,
-    });
-  } catch (err: any) {
-    if (err.statusCode) {
-      res.status(err.statusCode).json({
-        error: err.code || 'Error',
-        message: err.message,
-      });
-      return;
-    }
-    next(err);
-  }
-}
-
-// ── PUT /api/v1/agua/lecturas/:id ────────────────────────────────────────────
-// Corregir lectura de agua (Administrador y Directorio; 409 si ya se usó en expensa emitida)
-aguaRouter.put(
-  '/lecturas/:id',
-  authorizeRoles('Administrador', 'Directorio'),
-  handleCorregirLectura
-);
-
-// Alias directo PUT /api/v1/agua/:id
-aguaRouter.put(
-  '/:id',
-  authorizeRoles('Administrador', 'Directorio'),
-  handleCorregirLectura
-);
-
