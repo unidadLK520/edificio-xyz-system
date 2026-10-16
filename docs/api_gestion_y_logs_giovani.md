@@ -47,7 +47,7 @@ Request:
 ```json
 { "correo": "admin@edificioxyz.com", "password": "********" }
 ```
-Respuesta 200:
+Respuesta 200 OK:
 ```json
 {
   "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
@@ -429,6 +429,8 @@ Genera en una transacción las expensas del período:
 - `monto = monto_base + monto_agua`, `saldo = monto`.
 - Aplica de inmediato los anticipos disponibles en orden FIFO dentro de la misma transacción.
 - Una expensa emitida nunca se modifica tras su emisión. Audita `GENERACION_MASIVA_EXPENSAS`.
+- **Manejo de `tasaInteresMora` en el body:** El body acepta opcionalmente `tasaInteresMora?: number`. Si se envía en el request, se aplica explícitamente dicho porcentaje a las expensas generadas; si se omite (`undefined`), el sistema copia automáticamente la tasa de la regla activa vigente (`reglaMora` donde `activa = true`, o 0 si no existe regla activa). En ambos casos, el valor queda guardado en `expensas.tasa_interes_mora` de cada expensa emitida y manda de forma inmutable frente a futuros recálculos de mora ("la tasa de la expensa manda").
+- **Filtro interno de prueba `idDepartamentos`:** El body acepta opcionalmente `idDepartamentos?: number[]` como filtro interno (utilizado para pruebas automatizadas y emisión selectiva puntual). Si se omite o está vacío, opera de forma masiva sobre todos los departamentos elegibles (respetando los excluidos en `excluirDepartamentos?: number[]`).
 Request:
 ```json
 { "periodo": "2026-10-01", "fechaVencimiento": "2026-10-15", "tasaInteresMora": 5 }
@@ -451,7 +453,8 @@ Respuesta 201:
 4.2 Cálculo de mora (CA10, CA12)
 `POST /api/v1/expensas/calcular-mora` · Roles: Administrador, Directorio.
 Evalúa expensas vencidas (hoy > `fechaVencimiento`, sin días de espera) con saldo pendiente. Calcula la mora sobre el capital pendiente (monto total − pagos − anticipos), por lo que la mora se aplica sobre el total (fijo + agua). Actualiza `montoMora`, `saldoPendiente` y el estado `Moroso`. Audita `CALCULO_MORA_EXPENSAS`.
-Request: vacío o `{ "idDepartamentos": [1, 2] }`.
+- **Filtro interno de prueba `idDepartamentos`:** Acepta opcionalmente en el body `{ "idDepartamentos": [ ... ] }` como filtro interno (utilizado primordialmente para pruebas automatizadas y diagnósticos controlados). Si se omite o está vacío, tanto este endpoint manual como la tarea programada (`cron`) operan siempre de manera global sobre todas las expensas vencidas elegibles del sistema.
+Request: vacío `{}` o `{ "idDepartamentos": [1, 2] }`.
 ```json
 { "message": "Se aplicó el recargo de mora a 3 expensas vencidas", "actualizadasCount": 3 }
 ```
@@ -695,7 +698,7 @@ Monto de expensa: el monto es fijo y sale directamente del tipo de departamento 
 Recálculo dinámico y efecto de pagos posteriores: la mora se recalcula en cada ejecución sobre el capital vivo; un pago posterior reduce o elimina la mora ya calculada.
 Ejemplo (550 / 300): expensa de Bs 550, tasa 5 %. Al vencer sin pagos, mora = 27.50 (saldo 577.50). Se aplican 250 (pago o anticipo): capital 300. La siguiente ejecución da mora = 15.00 (saldo 315.00). Si se cubren los 550, la mora pasa a 0.
 Caso del bug corregido: expensa 550 con anticipo aplicado de 250; antes la mora se calculaba sobre 550 (27.50, saldo 577.50); ahora sobre 300 (15.00, saldo 315.00).
-Idempotencia: ejecutar el cálculo varias veces sin cambios intermedios da el mismo resultado, porque sobrescribe `montoMora` sobre una base limpia. Si entre ejecuciones hubo pagos o cambió la regla, el resultado cambia.
+Idempotencia: ejecutar el cálculo varias veces consecutivas sobre las mismas expensas sin pagos intermedios arroja exactamente el mismo resultado, ya que `montoMora` se sobrescribe sobre el capital pendiente limpio. Como la tasa fijada en la expensa manda (`tasaInteresMora`), modificar la regla activa general posteriormente no altera la mora de las expensas ya emitidas (su tasa es inmutable); únicamente nuevos pagos o anticipos aplicados que reduzcan el capital pendiente modificarán el saldo o el monto de mora recalculado.
 `interesPagado`: se almacena de forma informativa; no amortiza mora, ni saldo, ni capital.
 Ejemplo de independencia de mora por período (febrero y marzo): un mismo departamento con dos expensas vencidas (febrero por Bs 300 y marzo por Bs 300) genera un 5 % de mora independiente en cada una (Bs 15 de mora en febrero y Bs 15 en marzo, resultando en saldos de Bs 315 en cada período). La mora no crece acumulativamente con el paso de los meses ni se calcula sobre la mora de otros períodos. El endpoint `/morosos` consolida ambas obligaciones en `totalDeuda = Bs 630.00`.
 4.13 Configuración de mora (CA09)
@@ -1210,8 +1213,14 @@ CA	Endpoint(s)	Estado	Nota
 
 ---
 ## 9. Pendientes conocidos
-- Quién pagó: `idPersonaPagador` obligatorio en pagos y correcciones implementado y probado; la columna `id_persona_pagador` en `edificio.pagos` fue creada formalmente en la BD compartida y versionada en `database/migrations/003_expensas_agua_sesiones_pagos.sql`.
-- Control de duplicados en expensas: resuelto; la BD real ya cuenta con la restricción `UNIQUE (id_departamento, periodo)` y el backend maneja P2002 como 409 Conflict.
+- [Resuelto] Quién pagó: `idPersonaPagador` obligatorio en pagos y correcciones implementado y probado; la columna `id_persona_pagador` en `edificio.pagos` fue creada formalmente en la BD compartida y versionada en `database/migrations/003_expensas_agua_sesiones_pagos.sql`.
+- [Resuelto] Control de duplicados en expensas: la BD real ya cuenta con la restricción `UNIQUE (id_departamento, periodo)` y el backend maneja P2002 como 409 Conflict.
+- (a) Base de datos de respaldo (Render): La instancia de base de datos en Render aún no cuenta con la ejecución de la migración `003_expensas_agua_sesiones_pagos.sql`. Hasta que DevOps alinee el esquema del respaldo ejecutando dicha migración, la validación `checkFallbackSchema` del failover abortará cualquier intento de conmutación y responderá `503 Service Unavailable` indicando las tablas y columnas faltantes.
+- (b) Sincronización y conciliación entre bases de datos: No existe replicación ni sincronización automática entre la base de datos principal y la de respaldo (son bases independientes). Toda operación realizada mientras el sistema se encuentre conmutado generará divergencia de datos y requerirá un proceso de conciliación manual por parte del equipo de operaciones antes o después de la restauración.
+- (c) Bloqueo temporal por sesión única: Con la política de sesión única basada en base de datos (`edificio.sesiones`), si un usuario cierra el navegador o pestaña abruptamente sin hacer logout (`POST /auth/logout`), su registro permanecerá activo y no podrá volver a iniciar sesión durante un período de hasta 30 minutos de inactividad (`ultimo_acceso >= 30 min`), salvo que un Administrador realice un cierre forzado (`DELETE /api/v1/auth/sesiones/:idUsuario`).
+- (d) Registros de auditoría generados por pruebas automatizadas: La tabla `edificio.auditoria` en la base de datos compartida contiene filas producidas durante la ejecución de pruebas y diagnósticos que no se pueden borrar a través de la API (los endpoints de auditoría son de solo lectura para preservar la inmutabilidad y trazabilidad).
+- (e) Atributo `area_m2` en departamentos: Posible traslado o consolidación de la columna `area_m2` a otra tabla especializada o su gestión exclusiva a nivel de tipo de departamento, pendiente de evaluar y decidir con el equipo de DevOps.
+- (f) Despliegue en contenedor Docker: Confirmar con el equipo de DevOps si el script de inicio `database/start.sh` (o el proceso de construcción del contenedor Docker) ejecuta formalmente la migración `003_expensas_agua_sesiones_pagos.sql` al aprovisionar el contenedor o si continúa realizando únicamente el `IMPORT FOREIGN SCHEMA`.
 - Pagos de expensa e ingresos: hoy un pago de expensa no genera un Ingreso en Movimientos (Pendiente).
 - Anulación de anticipo ya aplicado: pendiente bloquear con `409 Conflict` (Parcial / Pendiente).
 - US2.2: filtros (`periodo`, `desde`, `hasta`), línea de tiempo y caso sin movimientos (Pendiente).
@@ -1225,7 +1234,7 @@ CA	Endpoint(s)	Estado	Nota
 ### 10.1 Arquitectura del Cliente Prisma con BD Activa
 El backend implementa un mecanismo de conmutación de conexión transparente y seguro gestionado por `DatabaseFailoverService` en coordinación con el cliente dinámico Prisma (`@edificio-xyz/database`):
 - **Base de Datos Principal:** Apunta a la instancia primaria en la nube (`DATABASE_URL`).
-- **Base de Datos de Respaldo:** Apunta a la instancia de contingencia / réplica (`FALLBACK_DATABASE_URL`).
+- **Base de Datos de Respaldo:** Apunta a una instancia de contingencia independiente sin sincronización automática (`FALLBACK_DATABASE_URL`).
 - **Estado Activo:** El cliente opera con un estado unificado (`activeDb: 'principal' | 'respaldo'`), delegando todas las consultas del ORM al cliente correspondiente.
 
 ### 10.2 Reglas Estrictas de Conmutación
@@ -1233,9 +1242,12 @@ El backend implementa un mecanismo de conmutación de conexión transparente y s
    - La conmutación ocurre **ÚNICAMENTE** ante fallos de conexión de red o del motor de base de datos: códigos de error Prisma `P1001` (can't reach database server), `P1002` (timeout de conexión), `P1008` (operaciones expiradas), `P1017` (conexión cerrada por el servidor), y errores del sistema operativo `ECONNREFUSED`, `ETIMEDOUT`, `ECONNRESET` o timeouts.
    - **NUNCA ante errores de negocio:** Violaciones de unicidad o restricciones de integridad (`P2002`, `P2003`, `P2025` y cualquier código `P2xxx`) y errores HTTP de validación/negocio (`400`, `401`, `403`, `404`, `409`, `422`) **NO** provocan conmutación ni alteran la BD activa.
 2. **Reintento Inmediato:** Ante un fallo de conexión en la principal, el sistema ejecuta **un solo reintento** contra la base principal para descartar micro-cortes transitorios de red. Si el reintento responde, la operación continúa sin conmutar.
-3. **Validación Previa del Esquema de Respaldo:**
-   - Antes de efectuar la conmutación, el servicio valida que `FALLBACK_DATABASE_URL` esté definida, que el servidor de respaldo sea alcanzable y que contenga las tablas requeridas para operar (`usuarios`, `roles`, `departamentos`, `personas`, `expensas`, `pagos`).
-   - Si el respaldo no está configurado, es inalcanzable o carece del esquema necesario, la conmutación se aborta y se responde `503 Service Unavailable`.
+3. **Validación Previa del Esquema de Respaldo (`checkFallbackSchema`):**
+   - Antes de conmutar, el servicio comprueba la conectividad básica (`SELECT 1`) y valida estrictamente en `information_schema` que la base de datos de respaldo contenga todas las tablas y columnas necesarias para operar:
+     - **Tablas requeridas (11 tablas en el esquema `edificio`):** `usuarios`, `roles`, `departamentos`, `personas`, `expensas`, `pagos`, `sesiones`, `tarifas_agua`, `lecturas_agua`, `reglas_mora`, `tipos_departamento`.
+     - **Columnas requeridas (4 columnas críticas/nuevas):** `tipos_departamento.activo`, `expensas.monto_base`, `expensas.monto_agua`, `pagos.id_persona_pagador`.
+   - Si `FALLBACK_DATABASE_URL` no está configurada, es inalcanzable o carece de alguna de estas tablas o columnas, la conmutación se aborta inmediatamente para proteger la integridad operativa.
+   - En este caso, el sistema responde un error HTTP `503 Service Unavailable` listando detalladamente en el mensaje legible y en la estructura JSON (`details: { missingTables: string[], missingColumns: string[] }`) la totalidad de tablas y columnas faltantes.
 4. **Protección Contra Doble Escritura (Sin Reenvío de Operación Fallida):**
    - Para evitar duplicidad de transacciones críticas (como registros de pagos o aplicaciones de anticipos cuyo estado pudo quedar comprometido durante la interrupción), la petición en curso que detonó la caída **NUNCA** se reenvía automáticamente al respaldo.
    - Dicha petición responde de inmediato `503 Service Unavailable` con mensaje descriptivo, y el cliente conmuta de inmediato para que todas las peticiones posteriores utilicen la base de respaldo activa.
@@ -1309,5 +1321,3 @@ El backend implementa un mecanismo de conmutación de conexión transparente y s
   Dado que la preservación de operaciones transaccionales en lote depende directamente de estructuras no públicas del runtime de Prisma (`requestTransaction` y el duck-typing de `Symbol.toStringTag`), **la versión de Prisma (`@prisma/client` y `prisma`, actualmente `v6.19.3`) debe mantenerse estrictamente fija**. No deben aplicarse actualizaciones mayores o intermedias sin antes validar rigurosamente la compatibilidad del Proxy contra estos métodos internos.
 - **Detección temprana con pruebas de regresión:**
   La suite automatizada `backend/tests/database_failover.test.ts` incorpora pruebas de regresión dedicadas para ambas variantes de transacciones (`$transaction` por array de promesas y `$transaction` con callback interactivo). Estas pruebas aseguran que ante cualquier modificación en las dependencias o en el cliente Prisma, cualquier ruptura de compatibilidad interna sea detectada de forma inmediata.
-
-
