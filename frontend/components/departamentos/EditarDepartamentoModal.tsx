@@ -3,7 +3,7 @@
 
 import React from 'react'
 import { Edit, X, Building2, Car, Box } from 'lucide-react'
-import { UnidadItem } from './types'
+import { UnidadItem, TipoDepartamentoItem } from './types'
 
 interface EditarDepartamentoModalProps {
   isOpen: boolean
@@ -11,6 +11,7 @@ interface EditarDepartamentoModalProps {
   onClose: () => void
   onUpdate: (unidad: UnidadItem) => void
   onChange: (unidad: UnidadItem) => void
+  tiposDisponibles?: TipoDepartamentoItem[]
 }
 
 export default function EditarDepartamentoModal({
@@ -18,7 +19,8 @@ export default function EditarDepartamentoModal({
   depto,
   onClose,
   onUpdate,
-  onChange
+  onChange,
+  tiposDisponibles
 }: EditarDepartamentoModalProps) {
   if (!isOpen || !depto) return null
 
@@ -99,7 +101,37 @@ export default function EditarDepartamentoModal({
 
           {/* Campos exclusivos de Departamento */}
           {isDepto && (
-            <div className="grid grid-cols-2 gap-3">
+            <>
+              {tiposDisponibles && tiposDisponibles.length > 0 && (
+                <div>
+                  <label className="block font-bold text-[#5c5750] dark:text-slate-300 mb-1">
+                    Tipología de Departamento (Editable)
+                  </label>
+                  <select
+                    value={depto.tipologia || ''}
+                    onChange={(e) => {
+                      const sel = e.target.value
+                      const matched = tiposDisponibles.find((t) => t.nombre === sel)
+                      onChange({
+                        ...depto,
+                        tipologia: sel,
+                        areaM2: matched ? matched.areaM2 : depto.areaM2,
+                        expensaBase: matched ? matched.expensaBase : depto.expensaBase
+                      })
+                    }}
+                    className="w-full px-3 py-2 rounded-xl bg-[#ded8cc] dark:bg-slate-800 border border-[#cec8bc] dark:border-slate-700 text-xs text-[#262422] dark:text-white font-bold focus:outline-none focus:ring-2 focus:ring-blue-600 cursor-pointer"
+                  >
+                    <option value="">Seleccionar tipología...</option>
+                    {tiposDisponibles.map((t) => (
+                      <option key={t.id} value={t.nombre}>
+                        {t.nombre} ({t.areaM2} m² • Bs. {t.expensaBase.toFixed(2)})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
+              <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className="block font-bold text-[#5c5750] dark:text-slate-300 mb-1">
                   Piso *
@@ -126,7 +158,8 @@ export default function EditarDepartamentoModal({
                 />
               </div>
             </div>
-          )}
+          </>
+        )}
 
           {/* Panel Informativo de Asignación si es Parqueo o Baulera */}
           {!isDepto && (
