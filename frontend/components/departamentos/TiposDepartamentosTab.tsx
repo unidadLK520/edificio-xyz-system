@@ -59,7 +59,9 @@ export default function TiposDepartamentosTab({
         // Encontrar tipo coincidente por tipologia o área
         const matchingTipo = tipos.find(
           (t) =>
-            (u.tipologia && (u.tipologia.toLowerCase().includes(t.nombre.toLowerCase()) || u.tipologia.includes(t.codigo))) ||
+            (u.tipologia &&
+              (u.tipologia.toLowerCase().includes(t.nombre.toLowerCase()) ||
+                u.tipologia.includes(t.codigo))) ||
             (u.areaM2 && Math.abs(u.areaM2 - t.areaM2) < 0.1)
         )
         if (matchingTipo) {
@@ -86,9 +88,16 @@ export default function TiposDepartamentosTab({
 
   // KPIs
   const totalTipos = tipos.length
-  const totalDeptosAsignados = Array.from(departamentosPorTipo.values()).reduce((acc, list) => acc + list.length, 0)
-  const areaPromedio = totalTipos > 0 ? (tipos.reduce((acc, t) => acc + t.areaM2, 0) / totalTipos).toFixed(1) : 0
-  const expensaPromedio = totalTipos > 0 ? (tipos.reduce((acc, t) => acc + t.expensaBase, 0) / totalTipos).toFixed(2) : '0.00'
+  const totalDeptosAsignados = Array.from(departamentosPorTipo.values()).reduce(
+    (acc, list) => acc + list.length,
+    0
+  )
+  const areaPromedio =
+    totalTipos > 0 ? (tipos.reduce((acc, t) => acc + t.areaM2, 0) / totalTipos).toFixed(1) : 0
+  const expensaPromedio =
+    totalTipos > 0
+      ? (tipos.reduce((acc, t) => acc + t.expensaBase, 0) / totalTipos).toFixed(2)
+      : '0.00'
 
   const handleOpenCreate = () => {
     setTipoToEdit(null)
@@ -104,7 +113,11 @@ export default function TiposDepartamentosTab({
     if (!tipoToDelete) return
     const asignados = departamentosPorTipo.get(tipoToDelete.id)?.length || 0
     if (asignados > 0) {
-      if (!confirm(`Hay ${asignados} departamentos que utilizan este tipo. ¿Está seguro de eliminarlo?`)) {
+      if (
+        !confirm(
+          `Hay ${asignados} departamentos que utilizan este tipo. ¿Está seguro de eliminarlo?`
+        )
+      ) {
         return
       }
     }
@@ -126,21 +139,12 @@ export default function TiposDepartamentosTab({
             Tipos de Departamentos (Tipologías)
           </h2>
           <p className="text-xs sm:text-sm text-[#66615b] dark:text-slate-400 mt-1 max-w-2xl">
-            Administre, agregue o modifique las tipologías de apartamentos del edificio (superficie en m², expensa base en Bs., dormitorios, baños y especificaciones).
+            Administre, agregue o modifique las tipologías de apartamentos del edificio (superficie
+            en m², expensa base en Bs., dormitorios, baños y especificaciones).
           </p>
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
-          <button
-            type="button"
-            onClick={onResetDefaults}
-            className="inline-flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl border border-[#cec8bc] dark:border-slate-700 text-[#5c5750] dark:text-slate-300 hover:bg-[#ded8cc] dark:hover:bg-slate-800 text-xs font-bold transition-all cursor-pointer"
-            title="Restablecer a Tipos A, B y C de la Pizarra"
-          >
-            <RotateCcw className="w-3.5 h-3.5" />
-            <span>Valores Pizarra</span>
-          </button>
-
           <button
             type="button"
             onClick={handleOpenCreate}
@@ -162,7 +166,7 @@ export default function TiposDepartamentosTab({
             {totalTipos}
           </div>
           <div className="text-[11px] text-emerald-700 dark:text-emerald-400 font-semibold mt-0.5">
-            100% editables y configurables
+            Tipologías arquitectónicas activas
           </div>
         </div>
 
@@ -171,7 +175,8 @@ export default function TiposDepartamentosTab({
             Departamentos Asignados
           </div>
           <div className="text-2xl font-extrabold text-[#262422] dark:text-white mt-1">
-            {totalDeptosAsignados} / {unidades.filter((u) => u.tipoUnidad === 'Departamento').length}
+            {totalDeptosAsignados} /{' '}
+            {unidades.filter((u) => u.tipoUnidad === 'Departamento').length}
           </div>
           <div className="text-[11px] text-blue-700 dark:text-blue-400 font-semibold mt-0.5">
             Asociación automática por área/tipo
@@ -186,7 +191,10 @@ export default function TiposDepartamentosTab({
             {areaPromedio} <span className="text-sm font-normal text-[#7d776f]">m²</span>
           </div>
           <div className="text-[11px] text-[#7d776f] mt-0.5">
-            Rango: {tipos.length > 0 ? `${Math.min(...tipos.map((t) => t.areaM2))} - ${Math.max(...tipos.map((t) => t.areaM2))} m²` : 'N/A'}
+            Rango:{' '}
+            {tipos.length > 0
+              ? `${Math.min(...tipos.map((t) => t.areaM2))} - ${Math.max(...tipos.map((t) => t.areaM2))} m²`
+              : 'N/A'}
           </div>
         </div>
 
@@ -197,9 +205,7 @@ export default function TiposDepartamentosTab({
           <div className="text-2xl font-extrabold text-rose-700 dark:text-rose-400 mt-1 font-mono">
             Bs. {expensaPromedio}
           </div>
-          <div className="text-[11px] text-[#7d776f] mt-0.5">
-            Pizarra: Tipo A (300), B (350), C (400)
-          </div>
+          <div className="text-[11px] text-[#7d776f] mt-0.5">Promedio general del edificio</div>
         </div>
       </div>
 
@@ -226,7 +232,6 @@ export default function TiposDepartamentosTab({
         ) : (
           tiposFiltrados.map((tipo) => {
             const deptosAsignados = departamentosPorTipo.get(tipo.id) || []
-            const costoM2 = tipo.areaM2 > 0 ? (tipo.expensaBase / tipo.areaM2).toFixed(2) : '0.00'
 
             return (
               <div
@@ -244,7 +249,8 @@ export default function TiposDepartamentosTab({
                         {tipo.nombre}
                       </h3>
                       <span className="text-[11px] text-[#7d776f] dark:text-slate-400">
-                        Alícuota ref.: {tipo.alicuotaEstimada || ((tipo.areaM2 / 1600) * 100).toFixed(2)}%
+                        Alícuota ref.:{' '}
+                        {tipo.alicuotaEstimada || ((tipo.areaM2 / 1600) * 100).toFixed(2)}%
                       </span>
                     </div>
                   </div>
@@ -293,7 +299,7 @@ export default function TiposDepartamentosTab({
                 </div>
 
                 {/* ESPECIFICACIONES DE AMBIENTES */}
-                <div className="flex items-center justify-between text-xs text-[#5c5750] dark:text-slate-300 px-1">
+                <div className="flex items-center gap-4 text-xs text-[#5c5750] dark:text-slate-300 px-1">
                   <div className="flex items-center gap-1.5">
                     <Bed className="w-4 h-4 text-[#7d776f]" />
                     <span>{tipo.habitaciones} Dormitorios</span>
@@ -301,9 +307,6 @@ export default function TiposDepartamentosTab({
                   <div className="flex items-center gap-1.5">
                     <Bath className="w-4 h-4 text-[#7d776f]" />
                     <span>{tipo.banos} Baños</span>
-                  </div>
-                  <div className="text-[11px] font-mono text-[#7d776f]">
-                    {costoM2} Bs/m²
                   </div>
                 </div>
 
@@ -354,19 +357,6 @@ export default function TiposDepartamentosTab({
         )}
       </div>
 
-      {/* NOTA ACLARATORIA SOBRE EDITABILIDAD */}
-      <div className="p-4 rounded-2xl bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-900 flex items-start gap-3">
-        <Info className="w-5 h-5 text-blue-700 dark:text-blue-400 shrink-0 mt-0.5" />
-        <div className="text-xs text-blue-950 dark:text-blue-200 space-y-1">
-          <p className="font-bold">
-            Cumplimiento del criterio de evaluación: «Todo tiene que ser editable»
-          </p>
-          <p className="text-blue-900/90 dark:text-blue-300">
-            A diferencia de los sistemas rígidos, aquí puede alterar en cualquier momento el metraje en m², la expensa base en Bs., o agregar nuevas tipologías arquitectónicas (ej. Monoambientes, Dúplex o Penthouses). Al presionar <strong>"Sincronizar"</strong> o marcar la casilla de cascada al editar, el sistema actualizará los valores para todas las unidades correspondientes.
-          </p>
-        </div>
-      </div>
-
       {/* MODAL DE EDICIÓN / CREACIÓN */}
       <ModalEditarTipoDepto
         isOpen={isModalOpen}
@@ -386,7 +376,8 @@ export default function TiposDepartamentosTab({
               </h3>
             </div>
             <p className="text-xs text-[#5c5750] dark:text-slate-300">
-              ¿Está seguro de eliminar la tipología <strong>"{tipoToDelete.nombre}"</strong>? Esta acción no se puede deshacer.
+              ¿Está seguro de eliminar la tipología <strong>"{tipoToDelete.nombre}"</strong>? Esta
+              acción no se puede deshacer.
             </p>
             <div className="flex justify-end gap-2 pt-2 border-t border-[#cec8bc] dark:border-slate-800">
               <button
