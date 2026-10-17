@@ -327,12 +327,11 @@ export async function ejecutarCalculoMora(
  * - montoBase (numérico)
  * - montoAgua (numérico)
  * - monto (numérico total)
- * - concepto ("Expensa mensual Tipo B" y "Agua X m3" si aplica)
+ * - concepto ("Expensa mensual Tipo B" y "Agua" si aplica, sin m3)
  */
 export function formatearExpensaConConcepto(
   expensa: any,
-  tipoNombre?: string | null,
-  consumoM3?: number | null
+  tipoNombre?: string | null
 ): any {
   const monto = Number(expensa.monto);
   const montoAgua = Number(expensa.montoAgua || 0);
@@ -354,15 +353,9 @@ export function formatearExpensaConConcepto(
     }
   }
 
-  // Agua si aplica
+  // Agua si aplica (sin m3)
   let concepto = conceptoBase;
-  const consumo = consumoM3 !== undefined && consumoM3 !== null
-    ? Number(consumoM3)
-    : (expensa.lecturaAgua ? Number(expensa.lecturaAgua.consumoM3) : null);
-
-  if (consumo !== null && consumo > 0) {
-    concepto = `${conceptoBase} y Agua ${consumo} m3`;
-  } else if (montoAgua > 0) {
+  if (montoAgua > 0) {
     concepto = `${conceptoBase} y Agua`;
   }
 

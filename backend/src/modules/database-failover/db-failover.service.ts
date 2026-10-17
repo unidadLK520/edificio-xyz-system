@@ -173,8 +173,7 @@ export class DatabaseFailoverService {
         'expensas',
         'pagos',
         'sesiones',
-        'tarifas_agua',
-        'lecturas_agua',
+        'montos_agua',
         'reglas_mora',
         'tipos_departamento',
       ];

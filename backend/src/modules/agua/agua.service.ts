@@ -1,283 +1,253 @@
 // backend/src/modules/agua/agua.service.ts
-// Lógica de negocio para tarifas y lecturas de agua
+// Lógica de negocio para registro y consulta de montos manuales de agua
 
 import { prisma } from '@edificio-xyz/database';
 import { auditoriaService } from '../auditoria';
-import { ConfigurarTarifaAguaInput } from './agua.types';
+import {
+  RegistrarMontosAguaInput,
+  FiltrosObtenerMontosAgua,
+  MontoAguaResponse,
+} from './agua.types';
 
 /**
- * Configura una nueva tarifa de agua activa.
- * - precioM3 >= 0
- * - Desactiva de forma atómica en transacción cualquier tarifa previa (una activa a la vez)
- * - Registra evento de auditoría CONFIGURAR_TARIFA_AGUA
+ * Normaliza siempre el periodo recibido al primer día del mes (YYYY-MM-01) en formato UTC,
+ * con la misma normalización exacta que utiliza expensas.periodo.
  */
-export async function configurarTarifaAgua(input: ConfigurarTarifaAguaInput): Promise<any> {
-  if (input.precioM3 === undefined || input.precioM3 === null || isNaN(input.precioM3) || input.precioM3 < 0) {
-    const error: any = new Error('El precio por m3 debe ser mayor o igual a 0');
+export function normalizarPeriodo(periodoStr: string): { periodoNormalizado: string; periodoDate: Date } {
+  if (!periodoStr || typeof periodoStr !== 'string') {
+    const error: any = new Error('El período es obligatorio');
     error.statusCode = 400;
     error.code = 'VALIDATION_ERROR';
     throw error;
   }
 
-  return await prisma.$transaction(
-    async (tx) => {
-      // 1. Obtener la tarifa activa previa
-      const tarifaAnterior = await tx.tarifaAgua.findFirst({
-        where: { activa: true },
-        orderBy: { fechaCreacion: 'desc' },
-      });
-
-      // 2. Desactivar tarifas activas previas
-      await tx.tarifaAgua.updateMany({
-        where: { activa: true },
-        data: { activa: false },
-      });
-
-      // 3. Crear la nueva tarifa activa
-      const nuevaTarifa = await tx.tarifaAgua.create({
-        data: {
-          precioM3: input.precioM3,
-          activa: true,
-          idUsuarioCreacion: input.idUsuario || null,
-        },
-        include: {
-          usuarioCreacion: {
-            select: { idUsuario: true, nombreUsuario: true, correo: true },
-          },
-        },
-      });
-
-      // 4. Auditoría CONFIGURAR_TARIFA_AGUA
-      await auditoriaService.registrarEvento({
-        tablaAfectada: 'tarifas_agua',
-        idRegistro: String(nuevaTarifa.idTarifa),
-        accion: 'CONFIGURAR_TARIFA_AGUA',
-        resultado: 'EXITO',
-        datosAnteriores: tarifaAnterior
-          ? {
-              idTarifa: tarifaAnterior.idTarifa,
-              precioM3: Number(tarifaAnterior.precioM3),
-              activa: tarifaAnterior.activa,
-            }
-          : null,
-        datosNuevos: {
-          idTarifa: nuevaTarifa.idTarifa,
-          precioM3: Number(nuevaTarifa.precioM3),
-          activa: nuevaTarifa.activa,
-        },
-        idUsuario: input.idUsuario || null,
-        tx,
-      });
-
-      return nuevaTarifa;
-    },
-    { timeout: 30000, maxWait: 15000 }
-  );
-}
-
-/**
- * Obtiene la tarifa activa actual y el historial completo ordenado.
- */
-export async function obtenerTarifaAgua() {
-  const [activa, historial] = await Promise.all([
-    prisma.tarifaAgua.findFirst({
-      where: { activa: true },
-      include: {
-        usuarioCreacion: {
-          select: { idUsuario: true, nombreUsuario: true, correo: true },
-        },
-      },
-      orderBy: { fechaCreacion: 'desc' },
-    }),
-    prisma.tarifaAgua.findMany({
-      include: {
-        usuarioCreacion: {
-          select: { idUsuario: true, nombreUsuario: true, correo: true },
-        },
-      },
-      orderBy: { fechaCreacion: 'desc' },
-    }),
-  ]);
-
-  return {
-    activa: activa
-      ? {
-          ...activa,
-          precioM3: Number(activa.precioM3),
-        }
-      : null,
-    historial: historial.map((t) => ({
-      ...t,
-      precioM3: Number(t.precioM3),
-    })),
-    // Alias directo para clientes que esperan { tarifa: activa }
-    tarifa: activa
-      ? {
-          ...activa,
-          precioM3: Number(activa.precioM3),
-        }
-      : null,
-  };
-}
-
-/**
- * Normaliza un período (string o Date) al primer día del mes en UTC.
- */
-export function normalizarPeriodo(periodo: string | Date): { periodoDate: Date; periodoStr: string } {
-  if (typeof periodo === 'string') {
-    const parts = periodo.split('-');
-    const year = parts[0];
-    const month = (parts[1] || '01').padStart(2, '0');
-    const periodoStr = `${year}-${month}-01`;
-    return {
-      periodoDate: new Date(`${periodoStr}T00:00:00.000Z`),
-      periodoStr,
-    };
-  } else {
-    const year = periodo.getUTCFullYear();
-    const month = String(periodo.getUTCMonth() + 1).padStart(2, '0');
-    const periodoStr = `${year}-${month}-01`;
-    return {
-      periodoDate: new Date(`${periodoStr}T00:00:00.000Z`),
-      periodoStr,
-    };
+  const match = periodoStr.trim().match(/^(\d{4})-(\d{1,2})/);
+  if (!match) {
+    const error: any = new Error('Formato de período inválido. Debe ser YYYY-MM o YYYY-MM-DD');
+    error.statusCode = 400;
+    error.code = 'VALIDATION_ERROR';
+    throw error;
   }
+
+  const pYear = match[1];
+  const pMonth = match[2].padStart(2, '0');
+  const periodoNormalizado = `${pYear}-${pMonth}-01`;
+  const periodoDate = new Date(`${periodoNormalizado}T00:00:00.000Z`);
+
+  if (isNaN(periodoDate.getTime())) {
+    const error: any = new Error('Fecha de período inválida');
+    error.statusCode = 400;
+    error.code = 'VALIDATION_ERROR';
+    throw error;
+  }
+
+  return { periodoNormalizado, periodoDate };
 }
 
 /**
- * Registrar una lectura de agua para un departamento y período.
- * - lectura anterior = la última del departamento (si no hay, exige lecturaAnterior)
- * - 422 si actual < anterior o no hay tarifa activa
- * - consumo = actual - anterior
- * - monto_agua = round(consumo * precio, 2) guardando el precio
- * - 409 si ya existe para departamento y período
- * - Auditoría REGISTRO_LECTURA_AGUA
+ * Registra o actualiza en lote los montos manuales de agua por (idDepartamento, periodo).
+ * - Transacción atómica (todo o nada).
+ * - 400 si el monto es negativo o inválido.
+ * - 422 si el departamento no existe.
+ * - 409 si ya hay expensa emitida para ese departamento y período.
+ * - Auditoría REGISTRO_MONTO_AGUA por departamento con datosAnteriores y datosNuevos.
  */
-export async function registrarLecturaAgua(input: {
-  idDepartamento: number;
-  periodo: string | Date;
-  lecturaActual: number;
-  lecturaAnterior?: number;
-  idUsuario?: number | null;
-}): Promise<any> {
-  const { periodoDate, periodoStr } = normalizarPeriodo(input.periodo);
+export async function registrarOActualizarMontosAgua(
+  input: RegistrarMontosAguaInput
+): Promise<{ periodo: string; total: number; montos: MontoAguaResponse[] }> {
+  const { periodoNormalizado, periodoDate } = normalizarPeriodo(input.periodo);
+
+  if (!Array.isArray(input.montos) || input.montos.length === 0) {
+    const error: any = new Error('La lista de montos no puede estar vacía');
+    error.statusCode = 400;
+    error.code = 'VALIDATION_ERROR';
+    throw error;
+  }
+
+  // 1. Validaciones previas de montos
+  for (const item of input.montos) {
+    if (
+      item.idDepartamento === undefined ||
+      item.idDepartamento === null ||
+      isNaN(item.idDepartamento) ||
+      item.idDepartamento <= 0
+    ) {
+      const error: any = new Error('ID de departamento inválido en la lista de montos');
+      error.statusCode = 400;
+      error.code = 'VALIDATION_ERROR';
+      throw error;
+    }
+
+    if (
+      item.montoAgua === undefined ||
+      item.montoAgua === null ||
+      typeof item.montoAgua !== 'number' ||
+      isNaN(item.montoAgua) ||
+      item.montoAgua < 0
+    ) {
+      const error: any = new Error(`El monto de agua para el departamento ${item.idDepartamento} debe ser mayor o igual a 0`);
+      error.statusCode = 400;
+      error.code = 'VALIDATION_ERROR';
+      throw error;
+    }
+  }
+
+  const deptosIds = Array.from(new Set(input.montos.map((m) => m.idDepartamento)));
 
   return await prisma.$transaction(
     async (tx) => {
-      // 1. Validar existencia de tarifa activa
-      const tarifaActiva = await tx.tarifaAgua.findFirst({
-        where: { activa: true },
-        orderBy: { fechaCreacion: 'desc' },
+      // 2. Verificar existencia de todos los departamentos (422 si alguno no existe)
+      const deptosExistentes = await tx.departamento.findMany({
+        where: { idDepartamento: { in: deptosIds } },
+        select: { idDepartamento: true, numero: true },
       });
+      const deptosExistentesSet = new Set(deptosExistentes.map((d) => d.idDepartamento));
 
-      if (!tarifaActiva) {
-        const error: any = new Error('No existe una tarifa de agua activa configurada');
-        error.statusCode = 422;
-        error.code = 'UNPROCESSABLE_ENTITY';
-        throw error;
+      for (const idDepto of deptosIds) {
+        if (!deptosExistentesSet.has(idDepto)) {
+          const error: any = new Error(`El departamento con ID ${idDepto} no existe`);
+          error.statusCode = 422;
+          error.code = 'UNPROCESSABLE_ENTITY';
+          throw error;
+        }
       }
 
-      // 2. Validar que no exista lectura previa para el mismo depto y período
-      const existente = await tx.lecturaAgua.findFirst({
+      // 3. Verificar si ya existe expensa emitida para ese departamento y período (409)
+      const expensasEmitidas = await tx.expensa.findMany({
         where: {
-          idDepartamento: input.idDepartamento,
+          idDepartamento: { in: deptosIds },
           periodo: periodoDate,
+        },
+        select: {
+          idExpensa: true,
+          idDepartamento: true,
+          departamento: { select: { numero: true } },
         },
       });
 
-      if (existente) {
+      if (expensasEmitidas.length > 0) {
+        const primera = expensasEmitidas[0];
+        const numDepto = primera.departamento?.numero || primera.idDepartamento;
         const error: any = new Error(
-          `Ya existe una lectura de agua para el departamento ${input.idDepartamento} en el período ${periodoStr}`
+          `Ya existe una expensa emitida para el departamento ${numDepto} (ID: ${primera.idDepartamento}) en el período ${periodoNormalizado}. No se puede modificar el monto de agua.`
         );
         error.statusCode = 409;
         error.code = 'CONFLICT';
         throw error;
       }
 
-      // 3. Obtener la última lectura registrada del departamento
-      const ultimaLectura = await tx.lecturaAgua.findFirst({
-        where: { idDepartamento: input.idDepartamento },
-        orderBy: [{ periodo: 'desc' }, { idLectura: 'desc' }],
-      });
+      // 4. Crear o actualizar por (departamento, periodo) y auditar
+      const guardados: MontoAguaResponse[] = [];
 
-      let anterior: number;
-      if (ultimaLectura) {
-        anterior = Number(ultimaLectura.lecturaActual);
-      } else {
-        if (input.lecturaAnterior === undefined || input.lecturaAnterior === null || isNaN(input.lecturaAnterior)) {
-          const error: any = new Error(
-            'El departamento no tiene lecturas previas; debe especificar la lecturaAnterior inicial'
-          );
-          error.statusCode = 422;
-          error.code = 'UNPROCESSABLE_ENTITY';
-          throw error;
-        }
-        anterior = Number(input.lecturaAnterior);
-      }
+      for (const item of input.montos) {
+        const montoRedondeado = Math.round(item.montoAgua * 100) / 100;
 
-      const actual = Number(input.lecturaActual);
-
-      // 4. Validar actual >= anterior
-      if (actual < anterior) {
-        const error: any = new Error(
-          `La lectura actual (${actual}) no puede ser menor a la lectura anterior (${anterior})`
-        );
-        error.statusCode = 422;
-        error.code = 'UNPROCESSABLE_ENTITY';
-        throw error;
-      }
-
-      // 5. Calcular consumo y monto
-      const consumo = Math.round((actual - anterior) * 100) / 100;
-      const precio = Number(tarifaActiva.precioM3);
-      const montoAgua = Math.round(consumo * precio * 100) / 100;
-
-      // 6. Crear registro de lectura
-      const nuevaLectura = await tx.lecturaAgua.create({
-        data: {
-          idDepartamento: input.idDepartamento,
-          periodo: periodoDate,
-          lecturaAnterior: anterior,
-          lecturaActual: actual,
-          consumoM3: consumo,
-          precioM3: precio,
-          montoAgua,
-          idUsuarioRegistro: input.idUsuario || null,
-        },
-        include: {
-          departamento: {
-            select: { idDepartamento: true, numero: true, piso: true },
+        const anterior = await tx.montoAgua.findUnique({
+          where: {
+            idDepartamento_periodo: {
+              idDepartamento: item.idDepartamento,
+              periodo: periodoDate,
+            },
           },
-        },
-      });
+        });
 
-      // 7. Auditoría REGISTRO_LECTURA_AGUA
-      await auditoriaService.registrarEvento({
-        tablaAfectada: 'lecturas_agua',
-        idRegistro: String(nuevaLectura.idLectura),
-        accion: 'REGISTRO_LECTURA_AGUA',
-        resultado: 'EXITO',
-        datosNuevos: {
-          idLectura: nuevaLectura.idLectura,
-          idDepartamento: nuevaLectura.idDepartamento,
-          periodo: periodoStr,
-          lecturaAnterior: anterior,
-          lecturaActual: actual,
-          consumoM3: consumo,
-          precioM3: precio,
-          montoAgua,
-        },
-        idUsuario: input.idUsuario || null,
-        tx,
-      });
+        let montoGuardado: any;
+
+        if (anterior) {
+          montoGuardado = await tx.montoAgua.update({
+            where: { idMonto: anterior.idMonto },
+            data: {
+              montoAgua: montoRedondeado,
+              idUsuarioRegistro: input.idUsuario || null,
+              fechaRegistro: new Date(),
+            },
+            include: {
+              departamento: {
+                select: {
+                  numero: true,
+                  piso: true,
+                  tipo: { select: { nombre: true, montoExpensa: true } },
+                },
+              },
+              usuarioRegistro: {
+                select: { idUsuario: true, nombreUsuario: true, correo: true },
+              },
+            },
+          });
+        } else {
+          montoGuardado = await tx.montoAgua.create({
+            data: {
+              idDepartamento: item.idDepartamento,
+              periodo: periodoDate,
+              montoAgua: montoRedondeado,
+              idUsuarioRegistro: input.idUsuario || null,
+            },
+            include: {
+              departamento: {
+                select: {
+                  numero: true,
+                  piso: true,
+                  tipo: { select: { nombre: true, montoExpensa: true } },
+                },
+              },
+              usuarioRegistro: {
+                select: { idUsuario: true, nombreUsuario: true, correo: true },
+              },
+            },
+          });
+        }
+
+        // Auditoría REGISTRO_MONTO_AGUA por departamento
+        await auditoriaService.registrarEvento({
+          tablaAfectada: 'montos_agua',
+          idRegistro: String(montoGuardado.idMonto),
+          accion: 'REGISTRO_MONTO_AGUA',
+          resultado: 'EXITO',
+          datosAnteriores: anterior
+            ? {
+                idMonto: anterior.idMonto,
+                idDepartamento: anterior.idDepartamento,
+                periodo: periodoNormalizado,
+                montoAgua: Number(anterior.montoAgua),
+              }
+            : null,
+          datosNuevos: {
+            idMonto: montoGuardado.idMonto,
+            idDepartamento: montoGuardado.idDepartamento,
+            periodo: periodoNormalizado,
+            montoAgua: Number(montoGuardado.montoAgua),
+          },
+          idUsuario: input.idUsuario || null,
+          tx,
+        });
+
+        guardados.push({
+          idMonto: montoGuardado.idMonto,
+          idDepartamento: montoGuardado.idDepartamento,
+          departamento: montoGuardado.departamento
+            ? {
+                numero: montoGuardado.departamento.numero,
+                piso: montoGuardado.departamento.piso,
+                tipo: montoGuardado.departamento.tipo
+                  ? {
+                      nombre: montoGuardado.departamento.tipo.nombre,
+                      montoExpensa: Number(montoGuardado.departamento.tipo.montoExpensa),
+                    }
+                  : null,
+              }
+            : undefined,
+          periodo: periodoNormalizado,
+          montoAgua: Number(montoGuardado.montoAgua),
+          idUsuarioRegistro: montoGuardado.idUsuarioRegistro,
+          usuarioRegistro: montoGuardado.usuarioRegistro,
+          fechaRegistro: montoGuardado.fechaRegistro,
+        });
+      }
 
       return {
-        ...nuevaLectura,
-        lecturaAnterior: Number(nuevaLectura.lecturaAnterior),
-        lecturaActual: Number(nuevaLectura.lecturaActual),
-        consumoM3: Number(nuevaLectura.consumoM3),
-        precioM3: Number(nuevaLectura.precioM3),
-        montoAgua: Number(nuevaLectura.montoAgua),
+        periodo: periodoNormalizado,
+        total: guardados.length,
+        montos: guardados,
       };
     },
     { timeout: 30000, maxWait: 15000 }
@@ -285,178 +255,67 @@ export async function registrarLecturaAgua(input: {
 }
 
 /**
- * Consultar lecturas de agua con filtros opcionales (periodo, idDepartamento).
+ * Consulta montos de agua registrados con filtros opcionales por periodo e idDepartamento.
  */
-export async function obtenerLecturasAgua(filtros: {
-  periodo?: string | Date;
-  idDepartamento?: number;
-  page?: number;
-  limit?: number;
-}): Promise<any> {
+export async function obtenerMontosAgua(
+  filtros: FiltrosObtenerMontosAgua
+): Promise<{ data: MontoAguaResponse[]; total: number }> {
   const where: any = {};
-  if (filtros.idDepartamento) {
-    where.idDepartamento = Number(filtros.idDepartamento);
-  }
+
   if (filtros.periodo) {
     const { periodoDate } = normalizarPeriodo(filtros.periodo);
     where.periodo = periodoDate;
   }
 
-  const page = Math.max(1, filtros.page || 1);
-  const limit = Math.max(1, filtros.limit || 50);
-  const skip = (page - 1) * limit;
+  if (filtros.idDepartamento) {
+    where.idDepartamento = Number(filtros.idDepartamento);
+  }
 
-  const [lecturas, total] = await Promise.all([
-    prisma.lecturaAgua.findMany({
+  const [montos, total] = await Promise.all([
+    prisma.montoAgua.findMany({
       where,
-      skip,
-      take: limit,
-      orderBy: [{ periodo: 'desc' }, { idDepartamento: 'asc' }],
       include: {
         departamento: {
-          select: { idDepartamento: true, numero: true, piso: true },
-        },
-      },
-    }),
-    prisma.lecturaAgua.count({ where }),
-  ]);
-
-  return {
-    data: lecturas.map((l) => ({
-      ...l,
-      lecturaAnterior: Number(l.lecturaAnterior),
-      lecturaActual: Number(l.lecturaActual),
-      consumoM3: Number(l.consumoM3),
-      precioM3: Number(l.precioM3),
-      montoAgua: Number(l.montoAgua),
-    })),
-    meta: {
-      total,
-      page,
-      limit,
-      totalPages: Math.ceil(total / limit),
-    },
-  };
-}
-
-/**
- * Corregir una lectura de agua.
- * - 404 si no existe
- * - 409 si ya se usó en una expensa emitida
- * - 422 si actual < anterior
- * - Recalcula consumo y monto_agua
- * - Auditoría REGISTRO_LECTURA_AGUA
- */
-export async function corregirLecturaAgua(input: {
-  idLectura: number;
-  lecturaActual?: number;
-  lecturaAnterior?: number;
-  idUsuario?: number | null;
-}): Promise<any> {
-  return await prisma.$transaction(
-    async (tx) => {
-      // 1. Buscar la lectura
-      const lectura = await tx.lecturaAgua.findUnique({
-        where: { idLectura: input.idLectura },
-      });
-
-      if (!lectura) {
-        const error: any = new Error(`Lectura de agua con ID ${input.idLectura} no encontrada`);
-        error.statusCode = 404;
-        error.code = 'NOT_FOUND';
-        throw error;
-      }
-
-      // 2. Verificar si ya fue utilizada en una expensa emitida
-      const expensaExistente = await tx.expensa.findFirst({
-        where: {
-          idDepartamento: lectura.idDepartamento,
-          periodo: lectura.periodo,
-        },
-      });
-
-      if (expensaExistente) {
-        const error: any = new Error(
-          'No se puede corregir la lectura de agua porque ya fue utilizada en una expensa emitida'
-        );
-        error.statusCode = 409;
-        error.code = 'CONFLICT';
-        throw error;
-      }
-
-      // 3. Determinar nuevos valores
-      const anterior = input.lecturaAnterior !== undefined ? Number(input.lecturaAnterior) : Number(lectura.lecturaAnterior);
-      const actual = input.lecturaActual !== undefined ? Number(input.lecturaActual) : Number(lectura.lecturaActual);
-
-      if (actual < anterior) {
-        const error: any = new Error(
-          `La lectura actual (${actual}) no puede ser menor a la lectura anterior (${anterior})`
-        );
-        error.statusCode = 422;
-        error.code = 'UNPROCESSABLE_ENTITY';
-        throw error;
-      }
-
-      const consumo = Math.round((actual - anterior) * 100) / 100;
-      const precio = Number(lectura.precioM3);
-      const montoAgua = Math.round(consumo * precio * 100) / 100;
-
-      const datosAnteriores = {
-        idLectura: lectura.idLectura,
-        lecturaAnterior: Number(lectura.lecturaAnterior),
-        lecturaActual: Number(lectura.lecturaActual),
-        consumoM3: Number(lectura.consumoM3),
-        precioM3: Number(lectura.precioM3),
-        montoAgua: Number(lectura.montoAgua),
-      };
-
-      // 4. Actualizar lectura
-      const lecturaActualizada = await tx.lecturaAgua.update({
-        where: { idLectura: lectura.idLectura },
-        data: {
-          lecturaAnterior: anterior,
-          lecturaActual: actual,
-          consumoM3: consumo,
-          montoAgua,
-        },
-        include: {
-          departamento: {
-            select: { idDepartamento: true, numero: true, piso: true },
+          select: {
+            numero: true,
+            piso: true,
+            tipo: { select: { nombre: true, montoExpensa: true } },
           },
         },
-      });
+        usuarioRegistro: {
+          select: { idUsuario: true, nombreUsuario: true, correo: true },
+        },
+      },
+      orderBy: [{ periodo: 'desc' }, { idDepartamento: 'asc' }],
+    }),
+    prisma.montoAgua.count({ where }),
+  ]);
 
-      const datosNuevos = {
-        idLectura: lecturaActualizada.idLectura,
-        lecturaAnterior: anterior,
-        lecturaActual: actual,
-        consumoM3: consumo,
-        precioM3: precio,
-        montoAgua,
-      };
+  const data: MontoAguaResponse[] = montos.map((m) => {
+    const pDate = new Date(m.periodo);
+    const pStr = pDate.toISOString().split('T')[0];
+    return {
+      idMonto: m.idMonto,
+      idDepartamento: m.idDepartamento,
+      departamento: m.departamento
+        ? {
+            numero: m.departamento.numero,
+            piso: m.departamento.piso,
+            tipo: m.departamento.tipo
+              ? {
+                  nombre: m.departamento.tipo.nombre,
+                  montoExpensa: Number(m.departamento.tipo.montoExpensa),
+                }
+              : null,
+          }
+        : undefined,
+      periodo: pStr,
+      montoAgua: Number(m.montoAgua),
+      idUsuarioRegistro: m.idUsuarioRegistro,
+      usuarioRegistro: m.usuarioRegistro,
+      fechaRegistro: m.fechaRegistro,
+    };
+  });
 
-      // 5. Auditoría REGISTRO_LECTURA_AGUA
-      await auditoriaService.registrarEvento({
-        tablaAfectada: 'lecturas_agua',
-        idRegistro: String(lecturaActualizada.idLectura),
-        accion: 'REGISTRO_LECTURA_AGUA',
-        resultado: 'EXITO',
-        datosAnteriores,
-        datosNuevos,
-        idUsuario: input.idUsuario || null,
-        tx,
-      });
-
-      return {
-        ...lecturaActualizada,
-        lecturaAnterior: Number(lecturaActualizada.lecturaAnterior),
-        lecturaActual: Number(lecturaActualizada.lecturaActual),
-        consumoM3: Number(lecturaActualizada.consumoM3),
-        precioM3: Number(lecturaActualizada.precioM3),
-        montoAgua: Number(lecturaActualizada.montoAgua),
-      };
-    },
-    { timeout: 30000, maxWait: 15000 }
-  );
+  return { data, total };
 }
-
