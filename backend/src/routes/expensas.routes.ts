@@ -214,26 +214,8 @@ expensasRouter.get(
         prisma.expensa.count({ where }),
       ]);
 
-      const deptosPeriodos = expensas.map((e) => ({
-        idDepartamento: e.idDepartamento,
-        periodo: e.periodo,
-      }));
-      const lecturas = deptosPeriodos.length > 0
-        ? await prisma.lecturaAgua.findMany({
-            where: { OR: deptosPeriodos },
-            select: { idDepartamento: true, periodo: true, consumoM3: true },
-          })
-        : [];
-      const lecturasMap = new Map<string, number>();
-      for (const l of lecturas) {
-        const key = `${l.idDepartamento}_${new Date(l.periodo).toISOString().split('T')[0]}`;
-        lecturasMap.set(key, Number(l.consumoM3));
-      }
-
       const expensasConVencida = expensas.map((e) => {
-        const key = `${e.idDepartamento}_${new Date(e.periodo).toISOString().split('T')[0]}`;
-        const consumo = lecturasMap.get(key);
-        const formateada = formatearExpensaConConcepto(e, e.departamento?.tipo?.nombre, consumo);
+        const formateada = formatearExpensaConConcepto(e, e.departamento?.tipo?.nombre);
         return {
           ...formateada,
           vencida: new Date(e.fechaVencimiento) < ahora && Number(e.saldoPendiente) > 0,
@@ -387,7 +369,7 @@ expensasRouter.get(
         return;
       }
 
-      const [expensas, pagos, anticipos, lecturas] = await Promise.all([
+      const [expensas, pagos, anticipos] = await Promise.all([
         prisma.expensa.findMany({
           where: { idDepartamento },
           orderBy: { periodo: 'desc' },
@@ -408,19 +390,10 @@ expensasRouter.get(
           include: { aplicacionesAnticipo: true },
           orderBy: { fechaPago: 'desc' },
         }),
-        prisma.lecturaAgua.findMany({
-          where: { idDepartamento },
-        }),
       ]);
 
-      const lecturasMap = new Map<string, number>(
-        lecturas.map((l) => [new Date(l.periodo).toISOString().split('T')[0], Number(l.consumoM3)])
-      );
-
       const expensasConCapital = expensas.map((e) => {
-        const pKey = new Date(e.periodo).toISOString().split('T')[0];
-        const consumo = lecturasMap.get(pKey);
-        const conConcepto = formatearExpensaConConcepto(e, departamento.tipo?.nombre, consumo);
+        const conConcepto = formatearExpensaConConcepto(e, departamento.tipo?.nombre);
         return {
           ...conConcepto,
           capitalPendiente: calcularCapitalPendiente(e),
@@ -720,14 +693,9 @@ expensasRouter.get(
       const ahora = new Date();
       const vencida = new Date(expensa.fechaVencimiento) < ahora && Number(expensa.saldoPendiente) > 0;
 
-      const lectura = await prisma.lecturaAgua.findFirst({
-        where: { idDepartamento: expensa.idDepartamento, periodo: expensa.periodo },
-      });
-
       const expensaFormateada = formatearExpensaConConcepto(
         expensa,
-        expensa.departamento?.tipo?.nombre,
-        lectura ? Number(lectura.consumoM3) : null
+        expensa.departamento?.tipo?.nombre
       );
 
       res.json({
@@ -791,13 +759,13 @@ expensasRouter.post(
         });
         const deptosConExpensa = new Set(expensasExistentes.map((e) => e.idDepartamento));
 
-        // Consultar lecturas de agua existentes para el período en una sola consulta
-        const lecturasExistentes = await tx.lecturaAgua.findMany({
+        // Consultar montos de agua existentes para el período en una sola consulta
+        const montosExistentes = await tx.montoAgua.findMany({
           where: { periodo: periodoDate },
-          select: { idDepartamento: true, montoAgua: true, consumoM3: true },
+          select: { idDepartamento: true, montoAgua: true },
         });
-        const lecturasMap = new Map<number, { montoAgua: number; consumoM3: number }>(
-          lecturasExistentes.map((l) => [l.idDepartamento, { montoAgua: Number(l.montoAgua), consumoM3: Number(l.consumoM3) }])
+        const montosMap = new Map<number, number>(
+          montosExistentes.map((m) => [m.idDepartamento, Number(m.montoAgua)])
         );
 
         // Copiar tasa de la regla activa a expensas.tasa_interes_mora
@@ -832,17 +800,17 @@ expensasRouter.post(
             continue;
           }
 
-          // Monto base del tipo de departamento y monto de agua si tiene lectura
+          // Monto base del tipo de departamento y monto de agua si tiene monto registrado
           const montoBase = Number(depto.tipo.montoExpensa);
-          const lectura = lecturasMap.get(depto.idDepartamento);
+          const montoAguaRegistrado = montosMap.get(depto.idDepartamento);
           let montoAgua = 0;
-          if (lectura) {
-            montoAgua = lectura.montoAgua;
+          if (montoAguaRegistrado !== undefined) {
+            montoAgua = montoAguaRegistrado;
           } else {
             advertenciasArr.push({
               idDepartamento: depto.idDepartamento,
               numero: depto.numero,
-              advertencia: 'Sin lectura de agua registrada para el período; se emitió únicamente con monto base',
+              advertencia: 'Sin monto de agua registrado para el período; se emitió únicamente con monto base',
             });
           }
 
@@ -866,8 +834,7 @@ expensasRouter.post(
           const expensaConAnticipos = await aplicarAnticiposFIFO(tx, nuevaExpensa, req.user?.idUsuario);
           const expensaFormateada = formatearExpensaConConcepto(
             expensaConAnticipos,
-            depto.tipo.nombre,
-            lectura ? lectura.consumoM3 : null
+            depto.tipo.nombre
           );
           generadasArr.push(expensaFormateada);
         }
@@ -993,17 +960,17 @@ expensasRouter.post(
           include: { tipo: true },
         });
 
-        // Buscar lectura de agua para el período
-        const lectura = await tx.lecturaAgua.findFirst({
+        // Buscar monto de agua para el período
+        const montoReg = await tx.montoAgua.findFirst({
           where: { idDepartamento, periodo: periodoDate },
         });
 
         const advertenciasArr: string[] = [];
         let montoAgua = 0;
-        if (lectura) {
-          montoAgua = Number(lectura.montoAgua);
+        if (montoReg) {
+          montoAgua = Number(montoReg.montoAgua);
         } else {
-          advertenciasArr.push('Sin lectura de agua registrada para el período; se emitió únicamente con monto base');
+          advertenciasArr.push('Sin monto de agua registrado para el período; se emitió únicamente con monto base');
         }
 
         // Monto base: del tipo si existe, o inputMontoBase, o monto proporcionado
@@ -1021,7 +988,7 @@ expensasRouter.post(
         if (depto?.tipo || inputMontoBase !== undefined) {
           montoTotal = Math.round((montoBase + montoAgua) * 100) / 100;
         } else if (monto !== undefined) {
-          montoTotal = lectura ? Math.round((monto + montoAgua) * 100) / 100 : Number(monto);
+          montoTotal = montoReg ? Math.round((monto + montoAgua) * 100) / 100 : Number(monto);
         } else {
           montoTotal = Math.round((montoBase + montoAgua) * 100) / 100;
         }
@@ -1059,8 +1026,7 @@ expensasRouter.post(
 
         const expensaFormateada = formatearExpensaConConcepto(
           expensaProcesada,
-          depto?.tipo?.nombre,
-          lectura ? Number(lectura.consumoM3) : null
+          depto?.tipo?.nombre
         );
 
         return { expensaFinal: expensaFormateada, advertencias: advertenciasArr };

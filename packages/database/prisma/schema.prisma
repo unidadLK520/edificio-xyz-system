@@ -46,6 +46,7 @@ model Usuario {
   reglasMoraCreadas   ReglaMora[]
   tarifasAguaCreadas  TarifaAgua[]
   lecturasAguaRegistradas LecturaAgua[]
+  montosAguaRegistrados MontoAgua[]
   sesiones            Sesion[]
 
   @@map("usuarios")
@@ -103,6 +104,7 @@ model Departamento {
   expensas       Expensa[]
   pagos          Pago[]
   lecturasAgua   LecturaAgua[]
+  montosAgua     MontoAgua[]
 
   @@index([idTipo], map: "idx_departamentos_tipo")
   @@map("departamentos")
@@ -227,6 +229,23 @@ model LecturaAgua {
   @@index([idDepartamento], map: "idx_lecturas_agua_departamento")
   @@index([periodo], map: "idx_lecturas_agua_periodo")
   @@map("lecturas_agua")
+  @@schema("edificio")
+}
+
+model MontoAgua {
+  idMonto           Int          @id @default(autoincrement()) @map("id_monto")
+  idDepartamento    Int          @map("id_departamento")
+  periodo           DateTime     @db.Date
+  montoAgua         Decimal      @map("monto_agua") @db.Decimal(10, 2)
+  idUsuarioRegistro Int?         @map("id_usuario_registro")
+  fechaRegistro     DateTime     @default(now()) @map("fecha_registro") @db.Timestamp(6)
+
+  departamento      Departamento @relation(fields: [idDepartamento], references: [idDepartamento])
+  usuarioRegistro   Usuario?     @relation(fields: [idUsuarioRegistro], references: [idUsuario])
+
+  @@unique([idDepartamento, periodo], map: "uq_montos_agua_departamento_periodo")
+  @@index([periodo], map: "idx_montos_agua_periodo")
+  @@map("montos_agua")
   @@schema("edificio")
 }
 
