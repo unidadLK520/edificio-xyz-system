@@ -7,6 +7,13 @@ import { z } from 'zod';
 import { authMiddleware, AuthRequest } from '../middlewares/auth.middleware';
 import { authorizeRoles } from '../middlewares/role.middleware';
 import { auditoriaService } from '../modules/auditoria';
+import {
+  calcularCapitalPendiente,
+  configurarReglaMora,
+  obtenerReglasMora,
+  ejecutarCalculoMora,
+  formatearExpensaConConcepto,
+} from '../modules/expensas';
 
 export const expensasRouter: IRouter = Router();
 expensasRouter.use(authMiddleware);
@@ -42,9 +49,11 @@ async function registrarAuditoria(
 // ── Validation Schemas ────────────────────────────────────────────────────────
 const expensaSchema = z.object({
   idDepartamento: z.number().int().positive(),
-  periodo: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Formato: YYYY-MM-DD'),
-  monto: z.number().positive(),
-  tasaInteresMora: z.number().min(0).max(100).default(0),
+  periodo: z.string().regex(/^\d{4}-\d{2}(-\d{2})?$/, 'Formato: YYYY-MM o YYYY-MM-DD'),
+  monto: z.number().positive().optional(),
+  montoBase: z.number().positive().optional(),
+  montoAgua: z.number().min(0).optional(),
+  tasaInteresMora: z.number().min(0).max(100).optional(),
   fechaVencimiento: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Formato: YYYY-MM-DD'),
 });
 
@@ -52,14 +61,16 @@ const generarMasivoSchema = z.object({
   periodo: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Formato: YYYY-MM-DD'),
   fechaVencimiento: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Formato: YYYY-MM-DD'),
   montoBase: z.number().positive().optional().default(500),
-  tasaInteresMora: z.number().min(0).max(100).optional().default(5),
+  tasaInteresMora: z.number().min(0).max(100).optional(),
   excluirDepartamentos: z.array(z.number().int()).optional().default([]),
+  idDepartamentos: z.array(z.number().int()).optional(),
 });
 
 const pagoSchema = z.object({
   idDepartamento: z.number().int().positive().optional(),
   idExpensa: z.number().int().positive().nullable().optional(),
-  montoPagado: z.number().positive(),
+  idPersonaPagador: z.number().int().positive().optional(),
+  montoPagado: z.number(),
   interesPagado: z.number().min(0).default(0),
   metodoPago: z.enum(['Efectivo', 'Transferencia', 'Cheque', 'QR']).optional(),
   esAnticipado: z.boolean().default(false),
@@ -77,6 +88,11 @@ const anularPagoSchema = z.object({
 
 const corregirPagoSchema = pagoSchema.extend({
   motivo: z.string().min(1, 'El motivo de corrección es obligatorio'),
+});
+
+const reglaMoraSchema = z.object({
+  tasaInteres: z.number().min(0, 'La tasa de interés debe ser mayor o igual a 0').max(100, 'La tasa de interés no puede exceder 100'),
+  diasGracia: z.number().int().min(0, 'Los días de gracia no pueden ser negativos').optional().default(0),
 });
 
 // ── Helper FIFO para aplicación automática de anticipos ──────────────────────
@@ -159,12 +175,17 @@ expensasRouter.get(
   authorizeRoles('Administrador', 'Directorio'),
   async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
     try {
-      const { estado, idDepartamento, periodo, page = '1', limit = '50' } = req.query;
+      const { estado, idDepartamento, periodo, vencida, page = '1', limit = '50' } = req.query;
+      const ahora = new Date();
 
       const where: Record<string, unknown> = {};
       if (estado && estado !== 'Todos') where.estado = String(estado);
       if (idDepartamento) where.idDepartamento = parseInt(String(idDepartamento));
       if (periodo) where.periodo = new Date(String(periodo));
+      if (vencida === 'true') {
+        where.fechaVencimiento = { lt: ahora };
+        where.saldoPendiente = { gt: 0 };
+      }
 
       const pageNum = Math.max(1, parseInt(String(page)) || 1);
       const limitNum = Math.max(1, parseInt(String(limit)) || 50);
@@ -180,6 +201,7 @@ expensasRouter.get(
             departamento: {
               include: {
                 propietario: { select: { idPersona: true, nombres: true, apellidos: true, ciNit: true, telefono: true } },
+                tipo: true,
               },
             },
             pagos: {
@@ -192,8 +214,34 @@ expensasRouter.get(
         prisma.expensa.count({ where }),
       ]);
 
+      const deptosPeriodos = expensas.map((e) => ({
+        idDepartamento: e.idDepartamento,
+        periodo: e.periodo,
+      }));
+      const lecturas = deptosPeriodos.length > 0
+        ? await prisma.lecturaAgua.findMany({
+            where: { OR: deptosPeriodos },
+            select: { idDepartamento: true, periodo: true, consumoM3: true },
+          })
+        : [];
+      const lecturasMap = new Map<string, number>();
+      for (const l of lecturas) {
+        const key = `${l.idDepartamento}_${new Date(l.periodo).toISOString().split('T')[0]}`;
+        lecturasMap.set(key, Number(l.consumoM3));
+      }
+
+      const expensasConVencida = expensas.map((e) => {
+        const key = `${e.idDepartamento}_${new Date(e.periodo).toISOString().split('T')[0]}`;
+        const consumo = lecturasMap.get(key);
+        const formateada = formatearExpensaConConcepto(e, e.departamento?.tipo?.nombre, consumo);
+        return {
+          ...formateada,
+          vencida: new Date(e.fechaVencimiento) < ahora && Number(e.saldoPendiente) > 0,
+        };
+      });
+
       res.json({
-        data: expensas,
+        data: expensasConVencida,
         meta: {
           total,
           page: pageNum,
@@ -232,6 +280,8 @@ expensasRouter.get(
               propietario: { select: { idPersona: true, nombres: true, apellidos: true, ciNit: true, telefono: true, correo: true } },
             },
           },
+          pagos: { where: { anulado: false } },
+          aplicacionesAnticipos: { include: { pago: true } },
         },
         orderBy: [{ idDepartamento: 'asc' }, { periodo: 'asc' }],
       });
@@ -260,6 +310,7 @@ expensasRouter.get(
           idExpensa: exp.idExpensa,
           periodo: exp.periodo,
           montoTotal: Number(exp.monto),
+          capitalPendiente: calcularCapitalPendiente(exp),
           saldoPendiente: Number(exp.saldoPendiente),
           fechaVencimiento: exp.fechaVencimiento,
           tasaInteresMora: Number(exp.tasaInteresMora),
@@ -328,7 +379,7 @@ expensasRouter.get(
 
       const departamento = await prisma.departamento.findUnique({
         where: { idDepartamento },
-        include: { propietario: true },
+        include: { propietario: true, tipo: true },
       });
 
       if (!departamento) {
@@ -336,11 +387,14 @@ expensasRouter.get(
         return;
       }
 
-      const [expensas, pagos, anticipos] = await Promise.all([
+      const [expensas, pagos, anticipos, lecturas] = await Promise.all([
         prisma.expensa.findMany({
           where: { idDepartamento },
           orderBy: { periodo: 'desc' },
-          include: { pagos: true, aplicacionesAnticipos: true },
+          include: {
+            pagos: { where: { anulado: false } },
+            aplicacionesAnticipos: { include: { pago: true } },
+          },
         }),
         // Devuelve TODOS los pagos (anulados y vigentes) para trazabilidad completa.
         // El cálculo de totales excluye los anulados por filtro JS más abajo.
@@ -354,7 +408,24 @@ expensasRouter.get(
           include: { aplicacionesAnticipo: true },
           orderBy: { fechaPago: 'desc' },
         }),
+        prisma.lecturaAgua.findMany({
+          where: { idDepartamento },
+        }),
       ]);
+
+      const lecturasMap = new Map<string, number>(
+        lecturas.map((l) => [new Date(l.periodo).toISOString().split('T')[0], Number(l.consumoM3)])
+      );
+
+      const expensasConCapital = expensas.map((e) => {
+        const pKey = new Date(e.periodo).toISOString().split('T')[0];
+        const consumo = lecturasMap.get(pKey);
+        const conConcepto = formatearExpensaConConcepto(e, departamento.tipo?.nombre, consumo);
+        return {
+          ...conConcepto,
+          capitalPendiente: calcularCapitalPendiente(e),
+        };
+      });
 
       const anticiposConSaldo = anticipos.map((ant) => {
         const totalAplicado = ant.aplicacionesAnticipo.reduce(
@@ -388,12 +459,217 @@ expensasRouter.get(
           totalAnticiposDisponibles,
           estadoGlobal: saldoPendienteTotal > 0 ? (expensas.some((e) => e.estado === 'Moroso') ? 'Moroso' : 'Deuda Pendiente') : 'Al Día',
         },
-        expensas,
+        expensas: expensasConCapital,
         pagos,
         anticipos: anticiposConSaldo,
         anticiposDisponibles,
       });
     } catch (err) {
+      next(err);
+    }
+  }
+);
+
+// ── GET /api/v1/expensas/reglas-mora ─────────────────────────────────────────
+// CA09: Consultar regla de mora activa e historial completo
+expensasRouter.get(
+  '/reglas-mora',
+  authorizeRoles('Administrador', 'Directorio'),
+  async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const resultado = await obtenerReglasMora();
+      res.json(resultado);
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+// ── POST /api/v1/expensas/reglas-mora ────────────────────────────────────────
+// CA09, CA10: Configurar nueva regla de mora activa (desactiva anterior de forma atómica y audita)
+expensasRouter.post(
+  '/reglas-mora',
+  authorizeRoles('Administrador', 'Directorio'),
+  async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const parsed = reglaMoraSchema.safeParse(req.body);
+      if (!parsed.success) {
+        res.status(400).json({
+          error: 'Validation Error',
+          message: 'Parámetros de regla de mora inválidos',
+          details: parsed.error.flatten().fieldErrors,
+        });
+        return;
+      }
+
+      const { tasaInteres, diasGracia } = parsed.data;
+      const nuevaRegla = await configurarReglaMora({
+        tasaInteres,
+        diasGracia,
+        idUsuario: req.user?.idUsuario || null,
+      });
+
+      res.status(201).json({
+        message: 'Regla de mora configurada exitosamente',
+        regla: nuevaRegla,
+      });
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+// ── GET /api/v1/expensas/montos-tipo ─────────────────────────────────────────
+// Lectura de tipos de departamento y sus montos de expensa configurados
+expensasRouter.get(
+  '/montos-tipo',
+  authorizeRoles('Administrador', 'Directorio'),
+  async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const tipos = await prisma.tipoDepartamento.findMany({
+        orderBy: { idTipo: 'asc' },
+      });
+      res.json({
+        data: tipos.map((t) => ({
+          idTipo: t.idTipo,
+          nombre: t.nombre,
+          montoExpensa: Number(t.montoExpensa),
+        })),
+      });
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+// ── PUT /api/v1/expensas/montos-tipo ─────────────────────────────────────────
+// Actualización de montos de expensa por tipo con validación > 0 y auditoría CONFIGURAR_MONTO_EXPENSA
+expensasRouter.put(
+  '/montos-tipo',
+  authorizeRoles('Administrador', 'Directorio'),
+  async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      let items: Array<{ idTipo?: number; nombre?: string; monto: number }> = [];
+
+      if (Array.isArray(req.body)) {
+        items = req.body.map((item) => ({
+          idTipo: item.idTipo,
+          nombre: item.nombre,
+          monto: Number(item.monto !== undefined ? item.monto : item.montoExpensa),
+        }));
+      } else if (req.body && Array.isArray(req.body.tipos)) {
+        items = req.body.tipos.map((item: any) => ({
+          idTipo: item.idTipo,
+          nombre: item.nombre,
+          monto: Number(item.monto !== undefined ? item.monto : item.montoExpensa),
+        }));
+      } else if (req.body && (req.body.idTipo !== undefined || req.body.nombre !== undefined)) {
+        items = [
+          {
+            idTipo: req.body.idTipo,
+            nombre: req.body.nombre,
+            monto: Number(req.body.monto !== undefined ? req.body.monto : req.body.montoExpensa),
+          },
+        ];
+      } else {
+        res.status(400).json({
+          error: 'Validation Error',
+          message: 'Debe especificar al menos un tipo de departamento a actualizar (idTipo o nombre y monto)',
+        });
+        return;
+      }
+
+      if (items.length === 0) {
+        res.status(400).json({
+          error: 'Validation Error',
+          message: 'La lista de tipos a actualizar está vacía',
+        });
+        return;
+      }
+
+      // Validar montos > 0
+      for (const item of items) {
+        if (item.monto === undefined || isNaN(item.monto) || item.monto <= 0) {
+          res.status(400).json({
+            error: 'Validation Error',
+            message: 'El monto de la expensa debe ser mayor a cero',
+          });
+          return;
+        }
+        if (item.idTipo === undefined && !item.nombre) {
+          res.status(400).json({
+            error: 'Validation Error',
+            message: 'Debe especificar idTipo o nombre para identificar el tipo',
+          });
+          return;
+        }
+      }
+
+      // Actualizar en transacción con auditoría individual para cada tipo
+      const actualizados = await prisma.$transaction(async (tx) => {
+        const resultados: any[] = [];
+
+        for (const item of items) {
+          const tipoActual = await tx.tipoDepartamento.findFirst({
+            where: item.idTipo !== undefined ? { idTipo: item.idTipo } : { nombre: item.nombre },
+          });
+
+          if (!tipoActual) {
+            throw {
+              statusCode: 404,
+              code: 'NOT_FOUND',
+              message: `Tipo de departamento ${item.idTipo || item.nombre} no encontrado`,
+            };
+          }
+
+          const datosAnteriores = {
+            idTipo: tipoActual.idTipo,
+            nombre: tipoActual.nombre,
+            montoExpensa: Number(tipoActual.montoExpensa),
+          };
+
+          const tipoNuevo = await tx.tipoDepartamento.update({
+            where: { idTipo: tipoActual.idTipo },
+            data: { montoExpensa: item.monto },
+          });
+
+          const datosNuevos = {
+            idTipo: tipoNuevo.idTipo,
+            nombre: tipoNuevo.nombre,
+            montoExpensa: Number(tipoNuevo.montoExpensa),
+          };
+
+          await tx.auditoria.create({
+            data: {
+              tablaAfectada: 'tipos_departamento',
+              idRegistro: String(tipoNuevo.idTipo),
+              accion: 'CONFIGURAR_MONTO_EXPENSA',
+              resultado: 'EXITO',
+              datosAnteriores,
+              datosNuevos,
+              idUsuario: req.user?.idUsuario || null,
+              fechaHora: new Date(),
+            },
+          });
+
+          resultados.push(datosNuevos);
+        }
+
+        return resultados;
+      }, { timeout: 30000, maxWait: 15000 });
+
+      res.json({
+        message: 'Montos de expensa por tipo actualizados exitosamente',
+        actualizados,
+      });
+    } catch (err: any) {
+      if (err.statusCode) {
+        res.status(err.statusCode).json({
+          error: err.code || 'Bad Request',
+          message: err.message,
+        });
+        return;
+      }
       next(err);
     }
   }
@@ -418,6 +694,7 @@ expensasRouter.get(
           departamento: {
             include: {
               propietario: { select: { nombres: true, apellidos: true, telefono: true, correo: true, ciNit: true } },
+              tipo: true,
             },
           },
           pagos: {
@@ -440,7 +717,23 @@ expensasRouter.get(
         return;
       }
 
-      res.json(expensa);
+      const ahora = new Date();
+      const vencida = new Date(expensa.fechaVencimiento) < ahora && Number(expensa.saldoPendiente) > 0;
+
+      const lectura = await prisma.lecturaAgua.findFirst({
+        where: { idDepartamento: expensa.idDepartamento, periodo: expensa.periodo },
+      });
+
+      const expensaFormateada = formatearExpensaConConcepto(
+        expensa,
+        expensa.departamento?.tipo?.nombre,
+        lectura ? Number(lectura.consumoM3) : null
+      );
+
+      res.json({
+        ...expensaFormateada,
+        vencida,
+      });
     } catch (err) {
       next(err);
     }
@@ -464,37 +757,73 @@ expensasRouter.post(
         return;
       }
 
-      const { periodo, fechaVencimiento, montoBase, tasaInteresMora, excluirDepartamentos } = parsed.data;
+      const { periodo, fechaVencimiento, montoBase, tasaInteresMora, excluirDepartamentos, idDepartamentos } = parsed.data;
       // Normalizar periodo al primer día del mes en formato UTC para evitar discrepancias de zona horaria
       const [pYear, pMonth] = periodo.split('-');
       const periodoNormalizado = `${pYear}-${pMonth}-01`;
       const periodoDate = new Date(`${periodoNormalizado}T00:00:00.000Z`);
       const vencimientoDate = new Date(`${fechaVencimiento}T00:00:00.000Z`);
 
-      // CA2: Obtener unidades aplicables (excluir desocupadas/inactivas o especificadas en reglas)
-      const { generadas, excepciones } = await prisma.$transaction(async (tx) => {
+      // CA2: Obtener unidades aplicables (excluir departamentos especificados o filtrar por idDepartamentos)
+      const { generadas, excepciones, advertencias } = await prisma.$transaction(async (tx) => {
+        const whereClause: any = {};
+        if (excluirDepartamentos && excluirDepartamentos.length > 0) {
+          whereClause.idDepartamento = { notIn: excluirDepartamentos };
+        }
+        if (idDepartamentos && idDepartamentos.length > 0) {
+          whereClause.idDepartamento = {
+            ...(whereClause.idDepartamento || {}),
+            in: idDepartamentos,
+          };
+        }
+
         const departamentos = await tx.departamento.findMany({
-          where: {
-            NOT: [
-              { idDepartamento: { in: excluirDepartamentos } },
-              { estado: 'Inactivo' },
-            ],
+          where: whereClause,
+          include: {
+            tipo: true,
           },
         });
 
+        // Consultar expensas existentes para el período en una sola consulta
+        const expensasExistentes = await tx.expensa.findMany({
+          where: { periodo: periodoDate },
+          select: { idDepartamento: true },
+        });
+        const deptosConExpensa = new Set(expensasExistentes.map((e) => e.idDepartamento));
+
+        // Consultar lecturas de agua existentes para el período en una sola consulta
+        const lecturasExistentes = await tx.lecturaAgua.findMany({
+          where: { periodo: periodoDate },
+          select: { idDepartamento: true, montoAgua: true, consumoM3: true },
+        });
+        const lecturasMap = new Map<number, { montoAgua: number; consumoM3: number }>(
+          lecturasExistentes.map((l) => [l.idDepartamento, { montoAgua: Number(l.montoAgua), consumoM3: Number(l.consumoM3) }])
+        );
+
+        // Copiar tasa de la regla activa a expensas.tasa_interes_mora
+        const reglaActiva = await tx.reglaMora.findFirst({
+          where: { activa: true },
+          orderBy: { fechaCreacion: 'desc' },
+        });
+        const tasaAplicar = tasaInteresMora !== undefined ? tasaInteresMora : (reglaActiva ? Number(reglaActiva.tasaInteres) : 0);
+
         const generadasArr: any[] = [];
         const excepcionesArr: any[] = [];
+        const advertenciasArr: any[] = [];
 
         for (const depto of departamentos) {
-          // Verificar si ya existe expensa para el departamento en este período
-          const existente = await tx.expensa.findFirst({
-            where: {
+          // Si el departamento no tiene tipo asignado, va a excepciones
+          if (!depto.tipo) {
+            excepcionesArr.push({
               idDepartamento: depto.idDepartamento,
-              periodo: periodoDate,
-            },
-          });
+              numero: depto.numero,
+              motivo: 'El departamento no tiene un tipo asignado en tipos_departamento',
+            });
+            continue;
+          }
 
-          if (existente) {
+          // Verificar si ya existe expensa para el departamento en este período
+          if (deptosConExpensa.has(depto.idDepartamento)) {
             excepcionesArr.push({
               idDepartamento: depto.idDepartamento,
               numero: depto.numero,
@@ -503,17 +832,31 @@ expensasRouter.post(
             continue;
           }
 
-          // Calcular monto (proporcional al área m2 o monto base)
-          const areaFactor = depto.areaM2 ? Number(depto.areaM2) / 100 : 1;
-          const montoFinal = Math.round(montoBase * areaFactor * 100) / 100;
+          // Monto base del tipo de departamento y monto de agua si tiene lectura
+          const montoBase = Number(depto.tipo.montoExpensa);
+          const lectura = lecturasMap.get(depto.idDepartamento);
+          let montoAgua = 0;
+          if (lectura) {
+            montoAgua = lectura.montoAgua;
+          } else {
+            advertenciasArr.push({
+              idDepartamento: depto.idDepartamento,
+              numero: depto.numero,
+              advertencia: 'Sin lectura de agua registrada para el período; se emitió únicamente con monto base',
+            });
+          }
+
+          const montoTotal = Math.round((montoBase + montoAgua) * 100) / 100;
 
           const nuevaExpensa = await tx.expensa.create({
             data: {
               idDepartamento: depto.idDepartamento,
               periodo: periodoDate,
-              monto: montoFinal,
-              saldoPendiente: montoFinal,
-              tasaInteresMora,
+              montoBase: montoBase,
+              montoAgua: montoAgua,
+              monto: montoTotal,
+              saldoPendiente: montoTotal,
+              tasaInteresMora: tasaAplicar,
               fechaVencimiento: vencimientoDate,
               estado: 'Pendiente',
             },
@@ -521,7 +864,12 @@ expensasRouter.post(
 
           // Aplicación automática FIFO de anticipos disponibles en la misma transacción
           const expensaConAnticipos = await aplicarAnticiposFIFO(tx, nuevaExpensa, req.user?.idUsuario);
-          generadasArr.push(expensaConAnticipos);
+          const expensaFormateada = formatearExpensaConConcepto(
+            expensaConAnticipos,
+            depto.tipo.nombre,
+            lectura ? lectura.consumoM3 : null
+          );
+          generadasArr.push(expensaFormateada);
         }
 
         // Auditoría dentro de la misma transacción
@@ -534,19 +882,22 @@ expensasRouter.post(
             periodo,
             generadasCount: generadasArr.length,
             excepcionesCount: excepcionesArr.length,
+            advertenciasCount: advertenciasArr.length,
           },
           idUsuario: req.user?.idUsuario || null,
           tx,
         });
 
-        return { generadas: generadasArr, excepciones: excepcionesArr };
-      }, { timeout: 30000, maxWait: 15000 });
+        return { generadas: generadasArr, excepciones: excepcionesArr, advertencias: advertenciasArr };
+      }, { timeout: 120000, maxWait: 30000 });
 
       res.status(201).json({
         message: `Se generaron ${generadas.length} expensas para el período ${periodo}`,
         generadasCount: generadas.length,
         excepcionesCount: excepciones.length,
+        advertenciasCount: advertencias.length,
         excepciones,
+        advertencias,
       });
     } catch (err) {
       next(err);
@@ -555,73 +906,35 @@ expensasRouter.post(
 );
 
 // ── POST /api/v1/expensas/calcular-mora ──────────────────────────────────────
-// CA6, CA10: Cálculo idempotente de mora sobre expensas vencidas con auditoría transaccional
+// CA6, CA09, CA10: Cálculo idempotente de mora sobre expensas vencidas con auditoría transaccional
 expensasRouter.post(
   '/calcular-mora',
   authorizeRoles('Administrador', 'Directorio'),
   async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
     try {
-      const ahora = new Date();
+      const idDepartamentos = Array.isArray(req.body?.idDepartamentos)
+        ? req.body.idDepartamentos.map(Number).filter((n: number) => !isNaN(n))
+        : undefined;
 
-      const { actualizadasCount } = await prisma.$transaction(async (tx) => {
-        // Buscar expensas vencidas con saldo pendiente > 0 y que no estén pagadas
-        const expensasVencidas = await tx.expensa.findMany({
-          where: {
-            fechaVencimiento: { lt: ahora },
-            saldoPendiente: { gt: 0 },
-            estado: { not: 'Pagado' },
-          },
-          include: {
-            pagos: {
-              where: { anulado: false },
-            },
-          },
-        });
-
-        let count = 0;
-
-        for (const exp of expensasVencidas) {
-          const totalPagosValidos = exp.pagos.reduce((acc, p) => acc + Number(p.montoPagado), 0);
-          const tasa = Number(exp.tasaInteresMora) > 0 ? Number(exp.tasaInteresMora) : 5;
-          const baseParaMora = Math.max(0, Number(exp.monto) - totalPagosValidos);
-          const montoMora = Math.round((baseParaMora * (tasa / 100)) * 100) / 100;
-          const nuevoSaldo = Math.max(0, Math.round((Number(exp.monto) + montoMora - totalPagosValidos) * 100) / 100);
-          const nuevoEstado = (exp.fechaVencimiento < ahora && nuevoSaldo > 0) ? 'Moroso' : (nuevoSaldo === 0 ? 'Pagado' : 'Pendiente');
-
-          await tx.expensa.update({
-            where: { idExpensa: exp.idExpensa },
-            data: {
-              montoMora,
-              saldoPendiente: nuevoSaldo,
-              estado: nuevoEstado,
-            },
-          });
-
-          count++;
-        }
-
-        // CA10: Auditoría oficial dentro de la misma transacción
-        await auditoriaService.registrarEvento({
-          tablaAfectada: 'expensas',
-          idRegistro: `MORA-${ahora.toISOString().split('T')[0]}`,
-          accion: 'CALCULO_MORA_EXPENSAS',
-          resultado: 'EXITO',
-          datosNuevos: {
-            actualizadasCount: count,
-            fechaEjecucion: ahora.toISOString(),
-          },
-          idUsuario: req.user?.idUsuario || null,
-          tx,
-        });
-
-        return { actualizadasCount: count };
-      }, { timeout: 30000, maxWait: 15000 });
+      const resultado = await ejecutarCalculoMora({
+        idUsuario: req.user?.idUsuario || null,
+        origen: 'MANUAL',
+        idDepartamentos: idDepartamentos && idDepartamentos.length > 0 ? idDepartamentos : undefined,
+      });
 
       res.json({
-        message: `Se aplicó el recargo de mora a ${actualizadasCount} expensas vencidas`,
-        actualizadasCount,
+        message: resultado.mensaje,
+        actualizadasCount: resultado.actualizadasCount,
       });
-    } catch (err) {
+    } catch (err: any) {
+      if (err.statusCode) {
+        res.status(err.statusCode).json({
+          error: err.code || 'Bad Request',
+          code: err.code,
+          message: err.message,
+        });
+        return;
+      }
       next(err);
     }
   }
@@ -644,7 +957,7 @@ expensasRouter.post(
         return;
       }
 
-      const { idDepartamento, periodo, monto, tasaInteresMora, fechaVencimiento } = result.data;
+      const { idDepartamento, periodo, monto, montoBase: inputMontoBase, tasaInteresMora, fechaVencimiento } = result.data;
       const [pYear, pMonth] = periodo.split('-');
       const periodoNormalizado = `${pYear}-${pMonth}-01`;
       const periodoDate = new Date(`${periodoNormalizado}T00:00:00.000Z`);
@@ -666,15 +979,63 @@ expensasRouter.post(
         return;
       }
 
-      const expensaFinal = await prisma.$transaction(async (tx) => {
+      const { expensaFinal, advertencias } = await prisma.$transaction(async (tx) => {
+        // Copiar tasa de la regla activa a expensas.tasa_interes_mora si no se especifica explícitamente
+        const reglaActiva = await tx.reglaMora.findFirst({
+          where: { activa: true },
+          orderBy: { fechaCreacion: 'desc' },
+        });
+        const tasaAplicar = tasaInteresMora !== undefined ? tasaInteresMora : (reglaActiva ? Number(reglaActiva.tasaInteres) : 0);
+
+        // Obtener departamento y su tipo
+        const depto = await tx.departamento.findUnique({
+          where: { idDepartamento },
+          include: { tipo: true },
+        });
+
+        // Buscar lectura de agua para el período
+        const lectura = await tx.lecturaAgua.findFirst({
+          where: { idDepartamento, periodo: periodoDate },
+        });
+
+        const advertenciasArr: string[] = [];
+        let montoAgua = 0;
+        if (lectura) {
+          montoAgua = Number(lectura.montoAgua);
+        } else {
+          advertenciasArr.push('Sin lectura de agua registrada para el período; se emitió únicamente con monto base');
+        }
+
+        // Monto base: del tipo si existe, o inputMontoBase, o monto proporcionado
+        let montoBase = 0;
+        if (depto?.tipo) {
+          montoBase = Number(depto.tipo.montoExpensa);
+        } else if (inputMontoBase !== undefined) {
+          montoBase = Number(inputMontoBase);
+        } else if (monto !== undefined) {
+          montoBase = Number(monto);
+        }
+
+        // Monto total = monto_base + monto_agua
+        let montoTotal: number;
+        if (depto?.tipo || inputMontoBase !== undefined) {
+          montoTotal = Math.round((montoBase + montoAgua) * 100) / 100;
+        } else if (monto !== undefined) {
+          montoTotal = lectura ? Math.round((monto + montoAgua) * 100) / 100 : Number(monto);
+        } else {
+          montoTotal = Math.round((montoBase + montoAgua) * 100) / 100;
+        }
+
         const expensaCreada = await tx.expensa.create({
           data: {
             idDepartamento,
             periodo: periodoDate,
-            monto,
-            tasaInteresMora,
+            montoBase,
+            montoAgua,
+            monto: montoTotal,
+            tasaInteresMora: tasaAplicar,
             fechaVencimiento: vencimientoDate,
-            saldoPendiente: monto,
+            saldoPendiente: montoTotal,
             estado: 'Pendiente',
           },
           include: {
@@ -696,11 +1057,27 @@ expensasRouter.post(
           tx,
         });
 
-        return expensaProcesada;
+        const expensaFormateada = formatearExpensaConConcepto(
+          expensaProcesada,
+          depto?.tipo?.nombre,
+          lectura ? Number(lectura.consumoM3) : null
+        );
+
+        return { expensaFinal: expensaFormateada, advertencias: advertenciasArr };
       }, { timeout: 30000, maxWait: 15000 });
 
-      res.status(201).json(expensaFinal);
-    } catch (err) {
+      res.status(201).json({
+        ...expensaFinal,
+        advertencias,
+      });
+    } catch (err: any) {
+      if (err.code === 'P2002') {
+        res.status(409).json({
+          error: 'Conflict',
+          message: 'Ya existe una expensa registrada para el departamento en este período',
+        });
+        return;
+      }
       next(err);
     }
   }
@@ -713,6 +1090,29 @@ expensasRouter.post(
   authorizeRoles('Administrador', 'Directorio'),
   async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
     try {
+      // RN10: idPersonaPagador es obligatorio (422 si falta o la persona no existe, también en anticipos)
+      const rawPagador = req.body?.idPersonaPagador;
+      if (rawPagador === undefined || rawPagador === null || !Number.isInteger(Number(rawPagador)) || Number(rawPagador) <= 0) {
+        res.status(422).json({
+          error: 'Unprocessable Entity',
+          message: 'El idPersonaPagador es obligatorio y debe ser un número entero positivo',
+        });
+        return;
+      }
+
+      const idPersonaPagador = Number(rawPagador);
+      const personaExiste = await prisma.persona.findUnique({
+        where: { idPersona: idPersonaPagador },
+      });
+
+      if (!personaExiste) {
+        res.status(422).json({
+          error: 'Unprocessable Entity',
+          message: `La persona pagadora con ID ${idPersonaPagador} no existe`,
+        });
+        return;
+      }
+
       const result = pagoSchema.safeParse(req.body);
       if (!result.success) {
         res.status(400).json({
@@ -762,6 +1162,7 @@ expensasRouter.post(
           data: {
             idExpensa: null,
             idDepartamento: targetDepartamentoId,
+            idPersonaPagador,
             montoPagado,
             interesPagado: interesPagado ?? 0,
             metodoPago: metodoPago || 'Efectivo',
@@ -801,7 +1202,31 @@ expensasRouter.post(
         return;
       }
 
+      if (montoPagado <= 0) {
+        res.status(422).json({
+          error: 'Unprocessable Entity',
+          message: 'El monto pagado debe ser mayor a cero',
+        });
+        return;
+      }
+
+      if (expensa.estado === 'Pagado' || Number(expensa.saldoPendiente) <= 0) {
+        res.status(422).json({
+          error: 'Unprocessable Entity',
+          message: 'La expensa ya se encuentra totalmente pagada',
+        });
+        return;
+      }
+
       const saldoActual = Number(expensa.saldoPendiente);
+      if (montoPagado > saldoActual) {
+        res.status(422).json({
+          error: 'Unprocessable Entity',
+          message: `El monto pagado (${montoPagado}) no puede exceder el saldo pendiente (${saldoActual})`,
+        });
+        return;
+      }
+
       const nuevoSaldo = Math.max(0, Math.round((saldoActual - montoPagado) * 100) / 100);
       const nuevoEstado = nuevoSaldo === 0 ? 'Pagado' : 'Parcial';
 
@@ -810,6 +1235,7 @@ expensasRouter.post(
           data: {
             idExpensa: expensaId,
             idDepartamento: expensa.idDepartamento,
+            idPersonaPagador,
             montoPagado,
             interesPagado: interesPagado ?? 0,
             metodoPago: metodoPago || 'Efectivo',
@@ -1020,36 +1446,28 @@ async function recalcularSaldoExpensa(
 ) {
   const expensa = await tx.expensa.findUnique({
     where: { idExpensa },
+    include: {
+      pagos: {
+        where: { anulado: false },
+      },
+      aplicacionesAnticipos: {
+        include: { pago: true },
+      },
+    },
   });
 
   if (!expensa) return null;
 
-  const pagosActivos = await tx.pago.findMany({
-    where: {
-      idExpensa,
-      anulado: false,
-    },
-  });
-
-  const aplicacionesAnticipo = await tx.aplicacionAnticipo.findMany({
-    where: {
-      idExpensa,
-      pago: { anulado: false },
-    },
-  });
-
-  const totalPagosDirectos = pagosActivos.reduce((acc, p) => acc + Number(p.montoPagado), 0);
-  const totalAnticiposAplicados = aplicacionesAnticipo.reduce((acc, a) => acc + Number(a.monto), 0);
-  const totalPagado = totalPagosDirectos + totalAnticiposAplicados;
-  const totalObligacion = Number(expensa.monto) + Number(expensa.montoMora);
-  const nuevoSaldo = Math.max(0, Math.round((totalObligacion - totalPagado) * 100) / 100);
+  const capitalPendiente = calcularCapitalPendiente(expensa);
+  const montoMora = Number(expensa.montoMora || 0);
+  const nuevoSaldo = Math.max(0, Math.round((capitalPendiente + montoMora) * 100) / 100);
 
   let nuevoEstado = 'Pendiente';
   if (nuevoSaldo === 0) {
     nuevoEstado = 'Pagado';
-  } else if (totalPagado > 0) {
+  } else if (capitalPendiente < Number(expensa.monto)) {
     nuevoEstado = 'Parcial';
-  } else if (Number(expensa.montoMora) > 0) {
+  } else if (montoMora > 0 || expensa.fechaVencimiento < new Date()) {
     nuevoEstado = 'Moroso';
   } else {
     nuevoEstado = 'Pendiente';
@@ -1195,6 +1613,29 @@ expensasRouter.patch(
         return;
       }
 
+      // RN10: idPersonaPagador es obligatorio (422 si falta o la persona no existe)
+      const rawPagador = req.body?.idPersonaPagador;
+      if (rawPagador === undefined || rawPagador === null || !Number.isInteger(Number(rawPagador)) || Number(rawPagador) <= 0) {
+        res.status(422).json({
+          error: 'Unprocessable Entity',
+          message: 'El idPersonaPagador es obligatorio y debe ser un número entero positivo',
+        });
+        return;
+      }
+
+      const idPersonaPagador = Number(rawPagador);
+      const personaExiste = await prisma.persona.findUnique({
+        where: { idPersona: idPersonaPagador },
+      });
+
+      if (!personaExiste) {
+        res.status(422).json({
+          error: 'Unprocessable Entity',
+          message: `La persona pagadora con ID ${idPersonaPagador} no existe`,
+        });
+        return;
+      }
+
       const result = corregirPagoSchema.safeParse(req.body);
       if (!result.success) {
         res.status(400).json({
@@ -1206,17 +1647,45 @@ expensasRouter.patch(
       }
 
       const { motivo, montoPagado, interesPagado, metodoPago, esAnticipado, idCuenta, comprobanteUrl } = result.data;
+      if (montoPagado <= 0) {
+        res.status(422).json({
+          error: 'Unprocessable Entity',
+          message: 'El monto pagado debe ser mayor a cero',
+        });
+        return;
+      }
+
       const idUsuario = req.user?.idUsuario;
 
       const { pagoAnulado, nuevoPago, expensaFinal } = await prisma.$transaction(async (tx) => {
         // 1. Anular el pago original reutilizando la lógica interna
-        const { pagoAnulado } = await anularPagoInterno(tx, idPago, idUsuario, motivo);
+        const { pagoAnulado, expensaActualizada } = await anularPagoInterno(tx, idPago, idUsuario, motivo);
+
+        // Si el pago pertenece a una expensa, validar contra el saldo sin el pago original
+        if (pagoAnulado.idExpensa && expensaActualizada) {
+          const saldoSinPagoOriginal = Number(expensaActualizada.saldoPendiente);
+          if (saldoSinPagoOriginal <= 0) {
+            const err: any = new Error('La expensa ya se encuentra totalmente pagada');
+            err.statusCode = 422;
+            err.code = 'EXPENSA_YA_PAGADA';
+            throw err;
+          }
+          if (montoPagado > saldoSinPagoOriginal) {
+            const err: any = new Error(
+              `El monto pagado (${montoPagado}) no puede exceder el saldo pendiente (${saldoSinPagoOriginal})`
+            );
+            err.statusCode = 422;
+            err.code = 'MONTO_EXCEDE_SALDO';
+            throw err;
+          }
+        }
 
         // 2. Crear el nuevo pago vinculado al original
         const nuevoPago = await tx.pago.create({
           data: {
             idExpensa: pagoAnulado.idExpensa,
             idDepartamento: pagoAnulado.idDepartamento,
+            idPersonaPagador,
             montoPagado,
             interesPagado: interesPagado ?? 0,
             metodoPago: metodoPago || 'Efectivo',

@@ -7,6 +7,7 @@ import helmet from 'helmet';
 import { config } from './config';
 import { router } from './routes';
 import { errorMiddleware } from './middlewares/error.middleware';
+import { iniciarCronMora } from './modules/expensas';
 
 const app: Application = express();
 
@@ -68,15 +69,20 @@ app.use((req, res) => {
 app.use(errorMiddleware);
 
 // ── Iniciar servidor ─────────────────────────────────────────────────────────
-app.listen(config.port, () => {
-  console.log('');
-  console.log('🏢 ═══════════════════════════════════════════════');
-  console.log(`   Edificio XYZ API — v1.0.0`);
-  console.log(`   🚀 http://localhost:${config.port}`);
-  console.log(`   📦 Ambiente: ${config.nodeEnv}`);
-  console.log(`   🌐 CORS: ${config.corsOrigin}`);
-  console.log('   ═══════════════════════════════════════════════');
-  console.log('');
-});
+if (process.env.NODE_ENV !== 'test') {
+  app.listen(config.port, () => {
+    console.log('');
+    console.log('🏢 ═══════════════════════════════════════════════');
+    console.log(`   Edificio XYZ API — v1.0.0`);
+    console.log(`   🚀 http://localhost:${config.port}`);
+    console.log(`   📦 Ambiente: ${config.nodeEnv}`);
+    console.log(`   🌐 CORS: ${config.corsOrigin}`);
+    console.log('   ═══════════════════════════════════════════════');
+    console.log('');
+  });
+
+  // Iniciar tarea programada de cálculo de mora automática (CA10)
+  iniciarCronMora();
+}
 
 export { app };

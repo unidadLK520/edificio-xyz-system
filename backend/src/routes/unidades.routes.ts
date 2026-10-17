@@ -19,6 +19,7 @@ const crearUnidadSchema = z.object({
   piso: z.number().int().optional(),
   areaM2: z.number().positive().optional(),
   estado: z.string().optional(),
+  idTipo: z.number().int().positive().nullable().optional(),
 });
 
 const editarUnidadSchema = z.object({
@@ -26,6 +27,7 @@ const editarUnidadSchema = z.object({
   piso: z.number().int().optional(),
   areaM2: z.number().positive().optional(),
   estado: z.string().optional(),
+  idTipo: z.number().int().positive().nullable().optional(),
 });
 
 const asignacionSchema = z.object({
@@ -79,6 +81,7 @@ async function verificarIdentificadorDuplicado(
 
 // ── GET /api/v1/unidades ─────────────────────────────────────────────────────
 // CA2, CA08, CA10: Listar y filtrar unidades por tipo, estado o búsqueda
+// Retorna tipo y monto del tipo de departamento si está configurado
 unidadesRouter.get(
   '/',
   authorizeRoles('Administrador', 'Directorio', 'Consulta', 'Copropietario'),
@@ -127,6 +130,7 @@ unidadesRouter.get(
             },
             parqueos: true,
             bauleras: true,
+            tipo: true,
           },
           orderBy: { numero: 'asc' },
         });
@@ -153,6 +157,16 @@ unidadesRouter.get(
             piso: d.piso,
             areaM2: d.areaM2 ? Number(d.areaM2) : null,
             estado: estadoFinal,
+            idTipo: d.idTipo ?? null,
+            tipo: d.tipo ? d.tipo.nombre : null,
+            monto: d.tipo ? Number(d.tipo.montoExpensa) : null,
+            tipoDepartamento: d.tipo
+              ? {
+                  idTipo: d.tipo.idTipo,
+                  nombre: d.tipo.nombre,
+                  montoExpensa: Number(d.tipo.montoExpensa),
+                }
+              : null,
             propietario: d.propietario,
             ocupanteActual: tieneOcupante ? d.ocupantes[0].persona : null,
             tipoOcupante: tieneOcupante ? d.ocupantes[0].tipoOcupante : (tienePropietario ? 'Propietario' : null),
@@ -260,6 +274,9 @@ unidadesRouter.get(
 
 // ── GET /api/v1/unidades/:tipo/:id ───────────────────────────────────────────
 // CA2, CA10: Obtener detalle completo de una unidad por tipo e ID
+// historialAsignaciones:
+// - Para Departamento: proviene de ocupantes_departamento
+// - Para Parqueo y Baulera: proviene de los eventos de auditoria de esa unidad
 unidadesRouter.get(
   '/:tipo/:id',
   authorizeRoles('Administrador', 'Directorio', 'Consulta', 'Copropietario'),
@@ -283,6 +300,7 @@ unidadesRouter.get(
             propietario: true,
             parqueos: true,
             bauleras: true,
+            tipo: true,
             ocupantes: {
               include: { persona: true },
               orderBy: { fechaInicio: 'desc' },
@@ -291,11 +309,27 @@ unidadesRouter.get(
         });
 
         if (unidad) {
-          historial = await prisma.historialAsignacionUnidad.findMany({
-            where: { tipoUnidad: 'Departamento', idUnidad: id },
+          // Historial de asignaciones para Departamento obtenido de ocupantes_departamento
+          const ocupantes = await prisma.ocupanteDepartamento.findMany({
+            where: { idDepartamento: id },
             include: { persona: true, departamento: true },
             orderBy: { fechaInicio: 'desc' },
           });
+
+          historial = ocupantes.map((oc) => ({
+            idHistorial: oc.idOcupacion,
+            tipoUnidad: 'Departamento',
+            idUnidad: oc.idDepartamento,
+            numeroUnidad: unidad.numero,
+            idPersona: oc.idPersona,
+            idDepartamento: oc.idDepartamento,
+            tipoRelacion: oc.tipoOcupante,
+            fechaInicio: oc.fechaInicio,
+            fechaFin: oc.fechaFin,
+            notas: `Ocupación registrada como ${oc.tipoOcupante}`,
+            persona: oc.persona,
+            departamento: oc.departamento,
+          }));
         }
       } else if (tipo === 'Parqueo') {
         unidad = await prisma.parqueo.findUnique({
@@ -304,10 +338,58 @@ unidadesRouter.get(
         });
 
         if (unidad) {
-          historial = await prisma.historialAsignacionUnidad.findMany({
-            where: { tipoUnidad: 'Parqueo', idUnidad: id },
-            include: { persona: true, departamento: true },
-            orderBy: { fechaInicio: 'desc' },
+          // Historial de asignaciones para Parqueo obtenido de los eventos de auditoría
+          const eventos = await prisma.auditoria.findMany({
+            where: {
+              tablaAfectada: 'parqueos',
+              idRegistro: String(id),
+            },
+            orderBy: { fechaHora: 'desc' },
+          });
+
+          const personaIds = new Set<number>();
+          const deptoIds = new Set<number>();
+
+          eventos.forEach((ev) => {
+            const dn = (ev.datosNuevos as any) || {};
+            const da = (ev.datosAnteriores as any) || {};
+            if (dn?.idPersona) personaIds.add(Number(dn.idPersona));
+            if (dn?.idDepartamento) deptoIds.add(Number(dn.idDepartamento));
+            if (da?.idPersona) personaIds.add(Number(da.idPersona));
+            if (da?.idDepartamento) deptoIds.add(Number(da.idDepartamento));
+          });
+
+          const personas = personaIds.size > 0
+            ? await prisma.persona.findMany({ where: { idPersona: { in: Array.from(personaIds) } } })
+            : [];
+          const deptos = deptoIds.size > 0
+            ? await prisma.departamento.findMany({ where: { idDepartamento: { in: Array.from(deptoIds) } } })
+            : [];
+
+          const personaMap = new Map(personas.map((p) => [p.idPersona, p]));
+          const deptoMap = new Map(deptos.map((d) => [d.idDepartamento, d]));
+
+          historial = eventos.map((ev) => {
+            const dn = (ev.datosNuevos as any) || {};
+            const da = (ev.datosAnteriores as any) || {};
+            const idPersona = dn.idPersona ?? da.idPersona ?? null;
+            const idDepartamento = dn.idDepartamento ?? da.idDepartamento ?? null;
+            const tipoRelacion = dn.tipoRelacion || (ev.accion === 'FINALIZACION_ASIGNACION' ? 'Finalizado' : 'Asignado');
+
+            return {
+              idHistorial: Number(ev.idAuditoria),
+              tipoUnidad: 'Parqueo',
+              idUnidad: id,
+              numeroUnidad: unidad.numero,
+              idPersona,
+              idDepartamento,
+              tipoRelacion,
+              fechaInicio: ev.fechaHora,
+              fechaFin: ev.accion === 'FINALIZACION_ASIGNACION' ? ev.fechaHora : null,
+              notas: dn.notas || `Evento de auditoría: ${ev.accion}`,
+              persona: idPersona ? personaMap.get(idPersona) || null : null,
+              departamento: idDepartamento ? deptoMap.get(idDepartamento) || null : null,
+            };
           });
         }
       } else if (tipo === 'Baulera') {
@@ -317,10 +399,58 @@ unidadesRouter.get(
         });
 
         if (unidad) {
-          historial = await prisma.historialAsignacionUnidad.findMany({
-            where: { tipoUnidad: 'Baulera', idUnidad: id },
-            include: { persona: true, departamento: true },
-            orderBy: { fechaInicio: 'desc' },
+          // Historial de asignaciones para Baulera obtenido de los eventos de auditoría
+          const eventos = await prisma.auditoria.findMany({
+            where: {
+              tablaAfectada: 'bauleras',
+              idRegistro: String(id),
+            },
+            orderBy: { fechaHora: 'desc' },
+          });
+
+          const personaIds = new Set<number>();
+          const deptoIds = new Set<number>();
+
+          eventos.forEach((ev) => {
+            const dn = (ev.datosNuevos as any) || {};
+            const da = (ev.datosAnteriores as any) || {};
+            if (dn?.idPersona) personaIds.add(Number(dn.idPersona));
+            if (dn?.idDepartamento) deptoIds.add(Number(dn.idDepartamento));
+            if (da?.idPersona) personaIds.add(Number(da.idPersona));
+            if (da?.idDepartamento) deptoIds.add(Number(da.idDepartamento));
+          });
+
+          const personas = personaIds.size > 0
+            ? await prisma.persona.findMany({ where: { idPersona: { in: Array.from(personaIds) } } })
+            : [];
+          const deptos = deptoIds.size > 0
+            ? await prisma.departamento.findMany({ where: { idDepartamento: { in: Array.from(deptoIds) } } })
+            : [];
+
+          const personaMap = new Map(personas.map((p) => [p.idPersona, p]));
+          const deptoMap = new Map(deptos.map((d) => [d.idDepartamento, d]));
+
+          historial = eventos.map((ev) => {
+            const dn = (ev.datosNuevos as any) || {};
+            const da = (ev.datosAnteriores as any) || {};
+            const idPersona = dn.idPersona ?? da.idPersona ?? null;
+            const idDepartamento = dn.idDepartamento ?? da.idDepartamento ?? null;
+            const tipoRelacion = dn.tipoRelacion || (ev.accion === 'FINALIZACION_ASIGNACION' ? 'Finalizado' : 'Asignado');
+
+            return {
+              idHistorial: Number(ev.idAuditoria),
+              tipoUnidad: 'Baulera',
+              idUnidad: id,
+              numeroUnidad: unidad.numero,
+              idPersona,
+              idDepartamento,
+              tipoRelacion,
+              fechaInicio: ev.fechaHora,
+              fechaFin: ev.accion === 'FINALIZACION_ASIGNACION' ? ev.fechaHora : null,
+              notas: dn.notas || `Evento de auditoría: ${ev.accion}`,
+              persona: idPersona ? personaMap.get(idPersona) || null : null,
+              departamento: idDepartamento ? deptoMap.get(idDepartamento) || null : null,
+            };
           });
         }
       }
@@ -334,8 +464,15 @@ unidadesRouter.get(
         unidad: {
           ...unidad,
           tipoUnidad: tipo,
+          ...(tipo === 'Departamento'
+            ? {
+                tipo: unidad.tipo ? unidad.tipo.nombre : null,
+                monto: unidad.tipo ? Number(unidad.tipo.montoExpensa) : null,
+              }
+            : {}),
         },
         historial,
+        historialAsignaciones: historial,
       });
     } catch (err) {
       next(err);
@@ -345,6 +482,7 @@ unidadesRouter.get(
 
 // ── POST /api/v1/unidades ────────────────────────────────────────────────────
 // CA1, CA4, CA09: Crear unidad con verificación de duplicado e identificador único
+// Acepta idTipo opcional para Departamentos (debe existir en tipos_departamento, si no 422)
 unidadesRouter.post(
   '/',
   authorizeRoles('Administrador', 'Directorio'),
@@ -360,7 +498,21 @@ unidadesRouter.post(
         return;
       }
 
-      const { tipoUnidad, numero, piso, areaM2, estado } = parsed.data;
+      const { tipoUnidad, numero, piso, areaM2, estado, idTipo } = parsed.data;
+
+      // Validación de idTipo en tipos_departamento para Departamentos
+      if (tipoUnidad === 'Departamento' && idTipo !== undefined && idTipo !== null) {
+        const tipoExistente = await prisma.tipoDepartamento.findUnique({
+          where: { idTipo },
+        });
+        if (!tipoExistente) {
+          res.status(422).json({
+            error: 'UNPROCESSABLE_ENTITY',
+            message: 'El idTipo especificado no existe en tipos_departamento',
+          });
+          return;
+        }
+      }
 
       // CA4: Impedir registro duplicado
       const esDuplicado = await verificarIdentificadorDuplicado(tipoUnidad, numero);
@@ -391,6 +543,10 @@ unidadesRouter.post(
             piso: piso ?? null,
             areaM2: areaM2 ? areaM2 : null,
             estado: estadoFinal,
+            idTipo: idTipo ?? null,
+          },
+          include: {
+            tipo: true,
           },
         });
       } else if (tipoUnidad === 'Parqueo') {
@@ -421,6 +577,7 @@ unidadesRouter.post(
         ),
         accion: 'CREATE',
         idUsuario,
+        datosAnteriores: null,
         datosNuevos: nuevaUnidad,
       });
 
@@ -429,6 +586,12 @@ unidadesRouter.post(
         unidad: {
           ...nuevaUnidad,
           tipoUnidad,
+          ...(tipoUnidad === 'Departamento'
+            ? {
+                tipo: nuevaUnidad.tipo ? nuevaUnidad.tipo.nombre : null,
+                monto: nuevaUnidad.tipo ? Number(nuevaUnidad.tipo.montoExpensa) : null,
+              }
+            : {}),
         },
       });
     } catch (err) {
@@ -439,6 +602,8 @@ unidadesRouter.post(
 
 // ── PUT /api/v1/unidades/:tipo/:id ───────────────────────────────────────────
 // CA3, CA4, CA09: Modificar datos de unidad conservando información no modificada
+// PUT /unidades/Departamento/:id acepta idTipo opcional (debe existir en tipos_departamento, si no 422)
+// Auditoría con datosAnteriores y datosNuevos
 unidadesRouter.put(
   '/:tipo/:id',
   authorizeRoles('Administrador', 'Directorio'),
@@ -462,7 +627,21 @@ unidadesRouter.put(
         return;
       }
 
-      const { numero, piso, areaM2, estado } = parsed.data;
+      const { numero, piso, areaM2, estado, idTipo } = parsed.data;
+
+      // Validación de idTipo para Departamento (422 si no existe)
+      if (tipo === 'Departamento' && idTipo !== undefined && idTipo !== null) {
+        const tipoExistente = await prisma.tipoDepartamento.findUnique({
+          where: { idTipo },
+        });
+        if (!tipoExistente) {
+          res.status(422).json({
+            error: 'UNPROCESSABLE_ENTITY',
+            message: 'El idTipo especificado no existe en tipos_departamento',
+          });
+          return;
+        }
+      }
 
       // CA4: Si se modifica el identificador (`numero`), verificar duplicados
       if (numero) {
@@ -478,7 +657,10 @@ unidadesRouter.put(
 
       let unidadAnterior: any = null;
       if (tipo === 'Departamento') {
-        unidadAnterior = await prisma.departamento.findUnique({ where: { idDepartamento: id } });
+        unidadAnterior = await prisma.departamento.findUnique({
+          where: { idDepartamento: id },
+          include: { tipo: true },
+        });
       } else if (tipo === 'Parqueo') {
         unidadAnterior = await prisma.parqueo.findUnique({ where: { idParqueo: id } });
       } else {
@@ -511,6 +693,10 @@ unidadesRouter.put(
             ...(piso !== undefined ? { piso } : {}),
             ...(areaM2 !== undefined ? { areaM2 } : {}),
             ...(estado ? { estado } : {}),
+            ...(idTipo !== undefined ? { idTipo } : {}),
+          },
+          include: {
+            tipo: true,
           },
         });
       } else if (tipo === 'Parqueo') {
@@ -546,6 +732,12 @@ unidadesRouter.put(
         unidad: {
           ...unidadActualizada,
           tipoUnidad: tipo,
+          ...(tipo === 'Departamento'
+            ? {
+                tipo: unidadActualizada.tipo ? unidadActualizada.tipo.nombre : null,
+                monto: unidadActualizada.tipo ? Number(unidadActualizada.tipo.montoExpensa) : null,
+              }
+            : {}),
         },
       });
     } catch (err) {
@@ -555,7 +747,8 @@ unidadesRouter.put(
 );
 
 // ── POST /api/v1/unidades/asignaciones ───────────────────────────────────────
-// CA5, CA6, CA07, CA09: Asignar unidad (departamento, parqueo, baulera) registrando la relación e historial
+// CA5, CA6, CA07, CA09: Asignar unidad (departamento, parqueo, baulera)
+// Para Parqueo y Baulera: actualiza solo estado, id_departamento, id_persona y fecha_asignacion en $transaction con auditoría
 unidadesRouter.post(
   '/asignaciones',
   authorizeRoles('Administrador', 'Directorio'),
@@ -591,23 +784,9 @@ unidadesRouter.post(
             return { status: 404, body: { error: 'Not Found', message: 'Departamento no encontrado' } };
           }
 
-          if (tipoRelacion === 'Propietario' && idPersona) {
-            // CA07: Si ya tenía un propietario distinto, registrar el antecedente anterior
-            if (depto.idPropietario && depto.idPropietario !== idPersona) {
-              await tx.historialAsignacionUnidad.create({
-                data: {
-                  tipoUnidad: 'Departamento',
-                  idUnidad: depto.idDepartamento,
-                  numeroUnidad: depto.numero,
-                  idPersona: depto.idPropietario,
-                  tipoRelacion: 'Propietario',
-                  fechaInicio: ahora,
-                  fechaFin: ahora,
-                  notas: 'Cambio de propietario',
-                },
-              });
-            }
+          const deptoAnterior = { ...depto };
 
+          if (tipoRelacion === 'Propietario' && idPersona) {
             await tx.departamento.update({
               where: { idDepartamento: idUnidad },
               data: { idPropietario: idPersona, estado: 'Ocupado' },
@@ -615,7 +794,7 @@ unidadesRouter.post(
           }
 
           if (idPersona) {
-            // Finalizar cualquier ocupante previo activo para mantener antecedente (CA07)
+            // Finalizar ocupantes previos activos
             await tx.ocupanteDepartamento.updateMany({
               where: { idDepartamento: idUnidad, fechaFin: null },
               data: { fechaFin: ahora },
@@ -630,31 +809,18 @@ unidadesRouter.post(
               },
             });
 
-            // Asegurar que el estado del departamento pase a Ocupado
             await tx.departamento.update({
               where: { idDepartamento: idUnidad },
               data: { estado: 'Ocupado' },
             });
           }
 
-          // Registrar entrada en historial de antecedentes (CA07)
-          await tx.historialAsignacionUnidad.create({
-            data: {
-              tipoUnidad: 'Departamento',
-              idUnidad: depto.idDepartamento,
-              numeroUnidad: depto.numero,
-              idPersona: idPersona || null,
-              tipoRelacion,
-              fechaInicio: ahora,
-              notas: notas || `Asignación de ${tipoRelacion}`,
-            },
-          });
-
           await auditoriaService.registrarEvento({
             tablaAfectada: 'departamentos',
             idRegistro: String(idUnidad),
             accion: 'ASIGNACION_UNIDAD',
             idUsuario,
+            datosAnteriores: deptoAnterior,
             datosNuevos: { tipoUnidad, idUnidad, idPersona, tipoRelacion, notas },
             tx,
           });
@@ -666,24 +832,9 @@ unidadesRouter.post(
             return { status: 404, body: { error: 'Not Found', message: 'Parqueo no encontrado' } };
           }
 
-          // CA07: Si el parqueo ya estaba asignado, cerrar antecedente previo en el historial
-          if (parqueo.estado === 'Asignado' && (parqueo.idPersona || parqueo.idDepartamento)) {
-            await tx.historialAsignacionUnidad.create({
-              data: {
-                tipoUnidad: 'Parqueo',
-                idUnidad: parqueo.idParqueo,
-                numeroUnidad: parqueo.numero,
-                idPersona: parqueo.idPersona,
-                idDepartamento: parqueo.idDepartamento,
-                tipoRelacion: 'Asignado',
-                fechaInicio: parqueo.fechaAsignacion || ahora,
-                fechaFin: ahora,
-                notas: 'Asignación previa finalizada al reasignar',
-              },
-            });
-          }
+          const parqueoAnterior = { ...parqueo };
 
-          // CA6: Actualizar el estado del parqueo para que deje de figurar como 'Disponible' (pasa a 'Asignado')
+          // Actualiza solo estado, id_departamento, id_persona y fecha_asignacion
           const parqueoActualizado = await tx.parqueo.update({
             where: { idParqueo: idUnidad },
             data: {
@@ -694,26 +845,22 @@ unidadesRouter.post(
             },
           });
 
-          // CA07: Guardar la nueva asignación en el historial
-          await tx.historialAsignacionUnidad.create({
-            data: {
-              tipoUnidad: 'Parqueo',
-              idUnidad: parqueoActualizado.idParqueo,
-              numeroUnidad: parqueoActualizado.numero,
-              idPersona: idPersona || null,
-              idDepartamento: idDepartamento || null,
-              tipoRelacion: 'Asignado',
-              fechaInicio: ahora,
-              notas: notas || 'Asignación de parqueo',
-            },
-          });
-
           await auditoriaService.registrarEvento({
             tablaAfectada: 'parqueos',
             idRegistro: String(idUnidad),
             accion: 'ASIGNACION_UNIDAD',
             idUsuario,
-            datosNuevos: { tipoUnidad, idUnidad, idPersona, idDepartamento, tipoRelacion, notas },
+            datosAnteriores: parqueoAnterior,
+            datosNuevos: {
+              tipoUnidad,
+              idUnidad,
+              idPersona: idPersona || null,
+              idDepartamento: idDepartamento || null,
+              tipoRelacion,
+              notas,
+              estado: 'Asignado',
+              fechaAsignacion: ahora,
+            },
             tx,
           });
 
@@ -730,24 +877,9 @@ unidadesRouter.post(
             return { status: 404, body: { error: 'Not Found', message: 'Baulera no encontrada' } };
           }
 
-          // CA07: Guardar antecedente previo si estaba asignada
-          if (baulera.estado === 'Asignado' && (baulera.idPersona || baulera.idDepartamento)) {
-            await tx.historialAsignacionUnidad.create({
-              data: {
-                tipoUnidad: 'Baulera',
-                idUnidad: baulera.idBaulera,
-                numeroUnidad: baulera.numero,
-                idPersona: baulera.idPersona,
-                idDepartamento: baulera.idDepartamento,
-                tipoRelacion: 'Asignado',
-                fechaInicio: baulera.fechaAsignacion || ahora,
-                fechaFin: ahora,
-                notas: 'Asignación previa finalizada al reasignar',
-              },
-            });
-          }
+          const bauleraAnterior = { ...baulera };
 
-          // CA6: Actualizar estado de baulera a 'Asignado'
+          // Actualiza solo estado, id_departamento, id_persona y fecha_asignacion
           const bauleraActualizada = await tx.baulera.update({
             where: { idBaulera: idUnidad },
             data: {
@@ -758,26 +890,22 @@ unidadesRouter.post(
             },
           });
 
-          // CA07: Guardar historial
-          await tx.historialAsignacionUnidad.create({
-            data: {
-              tipoUnidad: 'Baulera',
-              idUnidad: bauleraActualizada.idBaulera,
-              numeroUnidad: bauleraActualizada.numero,
-              idPersona: idPersona || null,
-              idDepartamento: idDepartamento || null,
-              tipoRelacion: 'Asignado',
-              fechaInicio: ahora,
-              notas: notas || 'Asignación de baulera',
-            },
-          });
-
           await auditoriaService.registrarEvento({
             tablaAfectada: 'bauleras',
             idRegistro: String(idUnidad),
             accion: 'ASIGNACION_UNIDAD',
             idUsuario,
-            datosNuevos: { tipoUnidad, idUnidad, idPersona, idDepartamento, tipoRelacion, notas },
+            datosAnteriores: bauleraAnterior,
+            datosNuevos: {
+              tipoUnidad,
+              idUnidad,
+              idPersona: idPersona || null,
+              idDepartamento: idDepartamento || null,
+              tipoRelacion,
+              notas,
+              estado: 'Asignado',
+              fechaAsignacion: ahora,
+            },
             tx,
           });
 
@@ -791,7 +919,7 @@ unidadesRouter.post(
         }
 
         return { status: 400, body: { error: 'Bad Request', message: 'Tipo de unidad no soportado' } };
-      });
+      }, { timeout: 30000, maxWait: 15000 });
 
       res.status(result.status).json(result.body);
     } catch (err) {
@@ -801,7 +929,8 @@ unidadesRouter.post(
 );
 
 // ── POST /api/v1/unidades/asignaciones/finalizar ─────────────────────────────
-// CA6, CA07, CA09: Finalizar asignación vigente, restaurar estado 'Disponible' y conservar antecedente
+// CA6, CA07, CA09: Finalizar asignación vigente, restaurar estado 'Disponible'
+// Para Parqueo y Baulera: actualiza solo estado, id_departamento, id_persona y fecha_asignacion en $transaction con auditoría
 unidadesRouter.post(
   '/asignaciones/finalizar',
   authorizeRoles('Administrador', 'Directorio'),
@@ -828,24 +957,12 @@ unidadesRouter.post(
             return { status: 404, body: { error: 'Not Found', message: 'Departamento no encontrado' } };
           }
 
+          const deptoAnterior = { ...depto };
+
           // Finalizar ocupantes activos
           await tx.ocupanteDepartamento.updateMany({
             where: { idDepartamento: idUnidad, fechaFin: null },
             data: { fechaFin: ahora },
-          });
-
-          // Registrar antecedente en historial
-          await tx.historialAsignacionUnidad.create({
-            data: {
-              tipoUnidad: 'Departamento',
-              idUnidad: depto.idDepartamento,
-              numeroUnidad: depto.numero,
-              idPersona: depto.idPropietario,
-              tipoRelacion: 'Finalizado',
-              fechaInicio: ahora,
-              fechaFin: ahora,
-              notas: notas || 'Asignación finalizada',
-            },
           });
 
           // Verificar ocupantes activos restantes para sincronizar estado (Ocupado / Disponible)
@@ -867,6 +984,7 @@ unidadesRouter.post(
             idRegistro: String(idUnidad),
             accion: 'FINALIZACION_ASIGNACION',
             idUsuario,
+            datosAnteriores: deptoAnterior,
             datosNuevos: { tipoUnidad, idUnidad, notas, estado: nuevoEstado },
             tx,
           });
@@ -878,22 +996,9 @@ unidadesRouter.post(
             return { status: 404, body: { error: 'Not Found', message: 'Parqueo no encontrado' } };
           }
 
-          // CA07: Conservar el antecedente de la asignación anterior
-          await tx.historialAsignacionUnidad.create({
-            data: {
-              tipoUnidad: 'Parqueo',
-              idUnidad: parqueo.idParqueo,
-              numeroUnidad: parqueo.numero,
-              idPersona: parqueo.idPersona,
-              idDepartamento: parqueo.idDepartamento,
-              tipoRelacion: 'Asignado',
-              fechaInicio: parqueo.fechaAsignacion || ahora,
-              fechaFin: ahora,
-              notas: notas || 'Asignación finalizada - vuelve a estar disponible',
-            },
-          });
+          const parqueoAnterior = { ...parqueo };
 
-          // CA6: Retornar a estado 'Disponible'
+          // CA6: Retornar a estado 'Disponible' y limpiar departamento, persona y fechaAsignacion
           const parqueoLibre = await tx.parqueo.update({
             where: { idParqueo: idUnidad },
             data: {
@@ -909,6 +1014,7 @@ unidadesRouter.post(
             idRegistro: String(idUnidad),
             accion: 'FINALIZACION_ASIGNACION',
             idUsuario,
+            datosAnteriores: parqueoAnterior,
             datosNuevos: { tipoUnidad, idUnidad, notas, estado: 'Disponible' },
             tx,
           });
@@ -920,22 +1026,9 @@ unidadesRouter.post(
             return { status: 404, body: { error: 'Not Found', message: 'Baulera no encontrada' } };
           }
 
-          // CA07: Conservar antecedente
-          await tx.historialAsignacionUnidad.create({
-            data: {
-              tipoUnidad: 'Baulera',
-              idUnidad: baulera.idBaulera,
-              numeroUnidad: baulera.numero,
-              idPersona: baulera.idPersona,
-              idDepartamento: baulera.idDepartamento,
-              tipoRelacion: 'Asignado',
-              fechaInicio: baulera.fechaAsignacion || ahora,
-              fechaFin: ahora,
-              notas: notas || 'Asignación finalizada - vuelve a estar disponible',
-            },
-          });
+          const bauleraAnterior = { ...baulera };
 
-          // CA6: Retornar a estado 'Disponible'
+          // CA6: Retornar a estado 'Disponible' y limpiar departamento, persona y fechaAsignacion
           const bauleraLibre = await tx.baulera.update({
             where: { idBaulera: idUnidad },
             data: {
@@ -951,6 +1044,7 @@ unidadesRouter.post(
             idRegistro: String(idUnidad),
             accion: 'FINALIZACION_ASIGNACION',
             idUsuario,
+            datosAnteriores: bauleraAnterior,
             datosNuevos: { tipoUnidad, idUnidad, notas, estado: 'Disponible' },
             tx,
           });
@@ -959,7 +1053,7 @@ unidadesRouter.post(
         }
 
         return { status: 400, body: { error: 'Bad Request', message: 'Tipo de unidad no soportado' } };
-      });
+      }, { timeout: 30000, maxWait: 15000 });
 
       res.status(result.status).json(result.body);
     } catch (err) {

@@ -327,16 +327,13 @@ async function main() {
   } finally {
     // Limpieza de datos de prueba
     if (deptoId) {
-      await prisma.historialAsignacionUnidad.deleteMany({ where: { idUnidad: deptoId, tipoUnidad: 'Departamento' } });
       await prisma.ocupanteDepartamento.deleteMany({ where: { idDepartamento: deptoId } });
       await prisma.departamento.deleteMany({ where: { idDepartamento: deptoId } });
     }
     if (parqueoId) {
-      await prisma.historialAsignacionUnidad.deleteMany({ where: { idUnidad: parqueoId, tipoUnidad: 'Parqueo' } });
       await prisma.parqueo.deleteMany({ where: { idParqueo: parqueoId } });
     }
     if (bauleraId) {
-      await prisma.historialAsignacionUnidad.deleteMany({ where: { idUnidad: bauleraId, tipoUnidad: 'Baulera' } });
       await prisma.baulera.deleteMany({ where: { idBaulera: bauleraId } });
     }
     if (personaId) {

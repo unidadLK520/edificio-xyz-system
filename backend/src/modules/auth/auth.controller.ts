@@ -39,8 +39,10 @@ export class AuthController {
       );
 
       if (!loginResult.success) {
-        res.status(401).json({
-          error: 'Unauthorized',
+        const statusCode = loginResult.status || (loginResult.reason === 'SESSION_ACTIVE' ? 409 : 401);
+        const errorLabel = statusCode === 409 ? 'Conflict' : 'Unauthorized';
+        res.status(statusCode).json({
+          error: errorLabel,
           message: loginResult.message,
         });
         return;
@@ -73,6 +75,30 @@ export class AuthController {
       }
 
       res.json(usuario);
+    } catch (err) {
+      next(err);
+    }
+  };
+
+  forzarCierreSesion = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const idUsuario = parseInt(req.params.idUsuario, 10);
+      if (isNaN(idUsuario)) {
+        res.status(400).json({ error: 'Bad Request', message: 'ID de usuario inválido' });
+        return;
+      }
+
+      const idOperador = req.user!.idUsuario;
+      const ip = req.ip || (req.socket.remoteAddress as string | undefined);
+      const userAgent = req.headers['user-agent'] as string | undefined;
+
+      const resultado = await this.service.forzarCierreSesion(idOperador, idUsuario, { ip, userAgent });
+
+      res.json({
+        success: true,
+        message: 'Sesión cerrada exitosamente',
+        data: resultado,
+      });
     } catch (err) {
       next(err);
     }

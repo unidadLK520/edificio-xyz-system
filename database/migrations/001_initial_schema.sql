@@ -3,6 +3,23 @@ CREATE SCHEMA IF NOT EXISTS edificio;
 -- PostgreSQL database dump
 --
 
+\restrict JSpK8gNsgmkL8mD1M7xL2QmMKTPmCg6eh7Rfcyozpv1NENehsHUAD1LP8HyIbsI
+
+-- Dumped from database version 17.6
+-- Dumped by pg_dump version 17.11
+
+SET statement_timeout = 0;
+SET lock_timeout = 0;
+SET idle_in_transaction_session_timeout = 0;
+SET transaction_timeout = 0;
+SET client_encoding = 'UTF8';
+SET standard_conforming_strings = on;
+SELECT pg_catalog.set_config('search_path', '', false);
+SET check_function_bodies = false;
+SET xmloption = content;
+SET client_min_messages = warning;
+SET row_security = off;
+
 --
 -- Name: edificio; Type: SCHEMA; Schema: -; Owner: -
 --
@@ -820,6 +837,7 @@ CREATE TABLE edificio.tipos_departamento (
     id_tipo integer NOT NULL,
     nombre character varying(10) NOT NULL,
     monto_expensa numeric(10,2) NOT NULL,
+    tipo_departamento character varying,
     CONSTRAINT tipos_departamento_monto_expensa_check CHECK ((monto_expensa >= (0)::numeric))
 );
 
@@ -1811,4 +1829,5 @@ ALTER TABLE ONLY edificio.usuarios
 -- PostgreSQL database dump complete
 --
 
+\unrestrict JSpK8gNsgmkL8mD1M7xL2QmMKTPmCg6eh7Rfcyozpv1NENehsHUAD1LP8HyIbsI
 
