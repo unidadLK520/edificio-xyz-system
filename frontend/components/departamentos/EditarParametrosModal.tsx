@@ -130,9 +130,6 @@ export default function EditarParametrosModal({
                 <Calculator className="w-4 h-4 text-blue-600" />
                 1. Expensa Base Fijada
               </span>
-              <span className="text-[11px] text-[#7d776f]">
-                Valores base: Tipo A (Bs 300), Tipo B (Bs 350), Tipo C (Bs 400)
-              </span>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
@@ -158,7 +155,7 @@ export default function EditarParametrosModal({
                   value={otrosExtras}
                   onChange={(e) => setOtrosExtras(Number(e.target.value))}
                   className="w-full px-3 py-2 rounded-xl bg-[#dfd9ce] dark:bg-slate-800 border border-[#cec8bc] dark:border-slate-700 font-mono text-xs text-[#262422] dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-600"
-                  placeholder="Ej. +10, +12, +18 (cargo adicional)"
+                  placeholder="0.00"
                 />
               </div>
             </div>
@@ -187,7 +184,7 @@ export default function EditarParametrosModal({
                   value={codigoMedidor}
                   onChange={(e) => setCodigoMedidor(e.target.value)}
                   className="w-full px-3 py-2 rounded-xl bg-white dark:bg-slate-900 border border-blue-200 dark:border-blue-800 font-mono text-xs text-[#262422] dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-600"
-                  placeholder="Ej. MED-A1"
+                  placeholder="Código del medidor"
                 />
               </div>
               <div>
@@ -201,7 +198,7 @@ export default function EditarParametrosModal({
                   value={lecturaAnteriorAgua}
                   onChange={(e) => setLecturaAnteriorAgua(Number(e.target.value))}
                   className="w-full px-3 py-2 rounded-xl bg-white dark:bg-slate-900 border border-blue-200 dark:border-blue-800 font-mono font-bold text-xs text-[#262422] dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-600"
-                  placeholder="Ej. 940 (30/Sep)"
+                  placeholder="0.00"
                 />
                 <span className="text-[10px] text-[#7d776f] mt-0.5 block font-mono">
                   Toma: {fechaLecturaAnterior}
@@ -218,7 +215,7 @@ export default function EditarParametrosModal({
                   value={lecturaActualAgua}
                   onChange={(e) => setLecturaActualAgua(Number(e.target.value))}
                   className="w-full px-3 py-2 rounded-xl bg-white dark:bg-slate-900 border border-blue-200 dark:border-blue-800 font-mono font-bold text-xs text-[#262422] dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-600"
-                  placeholder="Ej. 945 (31/Oct)"
+                  placeholder="0.00"
                 />
                 <span className="text-[10px] text-[#7d776f] mt-0.5 block font-mono">
                   Toma: {fechaLecturaActual}
@@ -231,17 +228,13 @@ export default function EditarParametrosModal({
               <div className="flex items-center gap-2">
                 <span className="text-[#5c5750] dark:text-slate-400">Consumo Calculado:</span>
                 <span className="px-2 py-0.5 rounded-lg bg-blue-100 dark:bg-blue-950 text-blue-800 dark:text-blue-300 font-black">
-                  {consumoCubos.toFixed(1)} cubos (m³)
+                  {consumoCubos.toFixed(1)} m³
                 </span>
-                <span className="text-[#7d776f] text-[11px]">(945 - 940)</span>
               </div>
               <div className="flex items-center gap-2">
-                <span className="text-[#5c5750] dark:text-slate-400">Costo Agua:</span>
+                <span className="text-[#5c5750] dark:text-slate-400">Total Agua:</span>
                 <span className="font-extrabold text-blue-900 dark:text-blue-300 text-sm">
                   Bs. {totalAgua.toFixed(2)}
-                </span>
-                <span className="text-[#7d776f] text-[11px]">
-                  ({consumoCubos} × Bs {tarifaAguaM3})
                 </span>
               </div>
             </div>
@@ -284,10 +277,6 @@ export default function EditarParametrosModal({
                 </span>
               </div>
             </div>
-            <p className="text-[11px] text-[#7d776f] dark:text-slate-400">
-              ℹ️ <strong>Ejemplo de Cobro:</strong> Para Depto 101 (Base Bs 300 + Agua Bs 25 = Total
-              Bs 325.00). Si no paga antes del día 10, se aplica el recargo de mora configurado.
-            </p>
           </div>
 
           {/* Botones de acción */}

@@ -875,9 +875,6 @@ export default function DepartamentosPage() {
         >
           <Layers className="w-4 h-4 text-blue-500" />
           <span>Tipos de Departamentos</span>
-          <span className="px-1.5 py-0.5 rounded-md text-[10px] font-extrabold uppercase bg-blue-500/20 text-blue-900 dark:text-blue-300 border border-blue-500/30">
-            {tiposDepto.length} Editables
-          </span>
         </button>
 
         <button
@@ -891,9 +888,6 @@ export default function DepartamentosPage() {
         >
           <Sliders className="w-4 h-4 text-amber-500" />
           <span>Parámetros & Medidores</span>
-          <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold uppercase bg-amber-500/20 text-amber-900 dark:text-amber-300 border border-amber-500/30">
-            Parámetros de Cobro
-          </span>
         </button>
       </div>
 

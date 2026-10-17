@@ -147,16 +147,6 @@ export default function TiposDepartamentosTab({
         <div className="flex flex-wrap items-center gap-2">
           <button
             type="button"
-            onClick={onResetDefaults}
-            className="inline-flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl border border-[#cec8bc] dark:border-slate-700 text-[#5c5750] dark:text-slate-300 hover:bg-[#ded8cc] dark:hover:bg-slate-800 text-xs font-bold transition-all cursor-pointer"
-            title="Restablecer a Tipologías por Defecto (Tipos A, B y C)"
-          >
-            <RotateCcw className="w-3.5 h-3.5" />
-            <span>Valores por Defecto</span>
-          </button>
-
-          <button
-            type="button"
             onClick={handleOpenCreate}
             className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-rose-700 hover:bg-rose-600 active:bg-rose-800 text-white text-xs sm:text-sm font-bold shadow-lg shadow-rose-900/20 transition-all cursor-pointer"
           >
@@ -176,7 +166,7 @@ export default function TiposDepartamentosTab({
             {totalTipos}
           </div>
           <div className="text-[11px] text-emerald-700 dark:text-emerald-400 font-semibold mt-0.5">
-            100% editables y configurables
+            Tipologías arquitectónicas activas
           </div>
         </div>
 
@@ -215,9 +205,7 @@ export default function TiposDepartamentosTab({
           <div className="text-2xl font-extrabold text-rose-700 dark:text-rose-400 mt-1 font-mono">
             Bs. {expensaPromedio}
           </div>
-          <div className="text-[11px] text-[#7d776f] mt-0.5">
-            Valores base: Tipo A (300), B (350), C (400)
-          </div>
+          <div className="text-[11px] text-[#7d776f] mt-0.5">Promedio general del edificio</div>
         </div>
       </div>
 
@@ -367,23 +355,6 @@ export default function TiposDepartamentosTab({
             )
           })
         )}
-      </div>
-
-      {/* NOTA ACLARATORIA SOBRE EDITABILIDAD */}
-      <div className="p-4 rounded-2xl bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-900 flex items-start gap-3">
-        <Info className="w-5 h-5 text-blue-700 dark:text-blue-400 shrink-0 mt-0.5" />
-        <div className="text-xs text-blue-950 dark:text-blue-200 space-y-1">
-          <p className="font-bold">
-            Cumplimiento del criterio de evaluación: «Todo tiene que ser editable»
-          </p>
-          <p className="text-blue-900/90 dark:text-blue-300">
-            A diferencia de los sistemas rígidos, aquí puede alterar en cualquier momento el metraje
-            en m², la expensa base en Bs., o agregar nuevas tipologías arquitectónicas (ej.
-            Monoambientes, Dúplex o Penthouses). Al presionar <strong>"Sincronizar"</strong> o
-            marcar la casilla de cascada al editar, el sistema actualizará los valores para todas
-            las unidades correspondientes.
-          </p>
-        </div>
       </div>
 
       {/* MODAL DE EDICIÓN / CREACIÓN */}
