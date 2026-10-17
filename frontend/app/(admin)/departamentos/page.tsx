@@ -20,14 +20,18 @@ import {
   CheckCircle2,
   UserCheck,
   KeyRound,
-  AlertCircle
+  AlertCircle,
+  Sliders,
+  Gauge
 } from 'lucide-react'
-import { UnidadItem, DepartamentoFormData, TipoUnidad } from '@/components/departamentos/types'
+import { UnidadItem, DepartamentoFormData, TipoUnidad, TipoDepartamentoItem, DEFAULT_TIPOS_DEPARTAMENTO } from '@/components/departamentos/types'
 import DepartamentosKpis from '@/components/departamentos/DepartamentosKpis'
 import CrearDepartamentoModal from '@/components/departamentos/CrearDepartamentoModal'
 import EditarDepartamentoModal from '@/components/departamentos/EditarDepartamentoModal'
 import FichaTecnicaModal from '@/components/departamentos/FichaTecnicaModal'
 import AsignarUnidadModal from '@/components/departamentos/AsignarUnidadModal'
+import ParametrosDepartamentosTab from '@/components/departamentos/ParametrosDepartamentosTab'
+import TiposDepartamentosTab from '@/components/departamentos/TiposDepartamentosTab'
 
 // Semilla basada en el modelo administrativo real de 20 departamentos (1,600 m² totales)
 const UNIDADES_SEED: UnidadItem[] = [
@@ -339,6 +343,8 @@ const UNIDADES_SEED: UnidadItem[] = [
 
 export default function DepartamentosPage() {
   const [unidades, setUnidades] = useState<UnidadItem[]>(UNIDADES_SEED)
+  const [activeTab, setActiveTab] = useState<'catastro' | 'tipos' | 'parametros'>('catastro')
+  const [tiposDepto, setTiposDepto] = useState<TipoDepartamentoItem[]>(DEFAULT_TIPOS_DEPARTAMENTO)
   const [searchTerm, setSearchTerm] = useState('')
   const [filtroTipo, setFiltroTipo] = useState<string>('Todos')
   const [filtroEstado, setFiltroEstado] = useState('Todos')
@@ -353,6 +359,158 @@ export default function DepartamentosPage() {
   const [unidadToAssign, setUnidadToAssign] = useState<UnidadItem | null>(null)
   const [createErrorMessage, setCreateErrorMessage] = useState<string | null>(null)
   const [successToast, setSuccessToast] = useState<string | null>(null)
+
+  // Cargar parámetros y tipos de departamentos guardados en localStorage
+  useEffect(() => {
+    try {
+      // 1. Tipologías editables
+      const savedTipos = localStorage.getItem('edificio_xyz_tipos_departamento')
+      if (savedTipos) {
+        const parsed = JSON.parse(savedTipos)
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          setTiposDepto(parsed)
+        }
+      }
+
+      // 2. Parámetros de unidades
+      const savedUnidades = localStorage.getItem('edificio_xyz_unidades_parametros')
+      if (savedUnidades) {
+        const map = JSON.parse(savedUnidades)
+        setUnidades((prev) =>
+          prev.map((u) => (map[u.id] ? { ...u, ...map[u.id] } : u))
+        )
+      }
+    } catch {}
+  }, [])
+
+  // Manejadores para Tipos de Departamentos (100% Editables)
+  const handleSaveTipoDepto = (tipoGuardado: TipoDepartamentoItem, cascada: boolean) => {
+    setTiposDepto((prev) => {
+      const exists = prev.some((t) => t.id === tipoGuardado.id)
+      const nuevos = exists
+        ? prev.map((t) => (t.id === tipoGuardado.id ? tipoGuardado : t))
+        : [...prev, tipoGuardado]
+
+      try {
+        localStorage.setItem('edificio_xyz_tipos_departamento', JSON.stringify(nuevos))
+      } catch {}
+      return nuevos
+    })
+
+    // Si se activó la opción de actualizar departamentos asociados
+    if (cascada) {
+      setUnidades((prev) => {
+        const updated = prev.map((u) => {
+          const match =
+            (u.tipologia && u.tipologia.toLowerCase().includes(tipoGuardado.nombre.toLowerCase())) ||
+            (u.tipologia && u.tipologia.includes(tipoGuardado.codigo)) ||
+            (u.areaM2 && Math.abs(u.areaM2 - tipoGuardado.areaM2) < 0.1)
+
+          if (match) {
+            return {
+              ...u,
+              tipologia: tipoGuardado.nombre,
+              areaM2: tipoGuardado.areaM2,
+              expensaBase: tipoGuardado.expensaBase,
+              alicuota: Number(((tipoGuardado.areaM2 / 1600) * 100).toFixed(2))
+            }
+          }
+          return u
+        })
+
+        try {
+          const existingSaved = localStorage.getItem('edificio_xyz_unidades_parametros')
+          const map = existingSaved ? JSON.parse(existingSaved) : {}
+          updated.forEach((u) => {
+            map[u.id] = u
+          })
+          localStorage.setItem('edificio_xyz_unidades_parametros', JSON.stringify(map))
+        } catch {}
+
+        return updated
+      })
+    }
+
+    showToast(`¡Tipo de departamento "${tipoGuardado.nombre}" guardado exitosamente!`)
+  }
+
+  const handleDeleteTipoDepto = (id: string) => {
+    setTiposDepto((prev) => {
+      const filtered = prev.filter((t) => t.id !== id)
+      try {
+        localStorage.setItem('edificio_xyz_tipos_departamento', JSON.stringify(filtered))
+      } catch {}
+      return filtered
+    })
+  }
+
+  const handleResetDefaultTipos = () => {
+    setTiposDepto(DEFAULT_TIPOS_DEPARTAMENTO)
+    try {
+      localStorage.setItem('edificio_xyz_tipos_departamento', JSON.stringify(DEFAULT_TIPOS_DEPARTAMENTO))
+    } catch {}
+    showToast('Tipologías restablecidas a los valores de la pizarra (Tipos A, B y C).')
+  }
+
+  const handleSincronizarUnidadesTipo = (tipo: TipoDepartamentoItem) => {
+    let count = 0
+    setUnidades((prev) => {
+      const updated = prev.map((u) => {
+        const match =
+          (u.tipologia && u.tipologia.toLowerCase().includes(tipo.nombre.toLowerCase())) ||
+          (u.tipologia && u.tipologia.includes(tipo.codigo)) ||
+          (u.areaM2 && Math.abs(u.areaM2 - tipo.areaM2) < 0.1)
+
+        if (match) {
+          count++
+          return {
+            ...u,
+            tipologia: tipo.nombre,
+            areaM2: tipo.areaM2,
+            expensaBase: tipo.expensaBase,
+            alicuota: Number(((tipo.areaM2 / 1600) * 100).toFixed(2))
+          }
+        }
+        return u
+      })
+
+      try {
+        const existingSaved = localStorage.getItem('edificio_xyz_unidades_parametros')
+        const map = existingSaved ? JSON.parse(existingSaved) : {}
+        updated.forEach((u) => {
+          map[u.id] = u
+        })
+        localStorage.setItem('edificio_xyz_unidades_parametros', JSON.stringify(map))
+      } catch {}
+
+      return updated
+    })
+
+    showToast(`¡${count} departamentos sincronizados con la tipología "${tipo.nombre}"!`)
+  }
+
+  const handleUpdateUnidadParametros = (updated: UnidadItem) => {
+    setUnidades((prev) => prev.map((u) => (u.id === updated.id ? { ...u, ...updated } : u)))
+    try {
+      const existingSaved = localStorage.getItem('edificio_xyz_unidades_parametros')
+      const map = existingSaved ? JSON.parse(existingSaved) : {}
+      map[updated.id] = updated
+      localStorage.setItem('edificio_xyz_unidades_parametros', JSON.stringify(map))
+    } catch {}
+  }
+
+  const handleUpdateMultipleParametros = (updatedList: UnidadItem[]) => {
+    const updatedMap = new Map(updatedList.map((u) => [u.id, u]))
+    setUnidades((prev) => prev.map((u) => updatedMap.get(u.id) || u))
+    try {
+      const existingSaved = localStorage.getItem('edificio_xyz_unidades_parametros')
+      const map = existingSaved ? JSON.parse(existingSaved) : {}
+      updatedList.forEach((u) => {
+        map[u.id] = u
+      })
+      localStorage.setItem('edificio_xyz_unidades_parametros', JSON.stringify(map))
+    } catch {}
+  }
 
   // Fetch unidades desde la API con fallback inteligente
   const fetchUnidades = useCallback(async () => {
@@ -474,6 +632,19 @@ export default function DepartamentosPage() {
   const handleEditSubmit = async (formData: DepartamentoFormData) => {
     if (!unidadToEdit) return
 
+    // Actualizar estado local y parámetros inmediatamente
+    const updatedUnidad: UnidadItem = {
+      ...unidadToEdit,
+      numero: formData.numero,
+      piso: formData.piso,
+      areaM2: formData.areaM2,
+      tipologia: formData.tipologia || unidadToEdit.tipologia,
+      expensaBase: formData.expensaBase ?? unidadToEdit.expensaBase,
+      alicuota: formData.areaM2 ? Number(((formData.areaM2 / 1600) * 100).toFixed(2)) : unidadToEdit.alicuota,
+      estado: formData.estado
+    }
+    handleUpdateUnidadParametros(updatedUnidad)
+
     try {
       const res = await fetch(`/api/v1/unidades/${unidadToEdit.id}`, {
         method: 'PATCH',
@@ -488,11 +659,12 @@ export default function DepartamentosPage() {
 
       if (res.ok) {
         await fetchUnidades()
-        setIsEditModalOpen(false)
-        setUnidadToEdit(null)
-        showToast(`¡Unidad ${formData.numero} actualizada correctamente!`)
       }
     } catch {}
+
+    setIsEditModalOpen(false)
+    setUnidadToEdit(null)
+    showToast(`¡Unidad ${formData.numero} actualizada correctamente!`)
   }
 
   return (
@@ -529,7 +701,60 @@ export default function DepartamentosPage() {
         </button>
       </div>
 
-      {/* KPIS DE OCUPACIÓN REAL */}
+      {/* PESTAÑAS PRINCIPALES: CATASTRO VS PARÁMETROS Y MEDIDORES */}
+      <div className="flex items-center gap-2 border-b border-[#cec8bc] dark:border-slate-800 pb-2">
+        <button
+          type="button"
+          onClick={() => setActiveTab('catastro')}
+          className={`inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition-all cursor-pointer ${
+            activeTab === 'catastro'
+              ? 'bg-rose-700 text-white shadow-md shadow-rose-900/20'
+              : 'bg-[#ede9e1] dark:bg-slate-900 text-[#66615b] dark:text-slate-400 hover:text-[#262422] dark:hover:text-white border border-[#cec8bc] dark:border-slate-800'
+          }`}
+        >
+          <Building2 className="w-4 h-4" />
+          <span>Catastro de Unidades</span>
+          <span className="ml-1 px-1.5 py-0.5 rounded-md text-[10px] font-bold bg-white/20 dark:bg-white/10">
+            {totalDeptos}
+          </span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setActiveTab('tipos')}
+          className={`inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition-all cursor-pointer ${
+            activeTab === 'tipos'
+              ? 'bg-rose-700 text-white shadow-md shadow-rose-900/20'
+              : 'bg-[#ede9e1] dark:bg-slate-900 text-[#66615b] dark:text-slate-400 hover:text-[#262422] dark:hover:text-white border border-[#cec8bc] dark:border-slate-800'
+          }`}
+        >
+          <Layers className="w-4 h-4 text-blue-500" />
+          <span>Tipos de Departamentos</span>
+          <span className="px-1.5 py-0.5 rounded-md text-[10px] font-extrabold uppercase bg-blue-500/20 text-blue-900 dark:text-blue-300 border border-blue-500/30">
+            {tiposDepto.length} Editables
+          </span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setActiveTab('parametros')}
+          className={`inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition-all cursor-pointer ${
+            activeTab === 'parametros'
+              ? 'bg-rose-700 text-white shadow-md shadow-rose-900/20'
+              : 'bg-[#ede9e1] dark:bg-slate-900 text-[#66615b] dark:text-slate-400 hover:text-[#262422] dark:hover:text-white border border-[#cec8bc] dark:border-slate-800'
+          }`}
+        >
+          <Sliders className="w-4 h-4 text-amber-500" />
+          <span>Parámetros & Medidores</span>
+          <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold uppercase bg-amber-500/20 text-amber-900 dark:text-amber-300 border border-amber-500/30">
+            Pizarra Docente
+          </span>
+        </button>
+      </div>
+
+      {activeTab === 'catastro' ? (
+        <>
+          {/* KPIS DE OCUPACIÓN REAL */}
       <DepartamentosKpis
         totalDeptos={totalDeptos}
         ocupadosPropietario={ocupadosPropietario}
@@ -730,6 +955,25 @@ export default function DepartamentosPage() {
           </table>
         </div>
       </div>
+    </>
+  ) : activeTab === 'tipos' ? (
+    <TiposDepartamentosTab
+      tipos={tiposDepto}
+      unidades={unidades}
+      onSaveTipo={handleSaveTipoDepto}
+      onDeleteTipo={handleDeleteTipoDepto}
+      onResetDefaults={handleResetDefaultTipos}
+      onSincronizarUnidadesTipo={handleSincronizarUnidadesTipo}
+      showToast={showToast}
+    />
+  ) : (
+    <ParametrosDepartamentosTab
+      unidades={unidades}
+      onUpdateUnidad={handleUpdateUnidadParametros}
+      onUpdateMultiple={handleUpdateMultipleParametros}
+      showToast={showToast}
+    />
+  )}
 
       {/* MODAL CREAR DEPARTAMENTO */}
       <CrearDepartamentoModal
@@ -738,6 +982,7 @@ export default function DepartamentosPage() {
         onSubmit={handleCreateSubmit}
         totalAreaConstruida={totalAreaConstruida}
         errorMessage={createErrorMessage}
+        tiposDisponibles={tiposDepto}
       />
 
       {/* MODAL EDITAR DEPARTAMENTO */}
@@ -750,17 +995,18 @@ export default function DepartamentosPage() {
           }}
           depto={unidadToEdit}
           onChange={(updated) => setUnidadToEdit(updated)}
+          tiposDisponibles={tiposDepto}
           onUpdate={async (updated) => {
             await handleEditSubmit({
               numero: updated.numero,
               piso: updated.piso || 1,
               areaM2: updated.areaM2 || 0,
+              tipologia: updated.tipologia,
+              expensaBase: updated.expensaBase,
               estado: updated.estado,
               parqueo: updated.parqueo,
               baulera: updated.baulera
             })
-            setIsEditModalOpen(false)
-            setUnidadToEdit(null)
           }}
         />
       )}
