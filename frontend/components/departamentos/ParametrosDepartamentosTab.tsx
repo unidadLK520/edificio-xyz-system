@@ -1,5 +1,5 @@
 // frontend/components/departamentos/ParametrosDepartamentosTab.tsx
-// Pestaña de Parámetros y Medidores de Departamentos (Reglas de Pizarra Docente: Mora, Agua y Expensas Base)
+// Pestaña de Parámetros y Medidores de Departamentos (Reglas de Cobro: Mora, Agua y Expensas Base)
 'use client'
 
 import React, { useState, useMemo } from 'react'
@@ -32,7 +32,7 @@ interface ParametrosDepartamentosTabProps {
   showToast: (msg: string) => void
 }
 
-export const DEFAULT_CONFIG_PIZARRA: ParametrosCobroConfig = {
+export const DEFAULT_CONFIG_PARAMETROS: ParametrosCobroConfig = {
   diaLimitePago: 10, // < 10/Mes -> Mora = 0; >= 10/Mes -> Mora
   tipoMora: 'porcentaje', // 'porcentaje' (10%) o 'monto_fijo' (Bs 50)
   valorMoraPorcentaje: 10,
@@ -53,33 +53,44 @@ export default function ParametrosDepartamentosTab({
   // Configuración global de parámetros
   const [config, setConfig] = useState<ParametrosCobroConfig>(() => {
     if (typeof window !== 'undefined') {
-      const saved = localStorage.getItem('edificio_xyz_config_pizarra')
+      const saved =
+        localStorage.getItem('edificio_xyz_config_parametros') ||
+        localStorage.getItem('edificio_xyz_config_cobros')
       if (saved) {
         try {
           return JSON.parse(saved)
         } catch {}
       }
     }
-    return DEFAULT_CONFIG_PIZARRA
+    return DEFAULT_CONFIG_PARAMETROS
   })
 
   // Estado local editable de unidades para permitir edición en línea rápida
   const [unidadesLocales, setUnidadesLocales] = useState<UnidadItem[]>(() => {
     return unidades.map((u, idx) => {
-      const tipo = u.tipologia?.includes('Tipo A') ? 'Tipo A' : u.tipologia?.includes('Tipo B') ? 'Tipo B' : 'Tipo C'
-      const baseDefault = tipo === 'Tipo A' ? config.expensaBaseTipoA : tipo === 'Tipo B' ? config.expensaBaseTipoB : config.expensaBaseTipoC
-      
-      // Valores de ejemplo basados en la pizarra para A1, A2, B1, B2...
-      const lectAnt = u.lecturaAnteriorAgua ?? (idx === 0 ? 940 : idx === 3 ? 910 : 900 + idx * 5)
-      const lectAct = u.lecturaActualAgua ?? (idx === 0 ? 945 : idx === 3 ? 912 : lectAnt + (idx % 3 === 0 ? 5 : idx % 2 === 0 ? 2 : 3))
+      const tipo = u.tipologia?.includes('Tipo A')
+        ? 'Tipo A'
+        : u.tipologia?.includes('Tipo B')
+          ? 'Tipo B'
+          : 'Tipo C'
+      const baseDefault =
+        tipo === 'Tipo A'
+          ? config.expensaBaseTipoA
+          : tipo === 'Tipo B'
+            ? config.expensaBaseTipoB
+            : config.expensaBaseTipoC
+
+      // Valores de lecturas de agua
+      const lectAnt = u.lecturaAnteriorAgua ?? 240 + idx * 8
+      const lectAct = u.lecturaActualAgua ?? lectAnt + (idx % 3 === 0 ? 5 : idx % 2 === 0 ? 3 : 4)
       const cubos = Math.max(0, lectAct - lectAnt)
       const montoAg = cubos * config.tarifaAguaM3
-      const extras = u.otrosExtras ?? (idx === 1 ? 12 : idx === 4 ? 18 : 0)
+      const extras = u.otrosExtras ?? 0
 
       return {
         ...u,
         expensaBase: u.expensaBase ?? baseDefault,
-        codigoMedidor: u.codigoMedidor || (idx === 0 ? 'MED-A1' : idx === 3 ? 'MED-A2' : idx === 1 ? 'MED-B1' : idx === 4 ? 'MED-B2' : `MED-${u.numero}`),
+        codigoMedidor: u.codigoMedidor || `MED-${u.numero}`,
         lecturaAnteriorAgua: lectAnt,
         lecturaActualAgua: lectAct,
         tarifaAguaM3: u.tarifaAguaM3 ?? config.tarifaAguaM3,
@@ -99,18 +110,9 @@ export default function ParametrosDepartamentosTab({
   // Guardar configuración global
   const handleGuardarConfig = () => {
     if (typeof window !== 'undefined') {
-      localStorage.setItem('edificio_xyz_config_pizarra', JSON.stringify(config))
+      localStorage.setItem('edificio_xyz_config_parametros', JSON.stringify(config))
     }
     showToast('¡Parámetros globales de cobro y mora guardados correctamente!')
-  }
-
-  // Restablecer valores de pizarra
-  const handleRestablecerPizarra = () => {
-    setConfig(DEFAULT_CONFIG_PIZARRA)
-    if (typeof window !== 'undefined') {
-      localStorage.setItem('edificio_xyz_config_pizarra', JSON.stringify(DEFAULT_CONFIG_PIZARRA))
-    }
-    showToast('Configuración restablecida a los valores de la pizarra.')
   }
 
   // Modificación en línea de una fila
@@ -122,8 +124,10 @@ export default function ParametrosDepartamentosTab({
 
           // Si cambiaron las lecturas, recalcular cubos y monto de agua
           if (campo === 'lecturaAnteriorAgua' || campo === 'lecturaActualAgua') {
-            const ant = campo === 'lecturaAnteriorAgua' ? Number(valor) : (updated.lecturaAnteriorAgua || 0)
-            const act = campo === 'lecturaActualAgua' ? Number(valor) : (updated.lecturaActualAgua || 0)
+            const ant =
+              campo === 'lecturaAnteriorAgua' ? Number(valor) : updated.lecturaAnteriorAgua || 0
+            const act =
+              campo === 'lecturaActualAgua' ? Number(valor) : updated.lecturaActualAgua || 0
             const consumo = Math.max(0, act - ant)
             updated.consumoAguaM3 = consumo
             updated.montoAgua = consumo * (updated.tarifaAguaM3 || config.tarifaAguaM3)
@@ -170,7 +174,7 @@ export default function ParametrosDepartamentosTab({
       })
   }, [unidadesLocales, searchTerm, filtroTipo])
 
-  // Totales y Estadísticas de la Pizarra
+  // Totales y Estadísticas de Cobro
   const totales = useMemo(() => {
     const list = unidadesLocales.filter((u) => u.tipoUnidad === 'Departamento')
     const totalBase = list.reduce((acc, u) => acc + (u.expensaBase || 0), 0)
@@ -182,9 +186,10 @@ export default function ParametrosDepartamentosTab({
     // Mora proyectada total
     const totalMora = list.reduce((acc, u) => {
       const sub = (u.expensaBase || 0) + (u.montoAgua || 0) + (u.otrosExtras || 0)
-      const mora = config.tipoMora === 'porcentaje'
-        ? sub * (config.valorMoraPorcentaje / 100)
-        : config.valorMoraFijo
+      const mora =
+        config.tipoMora === 'porcentaje'
+          ? sub * (config.valorMoraPorcentaje / 100)
+          : config.valorMoraFijo
       return acc + mora
     }, 0)
 
@@ -201,8 +206,7 @@ export default function ParametrosDepartamentosTab({
 
   return (
     <div className="space-y-6 animate-in fade-in duration-300">
-      
-      {/* BANNER INFORMATIVO DE LA PIZARRA */}
+      {/* BANNER INFORMATIVO DE PARÁMETROS */}
       <div className="p-5 rounded-3xl bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-900/50 flex flex-col md:flex-row justify-between items-start md:items-center gap-4 shadow-sm">
         <div>
           <div className="flex items-center gap-2">
@@ -212,21 +216,12 @@ export default function ParametrosDepartamentosTab({
             </h2>
           </div>
           <p className="text-xs text-blue-800 dark:text-blue-300 mt-1 max-w-3xl leading-relaxed">
-            Reglas activas de la pizarra: <strong>Expensas Base</strong> (A: Bs 300, B: Bs 350, C: Bs 400), 
-            <strong> Medidores de Agua</strong> (Consumo en cubos × Bs 5.00) y 
-            <strong> Reglas de Mora</strong> (&lt; 10/Mes = Mora 0; &ge; 10/Mes = recargo configurable).
+            Administración de cuotas base por tipología, tarifas de medidores de agua potable y
+            políticas de recargos por mora.
           </p>
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
-          <button
-            onClick={handleRestablecerPizarra}
-            className="px-3.5 py-2 rounded-xl bg-white dark:bg-slate-900 border border-blue-200 dark:border-blue-800 text-xs font-bold text-blue-900 dark:text-blue-300 hover:bg-blue-100/50 transition-all flex items-center gap-1.5 cursor-pointer shadow-xs"
-            title="Restablecer valores originales de la pizarra"
-          >
-            <RotateCcw className="w-3.5 h-3.5" />
-            Valores Pizarra
-          </button>
           <button
             onClick={() => window.print()}
             className="px-3.5 py-2 rounded-xl bg-blue-700 hover:bg-blue-800 active:bg-blue-900 text-white text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer shadow-md shadow-blue-800/20"
@@ -237,9 +232,8 @@ export default function ParametrosDepartamentosTab({
         </div>
       </div>
 
-      {/* SECCIÓN 1: TARJETAS DE CONFIGURACIÓN GLOBAL (PIZARRA) */}
+      {/* SECCIÓN 1: TARJETAS DE CONFIGURACIÓN GLOBAL */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        
         {/* TARJETA 1: REGLAS DE MORA */}
         <div className="p-5 rounded-3xl bg-[#ede9e1] dark:bg-slate-900 border border-[#cec8bc] dark:border-slate-800 shadow-sm space-y-3.5">
           <div className="flex items-center justify-between border-b border-[#cec8bc] dark:border-slate-800 pb-2.5">
@@ -266,7 +260,7 @@ export default function ParametrosDepartamentosTab({
                   max="31"
                   value={config.diaLimitePago}
                   onChange={(e) => setConfig({ ...config, diaLimitePago: Number(e.target.value) })}
-                  className="w-20 px-3 py-1.5 rounded-xl bg-[#dfd9ce] dark:bg-slate-800 border border-[#cec8bc] dark:border-slate-700 font-mono font-bold text-center"
+                  className="w-20 px-3 py-1.5 rounded-xl bg-[#dfd9ce] dark:bg-slate-800 border border-[#cec8bc] dark:border-slate-700 font-mono font-bold text-center text-[#262422] dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-600"
                 />
                 <span className="text-[#7d776f]">de cada mes (antes de este día: Mora = 0)</span>
               </div>
@@ -312,14 +306,19 @@ export default function ParametrosDepartamentosTab({
                 <input
                   type="number"
                   step="0.1"
-                  value={config.tipoMora === 'porcentaje' ? config.valorMoraPorcentaje : config.valorMoraFijo}
+                  value={
+                    config.tipoMora === 'porcentaje'
+                      ? config.valorMoraPorcentaje
+                      : config.valorMoraFijo
+                  }
                   onChange={(e) =>
                     setConfig({
                       ...config,
-                      [config.tipoMora === 'porcentaje' ? 'valorMoraPorcentaje' : 'valorMoraFijo']: Number(e.target.value)
+                      [config.tipoMora === 'porcentaje' ? 'valorMoraPorcentaje' : 'valorMoraFijo']:
+                        Number(e.target.value)
                     })
                   }
-                  className="w-full px-3 py-1.5 rounded-xl bg-[#dfd9ce] dark:bg-slate-800 border border-[#cec8bc] dark:border-slate-700 font-mono font-bold"
+                  className="w-full px-3 py-1.5 rounded-xl bg-[#dfd9ce] dark:bg-slate-800 border border-[#cec8bc] dark:border-slate-700 font-mono font-bold text-[#262422] dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-600"
                 />
               </div>
 
@@ -330,16 +329,27 @@ export default function ParametrosDepartamentosTab({
                 <select
                   value={config.frecuenciaMora}
                   onChange={(e) => setConfig({ ...config, frecuenciaMora: e.target.value as any })}
-                  className="w-full px-3 py-1.5 rounded-xl bg-[#dfd9ce] dark:bg-slate-800 border border-[#cec8bc] dark:border-slate-700 font-bold"
+                  className="w-full px-3 py-1.5 rounded-xl bg-[#dfd9ce] dark:bg-slate-800 border border-[#cec8bc] dark:border-slate-700 font-bold text-[#262422] dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-600 cursor-pointer"
                 >
-                  <option value="mes">Por Mes (Mes)</option>
-                  <option value="dia">Por Día (Día)</option>
+                  <option
+                    value="mes"
+                    className="bg-[#ede9e1] dark:bg-slate-900 text-[#262422] dark:text-white"
+                  >
+                    Por Mes (Mes)
+                  </option>
+                  <option
+                    value="dia"
+                    className="bg-[#ede9e1] dark:bg-slate-900 text-[#262422] dark:text-white"
+                  >
+                    Por Día (Día)
+                  </option>
                 </select>
               </div>
             </div>
 
-            <div className="p-2.5 rounded-xl bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-900/50 text-[11px] text-red-900 dark:text-red-300">
-              💡 <strong>Ejemplo Pizarra:</strong> Cuota Bs 310 al 10/Oct. Al 10/Nov con 10% pasa a <strong>Bs 341</strong> (o +Bs 50 = <strong>Bs 360</strong>).
+            <div className="p-2.5 rounded-xl bg-[#dfd9ce]/60 dark:bg-slate-800/60 border border-[#cec8bc] dark:border-slate-700 text-[11px] text-[#5c5750] dark:text-slate-300">
+              El recargo configurado se aplica automáticamente a partir del día siguiente al límite
+              fijado.
             </div>
           </div>
         </div>
@@ -369,32 +379,20 @@ export default function ParametrosDepartamentosTab({
                   step="0.5"
                   value={config.tarifaAguaM3}
                   onChange={(e) => setConfig({ ...config, tarifaAguaM3: Number(e.target.value) })}
-                  className="w-24 px-3 py-1.5 rounded-xl bg-[#dfd9ce] dark:bg-slate-800 border border-[#cec8bc] dark:border-slate-700 font-mono font-bold text-sm"
+                  className="w-24 px-3 py-1.5 rounded-xl bg-[#dfd9ce] dark:bg-slate-800 border border-[#cec8bc] dark:border-slate-700 font-mono font-bold text-sm text-[#262422] dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-600"
                 />
                 <span className="text-[#7d776f]">Bs. por cada m³ consumido</span>
               </div>
             </div>
 
-            <div className="p-3 rounded-2xl bg-white/70 dark:bg-slate-950/60 border border-[#cec8bc] dark:border-slate-800 font-mono text-[11px] space-y-1">
-              <span className="font-sans font-bold text-xs text-[#262422] dark:text-white block">
-                Fórmula de Medidor A1 (Pizarra):
+            <div className="p-3 rounded-2xl bg-white/70 dark:bg-slate-950/60 border border-[#cec8bc] dark:border-slate-800 text-[11px] space-y-1">
+              <span className="font-bold text-xs text-[#262422] dark:text-white block">
+                Cálculo de Consumo
               </span>
-              <div className="flex justify-between">
-                <span>Lectura 30/Sep:</span>
-                <span className="font-bold">00940 m³</span>
-              </div>
-              <div className="flex justify-between">
-                <span>Lectura 31/Oct:</span>
-                <span className="font-bold">00945 m³</span>
-              </div>
-              <div className="flex justify-between border-t pt-1 font-bold text-blue-700 dark:text-blue-400">
-                <span>Diferencia (Cubos):</span>
-                <span>5 m³ × Bs 5 = Bs 25.00</span>
-              </div>
-            </div>
-
-            <div className="p-2.5 rounded-xl bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-900/50 text-[11px] text-blue-900 dark:text-blue-300">
-              ℹ️ <strong>Cálculo Fuera de su Sistema:</strong> Bs. 1,000.00 (mencionado en pizarra como control matriz externo).
+              <p className="text-[#5c5750] dark:text-slate-400 leading-relaxed">
+                Consumo = Lectura Actual − Lectura Anterior (m³). El importe a cobrar se liquida
+                multiplicando el consumo por la tarifa unitaria fijada.
+              </p>
             </div>
           </div>
         </div>
@@ -416,7 +414,7 @@ export default function ParametrosDepartamentosTab({
           <div className="space-y-2.5 text-xs">
             <div className="flex items-center justify-between p-2 rounded-xl bg-white/70 dark:bg-slate-950/60 border border-[#cec8bc] dark:border-slate-800">
               <div>
-                <span className="font-bold text-[#262422] dark:text-white block">Tipo A (A1, A2...)</span>
+                <span className="font-bold text-[#262422] dark:text-white block">Tipo A</span>
                 <span className="text-[10px] text-[#7d776f]">4 departamentos (60 m²)</span>
               </div>
               <div className="flex items-center gap-1 font-mono font-bold">
@@ -424,15 +422,17 @@ export default function ParametrosDepartamentosTab({
                 <input
                   type="number"
                   value={config.expensaBaseTipoA}
-                  onChange={(e) => setConfig({ ...config, expensaBaseTipoA: Number(e.target.value) })}
-                  className="w-20 px-2 py-1 rounded-lg bg-[#dfd9ce] dark:bg-slate-800 border text-right font-bold"
+                  onChange={(e) =>
+                    setConfig({ ...config, expensaBaseTipoA: Number(e.target.value) })
+                  }
+                  className="w-20 px-2 py-1 rounded-lg bg-[#dfd9ce] dark:bg-slate-800 border border-[#cec8bc] dark:border-slate-700 text-right font-bold text-[#262422] dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-600"
                 />
               </div>
             </div>
 
             <div className="flex items-center justify-between p-2 rounded-xl bg-white/70 dark:bg-slate-950/60 border border-[#cec8bc] dark:border-slate-800">
               <div>
-                <span className="font-bold text-[#262422] dark:text-white block">Tipo B (B1, B2...)</span>
+                <span className="font-bold text-[#262422] dark:text-white block">Tipo B</span>
                 <span className="text-[10px] text-[#7d776f]">10 departamentos (80 m²)</span>
               </div>
               <div className="flex items-center gap-1 font-mono font-bold">
@@ -440,15 +440,17 @@ export default function ParametrosDepartamentosTab({
                 <input
                   type="number"
                   value={config.expensaBaseTipoB}
-                  onChange={(e) => setConfig({ ...config, expensaBaseTipoB: Number(e.target.value) })}
-                  className="w-20 px-2 py-1 rounded-lg bg-[#dfd9ce] dark:bg-slate-800 border text-right font-bold"
+                  onChange={(e) =>
+                    setConfig({ ...config, expensaBaseTipoB: Number(e.target.value) })
+                  }
+                  className="w-20 px-2 py-1 rounded-lg bg-[#dfd9ce] dark:bg-slate-800 border border-[#cec8bc] dark:border-slate-700 text-right font-bold text-[#262422] dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-600"
                 />
               </div>
             </div>
 
             <div className="flex items-center justify-between p-2 rounded-xl bg-white/70 dark:bg-slate-950/60 border border-[#cec8bc] dark:border-slate-800">
               <div>
-                <span className="font-bold text-[#262422] dark:text-white block">Tipo C (C1, C2, C3...)</span>
+                <span className="font-bold text-[#262422] dark:text-white block">Tipo C</span>
                 <span className="text-[10px] text-[#7d776f]">6 departamentos (100 m²)</span>
               </div>
               <div className="flex items-center gap-1 font-mono font-bold">
@@ -456,8 +458,10 @@ export default function ParametrosDepartamentosTab({
                 <input
                   type="number"
                   value={config.expensaBaseTipoC}
-                  onChange={(e) => setConfig({ ...config, expensaBaseTipoC: Number(e.target.value) })}
-                  className="w-20 px-2 py-1 rounded-lg bg-[#dfd9ce] dark:bg-slate-800 border text-right font-bold"
+                  onChange={(e) =>
+                    setConfig({ ...config, expensaBaseTipoC: Number(e.target.value) })
+                  }
+                  className="w-20 px-2 py-1 rounded-lg bg-[#dfd9ce] dark:bg-slate-800 border border-[#cec8bc] dark:border-slate-700 text-right font-bold text-[#262422] dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-600"
                 />
               </div>
             </div>
@@ -474,7 +478,6 @@ export default function ParametrosDepartamentosTab({
             </div>
           </div>
         </div>
-
       </div>
 
       {/* SECCIÓN 2: BARRA DE BÚSQUEDA Y TOTALES */}
@@ -498,10 +501,30 @@ export default function ParametrosDepartamentosTab({
               onChange={(e) => setFiltroTipo(e.target.value)}
               className="bg-transparent text-[#262422] dark:text-white focus:outline-none cursor-pointer font-medium"
             >
-              <option value="Todos">Tipología: Todas</option>
-              <option value="Tipo A">Tipo A (300 Bs)</option>
-              <option value="Tipo B">Tipo B (350 Bs)</option>
-              <option value="Tipo C">Tipo C (400 Bs)</option>
+              <option
+                value="Todos"
+                className="bg-[#ede9e1] dark:bg-slate-900 text-[#262422] dark:text-white"
+              >
+                Tipología: Todas
+              </option>
+              <option
+                value="Tipo A"
+                className="bg-[#ede9e1] dark:bg-slate-900 text-[#262422] dark:text-white"
+              >
+                Tipo A (300 Bs)
+              </option>
+              <option
+                value="Tipo B"
+                className="bg-[#ede9e1] dark:bg-slate-900 text-[#262422] dark:text-white"
+              >
+                Tipo B (350 Bs)
+              </option>
+              <option
+                value="Tipo C"
+                className="bg-[#ede9e1] dark:bg-slate-900 text-[#262422] dark:text-white"
+              >
+                Tipo C (400 Bs)
+              </option>
             </select>
           </div>
 
@@ -528,7 +551,8 @@ export default function ParametrosDepartamentosTab({
             </p>
           </div>
           <span className="text-xs font-mono font-bold text-blue-800 dark:text-blue-300">
-            Total Estimado: Bs. {totales.totalSinMora.toLocaleString('es-BO', { minimumFractionDigits: 2 })}
+            Total Estimado: Bs.{' '}
+            {totales.totalSinMora.toLocaleString('es-BO', { minimumFractionDigits: 2 })}
           </span>
         </div>
 
@@ -536,7 +560,7 @@ export default function ParametrosDepartamentosTab({
           <table className="w-full text-left border-collapse text-xs">
             <thead>
               <tr className="border-b border-[#cec8bc] dark:border-slate-800 bg-[#dfd9ce]/70 dark:bg-slate-950/70 text-[#7d776f] uppercase text-[10px] font-bold">
-                <th className="py-3 px-3">Depto / Ref</th>
+                <th className="py-3 px-3">Departamento</th>
                 <th className="py-3 px-3">Titular / Ocupante</th>
                 <th className="py-3 px-3">Exp. Base (Bs)</th>
                 <th className="py-3 px-3">Medidor</th>
@@ -544,8 +568,12 @@ export default function ParametrosDepartamentosTab({
                 <th className="py-3 px-2">Lect. Actual</th>
                 <th className="py-3 px-2 text-center">Consumo (Cubos)</th>
                 <th className="py-3 px-2">Agua / Extras (Bs)</th>
-                <th className="py-3 px-3 font-black text-[#262422] dark:text-white">Subtotal (&lt; 10)</th>
-                <th className="py-3 px-3 text-red-700 dark:text-red-400 font-bold">Mora (&ge; 10)</th>
+                <th className="py-3 px-3 font-black text-[#262422] dark:text-white">
+                  Subtotal (&lt; 10)
+                </th>
+                <th className="py-3 px-3 text-red-700 dark:text-red-400 font-bold">
+                  Mora (&ge; 10)
+                </th>
                 <th className="py-3 px-3 text-right">Acciones</th>
               </tr>
             </thead>
@@ -558,24 +586,23 @@ export default function ParametrosDepartamentosTab({
                 </tr>
               ) : (
                 deptosFiltrados.map((u, idx) => {
-                  const subtotalFila = (u.expensaBase || 0) + (u.montoAgua || 0) + (u.otrosExtras || 0)
-                  const moraFila = config.tipoMora === 'porcentaje'
-                    ? subtotalFila * (config.valorMoraPorcentaje / 100)
-                    : config.valorMoraFijo
+                  const subtotalFila =
+                    (u.expensaBase || 0) + (u.montoAgua || 0) + (u.otrosExtras || 0)
+                  const moraFila =
+                    config.tipoMora === 'porcentaje'
+                      ? subtotalFila * (config.valorMoraPorcentaje / 100)
+                      : config.valorMoraFijo
                   const totalConMoraFila = subtotalFila + moraFila
 
-                  // Letra de pizarra (A1, A2, B1, B2, C1...)
-                  const refPizarra = u.numero === '101' ? 'A1' : u.numero === '104' ? 'A2' : u.numero === '102' ? 'B1' : u.numero === '105' ? 'B2' : u.numero === '103' ? 'C1' : `U-${u.numero}`
-
                   return (
-                    <tr key={u.id} className="hover:bg-[#dfd9ce]/40 dark:hover:bg-slate-800/40 transition-colors">
+                    <tr
+                      key={u.id}
+                      className="hover:bg-[#dfd9ce]/40 dark:hover:bg-slate-800/40 transition-colors"
+                    >
                       {/* Depto */}
                       <td className="py-2.5 px-3">
-                        <div className="font-black text-[#262422] dark:text-white flex items-center gap-1.5">
-                          <span>Dpto. {u.numero}</span>
-                          <span className="px-1.5 py-0.2 rounded text-[10px] font-bold bg-blue-100 dark:bg-blue-950 text-blue-800 dark:text-blue-300">
-                            {refPizarra}
-                          </span>
+                        <div className="font-black text-[#262422] dark:text-white">
+                          Dpto. {u.numero}
                         </div>
                         <div className="text-[10px] text-[#7d776f]">
                           {u.tipologia?.split(' ')[0] || 'Tipo B'} • Piso {u.piso || 1}
@@ -602,8 +629,10 @@ export default function ParametrosDepartamentosTab({
                             type="number"
                             step="0.01"
                             value={u.expensaBase ?? 0}
-                            onChange={(e) => handleCambioFila(u.id, 'expensaBase', Number(e.target.value))}
-                            className="w-20 px-2 py-1 rounded-lg bg-white dark:bg-slate-950 border border-[#cec8bc] dark:border-slate-700 font-mono font-bold text-xs focus:ring-2 focus:ring-blue-600 focus:outline-none"
+                            onChange={(e) =>
+                              handleCambioFila(u.id, 'expensaBase', Number(e.target.value))
+                            }
+                            className="w-20 px-2 py-1 rounded-lg bg-white dark:bg-slate-950 border border-[#cec8bc] dark:border-slate-700 font-mono font-bold text-xs text-[#262422] dark:text-white focus:ring-2 focus:ring-blue-600 focus:outline-none"
                           />
                         </div>
                       </td>
@@ -619,8 +648,10 @@ export default function ParametrosDepartamentosTab({
                           type="number"
                           step="0.01"
                           value={u.lecturaAnteriorAgua ?? 0}
-                          onChange={(e) => handleCambioFila(u.id, 'lecturaAnteriorAgua', Number(e.target.value))}
-                          className="w-18 px-2 py-1 rounded-lg bg-white dark:bg-slate-950 border border-blue-200 dark:border-blue-800 font-mono text-xs focus:ring-2 focus:ring-blue-600 focus:outline-none"
+                          onChange={(e) =>
+                            handleCambioFila(u.id, 'lecturaAnteriorAgua', Number(e.target.value))
+                          }
+                          className="w-18 px-2 py-1 rounded-lg bg-white dark:bg-slate-950 border border-blue-200 dark:border-blue-800 font-mono text-xs text-[#262422] dark:text-white focus:ring-2 focus:ring-blue-600 focus:outline-none"
                         />
                       </td>
 
@@ -630,8 +661,10 @@ export default function ParametrosDepartamentosTab({
                           type="number"
                           step="0.01"
                           value={u.lecturaActualAgua ?? 0}
-                          onChange={(e) => handleCambioFila(u.id, 'lecturaActualAgua', Number(e.target.value))}
-                          className="w-18 px-2 py-1 rounded-lg bg-white dark:bg-slate-950 border border-blue-200 dark:border-blue-800 font-mono font-bold text-xs focus:ring-2 focus:ring-blue-600 focus:outline-none"
+                          onChange={(e) =>
+                            handleCambioFila(u.id, 'lecturaActualAgua', Number(e.target.value))
+                          }
+                          className="w-18 px-2 py-1 rounded-lg bg-white dark:bg-slate-950 border border-blue-200 dark:border-blue-800 font-mono font-bold text-xs text-[#262422] dark:text-white focus:ring-2 focus:ring-blue-600 focus:outline-none"
                         />
                       </td>
 
@@ -648,11 +681,11 @@ export default function ParametrosDepartamentosTab({
                           Bs. {((u.montoAgua || 0) + (u.otrosExtras || 0)).toFixed(2)}
                         </div>
                         <div className="text-[9px] text-[#7d776f]">
-                          ({(u.consumoAguaM3 || 0)}×5 {u.otrosExtras ? `+${u.otrosExtras}` : ''})
+                          ({u.consumoAguaM3 || 0}×5 {u.otrosExtras ? `+${u.otrosExtras}` : ''})
                         </div>
                       </td>
 
-                      {/* Subtotal Pizarra (< 10 día) */}
+                      {/* Subtotal sin mora (< 10 día) */}
                       <td className="py-2.5 px-3 font-mono">
                         <div className="font-black text-sm text-emerald-800 dark:text-emerald-300">
                           Bs. {subtotalFila.toFixed(2)}
@@ -701,9 +734,7 @@ export default function ParametrosDepartamentosTab({
                 <td colSpan={2} className="py-3 px-3 uppercase font-sans">
                   TOTAL GENERAL (20 DEPARTAMENTOS)
                 </td>
-                <td className="py-3 px-3">
-                  Bs. {totales.totalBase.toFixed(2)}
-                </td>
+                <td className="py-3 px-3">Bs. {totales.totalBase.toFixed(2)}</td>
                 <td colSpan={3} className="py-3 px-2 text-right">
                   Consumo Total:
                 </td>
@@ -721,7 +752,9 @@ export default function ParametrosDepartamentosTab({
                 </td>
                 <td className="py-3 px-3 text-right font-sans">
                   <span className="text-[10px] text-[#7d776f] block">Con Mora Total:</span>
-                  <span className="font-mono font-black text-xs">Bs. {totales.totalConMora.toFixed(2)}</span>
+                  <span className="font-mono font-black text-xs">
+                    Bs. {totales.totalConMora.toFixed(2)}
+                  </span>
                 </td>
               </tr>
             </tfoot>
@@ -747,7 +780,6 @@ export default function ParametrosDepartamentosTab({
           }}
         />
       )}
-
     </div>
   )
 }

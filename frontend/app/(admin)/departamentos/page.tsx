@@ -24,7 +24,13 @@ import {
   Sliders,
   Gauge
 } from 'lucide-react'
-import { UnidadItem, DepartamentoFormData, TipoUnidad, TipoDepartamentoItem, DEFAULT_TIPOS_DEPARTAMENTO } from '@/components/departamentos/types'
+import {
+  UnidadItem,
+  DepartamentoFormData,
+  TipoUnidad,
+  TipoDepartamentoItem,
+  DEFAULT_TIPOS_DEPARTAMENTO
+} from '@/components/departamentos/types'
 import DepartamentosKpis from '@/components/departamentos/DepartamentosKpis'
 import CrearDepartamentoModal from '@/components/departamentos/CrearDepartamentoModal'
 import EditarDepartamentoModal from '@/components/departamentos/EditarDepartamentoModal'
@@ -45,7 +51,13 @@ const UNIDADES_SEED: UnidadItem[] = [
     tipologia: 'Tipo A (60 m²)',
     alicuota: 3.75,
     estado: 'Alquilado',
-    propietario: { id: 1, nombre: 'Ana Valdivia Morales', ci: '4829103 CBBA', telefono: '+591 71234567', correo: 'ana.valdivia@email.com' },
+    propietario: {
+      id: 1,
+      nombre: 'Ana Valdivia Morales',
+      ci: '4829103 CBBA',
+      telefono: '+591 71234567',
+      correo: 'ana.valdivia@email.com'
+    },
     inquilinoActual: { id: 101, nombre: 'Pedro Ramírez Soto', telefono: '+591 79876543' },
     parqueo: 'P-01',
     baulera: 'B-01',
@@ -60,7 +72,13 @@ const UNIDADES_SEED: UnidadItem[] = [
     tipologia: 'Tipo B (80 m²)',
     alicuota: 5.0,
     estado: 'Alquilado',
-    propietario: { id: 2, nombre: 'Carlos Mendoza Rojas', ci: '5920144 SCZ', telefono: '+591 79876543', correo: 'carlos.mendoza@email.com' },
+    propietario: {
+      id: 2,
+      nombre: 'Carlos Mendoza Rojas',
+      ci: '5920144 SCZ',
+      telefono: '+591 79876543',
+      correo: 'carlos.mendoza@email.com'
+    },
     inquilinoActual: { id: 102, nombre: 'María Fernández Arce', telefono: '+591 67123980' },
     parqueo: 'P-02',
     baulera: 'Sin baulera',
@@ -75,7 +93,13 @@ const UNIDADES_SEED: UnidadItem[] = [
     tipologia: 'Tipo C (100 m²)',
     alicuota: 6.25,
     estado: 'Desocupado',
-    propietario: { id: 3, nombre: 'Laura Céspedes Villarroel', ci: '3948120 LPZ', telefono: '+591 67123980', correo: 'laura.cespedes@email.com' },
+    propietario: {
+      id: 3,
+      nombre: 'Laura Céspedes Villarroel',
+      ci: '3948120 LPZ',
+      telefono: '+591 67123980',
+      correo: 'laura.cespedes@email.com'
+    },
     inquilinoActual: null,
     parqueo: 'P-03',
     baulera: 'B-02',
@@ -90,7 +114,13 @@ const UNIDADES_SEED: UnidadItem[] = [
     tipologia: 'Tipo A (60 m²)',
     alicuota: 3.75,
     estado: 'Alquilado',
-    propietario: { id: 4, nombre: 'José Vargas Quiroga', ci: '6129841 CBBA', telefono: '+591 75432198', correo: 'jose.vargas@email.com' },
+    propietario: {
+      id: 4,
+      nombre: 'José Vargas Quiroga',
+      ci: '6129841 CBBA',
+      telefono: '+591 75432198',
+      correo: 'jose.vargas@email.com'
+    },
     inquilinoActual: { id: 104, nombre: 'Roberto Daza Méndez', telefono: '+591 76543210' },
     parqueo: 'P-04',
     baulera: 'Sin baulera',
@@ -105,7 +135,13 @@ const UNIDADES_SEED: UnidadItem[] = [
     tipologia: 'Tipo B (80 m²)',
     alicuota: 5.0,
     estado: 'Desocupado',
-    propietario: { id: 5, nombre: 'Sofía Romero Paz', ci: '4918230 CBBA', telefono: '+591 72198450', correo: 'sofia.romero@email.com' },
+    propietario: {
+      id: 5,
+      nombre: 'Sofía Romero Paz',
+      ci: '4918230 CBBA',
+      telefono: '+591 72198450',
+      correo: 'sofia.romero@email.com'
+    },
     inquilinoActual: null,
     parqueo: 'Sin parqueo',
     baulera: 'Sin baulera',
@@ -121,7 +157,13 @@ const UNIDADES_SEED: UnidadItem[] = [
     tipologia: 'Tipo A (60 m²)',
     alicuota: 3.75,
     estado: 'Ocupado por Propietario',
-    propietario: { id: 6, nombre: 'Gabriel Romero Soria', ci: '4829104 LPZ', telefono: '+591 71239988', correo: 'gabriel.romero@email.com' },
+    propietario: {
+      id: 6,
+      nombre: 'Gabriel Romero Soria',
+      ci: '4829104 LPZ',
+      telefono: '+591 71239988',
+      correo: 'gabriel.romero@email.com'
+    },
     inquilinoActual: null,
     parqueo: 'P-05',
     baulera: 'B-03',
@@ -136,7 +178,13 @@ const UNIDADES_SEED: UnidadItem[] = [
     tipologia: 'Tipo B (80 m²)',
     alicuota: 5.0,
     estado: 'Alquilado',
-    propietario: { id: 7, nombre: 'Patricia Quiroga Daza', ci: '3920194 CBBA', telefono: '+591 79871122', correo: 'patricia.quiroga@email.com' },
+    propietario: {
+      id: 7,
+      nombre: 'Patricia Quiroga Daza',
+      ci: '3920194 CBBA',
+      telefono: '+591 79871122',
+      correo: 'patricia.quiroga@email.com'
+    },
     inquilinoActual: { id: 105, nombre: 'Martín Suárez Flores', telefono: '+591 77334455' },
     parqueo: 'P-06',
     baulera: 'B-04',
@@ -151,7 +199,13 @@ const UNIDADES_SEED: UnidadItem[] = [
     tipologia: 'Tipo B (80 m²)',
     alicuota: 5.0,
     estado: 'Alquilado',
-    propietario: { id: 8, nombre: 'Diego Claros Torrico', ci: '5192843 CBBA', telefono: '+591 60123456', correo: 'diego.claros@email.com' },
+    propietario: {
+      id: 8,
+      nombre: 'Diego Claros Torrico',
+      ci: '5192843 CBBA',
+      telefono: '+591 60123456',
+      correo: 'diego.claros@email.com'
+    },
     inquilinoActual: { id: 106, nombre: 'Andrea Mercado Bellot', telefono: '+591 71987654' },
     parqueo: 'P-07',
     baulera: 'Sin baulera',
@@ -166,7 +220,13 @@ const UNIDADES_SEED: UnidadItem[] = [
     tipologia: 'Tipo B (80 m²)',
     alicuota: 5.0,
     estado: 'Ocupado por Propietario',
-    propietario: { id: 9, nombre: 'Alejandro Gómez Salces', ci: '6192834 SCZ', telefono: '+591 60123987', correo: 'alejandro.gomez@email.com' },
+    propietario: {
+      id: 9,
+      nombre: 'Alejandro Gómez Salces',
+      ci: '6192834 SCZ',
+      telefono: '+591 60123987',
+      correo: 'alejandro.gomez@email.com'
+    },
     inquilinoActual: null,
     parqueo: 'P-08',
     baulera: 'B-05',
@@ -181,7 +241,13 @@ const UNIDADES_SEED: UnidadItem[] = [
     tipologia: 'Tipo C (100 m²)',
     alicuota: 6.25,
     estado: 'Desocupado',
-    propietario: { id: 10, nombre: 'Elena Bellot Mercado', ci: '7192834 CBBA', telefono: '+591 73456789', correo: 'elena.bellot@email.com' },
+    propietario: {
+      id: 10,
+      nombre: 'Elena Bellot Mercado',
+      ci: '7192834 CBBA',
+      telefono: '+591 73456789',
+      correo: 'elena.bellot@email.com'
+    },
     inquilinoActual: null,
     parqueo: 'P-09',
     baulera: 'B-06',
@@ -197,7 +263,13 @@ const UNIDADES_SEED: UnidadItem[] = [
     tipologia: 'Tipo A (60 m²)',
     alicuota: 3.75,
     estado: 'Alquilado',
-    propietario: { id: 11, nombre: 'Fernando Castro Ortiz', ci: '4918231 CBBA', telefono: '+591 72198451', correo: 'fernando.castro@email.com' },
+    propietario: {
+      id: 11,
+      nombre: 'Fernando Castro Ortiz',
+      ci: '4918231 CBBA',
+      telefono: '+591 72198451',
+      correo: 'fernando.castro@email.com'
+    },
     inquilinoActual: { id: 107, nombre: 'Camila Rojas Rios', telefono: '+591 74567890' },
     parqueo: 'P-10',
     baulera: 'B-07',
@@ -212,7 +284,13 @@ const UNIDADES_SEED: UnidadItem[] = [
     tipologia: 'Tipo B (80 m²)',
     alicuota: 5.0,
     estado: 'Alquilado',
-    propietario: { id: 12, nombre: 'Mariana Flores Soliz', ci: '5920145 SCZ', telefono: '+591 79876544', correo: 'mariana.flores@email.com' },
+    propietario: {
+      id: 12,
+      nombre: 'Mariana Flores Soliz',
+      ci: '5920145 SCZ',
+      telefono: '+591 79876544',
+      correo: 'mariana.flores@email.com'
+    },
     inquilinoActual: { id: 108, nombre: 'Lucía Gutiérrez Daza', telefono: '+591 78901234' },
     parqueo: 'P-11',
     baulera: 'Sin baulera',
@@ -227,7 +305,13 @@ const UNIDADES_SEED: UnidadItem[] = [
     tipologia: 'Tipo B (80 m²)',
     alicuota: 5.0,
     estado: 'Alquilado',
-    propietario: { id: 13, nombre: 'Rodrigo Heredia Zalles', ci: '8291044 CBBA', telefono: '+591 71239900', correo: 'rodrigo.heredia@email.com' },
+    propietario: {
+      id: 13,
+      nombre: 'Rodrigo Heredia Zalles',
+      ci: '8291044 CBBA',
+      telefono: '+591 71239900',
+      correo: 'rodrigo.heredia@email.com'
+    },
     inquilinoActual: { id: 109, nombre: 'Gonzalo Navia Ramos', telefono: '+591 65432109' },
     parqueo: 'P-12',
     baulera: 'B-08',
@@ -242,7 +326,13 @@ const UNIDADES_SEED: UnidadItem[] = [
     tipologia: 'Tipo B (80 m²)',
     alicuota: 5.0,
     estado: 'Desocupado',
-    propietario: { id: 14, nombre: 'Beatriz Salazar Camacho', ci: '9182045 LPZ', telefono: '+591 70123456', correo: 'beatriz.salazar@email.com' },
+    propietario: {
+      id: 14,
+      nombre: 'Beatriz Salazar Camacho',
+      ci: '9182045 LPZ',
+      telefono: '+591 70123456',
+      correo: 'beatriz.salazar@email.com'
+    },
     inquilinoActual: null,
     parqueo: 'P-13',
     baulera: 'Sin baulera',
@@ -257,7 +347,13 @@ const UNIDADES_SEED: UnidadItem[] = [
     tipologia: 'Tipo B (80 m²)',
     alicuota: 5.0,
     estado: 'Alquilado',
-    propietario: { id: 15, nombre: 'Juan Pérez Montaño', ci: '3819204 CBBA', telefono: '+591 76543219', correo: 'juan.perez@email.com' },
+    propietario: {
+      id: 15,
+      nombre: 'Juan Pérez Montaño',
+      ci: '3819204 CBBA',
+      telefono: '+591 76543219',
+      correo: 'juan.perez@email.com'
+    },
     inquilinoActual: { id: 110, nombre: 'María López Arteaga', telefono: '+591 79123456' },
     parqueo: 'P-14',
     baulera: 'B-09',
@@ -273,7 +369,13 @@ const UNIDADES_SEED: UnidadItem[] = [
     tipologia: 'Tipo A (60 m²)',
     alicuota: 3.75,
     estado: 'Ocupado por Propietario',
-    propietario: { id: 16, nombre: 'Javier Torrico Alba', ci: '4729103 CBBA', telefono: '+591 71234411', correo: 'javier.torrico@email.com' },
+    propietario: {
+      id: 16,
+      nombre: 'Javier Torrico Alba',
+      ci: '4729103 CBBA',
+      telefono: '+591 71234411',
+      correo: 'javier.torrico@email.com'
+    },
     inquilinoActual: null,
     parqueo: 'P-15',
     baulera: 'Sin baulera',
@@ -288,7 +390,13 @@ const UNIDADES_SEED: UnidadItem[] = [
     tipologia: 'Tipo C (100 m²)',
     alicuota: 6.25,
     estado: 'Ocupado por Propietario',
-    propietario: { id: 17, nombre: 'Claudia Daza Mendez', ci: '5819204 SCZ', telefono: '+591 79872233', correo: 'claudia.daza@email.com' },
+    propietario: {
+      id: 17,
+      nombre: 'Claudia Daza Mendez',
+      ci: '5819204 SCZ',
+      telefono: '+591 79872233',
+      correo: 'claudia.daza@email.com'
+    },
     inquilinoActual: null,
     parqueo: 'P-16',
     baulera: 'B-10',
@@ -303,7 +411,13 @@ const UNIDADES_SEED: UnidadItem[] = [
     tipologia: 'Tipo C (100 m²)',
     alicuota: 6.25,
     estado: 'Alquilado',
-    propietario: { id: 18, nombre: 'Marcelo Rios Quiroga', ci: '6918234 CBBA', telefono: '+591 67124455', correo: 'marcelo.rios@email.com' },
+    propietario: {
+      id: 18,
+      nombre: 'Marcelo Rios Quiroga',
+      ci: '6918234 CBBA',
+      telefono: '+591 67124455',
+      correo: 'marcelo.rios@email.com'
+    },
     inquilinoActual: { id: 111, nombre: 'Esteban Morales Zeballos', telefono: '+591 76549988' },
     parqueo: 'P-17',
     baulera: 'Sin baulera',
@@ -318,7 +432,13 @@ const UNIDADES_SEED: UnidadItem[] = [
     tipologia: 'Tipo C (100 m²)',
     alicuota: 6.25,
     estado: 'Desocupado',
-    propietario: { id: 19, nombre: 'Valeria Soliz Mercado', ci: '7182934 LPZ', telefono: '+591 75439900', correo: 'valeria.soliz@email.com' },
+    propietario: {
+      id: 19,
+      nombre: 'Valeria Soliz Mercado',
+      ci: '7182934 LPZ',
+      telefono: '+591 75439900',
+      correo: 'valeria.soliz@email.com'
+    },
     inquilinoActual: null,
     parqueo: 'P-18',
     baulera: 'Sin baulera',
@@ -333,7 +453,13 @@ const UNIDADES_SEED: UnidadItem[] = [
     tipologia: 'Tipo B (80 m²)',
     alicuota: 5.0,
     estado: 'Ocupado por Propietario',
-    propietario: { id: 20, nombre: 'Rubén Guzmán Villarroel', ci: '8192044 CBBA', telefono: '+591 72199911', correo: 'ruben.guzman@email.com' },
+    propietario: {
+      id: 20,
+      nombre: 'Rubén Guzmán Villarroel',
+      ci: '8192044 CBBA',
+      telefono: '+591 72199911',
+      correo: 'ruben.guzman@email.com'
+    },
     inquilinoActual: null,
     parqueo: 'P-19',
     baulera: 'Sin baulera',
@@ -376,9 +502,7 @@ export default function DepartamentosPage() {
       const savedUnidades = localStorage.getItem('edificio_xyz_unidades_parametros')
       if (savedUnidades) {
         const map = JSON.parse(savedUnidades)
-        setUnidades((prev) =>
-          prev.map((u) => (map[u.id] ? { ...u, ...map[u.id] } : u))
-        )
+        setUnidades((prev) => prev.map((u) => (map[u.id] ? { ...u, ...map[u.id] } : u)))
       }
     } catch {}
   }, [])
@@ -402,7 +526,8 @@ export default function DepartamentosPage() {
       setUnidades((prev) => {
         const updated = prev.map((u) => {
           const match =
-            (u.tipologia && u.tipologia.toLowerCase().includes(tipoGuardado.nombre.toLowerCase())) ||
+            (u.tipologia &&
+              u.tipologia.toLowerCase().includes(tipoGuardado.nombre.toLowerCase())) ||
             (u.tipologia && u.tipologia.includes(tipoGuardado.codigo)) ||
             (u.areaM2 && Math.abs(u.areaM2 - tipoGuardado.areaM2) < 0.1)
 
@@ -447,9 +572,12 @@ export default function DepartamentosPage() {
   const handleResetDefaultTipos = () => {
     setTiposDepto(DEFAULT_TIPOS_DEPARTAMENTO)
     try {
-      localStorage.setItem('edificio_xyz_tipos_departamento', JSON.stringify(DEFAULT_TIPOS_DEPARTAMENTO))
+      localStorage.setItem(
+        'edificio_xyz_tipos_departamento',
+        JSON.stringify(DEFAULT_TIPOS_DEPARTAMENTO)
+      )
     } catch {}
-    showToast('Tipologías restablecidas a los valores de la pizarra (Tipos A, B y C).')
+    showToast('Tipologías restablecidas a los valores por defecto (Tipos A, B y C).')
   }
 
   const handleSincronizarUnidadesTipo = (tipo: TipoDepartamentoItem) => {
@@ -515,7 +643,9 @@ export default function DepartamentosPage() {
   // Fetch unidades desde la API con fallback inteligente
   const fetchUnidades = useCallback(async () => {
     try {
-      const res = await fetch(`/api/v1/unidades?tipo=${filtroTipo}&estado=${filtroEstado}&search=${encodeURIComponent(searchTerm)}`)
+      const res = await fetch(
+        `/api/v1/unidades?tipo=${filtroTipo}&estado=${filtroEstado}&search=${encodeURIComponent(searchTerm)}`
+      )
       if (res.ok) {
         const json = await res.json()
         if (json.data && Array.isArray(json.data) && json.data.length > 0) {
@@ -526,17 +656,25 @@ export default function DepartamentosPage() {
             piso: item.piso,
             areaM2: item.areaM2,
             tipologia:
-              item.areaM2 === 60 ? 'Tipo A (60 m²)' :
-              item.areaM2 === 80 ? 'Tipo B (80 m²)' :
-              item.areaM2 === 100 ? 'Tipo C (100 m²)' : undefined,
-            alicuota: item.alicuota || (item.areaM2 ? Number(((item.areaM2 / 1600) * 100).toFixed(2)) : undefined),
+              item.areaM2 === 60
+                ? 'Tipo A (60 m²)'
+                : item.areaM2 === 80
+                  ? 'Tipo B (80 m²)'
+                  : item.areaM2 === 100
+                    ? 'Tipo C (100 m²)'
+                    : undefined,
+            alicuota:
+              item.alicuota ||
+              (item.areaM2 ? Number(((item.areaM2 / 1600) * 100).toFixed(2)) : undefined),
             estado: item.estado || 'Desocupado',
             parqueo: item.parqueos?.[0]?.numero || item.parqueo || 'Sin parqueo',
             baulera: item.bauleras?.[0]?.numero || item.baulera || 'Sin baulera',
             propietario: item.propietario
               ? {
                   id: item.propietario.idPersona,
-                  nombre: `${item.propietario.nombres || ''} ${item.propietario.apellidos || ''}`.trim() || item.propietario.nombre,
+                  nombre:
+                    `${item.propietario.nombres || ''} ${item.propietario.apellidos || ''}`.trim() ||
+                    item.propietario.nombre,
                   ci: item.propietario.ciNit || item.propietario.ci,
                   telefono: item.propietario.telefono,
                   correo: item.propietario.correo
@@ -558,7 +696,9 @@ export default function DepartamentosPage() {
   }, [fetchUnidades])
 
   const totalAreaConstruida = useMemo(() => {
-    return unidades.filter((u) => u.tipoUnidad === 'Departamento').reduce((acc, d) => acc + (d.areaM2 || 0), 0)
+    return unidades
+      .filter((u) => u.tipoUnidad === 'Departamento')
+      .reduce((acc, d) => acc + (d.areaM2 || 0), 0)
   }, [unidades])
 
   // Filtrado reactivo
@@ -585,7 +725,9 @@ export default function DepartamentosPage() {
   const totalDeptos = deptos.length
   const ocupadosPropietario = deptos.filter((u) => u.estado === 'Ocupado por Propietario').length
   const alquilados = deptos.filter((u) => u.estado === 'Alquilado').length
-  const desocupados = deptos.filter((u) => u.estado === 'Desocupado' || u.estado === 'Disponible').length
+  const desocupados = deptos.filter(
+    (u) => u.estado === 'Desocupado' || u.estado === 'Disponible'
+  ).length
   const conParqueo = deptos.filter((u) => u.parqueo !== 'Sin parqueo').length
 
   const showToast = (msg: string) => {
@@ -640,7 +782,9 @@ export default function DepartamentosPage() {
       areaM2: formData.areaM2,
       tipologia: formData.tipologia || unidadToEdit.tipologia,
       expensaBase: formData.expensaBase ?? unidadToEdit.expensaBase,
-      alicuota: formData.areaM2 ? Number(((formData.areaM2 / 1600) * 100).toFixed(2)) : unidadToEdit.alicuota,
+      alicuota: formData.areaM2
+        ? Number(((formData.areaM2 / 1600) * 100).toFixed(2))
+        : unidadToEdit.alicuota,
       estado: formData.estado
     }
     handleUpdateUnidadParametros(updatedUnidad)
@@ -688,7 +832,8 @@ export default function DepartamentosPage() {
             Unidades, Propietarios e Inquilinos
           </h1>
           <p className="text-xs sm:text-sm text-[#66615b] dark:text-slate-400 mt-1">
-            Catastro del Edificio XYZ (20 departamentos, 1,600 m²). Todas las unidades generan expensas sin importar si están ocupadas o vacías.
+            Catastro del Edificio XYZ (20 departamentos, 1,600 m²). Todas las unidades generan
+            expensas sin importar si están ocupadas o vacías.
           </p>
         </div>
 
@@ -730,9 +875,6 @@ export default function DepartamentosPage() {
         >
           <Layers className="w-4 h-4 text-blue-500" />
           <span>Tipos de Departamentos</span>
-          <span className="px-1.5 py-0.5 rounded-md text-[10px] font-extrabold uppercase bg-blue-500/20 text-blue-900 dark:text-blue-300 border border-blue-500/30">
-            {tiposDepto.length} Editables
-          </span>
         </button>
 
         <button
@@ -746,234 +888,249 @@ export default function DepartamentosPage() {
         >
           <Sliders className="w-4 h-4 text-amber-500" />
           <span>Parámetros & Medidores</span>
-          <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold uppercase bg-amber-500/20 text-amber-900 dark:text-amber-300 border border-amber-500/30">
-            Pizarra Docente
-          </span>
         </button>
       </div>
 
       {activeTab === 'catastro' ? (
         <>
           {/* KPIS DE OCUPACIÓN REAL */}
-      <DepartamentosKpis
-        totalDeptos={totalDeptos}
-        ocupadosPropietario={ocupadosPropietario}
-        alquilados={alquilados}
-        desocupados={desocupados}
-        conParqueo={conParqueo}
-        totalAreaConstruida={totalAreaConstruida}
-      />
-
-      {/* BUSCADOR Y FILTROS */}
-      <div className="p-4 rounded-2xl bg-[#ede9e1] dark:bg-slate-900 border border-[#cec8bc] dark:border-slate-800 flex flex-col md:flex-row gap-3 items-stretch md:items-center justify-between shadow-sm">
-        <div className="relative flex-1">
-          <Search className="w-4 h-4 text-[#7d776f] dark:text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
-          <input
-            type="text"
-            placeholder="Buscar por número, propietario o inquilino..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full pl-10 pr-4 py-2 bg-[#dfd9ce] dark:bg-slate-950 border border-[#cec8bc] dark:border-slate-700 rounded-xl text-xs sm:text-sm text-[#1c1917] dark:text-white placeholder-[#857f76] focus:outline-none focus:ring-2 focus:ring-rose-600"
+          <DepartamentosKpis
+            totalDeptos={totalDeptos}
+            ocupadosPropietario={ocupadosPropietario}
+            alquilados={alquilados}
+            desocupados={desocupados}
+            conParqueo={conParqueo}
+            totalAreaConstruida={totalAreaConstruida}
           />
-        </div>
 
-        <div className="flex flex-wrap items-center gap-2">
-          {/* Filtro Estado de Ocupación */}
-          <div className="flex items-center gap-1.5 bg-[#dfd9ce] dark:bg-slate-950 px-3 py-2 rounded-xl border border-[#cec8bc] dark:border-slate-700 text-xs">
-            <Filter className="w-3.5 h-3.5 text-[#7d776f]" />
-            <select
-              value={filtroEstado}
-              onChange={(e) => setFiltroEstado(e.target.value)}
-              className="bg-transparent text-[#262422] dark:text-white focus:outline-none cursor-pointer font-medium"
-            >
-              <option value="Todos">Ocupación: Todas</option>
-              <option value="Ocupado por Propietario">Ocupado por Dueño</option>
-              <option value="Alquilado">Alquilado a Inquilino</option>
-              <option value="Desocupado">Desocupado / Vacío</option>
-            </select>
+          {/* BUSCADOR Y FILTROS */}
+          <div className="p-4 rounded-2xl bg-[#ede9e1] dark:bg-slate-900 border border-[#cec8bc] dark:border-slate-800 flex flex-col md:flex-row gap-3 items-stretch md:items-center justify-between shadow-sm">
+            <div className="relative flex-1">
+              <Search className="w-4 h-4 text-[#7d776f] dark:text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+              <input
+                type="text"
+                placeholder="Buscar por número, propietario o inquilino..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="w-full pl-10 pr-4 py-2 bg-[#dfd9ce] dark:bg-slate-950 border border-[#cec8bc] dark:border-slate-700 rounded-xl text-xs sm:text-sm text-[#1c1917] dark:text-white placeholder-[#857f76] focus:outline-none focus:ring-2 focus:ring-rose-600"
+              />
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2">
+              {/* Filtro Estado de Ocupación */}
+              <div className="flex items-center gap-1.5 bg-[#dfd9ce] dark:bg-slate-950 px-3 py-2 rounded-xl border border-[#cec8bc] dark:border-slate-700 text-xs">
+                <Filter className="w-3.5 h-3.5 text-[#7d776f]" />
+                <select
+                  value={filtroEstado}
+                  onChange={(e) => setFiltroEstado(e.target.value)}
+                  className="bg-transparent text-[#262422] dark:text-white focus:outline-none cursor-pointer font-medium"
+                >
+                  <option value="Todos">Ocupación: Todas</option>
+                  <option value="Ocupado por Propietario">Ocupado por Dueño</option>
+                  <option value="Alquilado">Alquilado a Inquilino</option>
+                  <option value="Desocupado">Desocupado / Vacío</option>
+                </select>
+              </div>
+
+              {/* Filtro Piso */}
+              <div className="flex items-center gap-1.5 bg-[#dfd9ce] dark:bg-slate-950 px-3 py-2 rounded-xl border border-[#cec8bc] dark:border-slate-700 text-xs">
+                <Layers className="w-3.5 h-3.5 text-[#7d776f]" />
+                <select
+                  value={filtroPiso}
+                  onChange={(e) => setFiltroPiso(e.target.value)}
+                  className="bg-transparent text-[#262422] dark:text-white focus:outline-none cursor-pointer font-medium"
+                >
+                  <option value="Todos">Piso: Todos</option>
+                  <option value="1">Piso 1</option>
+                  <option value="2">Piso 2</option>
+                  <option value="3">Piso 3</option>
+                  <option value="4">Piso 4</option>
+                </select>
+              </div>
+            </div>
           </div>
 
-          {/* Filtro Piso */}
-          <div className="flex items-center gap-1.5 bg-[#dfd9ce] dark:bg-slate-950 px-3 py-2 rounded-xl border border-[#cec8bc] dark:border-slate-700 text-xs">
-            <Layers className="w-3.5 h-3.5 text-[#7d776f]" />
-            <select
-              value={filtroPiso}
-              onChange={(e) => setFiltroPiso(e.target.value)}
-              className="bg-transparent text-[#262422] dark:text-white focus:outline-none cursor-pointer font-medium"
-            >
-              <option value="Todos">Piso: Todos</option>
-              <option value="1">Piso 1</option>
-              <option value="2">Piso 2</option>
-              <option value="3">Piso 3</option>
-              <option value="4">Piso 4</option>
-            </select>
-          </div>
-        </div>
-      </div>
-
-      {/* TABLA CATASTRAL DE UNIDADES */}
-      <div className="rounded-2xl bg-[#ede9e1] dark:bg-slate-900 border border-[#cec8bc] dark:border-slate-800 overflow-hidden shadow-sm">
-        <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse text-xs sm:text-sm">
-            <thead>
-              <tr className="border-b border-[#cec8bc] dark:border-slate-800 bg-[#dfd9ce]/60 dark:bg-slate-950/60 text-[#7d776f] dark:text-slate-400 uppercase text-[11px] font-bold">
-                <th className="py-3 px-4">Unidad / Tipología</th>
-                <th className="py-3 px-4">Propietario Responsable</th>
-                <th className="py-3 px-4">Ocupante / Inquilino</th>
-                <th className="py-3 px-4">Superficie & Alícuota</th>
-                <th className="py-3 px-4">Parqueo / Baulera</th>
-                <th className="py-3 px-4">Estado Ocupación</th>
-                <th className="py-3 px-4 text-right">Acciones</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-[#cec8bc] dark:divide-slate-800">
-              {unidadesFiltradas.length === 0 ? (
-                <tr>
-                  <td colSpan={7} className="py-8 text-center text-[#7d776f] dark:text-slate-500">
-                    No se encontraron departamentos con los filtros aplicados.
-                  </td>
-                </tr>
-              ) : (
-                unidadesFiltradas.map((unidad) => (
-                  <tr
-                    key={unidad.id}
-                    className="hover:bg-[#dfd9ce]/40 dark:hover:bg-slate-800/40 transition-colors"
-                  >
-                    <td className="py-3 px-4">
-                      <div className="font-extrabold text-[#262422] dark:text-white flex items-center gap-1.5">
-                        <Building2 className="w-4 h-4 text-rose-700 dark:text-rose-400 shrink-0" />
-                        <span>Dpto. {unidad.numero}</span>
-                      </div>
-                      <div className="text-[11px] text-[#7d776f] dark:text-slate-400">
-                        {unidad.tipologia || (unidad.areaM2 === 60 ? 'Tipo A (60 m²)' : unidad.areaM2 === 80 ? 'Tipo B (80 m²)' : 'Tipo C (100 m²)')} • Piso {unidad.piso || '-'}
-                      </div>
-                    </td>
-
-                    <td className="py-3 px-4">
-                      {unidad.propietario ? (
-                        <div>
-                          <div className="font-bold text-[#262422] dark:text-white flex items-center gap-1">
-                            <UserCheck className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-                            {unidad.propietario.nombre}
+          {/* TABLA CATASTRAL DE UNIDADES */}
+          <div className="rounded-2xl bg-[#ede9e1] dark:bg-slate-900 border border-[#cec8bc] dark:border-slate-800 overflow-hidden shadow-sm">
+            <div className="overflow-x-auto">
+              <table className="w-full text-left border-collapse text-xs sm:text-sm">
+                <thead>
+                  <tr className="border-b border-[#cec8bc] dark:border-slate-800 bg-[#dfd9ce]/60 dark:bg-slate-950/60 text-[#7d776f] dark:text-slate-400 uppercase text-[11px] font-bold">
+                    <th className="py-3 px-4">Unidad / Tipología</th>
+                    <th className="py-3 px-4">Propietario Responsable</th>
+                    <th className="py-3 px-4">Ocupante / Inquilino</th>
+                    <th className="py-3 px-4">Superficie & Alícuota</th>
+                    <th className="py-3 px-4">Parqueo / Baulera</th>
+                    <th className="py-3 px-4">Estado Ocupación</th>
+                    <th className="py-3 px-4 text-right">Acciones</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-[#cec8bc] dark:divide-slate-800">
+                  {unidadesFiltradas.length === 0 ? (
+                    <tr>
+                      <td
+                        colSpan={7}
+                        className="py-8 text-center text-[#7d776f] dark:text-slate-500"
+                      >
+                        No se encontraron departamentos con los filtros aplicados.
+                      </td>
+                    </tr>
+                  ) : (
+                    unidadesFiltradas.map((unidad) => (
+                      <tr
+                        key={unidad.id}
+                        className="hover:bg-[#dfd9ce]/40 dark:hover:bg-slate-800/40 transition-colors"
+                      >
+                        <td className="py-3 px-4">
+                          <div className="font-extrabold text-[#262422] dark:text-white flex items-center gap-1.5">
+                            <Building2 className="w-4 h-4 text-rose-700 dark:text-rose-400 shrink-0" />
+                            <span>Dpto. {unidad.numero}</span>
                           </div>
                           <div className="text-[11px] text-[#7d776f] dark:text-slate-400">
-                            CI: {unidad.propietario.ci}
+                            {unidad.tipologia ||
+                              (unidad.areaM2 === 60
+                                ? 'Tipo A (60 m²)'
+                                : unidad.areaM2 === 80
+                                  ? 'Tipo B (80 m²)'
+                                  : 'Tipo C (100 m²)')}{' '}
+                            • Piso {unidad.piso || '-'}
                           </div>
-                        </div>
-                      ) : (
-                        <span className="text-amber-700 dark:text-amber-400 italic text-xs">
-                          Sin Propietario Asignado
-                        </span>
-                      )}
-                    </td>
+                        </td>
 
-                    <td className="py-3 px-4">
-                      {unidad.estado === 'Alquilado' && unidad.inquilinoActual ? (
-                        <div>
-                          <div className="font-bold text-[#262422] dark:text-white flex items-center gap-1">
-                            <KeyRound className="w-3.5 h-3.5 text-purple-600 shrink-0" />
-                            {unidad.inquilinoActual.nombre}
+                        <td className="py-3 px-4">
+                          {unidad.propietario ? (
+                            <div>
+                              <div className="font-bold text-[#262422] dark:text-white flex items-center gap-1">
+                                <UserCheck className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                                {unidad.propietario.nombre}
+                              </div>
+                              <div className="text-[11px] text-[#7d776f] dark:text-slate-400">
+                                CI: {unidad.propietario.ci}
+                              </div>
+                            </div>
+                          ) : (
+                            <span className="text-amber-700 dark:text-amber-400 italic text-xs">
+                              Sin Propietario Asignado
+                            </span>
+                          )}
+                        </td>
+
+                        <td className="py-3 px-4">
+                          {unidad.estado === 'Alquilado' && unidad.inquilinoActual ? (
+                            <div>
+                              <div className="font-bold text-[#262422] dark:text-white flex items-center gap-1">
+                                <KeyRound className="w-3.5 h-3.5 text-purple-600 shrink-0" />
+                                {unidad.inquilinoActual.nombre}
+                              </div>
+                              <span className="text-[10px] px-2 py-0.2 rounded-md bg-purple-100 text-purple-800 font-bold">
+                                Inquilino (Contrato Privado)
+                              </span>
+                            </div>
+                          ) : unidad.estado === 'Ocupado por Propietario' ? (
+                            <span className="text-[11px] text-emerald-700 dark:text-emerald-400 font-semibold">
+                              Vive el Propietario
+                            </span>
+                          ) : (
+                            <span className="text-[11px] text-[#7d776f] dark:text-slate-400 italic">
+                              Desocupado / Vacío
+                            </span>
+                          )}
+                        </td>
+
+                        <td className="py-3 px-4">
+                          <div className="font-bold text-[#262422] dark:text-white font-mono">
+                            {unidad.areaM2 ? `${unidad.areaM2} m²` : '—'}
                           </div>
-                          <span className="text-[10px] px-2 py-0.2 rounded-md bg-purple-100 text-purple-800 font-bold">
-                            Inquilino (Contrato Privado)
+                          <div className="text-[11px] text-[#7d776f] dark:text-slate-400">
+                            Alícuota:{' '}
+                            <span className="font-bold">
+                              {unidad.alicuota ? `${unidad.alicuota}%` : '—'}
+                            </span>
+                          </div>
+                          <div className="text-[11px] text-blue-700 dark:text-blue-400 font-mono font-bold mt-0.5">
+                            Bs.{' '}
+                            {(
+                              (15500 *
+                                (unidad.alicuota || (unidad.areaM2 ? unidad.areaM2 / 16 : 0))) /
+                              100
+                            ).toFixed(2)}
+                            /mes
+                          </div>
+                        </td>
+
+                        <td className="py-3 px-4">
+                          <div className="text-xs text-[#262422] dark:text-white flex items-center gap-1">
+                            <Car className="w-3.5 h-3.5 text-[#7d776f]" />
+                            <span>{unidad.parqueo || 'Sin parqueo'}</span>
+                          </div>
+                          <div className="text-[11px] text-[#7d776f] dark:text-slate-400 flex items-center gap-1">
+                            <Box className="w-3.5 h-3.5 text-[#7d776f]" />
+                            <span>{unidad.baulera || 'Sin baulera'}</span>
+                          </div>
+                        </td>
+
+                        <td className="py-3 px-4">
+                          <span
+                            className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-extrabold ${
+                              unidad.estado === 'Ocupado por Propietario'
+                                ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-400 border border-emerald-300'
+                                : unidad.estado === 'Alquilado'
+                                  ? 'bg-purple-100 text-purple-800 dark:bg-purple-950/60 dark:text-purple-400 border border-purple-300'
+                                  : 'bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-400 border border-amber-300'
+                            }`}
+                          >
+                            {unidad.estado}
                           </span>
-                        </div>
-                      ) : unidad.estado === 'Ocupado por Propietario' ? (
-                        <span className="text-[11px] text-emerald-700 dark:text-emerald-400 font-semibold">
-                          Vive el Propietario
-                        </span>
-                      ) : (
-                        <span className="text-[11px] text-[#7d776f] dark:text-slate-400 italic">
-                          Desocupado / Vacío
-                        </span>
-                      )}
-                    </td>
+                        </td>
 
-                    <td className="py-3 px-4">
-                      <div className="font-bold text-[#262422] dark:text-white font-mono">
-                        {unidad.areaM2 ? `${unidad.areaM2} m²` : '—'}
-                      </div>
-                      <div className="text-[11px] text-[#7d776f] dark:text-slate-400">
-                        Alícuota: <span className="font-bold">{unidad.alicuota ? `${unidad.alicuota}%` : '—'}</span>
-                      </div>
-                      <div className="text-[11px] text-blue-700 dark:text-blue-400 font-mono font-bold mt-0.5">
-                        Bs. {(15500 * ((unidad.alicuota || (unidad.areaM2 ? (unidad.areaM2 / 16) : 0))) / 100).toFixed(2)}/mes
-                      </div>
-                    </td>
-
-                    <td className="py-3 px-4">
-                      <div className="text-xs text-[#262422] dark:text-white flex items-center gap-1">
-                        <Car className="w-3.5 h-3.5 text-[#7d776f]" />
-                        <span>{unidad.parqueo || 'Sin parqueo'}</span>
-                      </div>
-                      <div className="text-[11px] text-[#7d776f] dark:text-slate-400 flex items-center gap-1">
-                        <Box className="w-3.5 h-3.5 text-[#7d776f]" />
-                        <span>{unidad.baulera || 'Sin baulera'}</span>
-                      </div>
-                    </td>
-
-                    <td className="py-3 px-4">
-                      <span
-                        className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-extrabold ${
-                          unidad.estado === 'Ocupado por Propietario'
-                            ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-400 border border-emerald-300'
-                            : unidad.estado === 'Alquilado'
-                              ? 'bg-purple-100 text-purple-800 dark:bg-purple-950/60 dark:text-purple-400 border border-purple-300'
-                              : 'bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-400 border border-amber-300'
-                        }`}
-                      >
-                        {unidad.estado}
-                      </span>
-                    </td>
-
-                    <td className="py-3 px-4 text-right">
-                      <div className="flex items-center justify-end gap-1.5">
-                        <button
-                          onClick={() => setSelectedUnidad(unidad)}
-                          className="px-2 py-1 rounded-lg bg-blue-100 text-blue-800 hover:bg-blue-200 dark:bg-blue-950/60 dark:text-blue-300 text-xs font-bold transition-all cursor-pointer flex items-center gap-1"
-                          title="Ver Ficha y Extracto de Expensa"
-                        >
-                          <Eye className="w-3.5 h-3.5" />
-                          Extracto
-                        </button>
-                        <button
-                          onClick={() => {
-                            setUnidadToEdit(unidad)
-                            setIsEditModalOpen(true)
-                          }}
-                          className="p-1.5 rounded-lg text-[#5c5750] hover:text-[#262422] hover:bg-[#ded8cc] dark:text-slate-400 dark:hover:text-white dark:hover:bg-slate-800 transition-colors"
-                          title="Editar Unidad"
-                        >
-                          <Edit className="w-4 h-4" />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
-      </div>
-    </>
-  ) : activeTab === 'tipos' ? (
-    <TiposDepartamentosTab
-      tipos={tiposDepto}
-      unidades={unidades}
-      onSaveTipo={handleSaveTipoDepto}
-      onDeleteTipo={handleDeleteTipoDepto}
-      onResetDefaults={handleResetDefaultTipos}
-      onSincronizarUnidadesTipo={handleSincronizarUnidadesTipo}
-      showToast={showToast}
-    />
-  ) : (
-    <ParametrosDepartamentosTab
-      unidades={unidades}
-      onUpdateUnidad={handleUpdateUnidadParametros}
-      onUpdateMultiple={handleUpdateMultipleParametros}
-      showToast={showToast}
-    />
-  )}
+                        <td className="py-3 px-4 text-right">
+                          <div className="flex items-center justify-end gap-1.5">
+                            <button
+                              onClick={() => setSelectedUnidad(unidad)}
+                              className="px-2 py-1 rounded-lg bg-blue-100 text-blue-800 hover:bg-blue-200 dark:bg-blue-950/60 dark:text-blue-300 text-xs font-bold transition-all cursor-pointer flex items-center gap-1"
+                              title="Ver Ficha y Extracto de Expensa"
+                            >
+                              <Eye className="w-3.5 h-3.5" />
+                              Extracto
+                            </button>
+                            <button
+                              onClick={() => {
+                                setUnidadToEdit(unidad)
+                                setIsEditModalOpen(true)
+                              }}
+                              className="p-1.5 rounded-lg text-[#5c5750] hover:text-[#262422] hover:bg-[#ded8cc] dark:text-slate-400 dark:hover:text-white dark:hover:bg-slate-800 transition-colors"
+                              title="Editar Unidad"
+                            >
+                              <Edit className="w-4 h-4" />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </>
+      ) : activeTab === 'tipos' ? (
+        <TiposDepartamentosTab
+          tipos={tiposDepto}
+          unidades={unidades}
+          onSaveTipo={handleSaveTipoDepto}
+          onDeleteTipo={handleDeleteTipoDepto}
+          onResetDefaults={handleResetDefaultTipos}
+          onSincronizarUnidadesTipo={handleSincronizarUnidadesTipo}
+          showToast={showToast}
+        />
+      ) : (
+        <ParametrosDepartamentosTab
+          unidades={unidades}
+          onUpdateUnidad={handleUpdateUnidadParametros}
+          onUpdateMultiple={handleUpdateMultipleParametros}
+          showToast={showToast}
+        />
+      )}
 
       {/* MODAL CREAR DEPARTAMENTO */}
       <CrearDepartamentoModal

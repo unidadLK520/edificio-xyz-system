@@ -6,6 +6,7 @@
 @custom-variant dark (&:where(.dark, .dark *));
 
 :root {
+  color-scheme: light;
   /* Modo Claro - Tono Lino / Arena Desaturado y Mate (Sin brillos blancos) */
   --background: #e6e2da;
   --foreground: #262422;
@@ -19,6 +20,7 @@
 }
 
 .dark {
+  color-scheme: dark;
   /* Modo Oscuro */
   --background: #020617;
   --foreground: #f8fafc;
@@ -29,6 +31,23 @@
   --muted: #1e293b;
   --muted-foreground: #94a3b8;
   --border: #1e293b;
+}
+
+/* Soporte de contraste para controles nativos y listas desplegables */
+select option {
+  background-color: #ede9e1;
+  color: #262422;
+}
+
+.dark select option {
+  background-color: #0f172a;
+  color: #f8fafc;
+}
+
+input,
+textarea,
+select {
+  color-scheme: inherit;
 }
 
 body {

@@ -56,7 +56,7 @@ export interface UnidadItem {
   baulera?: string
   fechaRegistro?: string
   historialOcupantes?: HistorialOcupanteItem[]
-  // Parámetros de cobro y medidores de agua (Reglas Pizarra Docente)
+  // Parámetros de cobro y medidores de agua (Reglas del Edificio XYZ)
   expensaBase?: number
   codigoMedidor?: string
   lecturaAnteriorAgua?: number
@@ -96,7 +96,7 @@ export interface DepartamentoFormData {
   otrosExtras?: number
 }
 
-// Configuración Global de Parámetros (Pizarra Docente)
+// Configuración Global de Parámetros de Cobro
 export interface ParametrosCobroConfig {
   diaLimitePago: number // ej. 10 (< 10/Mes -> Mora = 0; >= 10/Mes -> Mora)
   tipoMora: 'porcentaje' | 'monto_fijo' // 10% vs Bs 50

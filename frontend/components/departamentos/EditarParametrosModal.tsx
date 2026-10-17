@@ -3,7 +3,17 @@
 'use client'
 
 import React, { useState, useEffect } from 'react'
-import { X, Save, Gauge, Calculator, Droplets, Calendar, User, ShieldAlert, CheckCircle2 } from 'lucide-react'
+import {
+  X,
+  Save,
+  Gauge,
+  Calculator,
+  Droplets,
+  Calendar,
+  User,
+  ShieldAlert,
+  CheckCircle2
+} from 'lucide-react'
 import { UnidadItem, ParametrosCobroConfig } from './types'
 
 interface EditarParametrosModalProps {
@@ -25,26 +35,42 @@ export default function EditarParametrosModal({
 
   // Estados locales editables
   const [expensaBase, setExpensaBase] = useState<number>(
-    depto.expensaBase ?? (depto.tipologia?.includes('Tipo A') ? config.expensaBaseTipoA : depto.tipologia?.includes('Tipo B') ? config.expensaBaseTipoB : config.expensaBaseTipoC)
+    depto.expensaBase ??
+      (depto.tipologia?.includes('Tipo A')
+        ? config.expensaBaseTipoA
+        : depto.tipologia?.includes('Tipo B')
+          ? config.expensaBaseTipoB
+          : config.expensaBaseTipoC)
   )
-  const [codigoMedidor, setCodigoMedidor] = useState<string>(depto.codigoMedidor || `MED-${depto.numero}`)
-  const [lecturaAnteriorAgua, setLecturaAnteriorAgua] = useState<number>(depto.lecturaAnteriorAgua ?? 940)
+  const [codigoMedidor, setCodigoMedidor] = useState<string>(
+    depto.codigoMedidor || `MED-${depto.numero}`
+  )
+  const [lecturaAnteriorAgua, setLecturaAnteriorAgua] = useState<number>(
+    depto.lecturaAnteriorAgua ?? 940
+  )
   const [lecturaActualAgua, setLecturaActualAgua] = useState<number>(depto.lecturaActualAgua ?? 945)
-  const [tarifaAguaM3, setTarifaAguaM3] = useState<number>(depto.tarifaAguaM3 ?? config.tarifaAguaM3)
+  const [tarifaAguaM3, setTarifaAguaM3] = useState<number>(
+    depto.tarifaAguaM3 ?? config.tarifaAguaM3
+  )
   const [otrosExtras, setOtrosExtras] = useState<number>(depto.otrosExtras ?? 0)
-  const [fechaLecturaAnterior, setFechaLecturaAnterior] = useState<string>(depto.fechaLecturaAnterior || '30/Sep/2026')
-  const [fechaLecturaActual, setFechaLecturaActual] = useState<string>(depto.fechaLecturaActual || '31/Oct/2026')
+  const [fechaLecturaAnterior, setFechaLecturaAnterior] = useState<string>(
+    depto.fechaLecturaAnterior || '30/Sep/2026'
+  )
+  const [fechaLecturaActual, setFechaLecturaActual] = useState<string>(
+    depto.fechaLecturaActual || '31/Oct/2026'
+  )
 
-  // Cálculos en tiempo real según la pizarra
+  // Cálculos en tiempo real según reglas de cobro
   const consumoCubos = Math.max(0, lecturaActualAgua - lecturaAnteriorAgua)
   const totalAgua = consumoCubos * tarifaAguaM3
-  const subtotalPizarra = expensaBase + totalAgua + otrosExtras
+  const subtotalBaseAgua = expensaBase + totalAgua + otrosExtras
 
   // Mora según configuración (< 10 -> 0; >= 10 -> mora)
-  const moraProyectada = config.tipoMora === 'porcentaje'
-    ? subtotalPizarra * (config.valorMoraPorcentaje / 100)
-    : config.valorMoraFijo
-  const totalConMora = subtotalPizarra + moraProyectada
+  const moraProyectada =
+    config.tipoMora === 'porcentaje'
+      ? subtotalBaseAgua * (config.valorMoraPorcentaje / 100)
+      : config.valorMoraFijo
+  const totalConMora = subtotalBaseAgua + moraProyectada
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
@@ -68,7 +94,6 @@ export default function EditarParametrosModal({
   return (
     <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 backdrop-blur-xs">
       <div className="w-full max-w-2xl bg-[#ede9e1] dark:bg-slate-900 rounded-3xl border border-[#cec8bc] dark:border-slate-800 shadow-2xl p-6 sm:p-7 space-y-4 max-h-[92vh] overflow-y-auto animate-in fade-in zoom-in-95 duration-200 text-[#262422] dark:text-slate-100">
-        
         {/* Header */}
         <div className="flex items-center justify-between border-b border-[#cec8bc] dark:border-slate-800 pb-3">
           <div className="flex items-center gap-3">
@@ -84,7 +109,8 @@ export default function EditarParametrosModal({
                 Editar Datos de Cobro — Dpto {depto.numero}
               </h3>
               <p className="text-xs text-[#7d776f] dark:text-slate-400">
-                {depto.tipologia || 'Tipo A (60 m²)'} • Titular: {depto.propietario?.nombre || 'Sin titular'}
+                {depto.tipologia || 'Tipo A (60 m²)'} • Titular:{' '}
+                {depto.propietario?.nombre || 'Sin titular'}
               </p>
             </div>
           </div>
@@ -97,16 +123,12 @@ export default function EditarParametrosModal({
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4 text-xs">
-          
           {/* SECCIÓN 1: EXPENSA BASE */}
           <div className="p-4 rounded-2xl bg-white/70 dark:bg-slate-950/60 border border-[#cec8bc] dark:border-slate-800 space-y-3">
             <div className="flex items-center justify-between">
               <span className="font-extrabold text-[#262422] dark:text-white text-xs flex items-center gap-1.5">
                 <Calculator className="w-4 h-4 text-blue-600" />
                 1. Expensa Base Fijada
-              </span>
-              <span className="text-[11px] text-[#7d776f]">
-                Según pizarra docente: Tipo A (Bs 300), Tipo B (Bs 350), Tipo C (Bs 400)
               </span>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -133,7 +155,7 @@ export default function EditarParametrosModal({
                   value={otrosExtras}
                   onChange={(e) => setOtrosExtras(Number(e.target.value))}
                   className="w-full px-3 py-2 rounded-xl bg-[#dfd9ce] dark:bg-slate-800 border border-[#cec8bc] dark:border-slate-700 font-mono text-xs text-[#262422] dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-600"
-                  placeholder="Ej. +10, +12, +18 (según pizarra)"
+                  placeholder="0.00"
                 />
               </div>
             </div>
@@ -161,8 +183,8 @@ export default function EditarParametrosModal({
                   required
                   value={codigoMedidor}
                   onChange={(e) => setCodigoMedidor(e.target.value)}
-                  className="w-full px-3 py-2 rounded-xl bg-white dark:bg-slate-900 border border-blue-200 dark:border-blue-800 font-mono text-xs focus:outline-none focus:ring-2 focus:ring-blue-600"
-                  placeholder="Ej. MED-A1"
+                  className="w-full px-3 py-2 rounded-xl bg-white dark:bg-slate-900 border border-blue-200 dark:border-blue-800 font-mono text-xs text-[#262422] dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-600"
+                  placeholder="Código del medidor"
                 />
               </div>
               <div>
@@ -175,10 +197,12 @@ export default function EditarParametrosModal({
                   required
                   value={lecturaAnteriorAgua}
                   onChange={(e) => setLecturaAnteriorAgua(Number(e.target.value))}
-                  className="w-full px-3 py-2 rounded-xl bg-white dark:bg-slate-900 border border-blue-200 dark:border-blue-800 font-mono font-bold text-xs focus:outline-none focus:ring-2 focus:ring-blue-600"
-                  placeholder="Ej. 940 (30/Sep)"
+                  className="w-full px-3 py-2 rounded-xl bg-white dark:bg-slate-900 border border-blue-200 dark:border-blue-800 font-mono font-bold text-xs text-[#262422] dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-600"
+                  placeholder="0.00"
                 />
-                <span className="text-[10px] text-[#7d776f] mt-0.5 block font-mono">Toma: {fechaLecturaAnterior}</span>
+                <span className="text-[10px] text-[#7d776f] mt-0.5 block font-mono">
+                  Toma: {fechaLecturaAnterior}
+                </span>
               </div>
               <div>
                 <label className="block font-bold mb-1 text-[#5c5750] dark:text-slate-300">
@@ -190,10 +214,12 @@ export default function EditarParametrosModal({
                   required
                   value={lecturaActualAgua}
                   onChange={(e) => setLecturaActualAgua(Number(e.target.value))}
-                  className="w-full px-3 py-2 rounded-xl bg-white dark:bg-slate-900 border border-blue-200 dark:border-blue-800 font-mono font-bold text-xs focus:outline-none focus:ring-2 focus:ring-blue-600"
-                  placeholder="Ej. 945 (31/Oct)"
+                  className="w-full px-3 py-2 rounded-xl bg-white dark:bg-slate-900 border border-blue-200 dark:border-blue-800 font-mono font-bold text-xs text-[#262422] dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-600"
+                  placeholder="0.00"
                 />
-                <span className="text-[10px] text-[#7d776f] mt-0.5 block font-mono">Toma: {fechaLecturaActual}</span>
+                <span className="text-[10px] text-[#7d776f] mt-0.5 block font-mono">
+                  Toma: {fechaLecturaActual}
+                </span>
               </div>
             </div>
 
@@ -202,16 +228,14 @@ export default function EditarParametrosModal({
               <div className="flex items-center gap-2">
                 <span className="text-[#5c5750] dark:text-slate-400">Consumo Calculado:</span>
                 <span className="px-2 py-0.5 rounded-lg bg-blue-100 dark:bg-blue-950 text-blue-800 dark:text-blue-300 font-black">
-                  {consumoCubos.toFixed(1)} cubos (m³)
+                  {consumoCubos.toFixed(1)} m³
                 </span>
-                <span className="text-[#7d776f] text-[11px]">(945 - 940)</span>
               </div>
               <div className="flex items-center gap-2">
-                <span className="text-[#5c5750] dark:text-slate-400">Costo Agua:</span>
+                <span className="text-[#5c5750] dark:text-slate-400">Total Agua:</span>
                 <span className="font-extrabold text-blue-900 dark:text-blue-300 text-sm">
                   Bs. {totalAgua.toFixed(2)}
                 </span>
-                <span className="text-[#7d776f] text-[11px]">({consumoCubos} × Bs {tarifaAguaM3})</span>
               </div>
             </div>
           </div>
@@ -219,7 +243,7 @@ export default function EditarParametrosModal({
           {/* SECCIÓN 3: RESUMEN DE COBRO Y SIMULACIÓN DE MORA */}
           <div className="p-4 rounded-2xl bg-[#dfd9ce]/60 dark:bg-slate-950/60 border border-[#cec8bc] dark:border-slate-800 space-y-2.5">
             <span className="font-extrabold text-[#262422] dark:text-white text-xs block">
-              3. Resumen Liquidado según Reglas de la Pizarra
+              3. Resumen Liquidado según Reglas Administrativas
             </span>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-center font-mono text-xs">
               <div className="p-2.5 bg-white/60 dark:bg-slate-900/60 rounded-xl border border-[#cec8bc] dark:border-slate-800">
@@ -228,20 +252,31 @@ export default function EditarParametrosModal({
               </div>
               <div className="p-2.5 bg-white/60 dark:bg-slate-900/60 rounded-xl border border-[#cec8bc] dark:border-slate-800">
                 <span className="text-[10px] text-[#7d776f] block uppercase">Agua / Extras</span>
-                <span className="font-bold text-blue-700 dark:text-blue-400">Bs. {(totalAgua + otrosExtras).toFixed(2)}</span>
+                <span className="font-bold text-blue-700 dark:text-blue-400">
+                  Bs. {(totalAgua + otrosExtras).toFixed(2)}
+                </span>
               </div>
               <div className="p-2.5 bg-emerald-50 dark:bg-emerald-950/40 rounded-xl border border-emerald-200 dark:border-emerald-800">
-                <span className="text-[10px] text-emerald-800 dark:text-emerald-300 block uppercase font-bold">&lt; Día 10 (Sin Mora)</span>
-                <span className="font-black text-sm text-emerald-700 dark:text-emerald-300">Bs. {subtotalPizarra.toFixed(2)}</span>
+                <span className="text-[10px] text-emerald-800 dark:text-emerald-300 block uppercase font-bold">
+                  &lt; Día 10 (Sin Mora)
+                </span>
+                <span className="font-black text-sm text-emerald-700 dark:text-emerald-300">
+                  Bs. {subtotalBaseAgua.toFixed(2)}
+                </span>
               </div>
               <div className="p-2.5 bg-red-50 dark:bg-red-950/40 rounded-xl border border-red-200 dark:border-red-800">
-                <span className="text-[10px] text-red-800 dark:text-red-300 block uppercase font-bold">&ge; Día 10 ({config.tipoMora === 'porcentaje' ? `${config.valorMoraPorcentaje}%` : `+Bs ${config.valorMoraFijo}`})</span>
-                <span className="font-black text-sm text-red-700 dark:text-red-300">Bs. {totalConMora.toFixed(2)}</span>
+                <span className="text-[10px] text-red-800 dark:text-red-300 block uppercase font-bold">
+                  &ge; Día 10 (
+                  {config.tipoMora === 'porcentaje'
+                    ? `${config.valorMoraPorcentaje}%`
+                    : `+Bs ${config.valorMoraFijo}`}
+                  )
+                </span>
+                <span className="font-black text-sm text-red-700 dark:text-red-300">
+                  Bs. {totalConMora.toFixed(2)}
+                </span>
               </div>
             </div>
-            <p className="text-[11px] text-[#7d776f] dark:text-slate-400">
-              ℹ️ <strong>Ejemplo Pizarra:</strong> Para A1 (Base Bs 300 + Agua Bs 25 = Total Bs 325.00). Si no paga antes del día 10, se aplica el recargo de mora configurado.
-            </p>
           </div>
 
           {/* Botones de acción */}
