@@ -3,7 +3,7 @@
 
 import React, { useState } from 'react'
 import { Building2, X, Percent, Car, Box, AlertCircle } from 'lucide-react'
-import { DepartamentoFormData, TipoUnidad } from './types'
+import { DepartamentoFormData, TipoUnidad, TipoDepartamentoItem } from './types'
 
 interface CrearDepartamentoModalProps {
   isOpen: boolean
@@ -11,6 +11,7 @@ interface CrearDepartamentoModalProps {
   onSubmit: (formData: DepartamentoFormData) => Promise<void> | void
   totalAreaConstruida: number
   errorMessage?: string | null
+  tiposDisponibles?: TipoDepartamentoItem[]
 }
 
 export default function CrearDepartamentoModal({
@@ -18,7 +19,8 @@ export default function CrearDepartamentoModal({
   onClose,
   onSubmit,
   totalAreaConstruida,
-  errorMessage
+  errorMessage,
+  tiposDisponibles
 }: CrearDepartamentoModalProps) {
   const [formData, setFormData] = useState<DepartamentoFormData>({
     tipoUnidad: 'Departamento',
@@ -164,6 +166,35 @@ export default function CrearDepartamentoModal({
 
           {tipo === 'Departamento' && (
             <>
+              {tiposDisponibles && tiposDisponibles.length > 0 && (
+                <div>
+                  <label className="block text-xs font-bold text-[#5c5750] dark:text-slate-300 mb-1">
+                    Tipología de Departamento
+                  </label>
+                  <select
+                    value={formData.tipologia || ''}
+                    onChange={(e) => {
+                      const sel = e.target.value
+                      const matched = tiposDisponibles.find((t) => t.nombre === sel)
+                      setFormData({
+                        ...formData,
+                        tipologia: sel,
+                        areaM2: matched ? matched.areaM2 : formData.areaM2,
+                        expensaBase: matched ? matched.expensaBase : formData.expensaBase
+                      })
+                    }}
+                    className="w-full px-3 py-2 rounded-xl bg-[#ded8cc] dark:bg-slate-800 border border-[#cec8bc] dark:border-slate-700 text-xs text-[#262422] dark:text-white font-bold focus:outline-none focus:ring-2 focus:ring-blue-600 cursor-pointer mb-1"
+                  >
+                    <option value="">Seleccionar tipología...</option>
+                    {tiposDisponibles.map((t) => (
+                      <option key={t.id} value={t.nombre}>
+                        {t.nombre} ({t.areaM2} m² • Bs. {t.expensaBase.toFixed(2)})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs font-bold text-[#5c5750] dark:text-slate-300 mb-1">
