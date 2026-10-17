@@ -27,12 +27,36 @@ interface ModalEditarTipoDeptoProps {
 }
 
 const COLOR_OPTIONS = [
-  { key: 'blue', label: 'Azul', bg: 'bg-blue-100 text-blue-800 dark:bg-blue-950/60 dark:text-blue-300 border-blue-300 dark:border-blue-800' },
-  { key: 'emerald', label: 'Esmeralda', bg: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300 border-emerald-300 dark:border-emerald-800' },
-  { key: 'purple', label: 'Púrpura', bg: 'bg-purple-100 text-purple-800 dark:bg-purple-950/60 dark:text-purple-300 border-purple-300 dark:border-purple-800' },
-  { key: 'amber', label: 'Ámbar', bg: 'bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300 border-amber-300 dark:border-amber-800' },
-  { key: 'rose', label: 'Rosa / Tinto', bg: 'bg-rose-100 text-rose-800 dark:bg-rose-950/60 dark:text-rose-300 border-rose-300 dark:border-rose-800' },
-  { key: 'indigo', label: 'Índigo', bg: 'bg-indigo-100 text-indigo-800 dark:bg-indigo-950/60 dark:text-indigo-300 border-indigo-300 dark:border-indigo-800' }
+  {
+    key: 'blue',
+    label: 'Azul',
+    bg: 'bg-blue-100 text-blue-800 dark:bg-blue-950/60 dark:text-blue-300 border-blue-300 dark:border-blue-800'
+  },
+  {
+    key: 'emerald',
+    label: 'Esmeralda',
+    bg: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300 border-emerald-300 dark:border-emerald-800'
+  },
+  {
+    key: 'purple',
+    label: 'Púrpura',
+    bg: 'bg-purple-100 text-purple-800 dark:bg-purple-950/60 dark:text-purple-300 border-purple-300 dark:border-purple-800'
+  },
+  {
+    key: 'amber',
+    label: 'Ámbar',
+    bg: 'bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300 border-amber-300 dark:border-amber-800'
+  },
+  {
+    key: 'rose',
+    label: 'Rosa / Tinto',
+    bg: 'bg-rose-100 text-rose-800 dark:bg-rose-950/60 dark:text-rose-300 border-rose-300 dark:border-rose-800'
+  },
+  {
+    key: 'indigo',
+    label: 'Índigo',
+    bg: 'bg-indigo-100 text-indigo-800 dark:bg-indigo-950/60 dark:text-indigo-300 border-indigo-300 dark:border-indigo-800'
+  }
 ]
 
 export default function ModalEditarTipoDepto({
@@ -116,7 +140,6 @@ export default function ModalEditarTipoDepto({
   return (
     <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
       <div className="w-full max-w-xl bg-[#ede9e1] dark:bg-slate-900 rounded-3xl border border-[#cec8bc] dark:border-slate-800 shadow-2xl overflow-hidden my-8 animate-in fade-in zoom-in-95 duration-200">
-        
         {/* ENCABEZADO */}
         <div className="p-5 border-b border-[#cec8bc] dark:border-slate-800 flex items-center justify-between bg-[#dfd9ce]/60 dark:bg-slate-950/50">
           <div className="flex items-center gap-3">
@@ -125,7 +148,9 @@ export default function ModalEditarTipoDepto({
             </div>
             <div>
               <h2 className="text-lg font-extrabold text-[#262422] dark:text-white">
-                {isEditing ? `Editar Tipología: ${tipoToEdit?.nombre}` : 'Registrar Nuevo Tipo de Departamento'}
+                {isEditing
+                  ? `Editar Tipología: ${tipoToEdit?.nombre}`
+                  : 'Registrar Nuevo Tipo de Departamento'}
               </h2>
               <p className="text-xs text-[#66615b] dark:text-slate-400">
                 Configuración de superficie, expensa base y especificaciones arquitectónicas
@@ -182,7 +207,7 @@ export default function ModalEditarTipoDepto({
           </div>
 
           {/* Área m² y Expensa Base */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 p-4 rounded-2xl bg-[#dfd9ce]/50 dark:bg-slate-950/40 border border-[#cec8bc] dark:border-slate-800">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 p-4 rounded-2xl bg-[#dfd9ce]/50 dark:bg-slate-950/40 border border-[#cec8bc] dark:border-slate-800">
             <div>
               <label className="block text-xs font-bold text-[#5c5750] dark:text-slate-300 mb-1 flex items-center gap-1">
                 <Maximize2 className="w-3.5 h-3.5 text-blue-600" />
@@ -203,7 +228,10 @@ export default function ModalEditarTipoDepto({
                 </span>
               </div>
               <p className="text-[10px] text-[#7d776f] mt-1">
-                Alícuota est: <span className="font-bold text-rose-700 dark:text-rose-400">{alicuotaCalculada}%</span>
+                Alícuota est:{' '}
+                <span className="font-bold text-rose-700 dark:text-rose-400">
+                  {alicuotaCalculada}%
+                </span>
               </p>
             </div>
 
@@ -219,28 +247,16 @@ export default function ModalEditarTipoDepto({
                   min="0"
                   required
                   value={formData.expensaBase}
-                  onChange={(e) => setFormData({ ...formData, expensaBase: Number(e.target.value) })}
+                  onChange={(e) =>
+                    setFormData({ ...formData, expensaBase: Number(e.target.value) })
+                  }
                   className="w-full px-3 py-2 bg-[#ede9e1] dark:bg-slate-900 border border-[#cec8bc] dark:border-slate-700 rounded-xl text-xs font-mono font-bold text-[#262422] dark:text-white focus:outline-none focus:ring-2 focus:ring-rose-600"
                 />
                 <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-bold text-[#7d776f]">
                   Bs
                 </span>
               </div>
-              <p className="text-[10px] text-[#7d776f] mt-1">
-                Regla base de cobro mensual
-              </p>
-            </div>
-
-            <div>
-              <label className="block text-xs font-bold text-[#5c5750] dark:text-slate-300 mb-1">
-                Costo por m²
-              </label>
-              <div className="px-3 py-2 bg-[#ede9e1] dark:bg-slate-900 border border-[#cec8bc] dark:border-slate-700 rounded-xl text-xs font-mono font-bold text-[#262422] dark:text-white">
-                {formData.areaM2 > 0 ? (formData.expensaBase / formData.areaM2).toFixed(2) : '0.00'} Bs/m²
-              </div>
-              <p className="text-[10px] text-[#7d776f] mt-1">
-                Tarifa unitaria calculada
-              </p>
+              <p className="text-[10px] text-[#7d776f] mt-1">Regla base de cobro mensual</p>
             </div>
           </div>
 
@@ -346,11 +362,15 @@ export default function ModalEditarTipoDepto({
                 onChange={(e) => setCascadaAUnidades(e.target.checked)}
                 className="mt-0.5 w-4 h-4 rounded text-rose-600 focus:ring-rose-500 cursor-pointer"
               />
-              <label htmlFor="checkCascada" className="text-xs text-amber-950 dark:text-amber-200 cursor-pointer">
+              <label
+                htmlFor="checkCascada"
+                className="text-xs text-amber-950 dark:text-amber-200 cursor-pointer"
+              >
                 <span className="font-extrabold block">
                   Actualizar departamentos asociados a este tipo
                 </span>
-                Sincronizar la expensa base (Bs. {formData.expensaBase}) y superficie ({formData.areaM2} m²) en todos los departamentos que ya tengan asignado este tipo.
+                Sincronizar la expensa base (Bs. {formData.expensaBase}) y superficie (
+                {formData.areaM2} m²) en todos los departamentos que ya tengan asignado este tipo.
               </label>
             </div>
           )}
