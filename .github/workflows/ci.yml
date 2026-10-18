@@ -22,6 +22,8 @@ jobs:
       CORS_ORIGIN: "http://localhost:3000"
       NODE_ENV: "production"
       SESSION_IDLE_TIMEOUT_MINUTES: "30"
+      MORA_CRON: "0 1 * * *"
+      MORA_CRON_ENABLED: "false"
 
     steps:
       - name: Checkout del repositorio
