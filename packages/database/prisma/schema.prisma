@@ -376,6 +376,9 @@ model Movimiento {
   fechaAnulacion      DateTime?             @map("fecha_anulacion") @db.Timestamp(6)
   idUsuarioAnulacion  Int?                  @map("id_usuario_anulacion")
   motivoAnulacion     String?               @map("motivo_anulacion") @db.Text
+  tercero             String?               @db.VarChar(120)
+  nroFactura          String?               @map("nro_factura") @db.VarChar(50)
+  metodoPago          String?               @map("metodo_pago") @db.VarChar(30)
   
   categoria           CategoriaMovimiento   @relation(fields: [idCategoria], references: [idCategoria])
   usuarioRegistro     Usuario?              @relation(fields: [idUsuarioRegistro], references: [idUsuario])
