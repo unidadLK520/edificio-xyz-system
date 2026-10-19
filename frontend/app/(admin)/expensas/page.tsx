@@ -202,13 +202,15 @@ export default function ExpensasPage() {
   // Formulario Emisión Masiva (Requisitos HU04)
   const [nuevoPeriodo, setNuevoPeriodo] = useState('2026-11-01')
   const [nuevaFechaVencimiento, setNuevaFechaVencimiento] = useState('2026-11-10')
-  const [modeloCalculo, setModeloCalculo] = useState<'alicuota' | 'fijo_tipo'>('alicuota')
-  const [tasaMoraInput, setTasaMoraInput] = useState(5)
   const [isSubmittingEmision, setIsSubmittingEmision] = useState(false)
+  const [emisionError, setEmisionError] = useState<string | null>(null)
   const [resultadoEmision, setResultadoEmision] = useState<{
     generadasCount: number
-    totalFacturado: number
-    observaciones: string[]
+    excepcionesCount: number
+    advertenciasCount: number
+    excepciones: Array<{ idDepartamento?: number; numero?: string; motivo: string }>
+    advertencias: Array<{ idDepartamento?: number; numero?: string; advertencia: string }>
+    message?: string
   } | null>(null)
 
   const showToast = (msg: string) => {
@@ -302,6 +304,7 @@ export default function ExpensasPage() {
 
     setIsSubmittingEmision(true)
     setResultadoEmision(null)
+    setEmisionError(null)
 
     try {
       const res = await fetch('/api/v1/expensas/generar-masivo', {
@@ -309,44 +312,32 @@ export default function ExpensasPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           periodo: nuevoPeriodo,
-          fechaVencimiento: nuevaFechaVencimiento,
-          modeloCalculo,
-          tasaInteresMora: tasaMoraInput
+          fechaVencimiento: nuevaFechaVencimiento
         })
       })
 
+      const json = await res.json().catch(() => ({}))
+
       if (res.ok) {
-        const json = await res.json()
         setResultadoEmision({
-          generadasCount: json.generadasCount || 18,
-          totalFacturado: json.totalFacturado || 14725.0,
-          observaciones: json.observaciones || [
-            'Dpto 103 (Tipo C): Unidad vacía — Expensa emitida al titular Laura Céspedes.',
-            'Dpto 105 (Tipo B): Unidad vacía — Expensa emitida al titular Sofía Romero.'
-          ]
+          generadasCount: json.generadasCount ?? 0,
+          excepcionesCount: json.excepcionesCount ?? (json.excepciones?.length || 0),
+          advertenciasCount: json.advertenciasCount ?? (json.advertencias?.length || 0),
+          excepciones: json.excepciones || [],
+          advertencias: json.advertencias || [],
+          message: json.message
         })
         await fetchExpensas()
-        showToast('¡Lote de expensas emitido exitosamente!')
+        showToast(json.message || '¡Lote de expensas emitido exitosamente!')
       } else {
-        // Fallback simulado para la UI
-        setResultadoEmision({
-          generadasCount: 20,
-          totalFacturado: 15500.0,
-          observaciones: [
-            'Todas las 20 unidades del edificio han generado su obligación correspondiente.',
-            'Se registraron 15 departamentos con inquilinos y 5 desocupados/ocupados por propietario.'
-          ]
-        })
-        showToast('¡Emisión masiva completada!')
+        const errorMsg = json.message || json.error || 'Error en la emisión masiva de expensas'
+        setEmisionError(errorMsg)
+        showErrorToast(errorMsg)
       }
-    } catch {
-      setResultadoEmision({
-        generadasCount: 20,
-        totalFacturado: 15500.0,
-        observaciones: [
-          'Emisión generada en modo local (20 departamentos catastrados).'
-        ]
-      })
+    } catch (err: any) {
+      const errorMsg = err?.message || 'Error de conexión al emitir expensas'
+      setEmisionError(errorMsg)
+      showErrorToast(errorMsg)
     } finally {
       setIsSubmittingEmision(false)
     }
@@ -1128,15 +1119,22 @@ export default function ExpensasPage() {
                   Generación Masiva de Expensas
                 </h3>
                 <p className="text-xs text-[#7d776f]">
-                  Emisión del lote mensual para los 20 departamentos catastrados.
+                  Emisión mensual por tipo de departamento y consumo de agua.
                 </p>
               </div>
-              <button onClick={() => setIsEmitirModalOpen(false)}>
+              <button onClick={() => { setIsEmitirModalOpen(false); setResultadoEmision(null); setEmisionError(null) }}>
                 <X className="w-5 h-5 text-[#7d776f] hover:text-[#262422]" />
               </button>
             </div>
 
             <form onSubmit={handleEmisionMasiva} className="space-y-4 text-xs">
+              {emisionError && (
+                <div className="p-3 bg-rose-100 dark:bg-rose-950/70 border border-rose-300 dark:border-rose-800 text-rose-900 dark:text-rose-200 rounded-xl flex items-center gap-2 text-xs">
+                  <AlertCircle className="w-4 h-4 shrink-0 text-rose-600 dark:text-rose-400" />
+                  <span>{emisionError}</span>
+                </div>
+              )}
+
               {/* Paso 1: Selección de Período con control antierror */}
               <div>
                 <label className="block font-bold text-[#262422] dark:text-white mb-1">
@@ -1169,62 +1167,58 @@ export default function ExpensasPage() {
                 />
               </div>
 
-              {/* Modelo de cálculo */}
-              <div>
-                <label className="block font-bold text-[#262422] dark:text-white mb-1">
-                  Regla de Cálculo de Expensa
-                </label>
-                <select
-                  value={modeloCalculo}
-                  onChange={(e) => setModeloCalculo(e.target.value as any)}
-                  className="w-full px-3 py-2 rounded-xl bg-[#dfd9ce] dark:bg-slate-800 border border-[#cec8bc] dark:border-slate-700 font-semibold"
-                >
-                  <option value="alicuota">Por Alícuotas de Superficie (Tipo A Bs 581.25 / B Bs 775 / C Bs 968.75)</option>
-                  <option value="fijo_tipo">Cuota Fija por Tipología (Tipo A Bs 300 / B Bs 350 / C Bs 400)</option>
-                </select>
-              </div>
-
-              {/* Resumen previo */}
-              <div className="p-3.5 rounded-2xl bg-[#dfd9ce]/60 dark:bg-slate-950/60 border border-[#cec8bc] dark:border-slate-800 space-y-1.5 font-mono">
-                <span className="font-sans font-bold text-xs block text-[#262422] dark:text-white">
-                  Resumen Previo de Emisión
-                </span>
-                <div className="flex justify-between text-[11px]">
-                  <span>Total Unidades del Edificio:</span>
-                  <span className="font-bold">20 Departamentos</span>
-                </div>
-                <div className="flex justify-between text-[11px]">
-                  <span>Superficie Total Catastrada:</span>
-                  <span className="font-bold">1,600.00 m²</span>
-                </div>
-                <div className="flex justify-between text-xs font-bold text-emerald-700 dark:text-emerald-400 pt-1 border-t">
-                  <span>Monto Total a Generar:</span>
-                  <span>{modeloCalculo === 'alicuota' ? 'Bs 15,500.00' : 'Bs 7,000.00'}</span>
-                </div>
+              <div className="p-3.5 rounded-2xl bg-[#dfd9ce]/60 dark:bg-slate-950/60 border border-[#cec8bc] dark:border-slate-800 space-y-1 text-[#5c5750] dark:text-slate-300 text-[11px]">
+                <p>
+                  ℹ️ El monto se calcula en base a la cuota del tipo asignado al departamento más el monto de agua registrado en el mes.
+                </p>
               </div>
 
               {/* Resultado de la operación y obligaciones */}
               {resultadoEmision && (
-                <div className="p-3.5 rounded-2xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-300 dark:border-emerald-800 space-y-2">
+                <div className="p-3.5 rounded-2xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-300 dark:border-emerald-800 space-y-3">
                   <div className="flex items-center gap-1.5 text-emerald-800 dark:text-emerald-300 font-bold text-xs">
-                    <CheckCircle2 className="w-4 h-4" />
-                    Resultado: {resultadoEmision.generadasCount} Expensas Generadas Correctamente
+                    <CheckCircle2 className="w-4 h-4 shrink-0" />
+                    <span>Resultado: {resultadoEmision.generadasCount} expensas generadas correctamente.</span>
                   </div>
-                  <div className="text-[11px] text-[#5c5750] dark:text-slate-300 space-y-1">
-                    {resultadoEmision.observaciones.map((obs, idx) => (
-                      <div key={idx} className="flex items-start gap-1">
-                        <AlertCircle className="w-3.5 h-3.5 text-amber-600 shrink-0 mt-0.5" />
-                        <span>{obs}</span>
-                      </div>
-                    ))}
-                  </div>
+
+                  {resultadoEmision.excepciones.length > 0 && (
+                    <div className="space-y-1 pt-2 border-t border-amber-200 dark:border-amber-900/50">
+                      <span className="font-bold text-[11px] text-amber-800 dark:text-amber-400 flex items-center gap-1">
+                        <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
+                        Excepciones ({resultadoEmision.excepciones.length}):
+                      </span>
+                      <ul className="text-[11px] text-[#5c5750] dark:text-slate-300 space-y-1 list-disc list-inside">
+                        {resultadoEmision.excepciones.map((exc, idx) => (
+                          <li key={idx}>
+                            <span className="font-semibold">Dpto {exc.numero || exc.idDepartamento}:</span> {exc.motivo}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+
+                  {resultadoEmision.advertencias.length > 0 && (
+                    <div className="space-y-1 pt-2 border-t border-sky-200 dark:border-sky-900/50">
+                      <span className="font-bold text-[11px] text-sky-800 dark:text-sky-400 flex items-center gap-1">
+                        <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                        Advertencias ({resultadoEmision.advertencias.length}):
+                      </span>
+                      <ul className="text-[11px] text-[#5c5750] dark:text-slate-300 space-y-1 list-disc list-inside">
+                        {resultadoEmision.advertencias.map((adv, idx) => (
+                          <li key={idx}>
+                            <span className="font-semibold">Dpto {adv.numero || adv.idDepartamento}:</span> {adv.advertencia}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
                 </div>
               )}
 
               <div className="flex justify-end gap-2 pt-3 border-t border-[#cec8bc] dark:border-slate-800">
                 <button
                   type="button"
-                  onClick={() => setIsEmitirModalOpen(false)}
+                  onClick={() => { setIsEmitirModalOpen(false); setResultadoEmision(null); setEmisionError(null) }}
                   className="px-4 py-2 rounded-xl text-xs font-bold text-[#7d776f]"
                 >
                   Cerrar
