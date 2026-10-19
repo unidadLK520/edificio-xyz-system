@@ -49,19 +49,7 @@ export default function ParametrosDepartamentosTab({
   showToast
 }: ParametrosDepartamentosTabProps) {
   // Configuración global de parámetros
-  const [config, setConfig] = useState<ParametrosCobroConfig>(() => {
-    if (typeof window !== 'undefined') {
-      const saved =
-        localStorage.getItem('edificio_xyz_config_parametros') ||
-        localStorage.getItem('edificio_xyz_config_cobros')
-      if (saved) {
-        try {
-          return JSON.parse(saved)
-        } catch {}
-      }
-    }
-    return DEFAULT_CONFIG_PARAMETROS
-  })
+  const [config, setConfig] = useState<ParametrosCobroConfig>(DEFAULT_CONFIG_PARAMETROS)
 
   const [reglaMoraActiva, setReglaMoraActiva] = useState<{ idReglaMora: number; tasaInteres: number; diasGracia: number; fechaCreacion: string; usuarioCreacion?: any } | null>(null)
   const [historialReglasMora, setHistorialReglasMora] = useState<any[]>([])
@@ -138,25 +126,11 @@ export default function ParametrosDepartamentosTab({
             ? config.expensaBaseTipoB
             : config.expensaBaseTipoC
 
-      // Valores de lecturas de agua
-      const lectAnt = u.lecturaAnteriorAgua ?? 240 + idx * 8
-      const lectAct = u.lecturaActualAgua ?? lectAnt + (idx % 3 === 0 ? 5 : idx % 2 === 0 ? 3 : 4)
-      const cubos = Math.max(0, lectAct - lectAnt)
-      const montoAg = cubos * config.tarifaAguaM3
-      const extras = u.otrosExtras ?? 0
-
       return {
         ...u,
         expensaBase: u.expensaBase ?? baseDefault,
-        codigoMedidor: u.codigoMedidor || `MED-${u.numero}`,
-        lecturaAnteriorAgua: lectAnt,
-        lecturaActualAgua: lectAct,
-        tarifaAguaM3: u.tarifaAguaM3 ?? config.tarifaAguaM3,
-        consumoAguaM3: cubos,
-        montoAgua: montoAg,
-        otrosExtras: extras,
-        fechaLecturaAnterior: u.fechaLecturaAnterior || '30/Sep/2026',
-        fechaLecturaActual: u.fechaLecturaActual || '31/Oct/2026'
+        montoAgua: u.montoAgua ?? 0,
+        otrosExtras: u.otrosExtras ?? 0
       }
     })
   })
@@ -167,10 +141,7 @@ export default function ParametrosDepartamentosTab({
 
   // Guardar configuración global
   const handleGuardarConfig = () => {
-    if (typeof window !== 'undefined') {
-      localStorage.setItem('edificio_xyz_config_parametros', JSON.stringify(config))
-    }
-    showToast('¡Parámetros globales de cobro y mora guardados correctamente!')
+    showToast('¡Parámetros globales de cobro y mora actualizados correctamente!')
   }
 
   // Modificación en línea de una fila
@@ -178,20 +149,7 @@ export default function ParametrosDepartamentosTab({
     setUnidadesLocales((prev) =>
       prev.map((u) => {
         if (u.id === id) {
-          const updated = { ...u, [campo]: valor }
-
-          // Si cambiaron las lecturas, recalcular cubos y monto de agua
-          if (campo === 'lecturaAnteriorAgua' || campo === 'lecturaActualAgua') {
-            const ant =
-              campo === 'lecturaAnteriorAgua' ? Number(valor) : updated.lecturaAnteriorAgua || 0
-            const act =
-              campo === 'lecturaActualAgua' ? Number(valor) : updated.lecturaActualAgua || 0
-            const consumo = Math.max(0, act - ant)
-            updated.consumoAguaM3 = consumo
-            updated.montoAgua = consumo * (updated.tarifaAguaM3 || config.tarifaAguaM3)
-          }
-
-          return updated
+          return { ...u, [campo]: valor }
         }
         return u
       })
@@ -219,8 +177,7 @@ export default function ParametrosDepartamentosTab({
         const matchSearch =
           u.numero.toLowerCase().includes(searchLower) ||
           (u.propietario && u.propietario.nombre.toLowerCase().includes(searchLower)) ||
-          (u.inquilinoActual && u.inquilinoActual.nombre.toLowerCase().includes(searchLower)) ||
-          (u.codigoMedidor && u.codigoMedidor.toLowerCase().includes(searchLower))
+          (u.inquilinoActual && u.inquilinoActual.nombre.toLowerCase().includes(searchLower))
 
         const matchTipo =
           filtroTipo === 'Todos' ||
@@ -236,7 +193,6 @@ export default function ParametrosDepartamentosTab({
   const totales = useMemo(() => {
     const list = unidadesLocales.filter((u) => u.tipoUnidad === 'Departamento')
     const totalBase = list.reduce((acc, u) => acc + (u.expensaBase || 0), 0)
-    const totalCubosAgua = list.reduce((acc, u) => acc + (u.consumoAguaM3 || 0), 0)
     const totalMontoAgua = list.reduce((acc, u) => acc + (u.montoAgua || 0), 0)
     const totalExtras = list.reduce((acc, u) => acc + (u.otrosExtras || 0), 0)
     const totalSinMora = totalBase + totalMontoAgua + totalExtras
@@ -250,7 +206,6 @@ export default function ParametrosDepartamentosTab({
 
     return {
       totalBase,
-      totalCubosAgua,
       totalMontoAgua,
       totalExtras,
       totalSinMora,
@@ -267,11 +222,11 @@ export default function ParametrosDepartamentosTab({
           <div className="flex items-center gap-2">
             <Sliders className="w-5 h-5 text-blue-700 dark:text-blue-400" />
             <h2 className="font-black text-base sm:text-lg text-blue-950 dark:text-blue-200">
-              Configuración de Parámetros de Cobro & Lecturas de Agua
+              Configuración de Parámetros de Cobro & Reglas de Mora
             </h2>
           </div>
           <p className="text-xs text-blue-800 dark:text-blue-300 mt-1 max-w-3xl leading-relaxed">
-            Administración de cuotas base por tipología, tarifas de medidores de agua potable y
+            Administración de cuotas base por tipología y regla de mora porcentual oficial del edificio.
             políticas de recargos por mora.
           </p>
         </div>
@@ -546,11 +501,8 @@ export default function ParametrosDepartamentosTab({
                 <th className="py-3 px-3">Departamento</th>
                 <th className="py-3 px-3">Titular / Ocupante</th>
                 <th className="py-3 px-3">Exp. Base (Bs)</th>
-                <th className="py-3 px-3">Medidor</th>
-                <th className="py-3 px-2">Lect. Anterior</th>
-                <th className="py-3 px-2">Lect. Actual</th>
-                <th className="py-3 px-2 text-center">Consumo (Cubos)</th>
-                <th className="py-3 px-2">Agua / Extras (Bs)</th>
+                <th className="py-3 px-3">Monto Agua (Bs)</th>
+                <th className="py-3 px-3">Otros Extras (Bs)</th>
                 <th className="py-3 px-3 font-black text-[#262422] dark:text-white">
                   Subtotal (&lt; 10)
                 </th>
@@ -563,12 +515,12 @@ export default function ParametrosDepartamentosTab({
             <tbody className="divide-y divide-[#cec8bc] dark:divide-slate-800">
               {deptosFiltrados.length === 0 ? (
                 <tr>
-                  <td colSpan={11} className="py-8 text-center text-[#7d776f]">
+                  <td colSpan={8} className="py-8 text-center text-[#7d776f]">
                     No se encontraron departamentos con los filtros aplicados.
                   </td>
                 </tr>
               ) : (
-                deptosFiltrados.map((u, idx) => {
+                deptosFiltrados.map((u) => {
                   const subtotalFila =
                     (u.expensaBase || 0) + (u.montoAgua || 0) + (u.otrosExtras || 0)
                   const moraFila = subtotalFila * ((config.valorMoraPorcentaje || 0) / 100)
@@ -617,51 +569,35 @@ export default function ParametrosDepartamentosTab({
                         </div>
                       </td>
 
-                      {/* Medidor Código */}
-                      <td className="py-2.5 px-3 font-mono text-[11px] text-[#5c5750] dark:text-slate-400">
-                        {u.codigoMedidor || `MED-${u.numero}`}
-                      </td>
-
-                      {/* Lectura Anterior Editable */}
-                      <td className="py-2.5 px-2">
-                        <input
-                          type="number"
-                          step="0.01"
-                          value={u.lecturaAnteriorAgua ?? 0}
-                          onChange={(e) =>
-                            handleCambioFila(u.id, 'lecturaAnteriorAgua', Number(e.target.value))
-                          }
-                          className="w-18 px-2 py-1 rounded-lg bg-white dark:bg-slate-950 border border-blue-200 dark:border-blue-800 font-mono text-xs text-[#262422] dark:text-white focus:ring-2 focus:ring-blue-600 focus:outline-none"
-                        />
-                      </td>
-
-                      {/* Lectura Actual Editable */}
-                      <td className="py-2.5 px-2">
-                        <input
-                          type="number"
-                          step="0.01"
-                          value={u.lecturaActualAgua ?? 0}
-                          onChange={(e) =>
-                            handleCambioFila(u.id, 'lecturaActualAgua', Number(e.target.value))
-                          }
-                          className="w-18 px-2 py-1 rounded-lg bg-white dark:bg-slate-950 border border-blue-200 dark:border-blue-800 font-mono font-bold text-xs text-[#262422] dark:text-white focus:ring-2 focus:ring-blue-600 focus:outline-none"
-                        />
-                      </td>
-
-                      {/* Consumo Calculado en Cubos */}
-                      <td className="py-2.5 px-2 text-center font-mono">
-                        <span className="inline-block px-2 py-0.5 rounded-lg bg-blue-100 dark:bg-blue-950/80 text-blue-900 dark:text-blue-300 font-extrabold text-[11px]">
-                          {(u.consumoAguaM3 || 0).toFixed(1)} m³
-                        </span>
-                      </td>
-
-                      {/* Cobro Agua + Extras */}
-                      <td className="py-2.5 px-2 font-mono">
-                        <div className="font-bold text-blue-800 dark:text-blue-300">
-                          Bs. {((u.montoAgua || 0) + (u.otrosExtras || 0)).toFixed(2)}
+                      {/* Monto Agua Editable */}
+                      <td className="py-2.5 px-3">
+                        <div className="flex items-center gap-1">
+                          <span className="text-[#7d776f] font-mono text-[11px]">Bs.</span>
+                          <input
+                            type="number"
+                            step="0.01"
+                            value={u.montoAgua ?? 0}
+                            onChange={(e) =>
+                              handleCambioFila(u.id, 'montoAgua', Number(e.target.value))
+                            }
+                            className="w-20 px-2 py-1 rounded-lg bg-white dark:bg-slate-950 border border-blue-200 dark:border-blue-800 font-mono text-xs text-[#262422] dark:text-white focus:ring-2 focus:ring-blue-600 focus:outline-none"
+                          />
                         </div>
-                        <div className="text-[9px] text-[#7d776f]">
-                          ({u.consumoAguaM3 || 0}×5 {u.otrosExtras ? `+${u.otrosExtras}` : ''})
+                      </td>
+
+                      {/* Otros Extras Editable */}
+                      <td className="py-2.5 px-3">
+                        <div className="flex items-center gap-1">
+                          <span className="text-[#7d776f] font-mono text-[11px]">Bs.</span>
+                          <input
+                            type="number"
+                            step="0.01"
+                            value={u.otrosExtras ?? 0}
+                            onChange={(e) =>
+                              handleCambioFila(u.id, 'otrosExtras', Number(e.target.value))
+                            }
+                            className="w-20 px-2 py-1 rounded-lg bg-white dark:bg-slate-950 border border-[#cec8bc] dark:border-slate-700 font-mono text-xs text-[#262422] dark:text-white focus:ring-2 focus:ring-blue-600 focus:outline-none"
+                          />
                         </div>
                       </td>
 
@@ -712,17 +648,14 @@ export default function ParametrosDepartamentosTab({
             <tfoot>
               <tr className="border-t-2 border-[#cec8bc] dark:border-slate-700 bg-[#dfd9ce]/80 dark:bg-slate-950/80 font-black text-xs text-[#262422] dark:text-white font-mono">
                 <td colSpan={2} className="py-3 px-3 uppercase font-sans">
-                  TOTAL GENERAL (20 DEPARTAMENTOS)
+                  TOTAL GENERAL ({deptosFiltrados.length} DEPARTAMENTOS)
                 </td>
                 <td className="py-3 px-3">Bs. {totales.totalBase.toFixed(2)}</td>
-                <td colSpan={3} className="py-3 px-2 text-right">
-                  Consumo Total:
+                <td className="py-3 px-3 text-blue-900 dark:text-blue-300">
+                  Bs. {totales.totalMontoAgua.toFixed(2)}
                 </td>
-                <td className="py-3 px-2 text-center text-blue-800 dark:text-blue-300">
-                  {totales.totalCubosAgua.toFixed(1)} m³
-                </td>
-                <td className="py-3 px-2 text-blue-900 dark:text-blue-300">
-                  Bs. {(totales.totalMontoAgua + totales.totalExtras).toFixed(2)}
+                <td className="py-3 px-3">
+                  Bs. {totales.totalExtras.toFixed(2)}
                 </td>
                 <td className="py-3 px-3 text-emerald-800 dark:text-emerald-300 text-sm">
                   Bs. {totales.totalSinMora.toFixed(2)}
@@ -751,9 +684,7 @@ export default function ParametrosDepartamentosTab({
           onClose={() => setDeptoParaEdicionCompleta(null)}
           onSave={(updated) => {
             handleCambioFila(updated.id, 'expensaBase', updated.expensaBase)
-            handleCambioFila(updated.id, 'codigoMedidor', updated.codigoMedidor)
-            handleCambioFila(updated.id, 'lecturaAnteriorAgua', updated.lecturaAnteriorAgua)
-            handleCambioFila(updated.id, 'lecturaActualAgua', updated.lecturaActualAgua)
+            handleCambioFila(updated.id, 'montoAgua', updated.montoAgua)
             handleCambioFila(updated.id, 'otrosExtras', updated.otrosExtras)
             onUpdateUnidad(updated)
             showToast(`¡Parámetros del Dpto. ${updated.numero} actualizados correctamente!`)

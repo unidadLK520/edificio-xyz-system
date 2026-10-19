@@ -39,13 +39,11 @@ export interface ExpensaItem {
   tasaInteresMora: number
   fechaVencimiento: string
   estado: string
-  alicuota?: number
   departamento?: {
     numero: string
     piso?: number
     tipologia?: string
     areaM2?: number
-    alicuota?: number
     inquilino?: { nombres: string; apellidos: string }
     propietario?: { idPersona?: number; nombres?: string; apellidos?: string; ciNit?: string }
   }
@@ -67,113 +65,8 @@ export const RUBROS_GASTOS_COMUNES = [
 ]
 export const TOTAL_GASTOS_COMUNES = 15500.0
 
-const EXPENSAS_MOCK_XYZ: ExpensaItem[] = [
-  {
-    idExpensa: 101,
-    idDepartamento: 1,
-    periodo: '2026-10-01',
-    monto: 581.25,
-    saldoPendiente: 0,
-    tasaInteresMora: 5,
-    fechaVencimiento: '2026-10-10',
-    estado: 'Pagado',
-    departamento: { numero: '101', piso: 1, tipologia: 'Tipo A (60 m²)', areaM2: 60, inquilino: { nombres: 'Pedro', apellidos: 'Ramírez' } },
-    propietarioNombre: 'Ana Valdivia Morales',
-    inquilinoNombre: 'Pedro Ramírez Soto',
-    pagadoPor: 'Pedro Ramírez Soto (Inquilino)',
-    pagos: [{ idPago: 1, montoPagado: 581.25, metodoPago: 'Transferencia BNB', fechaPago: '2026-10-05', esAnticipado: false }]
-  },
-  {
-    idExpensa: 102,
-    idDepartamento: 2,
-    periodo: '2026-10-01',
-    monto: 775.00,
-    saldoPendiente: 0,
-    tasaInteresMora: 5,
-    fechaVencimiento: '2026-10-10',
-    estado: 'Pagado',
-    departamento: { numero: '102', piso: 1, tipologia: 'Tipo B (80 m²)', areaM2: 80, inquilino: { nombres: 'María', apellidos: 'Fernández' } },
-    propietarioNombre: 'Carlos Mendoza Rojas',
-    inquilinoNombre: 'María Fernández Arce',
-    pagadoPor: 'Carlos Mendoza Rojas (Propietario)',
-    pagos: [{ idPago: 2, montoPagado: 775.00, metodoPago: 'Pago Móvil QR', fechaPago: '2026-10-08', esAnticipado: false }]
-  },
-  {
-    idExpensa: 103,
-    idDepartamento: 3,
-    periodo: '2026-10-01',
-    monto: 968.75,
-    saldoPendiente: 968.75,
-    tasaInteresMora: 5,
-    fechaVencimiento: '2026-10-10',
-    estado: 'Pendiente',
-    departamento: { numero: '103', piso: 1, tipologia: 'Tipo C (100 m²)', areaM2: 100 },
-    propietarioNombre: 'Laura Céspedes Villarroel',
-    inquilinoNombre: '— (Unidad Vacía)',
-    pagos: []
-  },
-  {
-    idExpensa: 104,
-    idDepartamento: 4,
-    periodo: '2026-10-01',
-    monto: 581.25,
-    saldoPendiente: 581.25,
-    tasaInteresMora: 5,
-    fechaVencimiento: '2026-10-10',
-    estado: 'Moroso',
-    departamento: { numero: '104', piso: 1, tipologia: 'Tipo A (60 m²)', areaM2: 60, inquilino: { nombres: 'Roberto', apellidos: 'Daza' } },
-    propietarioNombre: 'José Vargas Quiroga',
-    inquilinoNombre: 'Roberto Daza Méndez',
-    pagos: []
-  },
-  {
-    idExpensa: 105,
-    idDepartamento: 5,
-    periodo: '2026-10-01',
-    monto: 775.00,
-    saldoPendiente: 775.00,
-    tasaInteresMora: 5,
-    fechaVencimiento: '2026-10-10',
-    estado: 'Pendiente',
-    departamento: { numero: '105', piso: 1, tipologia: 'Tipo B (80 m²)', areaM2: 80 },
-    propietarioNombre: 'Sofía Romero Paz',
-    inquilinoNombre: '— (Unidad Vacía)',
-    pagos: []
-  },
-  {
-    idExpensa: 106,
-    idDepartamento: 9,
-    periodo: '2026-10-01',
-    monto: 775.00,
-    saldoPendiente: 0,
-    tasaInteresMora: 5,
-    fechaVencimiento: '2026-10-10',
-    estado: 'Pagado',
-    departamento: { numero: '204', piso: 2, tipologia: 'Tipo B (80 m²)', areaM2: 80 },
-    propietarioNombre: 'Alejandro Gómez Salces',
-    inquilinoNombre: 'Vive Propietario',
-    pagadoPor: 'Alejandro Gómez Salces (Propietario)',
-    pagos: [{ idPago: 3, montoPagado: 775.00, metodoPago: 'QR Simple BNB', fechaPago: '2026-10-04', esAnticipado: false }]
-  },
-  {
-    idExpensa: 107,
-    idDepartamento: 15,
-    periodo: '2026-10-01',
-    monto: 775.00,
-    saldoPendiente: 0,
-    tasaInteresMora: 5,
-    fechaVencimiento: '2026-10-10',
-    estado: 'Pagado',
-    departamento: { numero: '305', piso: 3, tipologia: 'Tipo B (80 m²)', areaM2: 80, inquilino: { nombres: 'María', apellidos: 'López' } },
-    propietarioNombre: 'Juan Pérez Montaño',
-    inquilinoNombre: 'María López Arteaga',
-    pagadoPor: 'María López Arteaga (Inquilina)',
-    pagos: [{ idPago: 4, montoPagado: 775.00, metodoPago: 'Transferencia BMSC', fechaPago: '2026-10-02', esAnticipado: false }]
-  }
-]
-
 export default function ExpensasPage() {
-  const [expensas, setExpensas] = useState<ExpensaItem[]>(EXPENSAS_MOCK_XYZ)
+  const [expensas, setExpensas] = useState<ExpensaItem[]>([])
   const [searchTerm, setSearchTerm] = useState('')
   const [filtroEstado, setFiltroEstado] = useState('Todos')
   const [activeTab, setActiveTab] = useState<'todas' | 'cuotas' | 'morosos'>('todas')
@@ -191,6 +84,8 @@ export default function ExpensasPage() {
   const [successToast, setSuccessToast] = useState<string | null>(null)
   const [errorToast, setErrorToast] = useState<string | null>(null)
   const [modalError, setModalError] = useState<string | null>(null)
+  const [apiError, setApiError] = useState<string | null>(null)
+  const [isLoading, setIsLoading] = useState<boolean>(false)
   const [personasList, setPersonasList] = useState<Array<{ idPersona: number; nombres: string; apellidos: string; ciNit?: string }>>([])
 
   // Formulario Pago
@@ -248,38 +143,51 @@ export default function ExpensasPage() {
     }
   }, [])
 
-  // Fetch expensas desde la API con fallback
+  // Fetch expensas desde la API
   const fetchExpensas = useCallback(async () => {
+    setIsLoading(true)
+    setApiError(null)
     try {
       const res = await fetch(`/api/v1/expensas?estado=${filtroEstado}`)
-      if (res.ok) {
-        const json = await res.json()
-        if (json.data && Array.isArray(json.data) && json.data.length > 0) {
-          const mapped: ExpensaItem[] = json.data.map((item: any) => ({
-            idExpensa: item.idExpensa,
-            idDepartamento: item.idDepartamento,
-            periodo: new Date(item.periodo).toISOString().split('T')[0],
-            monto: Number(item.monto),
-            montoBase: item.montoBase !== undefined && item.montoBase !== null ? Number(item.montoBase) : Number(item.monto) - Number(item.montoAgua || 0),
-            montoAgua: Number(item.montoAgua || 0),
-            saldoPendiente: Number(item.saldoPendiente),
-            tasaInteresMora: Number(item.tasaInteresMora || 0),
-            fechaVencimiento: new Date(item.fechaVencimiento).toISOString().split('T')[0],
-            estado: item.estado,
-            departamento: item.departamento,
-            propietarioNombre: item.departamento?.propietario
-              ? `${item.departamento.propietario.nombres || ''} ${item.departamento.propietario.apellidos || ''}`.trim()
-              : item.propietarioNombre || 'Propietario Responsable',
-            inquilinoNombre: item.departamento?.inquilino
-              ? `${item.departamento.inquilino.nombres || ''} ${item.departamento.inquilino.apellidos || ''}`.trim()
-              : item.inquilinoNombre || '—',
-            pagadoPor: item.pagadoPor,
-            pagos: item.pagos || []
-          }))
-          setExpensas(mapped)
-        }
+      if (!res.ok) {
+        const errJson = await res.json().catch(() => ({}))
+        setApiError(errJson.message || 'Error al conectar con el servidor de expensas.')
+        setExpensas([])
+        return
       }
-    } catch {}
+      const json = await res.json()
+      if (json.data && Array.isArray(json.data)) {
+        const mapped: ExpensaItem[] = json.data.map((item: any) => ({
+          idExpensa: item.idExpensa,
+          idDepartamento: item.idDepartamento,
+          periodo: new Date(item.periodo).toISOString().split('T')[0],
+          monto: Number(item.monto),
+          montoBase: item.montoBase !== undefined && item.montoBase !== null ? Number(item.montoBase) : Number(item.monto) - Number(item.montoAgua || 0),
+          montoAgua: Number(item.montoAgua || 0),
+          saldoPendiente: Number(item.saldoPendiente),
+          tasaInteresMora: Number(item.tasaInteresMora || 0),
+          fechaVencimiento: new Date(item.fechaVencimiento).toISOString().split('T')[0],
+          estado: item.estado,
+          departamento: item.departamento,
+          propietarioNombre: item.departamento?.propietario
+            ? `${item.departamento.propietario.nombres || ''} ${item.departamento.propietario.apellidos || ''}`.trim()
+            : item.propietarioNombre || 'Propietario Responsable',
+          inquilinoNombre: item.departamento?.inquilino
+            ? `${item.departamento.inquilino.nombres || ''} ${item.departamento.inquilino.apellidos || ''}`.trim()
+            : item.inquilinoNombre || '—',
+          pagadoPor: item.pagadoPor,
+          pagos: item.pagos || []
+        }))
+        setExpensas(mapped)
+      } else {
+        setExpensas([])
+      }
+    } catch {
+      setApiError('Error de red al conectar con el servidor de expensas.')
+      setExpensas([])
+    } finally {
+      setIsLoading(false)
+    }
   }, [filtroEstado])
 
   const fetchMorosos = useCallback(async () => {
@@ -490,71 +398,11 @@ export default function ExpensasPage() {
         setIsEstadoCuentaModalOpen(true)
         return
       }
-    } catch {}
-
-    const selected = expensas.find((e) => e.idDepartamento === idDepartamento)
-    const cuota = selected?.monto || 775.0
-    const alic = selected?.alicuota || (cuota === 581.25 ? 3.75 : cuota === 775 ? 5.0 : 6.25)
-    const deptoNum = selected?.departamento?.numero || String(idDepartamento)
-
-    const movimientosHistoricos = [
-      {
-        periodo: 'Octubre 2026',
-        concepto: 'Expensa Común Ordinaria',
-        monto: cuota,
-        vencimiento: '10/10/2026',
-        estado: selected?.estado || 'Pendiente',
-        saldo: selected?.saldoPendiente || 0,
-        metodo: selected?.pagos?.[0]?.metodoPago || (selected?.estado === 'Pagado' ? (selected?.pagadoPor?.includes('Inquilino') ? 'Transferencia Bancaria (Inquilino)' : 'Transferencia BNB (Propietario)') : 'Pendiente'),
-        fechaPago: selected?.pagos?.[0]?.fechaPago || (selected?.estado === 'Pagado' ? '04/10/2026' : '—')
-      },
-      {
-        periodo: 'Septiembre 2026',
-        concepto: 'Expensa Común Ordinaria',
-        monto: cuota,
-        vencimiento: '10/09/2026',
-        estado: 'Pagado',
-        saldo: 0,
-        metodo: 'Transferencia BNB',
-        fechaPago: '05/09/2026'
-      },
-      {
-        periodo: 'Agosto 2026',
-        concepto: 'Expensa Común Ordinaria',
-        monto: cuota,
-        vencimiento: '10/08/2026',
-        estado: 'Pagado',
-        saldo: 0,
-        metodo: 'QR Simple Interbancario',
-        fechaPago: '03/08/2026'
-      }
-    ]
-
-    const totalFacturado = cuota * 3
-    const totalPagado = (cuota * 2) + (selected?.estado === 'Pagado' ? cuota : 0)
-    const saldoPendiente = selected?.saldoPendiente || 0
-
-    setEstadoCuentaData({
-      departamento: {
-        numero: deptoNum,
-        piso: selected?.departamento?.piso || (parseInt(deptoNum[0]) || 1),
-        tipologia: selected?.departamento?.tipologia || (cuota === 581.25 ? 'Tipo A (60 m²)' : cuota === 775 ? 'Tipo B (80 m²)' : 'Tipo C (100 m²)'),
-        areaM2: selected?.departamento?.areaM2 || (cuota === 581.25 ? 60 : cuota === 775 ? 80 : 100),
-        alicuota: alic,
-        propietario: { nombres: selected?.propietarioNombre || 'Titular Responsable', apellidos: '' },
-        inquilino: selected?.inquilinoNombre && selected.inquilinoNombre !== '— (Vive el Propietario)' && selected.inquilinoNombre !== '— (Unidad Vacía)'
-          ? { nombres: selected.inquilinoNombre, apellidos: '' }
-          : null
-      },
-      resumen: {
-        totalObligaciones: totalFacturado,
-        totalPagado: totalPagado,
-        saldoPendienteTotal: saldoPendiente
-      },
-      movimientos: movimientosHistoricos,
-      pagos: selected?.pagos || []
-    })
-    setIsEstadoCuentaModalOpen(true)
+      const err = await res.json().catch(() => ({}))
+      showErrorToast(err.message || 'Error al obtener el estado de cuenta del servidor')
+    } catch {
+      showErrorToast('Error de conexión al cargar el estado de cuenta')
+    }
   }
 
   // Filtrado de expensas
@@ -586,6 +434,22 @@ export default function ExpensasPage() {
         </div>
       )}
 
+      {/* Error de conexión con botón de reintentar */}
+      {apiError && (
+        <div className="p-4 bg-red-100 dark:bg-red-950/70 border border-red-300 dark:border-red-800 text-red-900 dark:text-red-200 rounded-2xl flex items-center justify-between gap-3 shadow-md">
+          <div className="flex items-center gap-3">
+            <AlertCircle className="w-5 h-5 text-red-600 dark:text-red-400 shrink-0" />
+            <span className="text-xs sm:text-sm font-bold">{apiError}</span>
+          </div>
+          <button
+            onClick={() => fetchExpensas()}
+            className="px-3 py-1.5 bg-red-700 hover:bg-red-800 text-white text-xs font-bold rounded-xl transition-all cursor-pointer"
+          >
+            Reintentar
+          </button>
+        </div>
+      )}
+
       {/* HEADER */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-[#cec8bc] dark:border-slate-800">
         <div>
@@ -605,10 +469,10 @@ export default function ExpensasPage() {
           <button
             onClick={() => setIsExtractoGeneralOpen(true)}
             className="inline-flex items-center justify-center gap-1.5 px-3.5 py-2.5 bg-[#dfd9ce] hover:bg-[#d5cfc2] dark:bg-slate-800 dark:hover:bg-slate-700 text-[#262422] dark:text-white border border-[#cec8bc] dark:border-slate-700 text-xs font-bold rounded-xl shadow-xs transition-all cursor-pointer"
-            title="Ver extracto general de gastos comunes y cálculo por alícuotas"
+            title="Ver extracto general de gastos comunes"
           >
             <FileText className="w-4 h-4 text-emerald-700 dark:text-emerald-400" />
-            Extracto de Gastos (Bs 15.500)
+            Extracto de Gastos Comunes
           </button>
 
           <button
@@ -650,7 +514,7 @@ export default function ExpensasPage() {
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
         <div className="p-4 rounded-2xl bg-[#ede9e1] dark:bg-slate-900 border border-[#cec8bc] dark:border-slate-800 shadow-sm">
           <div className="flex items-center justify-between text-xs font-semibold text-[#66615b] dark:text-slate-400 mb-1">
-            <span>Facturación Total (20 Dptos)</span>
+            <span>Facturación Total ({expensas.length} Dptos)</span>
             <DollarSign className="w-4 h-4 text-blue-700 dark:text-blue-400" />
           </div>
           <div className="text-2xl font-bold text-[#262422] dark:text-white">
@@ -712,7 +576,7 @@ export default function ExpensasPage() {
           }`}
         >
           <Receipt className="w-4 h-4" />
-          Expensas de las 20 Unidades
+          Expensas Emitidas ({expensas.length})
         </button>
         <button
           onClick={() => setActiveTab('cuotas')}
@@ -931,7 +795,7 @@ export default function ExpensasPage() {
                 </h3>
               </div>
               <p className="text-xs text-blue-800 dark:text-blue-300 mt-1">
-                Presupuesto mensual común del Edificio XYZ: <span className="font-extrabold font-mono">Bs. 15,500.00</span> distribuido con precisión matemática entre los 20 departamentos (1,600 m² construidos) según su alícuota inmobiliaria.
+                El monto base de expensas proviene del tipo asignado al departamento (Tipo A = 300 Bs, Tipo B = 350 Bs, Tipo C = 400 Bs), más el monto de consumo de agua registrado para el período.
               </p>
             </div>
             <div className="flex items-center gap-2">
@@ -953,19 +817,15 @@ export default function ExpensasPage() {
                 <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black bg-blue-100 text-blue-800 dark:bg-blue-950/60 dark:text-blue-300">
                   Tipo A (60 m²)
                 </span>
-                <span className="text-xs text-[#7d776f] font-mono font-bold">4 Unidades (240 m²)</span>
+                <span className="text-xs text-[#7d776f] font-mono font-bold">Base Estándar</span>
               </div>
               <div>
                 <div className="text-2xl font-black font-mono text-[#262422] dark:text-white">
-                  Bs. 581.25 <span className="text-xs text-[#7d776f] font-normal">/ mes</span>
+                  Bs. 300.00 <span className="text-xs text-[#7d776f] font-normal">/ mes base</span>
                 </div>
                 <div className="text-xs text-[#7d776f] dark:text-slate-400 mt-0.5">
-                  Alícuota: <span className="font-bold text-blue-700 dark:text-blue-400">3.75%</span> por unidad
+                  Superficie referencia: 60 m²
                 </div>
-              </div>
-              <div className="text-[11px] text-[#7d776f] dark:text-slate-400 border-t border-[#cec8bc] dark:border-slate-800 pt-2 flex justify-between">
-                <span>Dptos 101, 201, 301, 401:</span>
-                <span className="font-bold font-mono text-[#262422] dark:text-white">Bs. 2,325.00 total</span>
               </div>
             </div>
 
@@ -975,19 +835,15 @@ export default function ExpensasPage() {
                 <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black bg-purple-100 text-purple-800 dark:bg-purple-950/60 dark:text-purple-300">
                   Tipo B (80 m²)
                 </span>
-                <span className="text-xs text-[#7d776f] font-mono font-bold">10 Unidades (800 m²)</span>
+                <span className="text-xs text-[#7d776f] font-mono font-bold">Base Estándar</span>
               </div>
               <div>
                 <div className="text-2xl font-black font-mono text-[#262422] dark:text-white">
-                  Bs. 775.00 <span className="text-xs text-[#7d776f] font-normal">/ mes</span>
+                  Bs. 350.00 <span className="text-xs text-[#7d776f] font-normal">/ mes base</span>
                 </div>
                 <div className="text-xs text-[#7d776f] dark:text-slate-400 mt-0.5">
-                  Alícuota: <span className="font-bold text-purple-700 dark:text-purple-400">5.00%</span> por unidad
+                  Superficie referencia: 80 m²
                 </div>
-              </div>
-              <div className="text-[11px] text-[#7d776f] dark:text-slate-400 border-t border-[#cec8bc] dark:border-slate-800 pt-2 flex justify-between">
-                <span>Dptos 102-104, 202-204, 302-304, 405:</span>
-                <span className="font-bold font-mono text-[#262422] dark:text-white">Bs. 7,750.00 total</span>
               </div>
             </div>
 
@@ -997,36 +853,32 @@ export default function ExpensasPage() {
                 <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300">
                   Tipo C (100 m²)
                 </span>
-                <span className="text-xs text-[#7d776f] font-mono font-bold">6 Unidades (600 m²)</span>
+                <span className="text-xs text-[#7d776f] font-mono font-bold">Base Estándar</span>
               </div>
               <div>
                 <div className="text-2xl font-black font-mono text-[#262422] dark:text-white">
-                  Bs. 968.75 <span className="text-xs text-[#7d776f] font-normal">/ mes</span>
+                  Bs. 400.00 <span className="text-xs text-[#7d776f] font-normal">/ mes base</span>
                 </div>
                 <div className="text-xs text-[#7d776f] dark:text-slate-400 mt-0.5">
-                  Alícuota: <span className="font-bold text-emerald-700 dark:text-emerald-400">6.25%</span> por unidad
+                  Superficie referencia: 100 m²
                 </div>
-              </div>
-              <div className="text-[11px] text-[#7d776f] dark:text-slate-400 border-t border-[#cec8bc] dark:border-slate-800 pt-2 flex justify-between">
-                <span>Dptos 105, 205, 305, 402, 403, 404:</span>
-                <span className="font-bold font-mono text-[#262422] dark:text-white">Bs. 5,812.50 total</span>
               </div>
             </div>
           </div>
 
-          {/* Tabla Maestra Arancelaria: Cuánto se cobra a cada uno de los 20 departamentos */}
+          {/* Tabla Maestra Arancelaria */}
           <div className="rounded-2xl bg-[#ede9e1] dark:bg-slate-900 border border-[#cec8bc] dark:border-slate-800 overflow-hidden shadow-sm">
             <div className="p-4 border-b border-[#cec8bc] dark:border-slate-800 bg-[#dfd9ce]/40 dark:bg-slate-950/40 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
               <div>
                 <h4 className="font-black text-sm text-[#262422] dark:text-white">
-                  Detalle Nominal de Cobro por Unidad (20 Departamentos)
+                  Detalle Nominal de Cobro por Unidad ({expensas.length} Departamentos)
                 </h4>
                 <p className="text-xs text-[#7d776f] dark:text-slate-400">
-                  Desglose exacto de los rubros comunes que componen la cuota de cada departamento.
+                  Desglose de expensa base del tipo y monto de agua registrado.
                 </p>
               </div>
               <span className="text-xs font-bold text-blue-800 dark:text-blue-400 font-mono">
-                Recaudación Total: Bs 15,500.00 / mes
+                Total Facturado: Bs {totalFacturado.toFixed(2)}
               </span>
             </div>
 
@@ -1035,37 +887,33 @@ export default function ExpensasPage() {
                 <thead>
                   <tr className="border-b border-[#cec8bc] dark:border-slate-800 bg-[#dfd9ce]/60 dark:bg-slate-950/60 text-[#7d776f] dark:text-slate-400 uppercase text-[10px] font-bold">
                     <th className="py-3 px-3">Unidad</th>
-                    <th className="py-3 px-3">Tipología & m²</th>
-                    <th className="py-3 px-3">Alícuota</th>
+                    <th className="py-3 px-3">Tipología</th>
+                    <th className="py-3 px-3">Superficie</th>
                     <th className="py-3 px-3">Propietario / Responsable</th>
-                    <th className="py-3 px-2 text-right">Seguridad (36.1%)</th>
-                    <th className="py-3 px-2 text-right">Admin (22.6%)</th>
-                    <th className="py-3 px-2 text-right">Limpieza (14.2%)</th>
-                    <th className="py-3 px-2 text-right">Mantenim. (9.7%)</th>
-                    <th className="py-3 px-2 text-right">Otros (17.4%)</th>
-                    <th className="py-3 px-3 text-right font-black text-[#262422] dark:text-white">Cuota Mensual</th>
+                    <th className="py-3 px-3 text-right">Monto Base (Bs)</th>
+                    <th className="py-3 px-3 text-right">Monto Agua (Bs)</th>
+                    <th className="py-3 px-3 text-right font-black text-[#262422] dark:text-white">Total Expensa</th>
                     <th className="py-3 px-3 text-right">Acción</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-[#cec8bc] dark:divide-slate-800">
-                  {expensas.map((item) => {
-                    const alic = item.alicuota || (item.monto === 581.25 ? 3.75 : item.monto === 775 ? 5.0 : 6.25)
-                    const seg = 5600 * (alic / 100)
-                    const adm = 3500 * (alic / 100)
-                    const limp = 2200 * (alic / 100)
-                    const mant = 1500 * (alic / 100)
-                    const otros = (900 + 800 + 700 + 300) * (alic / 100)
-
-                    return (
+                  {expensas.length === 0 ? (
+                    <tr>
+                      <td colSpan={8} className="py-6 text-center text-[#7d776f]">
+                        No hay expensas emitidas en este período.
+                      </td>
+                    </tr>
+                  ) : (
+                    expensas.map((item) => (
                       <tr key={item.idExpensa} className="hover:bg-[#dfd9ce]/40 dark:hover:bg-slate-800/40">
                         <td className="py-2.5 px-3 font-extrabold text-[#262422] dark:text-white">
                           Dpto. {item.departamento?.numero || item.idDepartamento}
                         </td>
                         <td className="py-2.5 px-3 text-[11px] text-[#7d776f] dark:text-slate-300">
-                          {item.departamento?.tipologia || (item.monto === 581.25 ? 'Tipo A (60 m²)' : item.monto === 775 ? 'Tipo B (80 m²)' : 'Tipo C (100 m²)')}
+                          {item.departamento?.tipologia || 'Estándar'}
                         </td>
-                        <td className="py-2.5 px-3 font-mono font-bold text-blue-700 dark:text-blue-400">
-                          {alic.toFixed(2)}%
+                        <td className="py-2.5 px-3 font-mono text-[#5c5750] dark:text-slate-400">
+                          {item.departamento?.areaM2 ? `${item.departamento.areaM2} m²` : '—'}
                         </td>
                         <td className="py-2.5 px-3">
                           <div className="font-bold text-[#262422] dark:text-white truncate max-w-[150px]">
@@ -1077,20 +925,11 @@ export default function ExpensasPage() {
                             </div>
                           )}
                         </td>
-                        <td className="py-2.5 px-2 text-right font-mono text-[#5c5750] dark:text-slate-400">
-                          Bs. {seg.toFixed(2)}
+                        <td className="py-2.5 px-3 text-right font-mono text-[#5c5750] dark:text-slate-400">
+                          Bs. {(item.montoBase !== undefined && item.montoBase !== null ? item.montoBase : (item.monto - (item.montoAgua || 0))).toFixed(2)}
                         </td>
-                        <td className="py-2.5 px-2 text-right font-mono text-[#5c5750] dark:text-slate-400">
-                          Bs. {adm.toFixed(2)}
-                        </td>
-                        <td className="py-2.5 px-2 text-right font-mono text-[#5c5750] dark:text-slate-400">
-                          Bs. {limp.toFixed(2)}
-                        </td>
-                        <td className="py-2.5 px-2 text-right font-mono text-[#5c5750] dark:text-slate-400">
-                          Bs. {mant.toFixed(2)}
-                        </td>
-                        <td className="py-2.5 px-2 text-right font-mono text-[#5c5750] dark:text-slate-400">
-                          Bs. {otros.toFixed(2)}
+                        <td className="py-2.5 px-3 text-right font-mono text-blue-700 dark:text-blue-400 font-bold">
+                          Bs. {(item.montoAgua || 0).toFixed(2)}
                         </td>
                         <td className="py-2.5 px-3 text-right font-mono font-black text-sm text-[#262422] dark:text-white">
                           Bs. {item.monto.toFixed(2)}
@@ -1105,27 +944,22 @@ export default function ExpensasPage() {
                           </button>
                         </td>
                       </tr>
-                    )
-                  })}
+                    ))
+                  )}
                 </tbody>
                 <tfoot>
                   <tr className="border-t-2 border-[#cec8bc] dark:border-slate-700 bg-[#dfd9ce]/80 dark:bg-slate-950/80 font-black text-xs text-[#262422] dark:text-white">
-                    <td colSpan={2} className="py-3 px-3 uppercase tracking-wider">
-                      TOTAL GENERAL (20 DPTOS / 1,600 m²)
+                    <td colSpan={4} className="py-3 px-3 uppercase tracking-wider">
+                      TOTAL GENERAL ({expensas.length} DPTOS)
                     </td>
-                    <td className="py-3 px-3 font-mono text-blue-800 dark:text-blue-400">
-                      100.00%
+                    <td className="py-3 px-3 text-right font-mono">
+                      Bs. {expensas.reduce((acc, curr) => acc + (curr.montoBase ?? (curr.monto - (curr.montoAgua || 0))), 0).toFixed(2)}
                     </td>
-                    <td className="py-3 px-3 text-[11px] text-[#7d776f]">
-                      20 Obligaciones
+                    <td className="py-3 px-3 text-right font-mono text-blue-700 dark:text-blue-400">
+                      Bs. {expensas.reduce((acc, curr) => acc + (curr.montoAgua || 0), 0).toFixed(2)}
                     </td>
-                    <td className="py-3 px-2 text-right font-mono">Bs. 5,600.00</td>
-                    <td className="py-3 px-2 text-right font-mono">Bs. 3,500.00</td>
-                    <td className="py-3 px-2 text-right font-mono">Bs. 2,200.00</td>
-                    <td className="py-3 px-2 text-right font-mono">Bs. 1,500.00</td>
-                    <td className="py-3 px-2 text-right font-mono">Bs. 2,700.00</td>
                     <td className="py-3 px-3 text-right font-mono text-base text-emerald-800 dark:text-emerald-400">
-                      Bs. 15,500.00
+                      Bs. {totalFacturado.toFixed(2)}
                     </td>
                     <td className="py-3 px-3"></td>
                   </tr>
@@ -1744,7 +1578,7 @@ export default function ExpensasPage() {
                 <div className="border-t border-slate-200 dark:border-slate-800 pt-2 flex flex-wrap justify-between items-center text-[11px] gap-2">
                   <span><strong>Propietario:</strong> {selectedExtracto.propietarioNombre}</span>
                   <span><strong>Ocupante:</strong> {selectedExtracto.inquilinoNombre || '—'}</span>
-                  <span><strong>Alícuota:</strong> <span className="font-mono font-bold text-emerald-700 dark:text-emerald-400">{selectedExtracto.departamento?.areaM2 === 60 ? '3.75%' : selectedExtracto.departamento?.areaM2 === 100 ? '6.25%' : '5.00%'}</span></span>
+                  <span><strong>Superficie:</strong> <span className="font-mono font-bold text-emerald-700 dark:text-emerald-400">{selectedExtracto.departamento?.areaM2 ? `${selectedExtracto.departamento.areaM2} m²` : '—'}</span></span>
                   <span><strong>Expensa a Cobrar:</strong> <span className="font-mono font-bold text-emerald-700 dark:text-emerald-400 text-xs">Bs {selectedExtracto.monto.toFixed(2)}</span></span>
                 </div>
               )}
@@ -1759,7 +1593,7 @@ export default function ExpensasPage() {
                     <th className="py-2.5 px-3 text-right">Presupuesto Edificio</th>
                     <th className="py-2.5 px-3 text-right">% Ponderado</th>
                     <th className="py-2.5 px-3 text-right font-extrabold text-emerald-800 dark:text-emerald-400">
-                      {selectedExtracto ? `Cuota Dpto ${selectedExtracto.departamento?.numero}` : 'Cuota Tipo B (5%)'}
+                      {selectedExtracto ? `Cuota Dpto ${selectedExtracto.departamento?.numero}` : 'Cuota Base'}
                     </th>
                   </tr>
                 </thead>
@@ -1799,16 +1633,16 @@ export default function ExpensasPage() {
             {/* Comparativa por Tipología */}
             <div className="grid grid-cols-3 gap-2 text-center text-xs bg-[#dfd9ce]/40 dark:bg-slate-950/40 p-2.5 rounded-xl border border-[#cec8bc] dark:border-slate-800">
               <div>
-                <span className="text-[10px] text-[#7d776f] uppercase font-bold block">Tipo A (60 m² • 3.75%)</span>
-                <span className="font-mono font-bold text-emerald-800 dark:text-emerald-400">Bs. 581,25</span>
+                <span className="text-[10px] text-[#7d776f] uppercase font-bold block">Tipo A (60 m²)</span>
+                <span className="font-mono font-bold text-emerald-800 dark:text-emerald-400">Bs. 300,00 base</span>
               </div>
               <div>
-                <span className="text-[10px] text-[#7d776f] uppercase font-bold block">Tipo B (80 m² • 5.00%)</span>
-                <span className="font-mono font-bold text-emerald-800 dark:text-emerald-400">Bs. 775,00</span>
+                <span className="text-[10px] text-[#7d776f] uppercase font-bold block">Tipo B (80 m²)</span>
+                <span className="font-mono font-bold text-emerald-800 dark:text-emerald-400">Bs. 350,00 base</span>
               </div>
               <div>
-                <span className="text-[10px] text-[#7d776f] uppercase font-bold block">Tipo C (100 m² • 6.25%)</span>
-                <span className="font-mono font-bold text-emerald-800 dark:text-emerald-400">Bs. 968,75</span>
+                <span className="text-[10px] text-[#7d776f] uppercase font-bold block">Tipo C (100 m²)</span>
+                <span className="font-mono font-bold text-emerald-800 dark:text-emerald-400">Bs. 400,00 base</span>
               </div>
             </div>
 
@@ -1878,9 +1712,9 @@ export default function ExpensasPage() {
                 </span>
               </div>
               <div>
-                <span className="text-[#7d776f] text-[10px] uppercase font-bold block">Alícuota Inmobiliaria</span>
+                <span className="text-[#7d776f] text-[10px] uppercase font-bold block">Superficie</span>
                 <span className="font-extrabold font-mono text-blue-700 dark:text-blue-400">
-                  {estadoCuentaData.departamento?.alicuota ? `${Number(estadoCuentaData.departamento.alicuota).toFixed(2)}%` : '5.00%'}
+                  {estadoCuentaData.departamento?.areaM2 ? `${estadoCuentaData.departamento.areaM2} m²` : '—'}
                 </span>
               </div>
               <div>

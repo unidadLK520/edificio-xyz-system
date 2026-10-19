@@ -74,9 +74,6 @@ export default function ModalEditarTipoDepto({
     codigo: '',
     areaM2: 60,
     expensaBase: 300,
-    alicuotaEstimada: 3.75,
-    habitaciones: 2,
-    banos: 1,
     descripcion: '',
     colorBadge: 'blue',
     activo: true
@@ -95,9 +92,6 @@ export default function ModalEditarTipoDepto({
         codigo: '',
         areaM2: 70,
         expensaBase: 320,
-        alicuotaEstimada: Number(((70 / totalMetrosEdificio) * 100).toFixed(2)),
-        habitaciones: 2,
-        banos: 1,
         descripcion: '',
         colorBadge: 'indigo',
         activo: true
@@ -107,9 +101,6 @@ export default function ModalEditarTipoDepto({
   }, [tipoToEdit, isOpen, totalMetrosEdificio])
 
   if (!isOpen) return null
-
-  // Calcular alícuota estimada dinámica
-  const alicuotaCalculada = Number(((formData.areaM2 / totalMetrosEdificio) * 100).toFixed(2))
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
@@ -130,8 +121,7 @@ export default function ModalEditarTipoDepto({
     const itemToSave: TipoDepartamentoItem = {
       ...formData,
       id: formData.id || `tipo-${formData.nombre.toLowerCase().replace(/\s+/g, '-')}`,
-      codigo: codigoFinal,
-      alicuotaEstimada: alicuotaCalculada
+      codigo: codigoFinal
     }
 
     try {

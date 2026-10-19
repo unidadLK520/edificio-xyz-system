@@ -40,7 +40,6 @@ export interface UnidadItem {
   piso?: number | null
   areaM2?: number | null
   tipologia?: TipologiaDepto
-  alicuota?: number
   estado: EstadoOcupacionDepto | string // 'Ocupado por Propietario' | 'Alquilado' | 'Desocupado' | 'Asignado' | 'Disponible'
   propietario?: PropietarioInfo | null
   ocupanteActual?: PropietarioInfo | null
@@ -56,17 +55,10 @@ export interface UnidadItem {
   baulera?: string
   fechaRegistro?: string
   historialOcupantes?: HistorialOcupanteItem[]
-  // Parámetros de cobro y medidores de agua (Reglas del Edificio XYZ)
+  // Parámetros de cobro y agua (Reglas del Edificio XYZ)
   expensaBase?: number
-  codigoMedidor?: string
-  lecturaAnteriorAgua?: number
-  lecturaActualAgua?: number
-  tarifaAguaM3?: number
-  consumoAguaM3?: number
   montoAgua?: number
   otrosExtras?: number
-  fechaLecturaAnterior?: string
-  fechaLecturaActual?: string
 }
 
 export interface DepartamentoItem extends UnidadItem {}
@@ -77,7 +69,6 @@ export interface DepartamentoFormData {
   piso: number
   areaM2: number
   tipologia?: TipologiaDepto
-  alicuota?: number
   parqueo?: string
   baulera?: string
   propietarioNombre?: string
@@ -87,12 +78,9 @@ export interface DepartamentoFormData {
   inquilinoNombre?: string
   inquilinoTel?: string
   estado: EstadoOcupacionDepto | string
-  // Parámetros de cobro y medidor
+  // Parámetros de cobro
   expensaBase?: number
-  codigoMedidor?: string
-  lecturaAnteriorAgua?: number
-  lecturaActualAgua?: number
-  tarifaAguaM3?: number
+  montoAgua?: number
   otrosExtras?: number
 }
 
@@ -120,7 +108,6 @@ export interface TipoDepartamentoItem {
   departamentosAsignados?: number
   habitaciones?: number
   banos?: number
-  alicuotaEstimada?: number
   descripcion?: string
   colorBadge?: string
 }
