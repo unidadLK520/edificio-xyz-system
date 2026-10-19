@@ -99,10 +99,8 @@ export interface DepartamentoFormData {
 // Configuración Global de Parámetros de Cobro
 export interface ParametrosCobroConfig {
   diaLimitePago: number // ej. 10 (< 10/Mes -> Mora = 0; >= 10/Mes -> Mora)
-  tipoMora: 'porcentaje' | 'monto_fijo' // 10% vs Bs 50
-  valorMoraPorcentaje: number // 10
-  valorMoraFijo: number // 50
-  frecuenciaMora: 'mes' | 'dia' // Conf. < Mes / Día >
+  tipoMora?: 'porcentaje' // Solo porcentaje
+  valorMoraPorcentaje: number // Tasa de interés mora %
   tarifaAguaM3: number // 5 Bs / m3
   expensaBaseTipoA: number // 300 Bs
   expensaBaseTipoB: number // 350 Bs

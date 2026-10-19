@@ -65,11 +65,8 @@ export default function EditarParametrosModal({
   const totalAgua = consumoCubos * tarifaAguaM3
   const subtotalBaseAgua = expensaBase + totalAgua + otrosExtras
 
-  // Mora según configuración (< 10 -> 0; >= 10 -> mora)
-  const moraProyectada =
-    config.tipoMora === 'porcentaje'
-      ? subtotalBaseAgua * (config.valorMoraPorcentaje / 100)
-      : config.valorMoraFijo
+  // Mora según regla de mora porcentual
+  const moraProyectada = subtotalBaseAgua * ((config.valorMoraPorcentaje || 0) / 100)
   const totalConMora = subtotalBaseAgua + moraProyectada
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -266,11 +263,7 @@ export default function EditarParametrosModal({
               </div>
               <div className="p-2.5 bg-red-50 dark:bg-red-950/40 rounded-xl border border-red-200 dark:border-red-800">
                 <span className="text-[10px] text-red-800 dark:text-red-300 block uppercase font-bold">
-                  &ge; Día 10 (
-                  {config.tipoMora === 'porcentaje'
-                    ? `${config.valorMoraPorcentaje}%`
-                    : `+Bs ${config.valorMoraFijo}`}
-                  )
+                  Con Mora (+{config.valorMoraPorcentaje || 0}%)
                 </span>
                 <span className="font-black text-sm text-red-700 dark:text-red-300">
                   Bs. {totalConMora.toFixed(2)}

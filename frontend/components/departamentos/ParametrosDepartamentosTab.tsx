@@ -33,15 +33,13 @@ interface ParametrosDepartamentosTabProps {
 }
 
 export const DEFAULT_CONFIG_PARAMETROS: ParametrosCobroConfig = {
-  diaLimitePago: 10, // < 10/Mes -> Mora = 0; >= 10/Mes -> Mora
-  tipoMora: 'porcentaje', // 'porcentaje' (10%) o 'monto_fijo' (Bs 50)
-  valorMoraPorcentaje: 10,
-  valorMoraFijo: 50,
-  frecuenciaMora: 'mes', // 'mes' o 'dia'
-  tarifaAguaM3: 5, // 5 Bs / m3
-  expensaBaseTipoA: 300, // 300 Bs
-  expensaBaseTipoB: 350, // 350 Bs
-  expensaBaseTipoC: 400 // 400 Bs
+  diaLimitePago: 10,
+  tipoMora: 'porcentaje',
+  valorMoraPorcentaje: 0,
+  tarifaAguaM3: 5,
+  expensaBaseTipoA: 300,
+  expensaBaseTipoB: 350,
+  expensaBaseTipoC: 400
 }
 
 export default function ParametrosDepartamentosTab({
@@ -64,6 +62,66 @@ export default function ParametrosDepartamentosTab({
     }
     return DEFAULT_CONFIG_PARAMETROS
   })
+
+  const [reglaMoraActiva, setReglaMoraActiva] = useState<{ idReglaMora: number; tasaInteres: number; diasGracia: number; fechaCreacion: string; usuarioCreacion?: any } | null>(null)
+  const [historialReglasMora, setHistorialReglasMora] = useState<any[]>([])
+  const [tasaMoraInput, setTasaMoraInput] = useState<number | ''>('')
+  const [guardandoMora, setGuardandoMora] = useState(false)
+
+  const fetchReglasMora = React.useCallback(async () => {
+    try {
+      const res = await fetch('/api/v1/expensas/reglas-mora')
+      if (res.ok) {
+        const json = await res.json()
+        setReglaMoraActiva(json.activa || null)
+        setHistorialReglasMora(json.historial || [])
+        if (json.activa) {
+          const tasa = Number(json.activa.tasaInteres)
+          setTasaMoraInput(tasa)
+          setConfig((prev) => ({ ...prev, valorMoraPorcentaje: tasa }))
+        }
+      }
+    } catch (err) {
+      console.error('Error al cargar reglas de mora:', err)
+    }
+  }, [])
+
+  React.useEffect(() => {
+    fetchReglasMora()
+  }, [fetchReglasMora])
+
+  const handleGuardarReglaMora = async () => {
+    if (tasaMoraInput === '' || isNaN(Number(tasaMoraInput)) || Number(tasaMoraInput) < 0 || Number(tasaMoraInput) > 100) {
+      showToast('La tasa de mora debe ser un porcentaje entre 0 y 100.')
+      return
+    }
+
+    setGuardandoMora(true)
+    try {
+      const res = await fetch('/api/v1/expensas/reglas-mora', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          tasaInteres: Number(tasaMoraInput),
+          diasGracia: 0
+        })
+      })
+
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        const msg = data.message || data.error || 'Error al guardar la regla de mora'
+        showToast(`Error: ${msg}`)
+        return
+      }
+
+      await fetchReglasMora()
+      showToast('¡Regla de mora actualizada exitosamente!')
+    } catch (err: any) {
+      showToast('Error de conexión al actualizar la regla de mora.')
+    } finally {
+      setGuardandoMora(false)
+    }
+  }
 
   // Estado local editable de unidades para permitir edición en línea rápida
   const [unidadesLocales, setUnidadesLocales] = useState<UnidadItem[]>(() => {
@@ -186,10 +244,7 @@ export default function ParametrosDepartamentosTab({
     // Mora proyectada total
     const totalMora = list.reduce((acc, u) => {
       const sub = (u.expensaBase || 0) + (u.montoAgua || 0) + (u.otrosExtras || 0)
-      const mora =
-        config.tipoMora === 'porcentaje'
-          ? sub * (config.valorMoraPorcentaje / 100)
-          : config.valorMoraFijo
+      const mora = sub * ((config.valorMoraPorcentaje || 0) / 100)
       return acc + mora
     }, 0)
 
@@ -234,123 +289,68 @@ export default function ParametrosDepartamentosTab({
 
       {/* SECCIÓN 1: TARJETAS DE CONFIGURACIÓN GLOBAL */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        {/* TARJETA 1: REGLAS DE MORA */}
+        {/* TARJETA 1: REGLAS DE MORA (CONECTADA A LA API) */}
         <div className="p-5 rounded-3xl bg-[#ede9e1] dark:bg-slate-900 border border-[#cec8bc] dark:border-slate-800 shadow-sm space-y-3.5">
           <div className="flex items-center justify-between border-b border-[#cec8bc] dark:border-slate-800 pb-2.5">
             <div className="flex items-center gap-2">
-              <Calendar className="w-4 h-4 text-red-600 dark:text-red-400" />
+              <Percent className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
               <h3 className="font-extrabold text-sm text-[#262422] dark:text-white">
-                1. Regla de Mora e Intereses
+                1. Regla de Mora Oficial
               </h3>
             </div>
-            <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded-full bg-red-100 dark:bg-red-950/60 text-red-800 dark:text-red-300">
-              &lt; 10 = Mora 0
+            <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded-full bg-indigo-100 dark:bg-indigo-950/60 text-indigo-800 dark:text-indigo-300">
+              {reglaMoraActiva ? `${reglaMoraActiva.tasaInteres}% activa` : 'Sin regla'}
             </span>
           </div>
 
           <div className="space-y-3 text-xs">
             <div>
               <label className="block font-bold text-[#5c5750] dark:text-slate-300 mb-1">
-                Día de Corte / Gracia sin Mora *
+                Tasa de Interés Mensual (%) *
               </label>
               <div className="flex items-center gap-2">
                 <input
                   type="number"
-                  min="1"
-                  max="31"
-                  value={config.diaLimitePago}
-                  onChange={(e) => setConfig({ ...config, diaLimitePago: Number(e.target.value) })}
-                  className="w-20 px-3 py-1.5 rounded-xl bg-[#dfd9ce] dark:bg-slate-800 border border-[#cec8bc] dark:border-slate-700 font-mono font-bold text-center text-[#262422] dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-600"
+                  step="0.01"
+                  min="0"
+                  max="100"
+                  value={tasaMoraInput}
+                  onChange={(e) => setTasaMoraInput(e.target.value === '' ? '' : Number(e.target.value))}
+                  className="w-24 px-3 py-1.5 rounded-xl bg-[#dfd9ce] dark:bg-slate-800 border border-[#cec8bc] dark:border-slate-700 font-mono font-bold text-center text-[#262422] dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-600"
                 />
-                <span className="text-[#7d776f]">de cada mes (antes de este día: Mora = 0)</span>
-              </div>
-            </div>
-
-            <div>
-              <label className="block font-bold text-[#5c5750] dark:text-slate-300 mb-1">
-                Tipo de Recargo (&ge; Día {config.diaLimitePago}) *
-              </label>
-              <div className="grid grid-cols-2 gap-2">
+                <span className="font-bold text-xs">%</span>
                 <button
                   type="button"
-                  onClick={() => setConfig({ ...config, tipoMora: 'porcentaje' })}
-                  className={`px-3 py-2 rounded-xl font-bold text-xs flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
-                    config.tipoMora === 'porcentaje'
-                      ? 'bg-blue-700 text-white shadow-md'
-                      : 'bg-[#dfd9ce] dark:bg-slate-800 text-[#5c5750] dark:text-slate-400'
-                  }`}
+                  disabled={guardandoMora}
+                  onClick={handleGuardarReglaMora}
+                  className="px-3 py-1.5 rounded-xl bg-indigo-700 hover:bg-indigo-800 text-white font-bold text-xs shadow-xs cursor-pointer disabled:opacity-50"
                 >
-                  <Percent className="w-3.5 h-3.5" />
-                  10% Porcentual
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setConfig({ ...config, tipoMora: 'monto_fijo' })}
-                  className={`px-3 py-2 rounded-xl font-bold text-xs flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
-                    config.tipoMora === 'monto_fijo'
-                      ? 'bg-blue-700 text-white shadow-md'
-                      : 'bg-[#dfd9ce] dark:bg-slate-800 text-[#5c5750] dark:text-slate-400'
-                  }`}
-                >
-                  <DollarSign className="w-3.5 h-3.5" />
-                  Bs. 50 Fijo
+                  {guardandoMora ? 'Guardando...' : 'Guardar Tasa'}
                 </button>
               </div>
+              <p className="text-[10px] text-[#7d776f] mt-1">
+                Aplica a expensas vencidas sin días de gracia (según configuración de la API).
+              </p>
             </div>
 
-            <div className="grid grid-cols-2 gap-2">
-              <div>
-                <label className="block font-bold text-[#5c5750] dark:text-slate-300 mb-1">
-                  {config.tipoMora === 'porcentaje' ? 'Porcentaje (%)' : 'Monto Fijo (Bs)'}
-                </label>
-                <input
-                  type="number"
-                  step="0.1"
-                  value={
-                    config.tipoMora === 'porcentaje'
-                      ? config.valorMoraPorcentaje
-                      : config.valorMoraFijo
-                  }
-                  onChange={(e) =>
-                    setConfig({
-                      ...config,
-                      [config.tipoMora === 'porcentaje' ? 'valorMoraPorcentaje' : 'valorMoraFijo']:
-                        Number(e.target.value)
-                    })
-                  }
-                  className="w-full px-3 py-1.5 rounded-xl bg-[#dfd9ce] dark:bg-slate-800 border border-[#cec8bc] dark:border-slate-700 font-mono font-bold text-[#262422] dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-600"
-                />
+            {/* Historial */}
+            {historialReglasMora.length > 0 && (
+              <div className="pt-2 border-t border-[#cec8bc] dark:border-slate-800 space-y-1.5">
+                <span className="font-bold text-[11px] text-[#5c5750] dark:text-slate-300 block">
+                  Historial de Tasas:
+                </span>
+                <div className="max-h-24 overflow-y-auto space-y-1 text-[10px]">
+                  {historialReglasMora.map((r: any) => (
+                    <div key={r.idReglaMora} className="flex justify-between items-center py-0.5 px-2 rounded-lg bg-[#dfd9ce]/60 dark:bg-slate-800/60 font-mono">
+                      <span>{new Date(r.fechaCreacion).toLocaleDateString()} — {r.tasaInteres}%</span>
+                      <span className={r.activa ? 'text-emerald-600 font-bold' : 'text-[#7d776f]'}>
+                        {r.activa ? 'Activa' : 'Histórica'}
+                      </span>
+                    </div>
+                  ))}
+                </div>
               </div>
-
-              <div>
-                <label className="block font-bold text-[#5c5750] dark:text-slate-300 mb-1">
-                  Frecuencia (Conf.)
-                </label>
-                <select
-                  value={config.frecuenciaMora}
-                  onChange={(e) => setConfig({ ...config, frecuenciaMora: e.target.value as any })}
-                  className="w-full px-3 py-1.5 rounded-xl bg-[#dfd9ce] dark:bg-slate-800 border border-[#cec8bc] dark:border-slate-700 font-bold text-[#262422] dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-600 cursor-pointer"
-                >
-                  <option
-                    value="mes"
-                    className="bg-[#ede9e1] dark:bg-slate-900 text-[#262422] dark:text-white"
-                  >
-                    Por Mes (Mes)
-                  </option>
-                  <option
-                    value="dia"
-                    className="bg-[#ede9e1] dark:bg-slate-900 text-[#262422] dark:text-white"
-                  >
-                    Por Día (Día)
-                  </option>
-                </select>
-              </div>
-            </div>
-
-            <div className="p-2.5 rounded-xl bg-[#dfd9ce]/60 dark:bg-slate-800/60 border border-[#cec8bc] dark:border-slate-700 text-[11px] text-[#5c5750] dark:text-slate-300">
-              El recargo configurado se aplica automáticamente a partir del día siguiente al límite
-              fijado.
-            </div>
+            )}
           </div>
         </div>
 
@@ -588,10 +588,7 @@ export default function ParametrosDepartamentosTab({
                 deptosFiltrados.map((u, idx) => {
                   const subtotalFila =
                     (u.expensaBase || 0) + (u.montoAgua || 0) + (u.otrosExtras || 0)
-                  const moraFila =
-                    config.tipoMora === 'porcentaje'
-                      ? subtotalFila * (config.valorMoraPorcentaje / 100)
-                      : config.valorMoraFijo
+                  const moraFila = subtotalFila * ((config.valorMoraPorcentaje || 0) / 100)
                   const totalConMoraFila = subtotalFila + moraFila
 
                   return (

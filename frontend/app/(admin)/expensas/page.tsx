@@ -213,6 +213,14 @@ export default function ExpensasPage() {
     message?: string
   } | null>(null)
 
+  // Reglas de Mora (HU04 / CA09)
+  const [reglaMoraActiva, setReglaMoraActiva] = useState<{ idReglaMora: number; tasaInteres: number; diasGracia: number; fechaCreacion: string; usuarioCreacion?: any } | null>(null)
+  const [historialReglasMora, setHistorialReglasMora] = useState<any[]>([])
+  const [isMoraModalOpen, setIsMoraModalOpen] = useState(false)
+  const [nuevaTasaMoraInput, setNuevaTasaMoraInput] = useState<number | ''>('')
+  const [isSubmittingMora, setIsSubmittingMora] = useState(false)
+  const [moraError, setMoraError] = useState<string | null>(null)
+
   const showToast = (msg: string) => {
     setSuccessToast(msg)
     setTimeout(() => setSuccessToast(null), 4000)
@@ -282,11 +290,28 @@ export default function ExpensasPage() {
     } catch {}
   }, [])
 
+  const fetchReglasMora = useCallback(async () => {
+    try {
+      const res = await fetch('/api/v1/expensas/reglas-mora')
+      if (res.ok) {
+        const json = await res.json()
+        setReglaMoraActiva(json.activa || null)
+        setHistorialReglasMora(json.historial || [])
+        if (json.activa) {
+          setNuevaTasaMoraInput(Number(json.activa.tasaInteres))
+        }
+      }
+    } catch (err) {
+      console.error('Error al cargar reglas de mora:', err)
+    }
+  }, [])
+
   useEffect(() => {
     fetchExpensas()
     fetchMorosos()
     fetchPersonas()
-  }, [fetchExpensas, fetchMorosos, fetchPersonas])
+    fetchReglasMora()
+  }, [fetchExpensas, fetchMorosos, fetchPersonas, fetchReglasMora])
 
   // KPIs
   const totalFacturado = useMemo(() => expensas.reduce((acc, curr) => acc + curr.monto, 0), [expensas])
@@ -357,6 +382,47 @@ export default function ExpensasPage() {
       }
     } catch {
       showToast('Recargo de mora actualizado correctamente.')
+    }
+  }
+
+  // Guardar Regla de Mora
+  const handleGuardarReglaMora = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (nuevaTasaMoraInput === '' || isNaN(Number(nuevaTasaMoraInput)) || Number(nuevaTasaMoraInput) < 0 || Number(nuevaTasaMoraInput) > 100) {
+      showErrorToast('La tasa de mora debe ser un porcentaje entre 0 y 100.')
+      return
+    }
+
+    setIsSubmittingMora(true)
+    setMoraError(null)
+
+    try {
+      const res = await fetch('/api/v1/expensas/reglas-mora', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          tasaInteres: Number(nuevaTasaMoraInput),
+          diasGracia: 0
+        })
+      })
+
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        const msg = data.message || data.error || 'Error al configurar regla de mora'
+        setMoraError(msg)
+        showErrorToast(msg)
+        return
+      }
+
+      await fetchReglasMora()
+      setIsMoraModalOpen(false)
+      showToast('¡Regla de mora configurada exitosamente!')
+    } catch (err: any) {
+      const msg = err?.message || 'Error de conexión'
+      setMoraError(msg)
+      showErrorToast(msg)
+    } finally {
+      setIsSubmittingMora(false)
     }
   }
 
@@ -539,6 +605,19 @@ export default function ExpensasPage() {
           >
             <FileText className="w-4 h-4 text-emerald-700 dark:text-emerald-400" />
             Extracto de Gastos (Bs 15.500)
+          </button>
+
+          <button
+            onClick={() => {
+              setMoraError(null)
+              if (reglaMoraActiva) setNuevaTasaMoraInput(Number(reglaMoraActiva.tasaInteres))
+              setIsMoraModalOpen(true)
+            }}
+            className="inline-flex items-center justify-center gap-1.5 px-3.5 py-2.5 bg-indigo-700 hover:bg-indigo-800 text-white text-xs font-bold rounded-xl shadow-md transition-all cursor-pointer"
+            title="Ver y configurar regla de mora activa e historial"
+          >
+            <Percent className="w-4 h-4" />
+            Mora: {reglaMoraActiva ? `${reglaMoraActiva.tasaInteres}%` : '—'}
           </button>
 
           <button
@@ -1233,6 +1312,117 @@ export default function ExpensasPage() {
                   }`}
                 >
                   {isSubmittingEmision ? 'Generando lote...' : '⚡ Ejecutar Generación'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL CONFIGURAR REGLA DE MORA (HU04 / CA09) */}
+      {isMoraModalOpen && (
+        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 backdrop-blur-xs">
+          <div className="w-full max-w-md bg-[#ede9e1] dark:bg-slate-900 rounded-3xl border border-[#cec8bc] dark:border-slate-800 p-6 space-y-4 shadow-2xl">
+            <div className="flex justify-between items-center border-b border-[#cec8bc] dark:border-slate-800 pb-3">
+              <div>
+                <h3 className="font-extrabold text-base text-[#262422] dark:text-white flex items-center gap-2">
+                  <Percent className="w-4 h-4 text-indigo-600" />
+                  Regla de Mora e Intereses
+                </h3>
+                <p className="text-xs text-[#7d776f]">
+                  Configuración oficial de la tasa de mora (solo porcentaje)
+                </p>
+              </div>
+              <button onClick={() => setIsMoraModalOpen(false)}>
+                <X className="w-5 h-5 text-[#7d776f] hover:text-[#262422]" />
+              </button>
+            </div>
+
+            {moraError && (
+              <div className="p-3 bg-rose-100 dark:bg-rose-950/70 border border-rose-300 dark:border-rose-800 text-rose-900 dark:text-rose-200 rounded-xl flex items-center gap-2 text-xs">
+                <AlertCircle className="w-4 h-4 shrink-0 text-rose-600 dark:text-rose-400" />
+                <span>{moraError}</span>
+              </div>
+            )}
+
+            <form onSubmit={handleGuardarReglaMora} className="space-y-4 text-xs">
+              <div className="p-3 rounded-2xl bg-indigo-50 dark:bg-indigo-950/40 border border-indigo-200 dark:border-indigo-800 text-[11px] text-indigo-900 dark:text-indigo-200">
+                <span className="font-bold block">Tasa Activa Actual:</span>
+                <span className="text-base font-black text-indigo-700 dark:text-indigo-300 font-mono">
+                  {reglaMoraActiva ? `${reglaMoraActiva.tasaInteres}%` : 'Sin regla activa'}
+                </span>
+                <span className="block text-[10px] text-[#7d776f] mt-0.5">
+                  Días de gracia: 0 (aplicación directa sobre expensas vencidas)
+                </span>
+              </div>
+
+              <div>
+                <label className="block font-bold text-[#262422] dark:text-white mb-1">
+                  Nueva Tasa de Interés Mensual (%) *
+                </label>
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  max="100"
+                  required
+                  value={nuevaTasaMoraInput}
+                  onChange={(e) => setNuevaTasaMoraInput(e.target.value === '' ? '' : Number(e.target.value))}
+                  placeholder="Ej. 5"
+                  className="w-full px-3 py-2 rounded-xl bg-[#dfd9ce] dark:bg-slate-800 border border-[#cec8bc] dark:border-slate-700 font-mono font-bold text-sm text-[#262422] dark:text-white"
+                />
+              </div>
+
+              {/* Historial */}
+              <div className="space-y-1.5 pt-2 border-t border-[#cec8bc] dark:border-slate-800">
+                <span className="font-bold text-xs text-[#262422] dark:text-white flex items-center gap-1.5">
+                  <History className="w-3.5 h-3.5 text-indigo-600" />
+                  Historial de Reglas de Mora
+                </span>
+                <div className="max-h-36 overflow-y-auto space-y-1.5 pr-1">
+                  {historialReglasMora.length === 0 ? (
+                    <p className="text-[11px] text-[#7d776f]">No hay historial registrado.</p>
+                  ) : (
+                    historialReglasMora.map((reg) => (
+                      <div
+                        key={reg.idReglaMora}
+                        className={`p-2 rounded-xl border text-[11px] flex justify-between items-center ${
+                          reg.activa
+                            ? 'bg-emerald-50 dark:bg-emerald-950/40 border-emerald-300 dark:border-emerald-800 text-emerald-900 dark:text-emerald-200'
+                            : 'bg-[#dfd9ce]/60 dark:bg-slate-800/60 border-[#cec8bc] dark:border-slate-700 text-[#5c5750] dark:text-slate-400'
+                        }`}
+                      >
+                        <div>
+                          <span className="font-bold font-mono text-xs">{reg.tasaInteres}%</span>
+                          <span className="text-[10px] block text-[#7d776f]">
+                            {new Date(reg.fechaCreacion).toLocaleDateString()} {reg.usuarioCreacion?.nombreUsuario ? `• ${reg.usuarioCreacion.nombreUsuario}` : ''}
+                          </span>
+                        </div>
+                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                          reg.activa ? 'bg-emerald-200 dark:bg-emerald-900 text-emerald-800 dark:text-emerald-200' : 'bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300'
+                        }`}>
+                          {reg.activa ? 'Activa' : 'Histórica'}
+                        </span>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+
+              <div className="flex justify-end gap-2 pt-3 border-t border-[#cec8bc] dark:border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => setIsMoraModalOpen(false)}
+                  className="px-4 py-2 rounded-xl text-xs font-bold text-[#7d776f]"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSubmittingMora || nuevaTasaMoraInput === ''}
+                  className="px-4 py-2 rounded-xl bg-indigo-700 hover:bg-indigo-800 text-white text-xs font-bold shadow-md cursor-pointer disabled:opacity-50"
+                >
+                  {isSubmittingMora ? 'Guardando...' : 'Guardar Nueva Regla'}
                 </button>
               </div>
             </form>
