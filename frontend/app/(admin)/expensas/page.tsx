@@ -33,6 +33,8 @@ export interface ExpensaItem {
   idDepartamento: number
   periodo: string
   monto: number
+  montoBase?: number
+  montoAgua?: number
   saldoPendiente: number
   tasaInteresMora: number
   fechaVencimiento: string
@@ -258,6 +260,8 @@ export default function ExpensasPage() {
             idDepartamento: item.idDepartamento,
             periodo: new Date(item.periodo).toISOString().split('T')[0],
             monto: Number(item.monto),
+            montoBase: item.montoBase !== undefined && item.montoBase !== null ? Number(item.montoBase) : Number(item.monto) - Number(item.montoAgua || 0),
+            montoAgua: Number(item.montoAgua || 0),
             saldoPendiente: Number(item.saldoPendiente),
             tasaInteresMora: Number(item.tasaInteresMora || 0),
             fechaVencimiento: new Date(item.fechaVencimiento).toISOString().split('T')[0],
@@ -772,40 +776,42 @@ export default function ExpensasPage() {
               <table className="w-full text-left border-collapse text-xs sm:text-sm">
                 <thead>
                   <tr className="border-b border-[#cec8bc] dark:border-slate-800 bg-[#dfd9ce]/60 dark:bg-slate-950/60 text-[#7d776f] dark:text-slate-400 uppercase text-[11px] font-bold">
-                    <th className="py-3 px-4">Departamento</th>
-                    <th className="py-3 px-4">Propietario Responsable</th>
-                    <th className="py-3 px-4">Ocupante / Pagado Por</th>
-                    <th className="py-3 px-4">Período</th>
-                    <th className="py-3 px-4">Monto Expensa</th>
-                    <th className="py-3 px-4">Saldo Pendiente</th>
-                    <th className="py-3 px-4">Estado</th>
-                    <th className="py-3 px-4 text-right">Acciones</th>
+                    <th className="py-3 px-3">Departamento</th>
+                    <th className="py-3 px-3">Propietario Responsable</th>
+                    <th className="py-3 px-3">Ocupante / Pagado Por</th>
+                    <th className="py-3 px-3">Período</th>
+                    <th className="py-3 px-3 font-mono text-right">Base (Bs)</th>
+                    <th className="py-3 px-3 font-mono text-right">Agua (Bs)</th>
+                    <th className="py-3 px-3 font-mono text-right">Total (Bs)</th>
+                    <th className="py-3 px-3">Saldo</th>
+                    <th className="py-3 px-3">Estado</th>
+                    <th className="py-3 px-3 text-right">Acciones</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-[#cec8bc] dark:divide-slate-800">
                   {expensasFiltradas.length === 0 ? (
                     <tr>
-                      <td colSpan={8} className="py-8 text-center text-[#7d776f] dark:text-slate-500">
+                      <td colSpan={10} className="py-8 text-center text-[#7d776f] dark:text-slate-500">
                         No se encontraron expensas registradas con los filtros seleccionados.
                       </td>
                     </tr>
                   ) : (
                     expensasFiltradas.map((item) => (
                       <tr key={item.idExpensa} className="hover:bg-[#dfd9ce]/40 dark:hover:bg-slate-800/40">
-                        <td className="py-3.5 px-4">
+                        <td className="py-3.5 px-3">
                           <div className="font-extrabold text-[#262422] dark:text-white">
                             Dpto. {item.departamento?.numero || item.idDepartamento}
                           </div>
                           <div className="text-[11px] text-[#7d776f] dark:text-slate-400">
-                            {item.departamento?.tipologia || '80 m² (Alícuota 5%)'}
+                            {item.departamento?.tipologia || 'Departamento'}
                           </div>
                         </td>
 
-                        <td className="py-3.5 px-4 font-bold text-[#262422] dark:text-white">
+                        <td className="py-3.5 px-3 font-bold text-[#262422] dark:text-white">
                           {item.propietarioNombre || 'Propietario Titular'}
                         </td>
 
-                        <td className="py-3.5 px-4">
+                        <td className="py-3.5 px-3">
                           <div className="text-xs text-[#262422] dark:text-white">
                             {item.inquilinoNombre || '—'}
                           </div>
@@ -816,17 +822,20 @@ export default function ExpensasPage() {
                           )}
                         </td>
 
-                        <td className="py-3.5 px-4 font-mono text-xs">{item.periodo}</td>
+                        <td className="py-3.5 px-3 font-mono text-xs">{item.periodo}</td>
 
-                        <td className="py-3.5 px-4 font-mono">
-                          <div className="font-extrabold text-[#262422] dark:text-white">
+                        {/* Columnas separadas: montoBase, montoAgua, monto */}
+                        <td className="py-3.5 px-3 font-mono text-right font-bold text-[#262422] dark:text-white">
+                          Bs. {(item.montoBase !== undefined ? item.montoBase : (item.monto - (item.montoAgua || 0))).toFixed(2)}
+                        </td>
+
+                        <td className="py-3.5 px-3 font-mono text-right font-bold text-blue-700 dark:text-blue-400">
+                          Bs. {(item.montoAgua || 0).toFixed(2)}
+                        </td>
+
+                        <td className="py-3.5 px-3 font-mono text-right">
+                          <div className="font-extrabold text-emerald-800 dark:text-emerald-300 text-sm">
                             Bs. {item.monto.toFixed(2)}
-                          </div>
-                          <div className="text-[10px] text-blue-700 dark:text-blue-400 font-semibold">
-                            Alícuota {item.alicuota || (item.monto === 581.25 ? 3.75 : item.monto === 775 ? 5.0 : 6.25)}%
-                          </div>
-                          <div className="text-[9px] text-[#7d776f] dark:text-slate-400">
-                            Seg Bs {(5600 * (item.alicuota || (item.monto === 581.25 ? 3.75 : item.monto === 775 ? 5.0 : 6.25)) / 100).toFixed(0)} • Adm Bs {(3500 * (item.alicuota || (item.monto === 581.25 ? 3.75 : item.monto === 775 ? 5.0 : 6.25)) / 100).toFixed(0)} • Otros Bs {(6400 * (item.alicuota || (item.monto === 581.25 ? 3.75 : item.monto === 775 ? 5.0 : 6.25)) / 100).toFixed(0)}
                           </div>
                         </td>
 

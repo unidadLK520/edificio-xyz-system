@@ -354,44 +354,27 @@ export default function ParametrosDepartamentosTab({
           </div>
         </div>
 
-        {/* TARJETA 2: TARIFA DE AGUA Y MEDIDORES */}
+        {/* TARJETA 2: AGUA MANUAL POR DEPARTAMENTO */}
         <div className="p-5 rounded-3xl bg-[#ede9e1] dark:bg-slate-900 border border-[#cec8bc] dark:border-slate-800 shadow-sm space-y-3.5">
           <div className="flex items-center justify-between border-b border-[#cec8bc] dark:border-slate-800 pb-2.5">
             <div className="flex items-center gap-2">
               <Droplets className="w-4 h-4 text-blue-600 dark:text-blue-400" />
               <h3 className="font-extrabold text-sm text-[#262422] dark:text-white">
-                2. Medidor de Agua (Cubos)
+                2. Agua Manual por Departamento
               </h3>
             </div>
             <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded-full bg-blue-100 dark:bg-blue-950/60 text-blue-800 dark:text-blue-300">
-              5 Bs / Cubo
+              PUT /agua/montos
             </span>
           </div>
 
           <div className="space-y-3 text-xs">
-            <div>
-              <label className="block font-bold text-[#5c5750] dark:text-slate-300 mb-1">
-                Tarifa por Cubo (Metro Cúbico m³) *
-              </label>
-              <div className="flex items-center gap-2">
-                <input
-                  type="number"
-                  step="0.5"
-                  value={config.tarifaAguaM3}
-                  onChange={(e) => setConfig({ ...config, tarifaAguaM3: Number(e.target.value) })}
-                  className="w-24 px-3 py-1.5 rounded-xl bg-[#dfd9ce] dark:bg-slate-800 border border-[#cec8bc] dark:border-slate-700 font-mono font-bold text-sm text-[#262422] dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-600"
-                />
-                <span className="text-[#7d776f]">Bs. por cada m³ consumido</span>
-              </div>
-            </div>
-
             <div className="p-3 rounded-2xl bg-white/70 dark:bg-slate-950/60 border border-[#cec8bc] dark:border-slate-800 text-[11px] space-y-1">
               <span className="font-bold text-xs text-[#262422] dark:text-white block">
-                Cálculo de Consumo
+                Monto Fijo Mensual Directo
               </span>
               <p className="text-[#5c5750] dark:text-slate-400 leading-relaxed">
-                Consumo = Lectura Actual − Lectura Anterior (m³). El importe a cobrar se liquida
-                multiplicando el consumo por la tarifa unitaria fijada.
+                El monto de agua se registra manualmente por departamento y mes en la pestaña dedicada "Consumo de Agua (Bs)". No se utilizan medidores ni tarifas por metro cúbico.
               </p>
             </div>
           </div>

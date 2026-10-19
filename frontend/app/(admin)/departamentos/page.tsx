@@ -38,6 +38,7 @@ import FichaTecnicaModal from '@/components/departamentos/FichaTecnicaModal'
 import AsignarUnidadModal from '@/components/departamentos/AsignarUnidadModal'
 import ParametrosDepartamentosTab from '@/components/departamentos/ParametrosDepartamentosTab'
 import TiposDepartamentosTab from '@/components/departamentos/TiposDepartamentosTab'
+import AguaDepartamentosTab from '@/components/departamentos/AguaDepartamentosTab'
 
 // Semilla basada en el modelo administrativo real de 20 departamentos (1,600 m² totales)
 const UNIDADES_SEED: UnidadItem[] = [
@@ -469,7 +470,7 @@ const UNIDADES_SEED: UnidadItem[] = [
 
 export default function DepartamentosPage() {
   const [unidades, setUnidades] = useState<UnidadItem[]>(UNIDADES_SEED)
-  const [activeTab, setActiveTab] = useState<'catastro' | 'tipos' | 'parametros'>('catastro')
+  const [activeTab, setActiveTab] = useState<'catastro' | 'tipos' | 'parametros' | 'agua'>('catastro')
   const [tiposDepto, setTiposDepto] = useState<TipoDepartamentoItem[]>(DEFAULT_TIPOS_DEPARTAMENTO)
   const [searchTerm, setSearchTerm] = useState('')
   const [filtroTipo, setFiltroTipo] = useState<string>('Todos')
@@ -920,6 +921,19 @@ export default function DepartamentosPage() {
 
         <button
           type="button"
+          onClick={() => setActiveTab('agua')}
+          className={`inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition-all cursor-pointer ${
+            activeTab === 'agua'
+              ? 'bg-rose-700 text-white shadow-md shadow-rose-900/20'
+              : 'bg-[#ede9e1] dark:bg-slate-900 text-[#66615b] dark:text-slate-400 hover:text-[#262422] dark:hover:text-white border border-[#cec8bc] dark:border-slate-800'
+          }`}
+        >
+          <Building2 className="w-4 h-4 text-blue-500" />
+          <span>Consumo de Agua (Bs)</span>
+        </button>
+
+        <button
+          type="button"
           onClick={() => setActiveTab('parametros')}
           className={`inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition-all cursor-pointer ${
             activeTab === 'parametros'
@@ -928,7 +942,7 @@ export default function DepartamentosPage() {
           }`}
         >
           <Sliders className="w-4 h-4 text-amber-500" />
-          <span>Parámetros & Medidores</span>
+          <span>Reglas & Mora</span>
         </button>
       </div>
 
@@ -1162,6 +1176,11 @@ export default function DepartamentosPage() {
           onDeleteTipo={handleDeleteTipoDepto}
           onResetDefaults={handleResetDefaultTipos}
           onSincronizarUnidadesTipo={handleSincronizarUnidadesTipo}
+          showToast={showToast}
+        />
+      ) : activeTab === 'agua' ? (
+        <AguaDepartamentosTab
+          unidades={unidades}
           showToast={showToast}
         />
       ) : (
