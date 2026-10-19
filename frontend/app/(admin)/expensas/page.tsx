@@ -45,6 +45,7 @@ export interface ExpensaItem {
     areaM2?: number
     alicuota?: number
     inquilino?: { nombres: string; apellidos: string }
+    propietario?: { idPersona?: number; nombres?: string; apellidos?: string; ciNit?: string }
   }
   propietarioNombre?: string
   inquilinoNombre?: string
@@ -186,11 +187,14 @@ export default function ExpensasPage() {
   const [expensaAPagar, setExpensaAPagar] = useState<ExpensaItem | null>(null)
   const [estadoCuentaData, setEstadoCuentaData] = useState<any | null>(null)
   const [successToast, setSuccessToast] = useState<string | null>(null)
+  const [errorToast, setErrorToast] = useState<string | null>(null)
+  const [modalError, setModalError] = useState<string | null>(null)
+  const [personasList, setPersonasList] = useState<Array<{ idPersona: number; nombres: string; apellidos: string; ciNit?: string }>>([])
 
   // Formulario Pago
   const [montoPagoInput, setMontoPagoInput] = useState<number>(0)
   const [metodoPagoInput, setMetodoPagoInput] = useState<string>('Transferencia')
-  const [pagadoPorInput, setPagadoPorInput] = useState<string>('')
+  const [idPersonaPagadorInput, setIdPersonaPagadorInput] = useState<number | ''>('')
   const [esAnticipadoInput, setEsAnticipadoInput] = useState<boolean>(false)
   const [comprobanteUrlInput, setComprobanteUrlInput] = useState<string>('')
   const [isSubmittingPago, setIsSubmittingPago] = useState<boolean>(false)
@@ -211,6 +215,26 @@ export default function ExpensasPage() {
     setSuccessToast(msg)
     setTimeout(() => setSuccessToast(null), 4000)
   }
+
+  const showErrorToast = (msg: string) => {
+    setErrorToast(msg)
+    setModalError(msg)
+    setTimeout(() => setErrorToast(null), 6000)
+  }
+
+  const fetchPersonas = useCallback(async () => {
+    try {
+      const res = await fetch('/api/v1/personas?limit=100')
+      if (res.ok) {
+        const json = await res.json()
+        if (json.data && Array.isArray(json.data)) {
+          setPersonasList(json.data)
+        }
+      }
+    } catch (err) {
+      console.error('Error al cargar personas:', err)
+    }
+  }, [])
 
   // Fetch expensas desde la API con fallback
   const fetchExpensas = useCallback(async () => {
@@ -259,7 +283,8 @@ export default function ExpensasPage() {
   useEffect(() => {
     fetchExpensas()
     fetchMorosos()
-  }, [fetchExpensas, fetchMorosos])
+    fetchPersonas()
+  }, [fetchExpensas, fetchMorosos, fetchPersonas])
 
   // KPIs
   const totalFacturado = useMemo(() => expensas.reduce((acc, curr) => acc + curr.monto, 0), [expensas])
@@ -348,40 +373,47 @@ export default function ExpensasPage() {
   const handleRegistrarPagoSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!expensaAPagar) return
+
+    if (!idPersonaPagadorInput) {
+      showErrorToast('Debe seleccionar la persona pagadora.')
+      return
+    }
+
+    if (montoPagoInput <= 0) {
+      showErrorToast('El monto pagado debe ser mayor a cero.')
+      return
+    }
+
     setIsSubmittingPago(true)
+    setModalError(null)
 
     try {
       const res = await fetch(`/api/v1/expensas/${expensaAPagar.idExpensa}/pagos`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          montoPagado: montoPagoInput,
+          idPersonaPagador: Number(idPersonaPagadorInput),
+          montoPagado: Number(montoPagoInput),
           metodoPago: metodoPagoInput,
-          pagadoPor: pagadoPorInput || expensaAPagar.inquilinoNombre || expensaAPagar.propietarioNombre,
           esAnticipado: esAnticipadoInput,
-          comprobanteUrl: comprobanteUrlInput || undefined
+          comprobanteUrl: comprobanteUrlInput.trim() || undefined
         })
       })
 
-      // Actualizar estado local
-      setExpensas((prev) =>
-        prev.map((item) =>
-          item.idExpensa === expensaAPagar.idExpensa
-            ? {
-                ...item,
-                estado: 'Pagado',
-                saldoPendiente: Math.max(0, item.saldoPendiente - montoPagoInput),
-                pagadoPor: pagadoPorInput || item.inquilinoNombre || item.propietarioNombre
-              }
-            : item
-        )
-      )
+      const data = await res.json().catch(() => ({}))
 
+      if (!res.ok) {
+        const errorMsg = data.message || data.error || 'Error al registrar el pago'
+        showErrorToast(errorMsg)
+        return
+      }
+
+      await fetchExpensas()
       setIsPagarModalOpen(false)
       setExpensaAPagar(null)
-      showToast('¡Pago registrado y conciliado exitosamente!')
-    } catch {
-      alert('Error al registrar pago')
+      showToast(data.message || '¡Pago registrado y conciliado exitosamente!')
+    } catch (err: any) {
+      showErrorToast(err?.message || 'Error de conexión al registrar el pago')
     } finally {
       setIsSubmittingPago(false)
     }
@@ -484,6 +516,12 @@ export default function ExpensasPage() {
         <div className="p-4 bg-emerald-100 dark:bg-emerald-950/70 border border-emerald-300 dark:border-emerald-800 text-emerald-900 dark:text-emerald-200 rounded-2xl flex items-center gap-3 shadow-md animate-in fade-in slide-in-from-top-3 duration-300">
           <CheckCircle2 className="w-5 h-5 text-emerald-600 dark:text-emerald-400 shrink-0" />
           <span className="text-xs sm:text-sm font-bold">{successToast}</span>
+        </div>
+      )}
+      {errorToast && (
+        <div className="p-4 bg-rose-100 dark:bg-rose-950/70 border border-rose-300 dark:border-rose-800 text-rose-900 dark:text-rose-200 rounded-2xl flex items-center gap-3 shadow-md animate-in fade-in slide-in-from-top-3 duration-300">
+          <AlertCircle className="w-5 h-5 text-rose-600 dark:text-rose-400 shrink-0" />
+          <span className="text-xs sm:text-sm font-bold">{errorToast}</span>
         </div>
       )}
 
@@ -764,7 +802,18 @@ export default function ExpensasPage() {
                                 onClick={() => {
                                   setExpensaAPagar(item)
                                   setMontoPagoInput(item.saldoPendiente)
-                                  setPagadoPorInput(item.inquilinoNombre !== '— (Unidad Vacía)' ? item.inquilinoNombre || '' : item.propietarioNombre || '')
+                                  const propId = item.departamento?.propietario?.idPersona
+                                  if (propId) {
+                                    setIdPersonaPagadorInput(propId)
+                                  } else if (personasList.length > 0) {
+                                    setIdPersonaPagadorInput(personasList[0].idPersona)
+                                  } else {
+                                    setIdPersonaPagadorInput('')
+                                  }
+                                  setMetodoPagoInput('Transferencia')
+                                  setComprobanteUrlInput('')
+                                  setEsAnticipadoInput(false)
+                                  setModalError(null)
                                   setIsPagarModalOpen(true)
                                 }}
                                 className="px-2.5 py-1 rounded-lg bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold cursor-pointer"
@@ -1216,6 +1265,13 @@ export default function ExpensasPage() {
             </div>
 
             <form onSubmit={handleRegistrarPagoSubmit} className="space-y-3.5 text-xs">
+              {modalError && (
+                <div className="p-3 bg-rose-100 dark:bg-rose-950/70 border border-rose-300 dark:border-rose-800 text-rose-900 dark:text-rose-200 rounded-xl flex items-center gap-2 text-xs">
+                  <AlertCircle className="w-4 h-4 shrink-0 text-rose-600 dark:text-rose-400" />
+                  <span>{modalError}</span>
+                </div>
+              )}
+
               <div>
                 <label className="block font-bold mb-1">Monto de la Expensa a Cancelar (Bs.) *</label>
                 <input
@@ -1230,30 +1286,35 @@ export default function ExpensasPage() {
 
               <div>
                 <label className="block font-bold mb-1">Persona que Realiza el Pago *</label>
-                <input
-                  type="text"
+                <select
                   required
-                  placeholder="Ej. María López (Inquilina) o Juan Pérez (Propietario)"
-                  value={pagadoPorInput}
-                  onChange={(e) => setPagadoPorInput(e.target.value)}
+                  value={idPersonaPagadorInput}
+                  onChange={(e) => setIdPersonaPagadorInput(Number(e.target.value))}
                   className="w-full px-3 py-2 rounded-xl bg-[#dfd9ce] dark:bg-slate-800 border text-xs"
-                />
+                >
+                  <option value="" disabled>Seleccione una persona...</option>
+                  {personasList.map((p) => (
+                    <option key={p.idPersona} value={p.idPersona}>
+                      {p.nombres} {p.apellidos} {p.ciNit ? `(CI: ${p.ciNit})` : ''}
+                    </option>
+                  ))}
+                </select>
                 <p className="text-[10px] text-[#7d776f] mt-1">
-                  El pago puede realizarlo el inquilino o propietario sin alterar la titularidad del departamento.
+                  Persona registrada en el sistema. Por defecto se selecciona el propietario del departamento.
                 </p>
               </div>
 
               <div>
-                <label className="block font-bold mb-1">Forma de Pago</label>
+                <label className="block font-bold mb-1">Forma de Pago *</label>
                 <select
                   value={metodoPagoInput}
                   onChange={(e) => setMetodoPagoInput(e.target.value)}
-                  className="w-full px-3 py-2 rounded-xl bg-[#dfd9ce] dark:bg-slate-800 border"
+                  className="w-full px-3 py-2 rounded-xl bg-[#dfd9ce] dark:bg-slate-800 border text-xs"
                 >
-                  <option value="Transferencia BNB">Transferencia Bancaria (BNB)</option>
-                  <option value="Transferencia BMSC">Transferencia Bancaria (BMSC)</option>
-                  <option value="QR Simple Interbancario">Pago Móvil QR Simple</option>
-                  <option value="Efectivo en Administración">Efectivo en Caja Administración</option>
+                  <option value="Transferencia">Transferencia Bancaria</option>
+                  <option value="QR">Pago QR</option>
+                  <option value="Efectivo">Efectivo en Caja</option>
+                  <option value="Cheque">Cheque</option>
                 </select>
               </div>
 
