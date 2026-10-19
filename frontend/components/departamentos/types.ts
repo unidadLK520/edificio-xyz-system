@@ -107,62 +107,22 @@ export interface ParametrosCobroConfig {
   expensaBaseTipoC: number // 400 Bs
 }
 
-// Interfaz para Gestión 100% Editable de Tipos de Departamentos (Tipologías)
+// Interfaz para Gestión de Tipos de Departamentos conectada a la API
 export interface TipoDepartamentoItem {
   id: string
-  nombre: string // Ej: 'Tipo A', 'Tipo B', 'Tipo C', 'Penthouse'
-  codigo: string // Ej: 'A', 'B', 'C', 'PH'
-  areaM2: number // Superficie en m² (ej. 60, 80, 100)
-  expensaBase: number // Expensa base en Bs (ej. 300, 350, 400)
-  alicuotaEstimada?: number // % Alícuota sobre 1,600 m²
-  habitaciones: number // Nro de dormitorios
-  banos: number // Nro de baños
-  descripcion: string
-  colorBadge: 'blue' | 'emerald' | 'purple' | 'amber' | 'rose' | 'indigo' | string
+  idTipo?: number
+  nombre: string
+  codigo?: string
+  areaM2: number
+  expensaBase: number
+  montoExpensa?: number
   activo: boolean
+  departamentosAsignados?: number
+  habitaciones?: number
+  banos?: number
+  alicuotaEstimada?: number
+  descripcion?: string
+  colorBadge?: string
 }
 
-export const DEFAULT_TIPOS_DEPARTAMENTO: TipoDepartamentoItem[] = [
-  {
-    id: 'tipo-a',
-    nombre: 'Tipo A',
-    codigo: 'A',
-    areaM2: 60.0,
-    expensaBase: 300.0,
-    alicuotaEstimada: 3.75,
-    habitaciones: 2,
-    banos: 1,
-    descripcion:
-      'Departamento compacto de 2 dormitorios, 1 baño, living-comedor y cocina americana.',
-    colorBadge: 'blue',
-    activo: true
-  },
-  {
-    id: 'tipo-b',
-    nombre: 'Tipo B',
-    codigo: 'B',
-    areaM2: 80.0,
-    expensaBase: 350.0,
-    alicuotaEstimada: 5.0,
-    habitaciones: 3,
-    banos: 2,
-    descripcion:
-      'Departamento familiar de 3 dormitorios (1 en suite), 2 baños y cocina independiente.',
-    colorBadge: 'emerald',
-    activo: true
-  },
-  {
-    id: 'tipo-c',
-    nombre: 'Tipo C',
-    codigo: 'C',
-    areaM2: 100.0,
-    expensaBase: 400.0,
-    alicuotaEstimada: 6.25,
-    habitaciones: 3,
-    banos: 3,
-    descripcion:
-      'Departamento amplio de 3 dormitorios en suite, balcón panorámico, dependencia y lavandería.',
-    colorBadge: 'purple',
-    activo: true
-  }
-]
+export const DEFAULT_TIPOS_DEPARTAMENTO: TipoDepartamentoItem[] = []

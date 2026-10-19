@@ -486,135 +486,157 @@ export default function DepartamentosPage() {
   const [createErrorMessage, setCreateErrorMessage] = useState<string | null>(null)
   const [successToast, setSuccessToast] = useState<string | null>(null)
 
-  // Cargar parámetros y tipos de departamentos guardados en localStorage
-  useEffect(() => {
+  // Cargar tipos de departamentos desde la API
+  const fetchTiposDepto = useCallback(async () => {
     try {
-      // 1. Tipologías editables
-      const savedTipos = localStorage.getItem('edificio_xyz_tipos_departamento')
-      if (savedTipos) {
-        const parsed = JSON.parse(savedTipos)
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          setTiposDepto(parsed)
+      const res = await fetch('/api/v1/tipos-departamento')
+      if (res.ok) {
+        const json = await res.json()
+        if (json.data && Array.isArray(json.data)) {
+          const mapped: TipoDepartamentoItem[] = json.data.map((t: any) => ({
+            id: String(t.idTipo),
+            idTipo: t.idTipo,
+            nombre: t.nombre,
+            codigo: t.nombre.slice(0, 3).toUpperCase(),
+            areaM2: t.areaM2 || 0,
+            expensaBase: t.montoExpensa,
+            montoExpensa: t.montoExpensa,
+            activo: t.activo !== false,
+            departamentosAsignados: t.departamentosAsignados || 0
+          }))
+          setTiposDepto(mapped)
         }
-      }
-
-      // 2. Parámetros de unidades
-      const savedUnidades = localStorage.getItem('edificio_xyz_unidades_parametros')
-      if (savedUnidades) {
-        const map = JSON.parse(savedUnidades)
-        setUnidades((prev) => prev.map((u) => (map[u.id] ? { ...u, ...map[u.id] } : u)))
       }
     } catch {}
   }, [])
 
-  // Manejadores para Tipos de Departamentos (100% Editables)
-  const handleSaveTipoDepto = (tipoGuardado: TipoDepartamentoItem, cascada: boolean) => {
-    setTiposDepto((prev) => {
-      const exists = prev.some((t) => t.id === tipoGuardado.id)
-      const nuevos = exists
-        ? prev.map((t) => (t.id === tipoGuardado.id ? tipoGuardado : t))
-        : [...prev, tipoGuardado]
+  useEffect(() => {
+    fetchTiposDepto()
+  }, [fetchTiposDepto])
 
-      try {
-        localStorage.setItem('edificio_xyz_tipos_departamento', JSON.stringify(nuevos))
-      } catch {}
-      return nuevos
-    })
+  // Manejadores para Tipos de Departamentos conectados a la API
+  const handleSaveTipoDepto = async (tipoGuardado: TipoDepartamentoItem, cascada: boolean): Promise<string | null> => {
+    try {
+      const idNumerico = tipoGuardado.idTipo || (!isNaN(Number(tipoGuardado.id)) ? Number(tipoGuardado.id) : null)
+      const isEdit = !!idNumerico
 
-    // Si se activó la opción de actualizar departamentos asociados
-    if (cascada) {
-      setUnidades((prev) => {
-        const updated = prev.map((u) => {
-          const match =
-            (u.tipologia &&
-              u.tipologia.toLowerCase().includes(tipoGuardado.nombre.toLowerCase())) ||
-            (u.tipologia && u.tipologia.includes(tipoGuardado.codigo)) ||
-            (u.areaM2 && Math.abs(u.areaM2 - tipoGuardado.areaM2) < 0.1)
+      const url = isEdit ? `/api/v1/tipos-departamento/${idNumerico}` : '/api/v1/tipos-departamento'
+      const method = isEdit ? 'PUT' : 'POST'
+      const payload: any = {
+        nombre: tipoGuardado.nombre.trim(),
+        montoExpensa: tipoGuardado.expensaBase,
+        areaM2: tipoGuardado.areaM2 > 0 ? tipoGuardado.areaM2 : null,
+        activo: tipoGuardado.activo !== false
+      }
 
-          if (match) {
-            return {
-              ...u,
-              tipologia: tipoGuardado.nombre,
-              areaM2: tipoGuardado.areaM2,
-              expensaBase: tipoGuardado.expensaBase,
-              alicuota: Number(((tipoGuardado.areaM2 / 1600) * 100).toFixed(2))
-            }
-          }
-          return u
-        })
-
-        try {
-          const existingSaved = localStorage.getItem('edificio_xyz_unidades_parametros')
-          const map = existingSaved ? JSON.parse(existingSaved) : {}
-          updated.forEach((u) => {
-            map[u.id] = u
-          })
-          localStorage.setItem('edificio_xyz_unidades_parametros', JSON.stringify(map))
-        } catch {}
-
-        return updated
+      const res = await fetch(url, {
+        method,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
       })
-    }
 
-    showToast(`¡Tipo de departamento "${tipoGuardado.nombre}" guardado exitosamente!`)
+      const json = await res.json().catch(() => ({}))
+
+      if (!res.ok) {
+        const errorMsg = json.message || (res.status === 409 ? 'Conflicto: Ya existe un tipo con ese nombre o no se puede desactivar con unidades asignadas.' : 'Error al guardar el tipo de departamento')
+        showToast(errorMsg)
+        return errorMsg
+      }
+
+      await fetchTiposDepto()
+      await fetchUnidades()
+      showToast(`¡Tipo de departamento "${tipoGuardado.nombre}" guardado exitosamente!`)
+      return null
+    } catch (e: any) {
+      const msg = 'Error de conexión al guardar tipo de departamento'
+      showToast(msg)
+      return msg
+    }
   }
 
-  const handleDeleteTipoDepto = (id: string) => {
-    setTiposDepto((prev) => {
-      const filtered = prev.filter((t) => t.id !== id)
-      try {
-        localStorage.setItem('edificio_xyz_tipos_departamento', JSON.stringify(filtered))
-      } catch {}
-      return filtered
-    })
+  const handleDeleteTipoDepto = async (id: string): Promise<string | null> => {
+    try {
+      const idNumerico = Number(id)
+      if (isNaN(idNumerico)) {
+        setTiposDepto((prev) => prev.filter((t) => t.id !== id))
+        return null
+      }
+
+      const res = await fetch(`/api/v1/tipos-departamento/${idNumerico}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ activo: false })
+      })
+
+      const json = await res.json().catch(() => ({}))
+
+      if (!res.ok) {
+        const msg = json.message || 'No se puede desactivar el tipo de departamento'
+        showToast(msg)
+        return msg
+      }
+
+      await fetchTiposDepto()
+      showToast('Tipo de departamento desactivado correctamente.')
+      return null
+    } catch {
+      const msg = 'Error de conexión al desactivar tipo de departamento'
+      showToast(msg)
+      return msg
+    }
   }
 
   const handleResetDefaultTipos = () => {
-    setTiposDepto(DEFAULT_TIPOS_DEPARTAMENTO)
-    try {
-      localStorage.setItem(
-        'edificio_xyz_tipos_departamento',
-        JSON.stringify(DEFAULT_TIPOS_DEPARTAMENTO)
-      )
-    } catch {}
-    showToast('Tipologías restablecidas a los valores por defecto (Tipos A, B y C).')
+    fetchTiposDepto()
+    showToast('Tipologías recargadas desde el servidor.')
   }
 
-  const handleSincronizarUnidadesTipo = (tipo: TipoDepartamentoItem) => {
-    let count = 0
-    setUnidades((prev) => {
-      const updated = prev.map((u) => {
-        const match =
-          (u.tipologia && u.tipologia.toLowerCase().includes(tipo.nombre.toLowerCase())) ||
-          (u.tipologia && u.tipologia.includes(tipo.codigo)) ||
-          (u.areaM2 && Math.abs(u.areaM2 - tipo.areaM2) < 0.1)
+  const handleSincronizarUnidadesTipo = async (tipo: TipoDepartamentoItem) => {
+    try {
+      const idTipoNum = tipo.idTipo || Number(tipo.id)
+      if (!idTipoNum || isNaN(idTipoNum)) {
+        showToast('Tipo no válido para sincronización masiva')
+        return
+      }
 
-        if (match) {
-          count++
-          return {
-            ...u,
-            tipologia: tipo.nombre,
-            areaM2: tipo.areaM2,
-            expensaBase: tipo.expensaBase,
-            alicuota: Number(((tipo.areaM2 / 1600) * 100).toFixed(2))
-          }
-        }
-        return u
+      const deptosCoincidentes = unidades.filter((u) => {
+        if (u.tipoUnidad !== 'Departamento') return false
+        return (
+          (u.tipologia && u.tipologia.toLowerCase().includes(tipo.nombre.toLowerCase())) ||
+          (u.tipologia && tipo.codigo && u.tipologia.includes(tipo.codigo)) ||
+          (u.areaM2 && tipo.areaM2 && Math.abs(u.areaM2 - tipo.areaM2) < 0.1)
+        )
       })
 
-      try {
-        const existingSaved = localStorage.getItem('edificio_xyz_unidades_parametros')
-        const map = existingSaved ? JSON.parse(existingSaved) : {}
-        updated.forEach((u) => {
-          map[u.id] = u
-        })
-        localStorage.setItem('edificio_xyz_unidades_parametros', JSON.stringify(map))
-      } catch {}
+      if (deptosCoincidentes.length === 0) {
+        showToast(`No se encontraron departamentos para asociar a "${tipo.nombre}".`)
+        return
+      }
 
-      return updated
-    })
+      const asignaciones = deptosCoincidentes.map((d) => ({
+        idDepartamento: d.id,
+        idTipo: idTipoNum
+      }))
 
-    showToast(`¡${count} departamentos sincronizados con la tipología "${tipo.nombre}"!`)
+      const res = await fetch('/api/v1/departamentos/asignar-tipo', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ asignaciones })
+      })
+
+      const json = await res.json().catch(() => ({}))
+
+      if (!res.ok) {
+        showToast(json.message || `Error al sincronizar departamentos con "${tipo.nombre}" (Código ${res.status})`)
+        return
+      }
+
+      await fetchUnidades()
+      await fetchTiposDepto()
+      showToast(`¡${asignaciones.length} departamentos sincronizados y asignados a "${tipo.nombre}"!`)
+    } catch {
+      showToast('Error de conexión al sincronizar tipologías')
+    }
   }
 
   const handleUpdateUnidadParametros = (updated: UnidadItem) => {
@@ -788,6 +810,25 @@ export default function DepartamentosPage() {
       estado: formData.estado
     }
     handleUpdateUnidadParametros(updatedUnidad)
+
+    // Si es departamento y cambió tipología, asignar tipo en backend (PUT /api/v1/departamentos/:id/tipo)
+    if (unidadToEdit.tipoUnidad === 'Departamento' && formData.tipologia) {
+      const tipoSel = tiposDepto.find((t) => t.nombre === formData.tipologia)
+      const idTipoNum = tipoSel?.idTipo || (tipoSel ? Number(tipoSel.id) : null)
+      if (idTipoNum && !isNaN(idTipoNum)) {
+        try {
+          const resTipo = await fetch(`/api/v1/departamentos/${unidadToEdit.id}/tipo`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ idTipo: idTipoNum })
+          })
+          if (!resTipo.ok) {
+            const errJson = await resTipo.json().catch(() => ({}))
+            showToast(errJson.message || `Error 422: No se pudo asignar el tipo al departamento`)
+          }
+        } catch {}
+      }
+    }
 
     try {
       const res = await fetch(`/api/v1/unidades/${unidadToEdit.id}`, {
