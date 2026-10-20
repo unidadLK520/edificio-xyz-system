@@ -6,7 +6,7 @@
 import dotenv from 'dotenv';
 import path from 'path';
 import fs from 'fs';
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient } from '@edificio-xyz/database';
 
 dotenv.config({ path: path.resolve(__dirname, '../.env') });
 
