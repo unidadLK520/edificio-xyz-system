@@ -12,7 +12,10 @@
     "db:push": "turbo db:push",
     "db:seed": "turbo db:seed",
     "db:studio": "pnpm --filter @edificio-xyz/database db:studio",
-    "db:sync-all": "pnpm --filter @edificio-xyz/database db:sync-all"
+    "db:sync-all": "pnpm --filter @edificio-xyz/database db:sync-all",
+    "check:t29": "pnpm --filter @edificio-xyz/api check:t29",
+    "check:t36": "pnpm --filter @edificio-xyz/api check:t36",
+    "check:t37-t38": "pnpm --filter @edificio-xyz/api check:t37-t38"
   },
   "packageManager": "pnpm@10.33.0",
   "devDependencies": {
