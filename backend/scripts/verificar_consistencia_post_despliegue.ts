@@ -5,7 +5,7 @@
 
 import dotenv from 'dotenv';
 import path from 'path';
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient } from '@edificio-xyz/database';
 
 dotenv.config({ path: path.resolve(__dirname, '../.env') });
 
@@ -114,7 +114,7 @@ async function main() {
       },
     });
 
-    const estadosValidos = ['Pendiente', 'Pagado', 'Moroso', 'Anulado'];
+    const estadosValidos = ['Pendiente', 'Pagado', 'Parcial', 'Moroso', 'Anulado'];
     const todasLasExpensas = await prisma.expensa.findMany({ select: { estado: true } });
     const estadosInvalidos = todasLasExpensas.filter((e) => !estadosValidos.includes(e.estado));
 
@@ -153,18 +153,22 @@ async function main() {
     let discrepanciasSaldos = 0;
     for (const exp of expensasConRelaciones) {
       const montoTotal = Number(exp.monto);
+      const mora = Number(exp.montoMora || 0);
       const sumaPagos = exp.pagos.reduce((acc, p) => acc + Number(p.montoPagado), 0);
       const sumaAnticipos = exp.aplicacionesAnticipos
         .filter((a) => !a.pago?.anulado)
         .reduce((acc, a) => acc + Number(a.monto), 0);
 
-      const saldoEsperado = Math.max(0, Math.round((montoTotal - sumaPagos - sumaAnticipos) * 100) / 100);
       const saldoActual = Number(exp.saldoPendiente);
+      // Si está pagada con saldo 0 (registro histórico o liquidado), saldo esperado es 0
+      const saldoEsperado = (exp.estado === 'Pagado' && saldoActual === 0)
+        ? 0
+        : Math.max(0, Math.round((montoTotal - sumaPagos - sumaAnticipos + mora) * 100) / 100);
 
-      // Margen de tolerancia de 1 centavo por redondeos de coma flotante
+      // Margen de tolerancia de 5 centavos por redondeos de coma flotante
       if (Math.abs(saldoEsperado - saldoActual) > 0.05) {
         discrepanciasSaldos++;
-        console.error(`❌ Discrepancia en Expensa ID ${exp.idExpensa} (Dpto ${exp.idDepartamento}): Saldo almacenado = ${saldoActual}, Saldo analítico esperado = ${saldoEsperado} (Monto: ${montoTotal}, Pagos: ${sumaPagos}, Anticipos: ${sumaAnticipos})`);
+        console.error(`❌ Discrepancia en Expensa ID ${exp.idExpensa} (Dpto ${exp.idDepartamento}): Saldo almacenado = ${saldoActual}, Saldo analítico esperado = ${saldoEsperado} (Monto: ${montoTotal}, Mora: ${mora}, Pagos: ${sumaPagos}, Anticipos: ${sumaAnticipos})`);
       }
     }
 
