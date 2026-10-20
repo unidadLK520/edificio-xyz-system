@@ -12,7 +12,7 @@ import { iniciarCronMora } from './modules/expensas';
 const app: Application = express();
 
 // ── Middlewares de seguridad y parsing ───────────────────────────────────────
-app.use(helmet());
+app.use(helmet({ crossOriginResourcePolicy: { policy: 'cross-origin' } }));
 app.use(
   cors({
     origin: config.corsOrigin,
@@ -23,6 +23,16 @@ app.use(
 );
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
+
+// ── Almacenamiento y servicio estático de comprobantes (US2.3-T35) ─────────────
+import path from 'path';
+import fs from 'fs';
+
+const uploadsAbsoluteDir = path.resolve(process.cwd(), config.storageUploadDir);
+if (!fs.existsSync(uploadsAbsoluteDir)) {
+  fs.mkdirSync(uploadsAbsoluteDir, { recursive: true });
+}
+app.use('/uploads', express.static(uploadsAbsoluteDir));
 
 // ── Logging en desarrollo ────────────────────────────────────────────────────
 if (config.isDev) {

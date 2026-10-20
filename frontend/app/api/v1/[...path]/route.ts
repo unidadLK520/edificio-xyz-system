@@ -789,6 +789,168 @@ async function proxyRequest(
       }
     }
 
+    if (targetPath.startsWith('expensas/estado-cuenta')) {
+      const parts = targetPath.split('/')
+      const idDepto = parseInt(parts[2]) || 1
+      const searchParams = request.nextUrl.searchParams
+      const filtroPeriodo = searchParams.get('periodo')
+      const filtroEstado = searchParams.get('estado')
+
+      const expensasBase = [
+        {
+          idExpensa: 101,
+          idDepartamento: idDepto,
+          periodo: '2026-10-01T00:00:00.000Z',
+          concepto: 'Expensa mensual Tipo B y Agua',
+          montoBase: 700.0,
+          montoAgua: 75.0,
+          monto: 775.0,
+          saldoPendiente: 775.0,
+          montoMora: 0,
+          tasaInteresMora: 5.0,
+          fechaVencimiento: '2026-10-10T00:00:00.000Z',
+          estado: 'Pendiente',
+          capitalPendiente: 775.0
+        },
+        {
+          idExpensa: 92,
+          idDepartamento: idDepto,
+          periodo: '2026-09-01T00:00:00.000Z',
+          concepto: 'Expensa mensual Tipo B',
+          montoBase: 775.0,
+          montoAgua: 0,
+          monto: 775.0,
+          saldoPendiente: 0,
+          montoMora: 0,
+          tasaInteresMora: 5.0,
+          fechaVencimiento: '2026-09-10T00:00:00.000Z',
+          estado: 'Pagado',
+          capitalPendiente: 0
+        },
+        {
+          idExpensa: 83,
+          idDepartamento: idDepto,
+          periodo: '2026-08-01T00:00:00.000Z',
+          concepto: 'Expensa mensual Tipo B',
+          montoBase: 775.0,
+          montoAgua: 0,
+          monto: 775.0,
+          saldoPendiente: 0,
+          montoMora: 0,
+          tasaInteresMora: 5.0,
+          fechaVencimiento: '2026-08-10T00:00:00.000Z',
+          estado: 'Pagado',
+          capitalPendiente: 0
+        }
+      ]
+
+      const pagosBase = [
+        {
+          idPago: 401,
+          idExpensa: 92,
+          idDepartamento: idDepto,
+          montoPagado: 775.0,
+          fechaPago: '2026-09-05T14:30:00.000Z',
+          metodoPago: 'Transferencia BNB',
+          anulado: false,
+          esAnticipado: false,
+          pagador: { nombres: 'Carlos', apellidos: 'Mendoza Rojas' }
+        },
+        {
+          idPago: 382,
+          idExpensa: 83,
+          idDepartamento: idDepto,
+          montoPagado: 775.0,
+          fechaPago: '2026-08-03T10:15:00.000Z',
+          metodoPago: 'QR Simple Interbancario',
+          anulado: false,
+          esAnticipado: false,
+          pagador: { nombres: 'Carlos', apellidos: 'Mendoza Rojas' }
+        }
+      ]
+
+      let expensasFiltradas = expensasBase
+      if (filtroEstado && filtroEstado !== 'Todos') {
+        expensasFiltradas = expensasFiltradas.filter((e) => e.estado.toLowerCase() === filtroEstado.toLowerCase())
+      }
+      if (filtroPeriodo) {
+        expensasFiltradas = expensasFiltradas.filter((e) => e.periodo.startsWith(filtroPeriodo))
+      }
+
+      const totalObligaciones = expensasFiltradas.reduce((acc, e) => acc + e.monto, 0)
+      const totalPagado = pagosBase.filter((p) => !p.anulado).reduce((acc, p) => acc + p.montoPagado, 0)
+      const saldoPendienteTotal = expensasFiltradas.reduce((acc, e) => acc + e.saldoPendiente, 0)
+
+      const movimientos = [
+        ...expensasFiltradas.map((e) => ({
+          id: `EXP-${e.idExpensa}`,
+          idReferencia: e.idExpensa,
+          tipo: 'OBLIGACION' as const,
+          fecha: e.periodo,
+          periodo: e.periodo,
+          concepto: e.concepto,
+          monto: e.monto,
+          debe: e.monto,
+          haber: 0,
+          saldoPendiente: e.saldoPendiente,
+          vencimiento: e.fechaVencimiento,
+          estado: e.estado,
+          montoMora: e.montoMora,
+          tasaInteresMora: e.tasaInteresMora,
+          capitalPendiente: e.capitalPendiente
+        })),
+        ...pagosBase.map((p) => ({
+          id: `PAG-${p.idPago}`,
+          idReferencia: p.idPago,
+          tipo: 'PAGO' as const,
+          fecha: p.fechaPago,
+          periodo: '2026-09',
+          concepto: `Pago de Expensa (${p.metodoPago})`,
+          monto: p.montoPagado,
+          debe: 0,
+          haber: p.montoPagado,
+          saldoPendiente: 0,
+          metodo: p.metodoPago,
+          anulado: false,
+          fechaPago: p.fechaPago,
+          pagador: `${p.pagador.nombres} ${p.pagador.apellidos}`
+        }))
+      ].sort((a, b) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime())
+
+      return NextResponse.json({
+        departamento: {
+          idDepartamento: idDepto,
+          numero: String(100 + idDepto),
+          piso: 1,
+          alicuota: 5.0,
+          tipo: { nombre: 'Tipo B (80 m²)' },
+          propietario: { nombres: 'Carlos', apellidos: 'Mendoza Rojas' },
+          ocupanteActual: {
+            tipoOcupante: 'Propietario',
+            persona: { nombres: 'Carlos', apellidos: 'Mendoza Rojas', telefono: '+591 71234567' }
+          }
+        },
+        filtrosAplicados: {
+          periodo: filtroPeriodo,
+          estado: filtroEstado
+        },
+        sinMovimientos: expensasFiltradas.length === 0,
+        resumen: {
+          totalObligaciones,
+          totalPagado,
+          saldoPendienteTotal,
+          totalAnticipos: 0,
+          totalAnticiposDisponibles: 0,
+          estadoGlobal: saldoPendienteTotal > 0 ? 'Deuda Pendiente' : 'Al Día'
+        },
+        movimientos,
+        expensas: expensasFiltradas,
+        pagos: pagosBase,
+        anticipos: [],
+        anticiposDisponibles: []
+      })
+    }
+
     if (targetPath.startsWith('health')) {
       return NextResponse.json({
         status: 'OK',
