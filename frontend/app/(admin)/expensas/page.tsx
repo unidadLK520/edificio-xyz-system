@@ -88,6 +88,14 @@ export default function ExpensasPage() {
   const [isLoading, setIsLoading] = useState<boolean>(false)
   const [personasList, setPersonasList] = useState<Array<{ idPersona: number; nombres: string; apellidos: string; ciNit?: string }>>([])
 
+  // Filtros interactivos del Estado de Cuenta
+  const [selectedDeptoIdParaEstadoCuenta, setSelectedDeptoIdParaEstadoCuenta] = useState<number | null>(null)
+  const [filtroECPeriodo, setFiltroECPeriodo] = useState<string>('')
+  const [filtroECEstado, setFiltroECEstado] = useState<string>('Todos')
+  const [filtroECDesde, setFiltroECDesde] = useState<string>('')
+  const [filtroECHasta, setFiltroECHasta] = useState<string>('')
+  const [isLoadingEC, setIsLoadingEC] = useState<boolean>(false)
+
   // Formulario Pago
   const [montoPagoInput, setMontoPagoInput] = useState<number>(0)
   const [metodoPagoInput, setMetodoPagoInput] = useState<string>('Transferencia')
@@ -388,20 +396,42 @@ export default function ExpensasPage() {
     }
   }
 
-  // Ver Estado de Cuenta
-  const handleVerEstadoCuenta = async (idDepartamento: number) => {
+  // Ver Estado de Cuenta con filtros opcionales
+  const handleVerEstadoCuenta = async (
+    idDepartamento: number,
+    filtrosOverrides?: { periodo?: string; estado?: string; desde?: string; hasta?: string }
+  ) => {
+    setSelectedDeptoIdParaEstadoCuenta(idDepartamento)
+    setIsLoadingEC(true)
+
+    const pPeriodo = filtrosOverrides?.periodo !== undefined ? filtrosOverrides.periodo : filtroECPeriodo
+    const pEstado = filtrosOverrides?.estado !== undefined ? filtrosOverrides.estado : filtroECEstado
+    const pDesde = filtrosOverrides?.desde !== undefined ? filtrosOverrides.desde : filtroECDesde
+    const pHasta = filtrosOverrides?.hasta !== undefined ? filtrosOverrides.hasta : filtroECHasta
+
+    const qParams = new URLSearchParams()
+    if (pPeriodo && pPeriodo.trim() !== '') qParams.append('periodo', pPeriodo.trim())
+    if (pEstado && pEstado !== 'Todos') qParams.append('estado', pEstado)
+    if (pDesde && pDesde.trim() !== '') qParams.append('desde', pDesde.trim())
+    if (pHasta && pHasta.trim() !== '') qParams.append('hasta', pHasta.trim())
+
+    const qStr = qParams.toString() ? `?${qParams.toString()}` : ''
+
     try {
-      const res = await fetch(`/api/v1/expensas/estado-cuenta/${idDepartamento}`)
+      const res = await fetch(`/api/v1/expensas/estado-cuenta/${idDepartamento}${qStr}`)
       if (res.ok) {
         const json = await res.json()
         setEstadoCuentaData(json)
         setIsEstadoCuentaModalOpen(true)
+        setIsLoadingEC(false)
         return
       }
       const err = await res.json().catch(() => ({}))
       showErrorToast(err.message || 'Error al obtener el estado de cuenta del servidor')
     } catch {
       showErrorToast('Error de conexión al cargar el estado de cuenta')
+    } finally {
+      setIsLoadingEC(false)
     }
   }
 
@@ -1675,7 +1705,7 @@ export default function ExpensasPage() {
       {/* MODAL ESTADO DE CUENTA (UI ESTADO DE CUENTA DEPTO) */}
       {isEstadoCuentaModalOpen && estadoCuentaData && (
         <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 backdrop-blur-xs">
-          <div className="w-full max-w-3xl bg-[#ede9e1] dark:bg-slate-900 rounded-3xl border border-[#cec8bc] dark:border-slate-800 p-6 sm:p-7 space-y-4 max-h-[92vh] overflow-y-auto shadow-2xl animate-in fade-in zoom-in-95 duration-200">
+          <div className="w-full max-w-4xl bg-[#ede9e1] dark:bg-slate-900 rounded-3xl border border-[#cec8bc] dark:border-slate-800 p-6 sm:p-7 space-y-4 max-h-[92vh] overflow-y-auto shadow-2xl animate-in fade-in zoom-in-95 duration-200">
             {/* Header del Estado de Cuenta */}
             <div className="flex justify-between items-start border-b border-[#cec8bc] dark:border-slate-800 pb-4">
               <div className="flex items-center gap-3">
@@ -1703,12 +1733,12 @@ export default function ExpensasPage() {
               </button>
             </div>
 
-            {/* Ficha Catastral del Departamento */}
+            {/* Ficha Catastral del Departamento y Ocupante */}
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 p-3.5 bg-white/70 dark:bg-slate-950/60 rounded-2xl border border-[#cec8bc] dark:border-slate-800 text-xs">
               <div>
                 <span className="text-[#7d776f] text-[10px] uppercase font-bold block">Tipología & m²</span>
                 <span className="font-extrabold text-[#262422] dark:text-white">
-                  {estadoCuentaData.departamento?.tipologia || 'Tipo B (80 m²)'}
+                  {estadoCuentaData.departamento?.tipo?.nombre || estadoCuentaData.departamento?.tipologia || '—'}
                 </span>
               </div>
               <div>
@@ -1720,29 +1750,131 @@ export default function ExpensasPage() {
               <div>
                 <span className="text-[#7d776f] text-[10px] uppercase font-bold block">Propietario Responsable</span>
                 <span className="font-extrabold text-[#262422] dark:text-white truncate block">
-                  {estadoCuentaData.departamento?.propietario?.nombres || 'Titular'}
+                  {estadoCuentaData.departamento?.propietario
+                    ? `${estadoCuentaData.departamento.propietario.nombres || ''} ${estadoCuentaData.departamento.propietario.apellidos || ''}`.trim()
+                    : 'Titular'}
                 </span>
               </div>
               <div>
-                <span className="text-[#7d776f] text-[10px] uppercase font-bold block">Ocupante / Inquilino</span>
+                <span className="text-[#7d776f] text-[10px] uppercase font-bold block">Ocupante Actual</span>
                 <span className="font-extrabold text-purple-700 dark:text-purple-400 truncate block">
-                  {estadoCuentaData.departamento?.inquilino?.nombres || 'Vive el Propietario'}
+                  {estadoCuentaData.departamento?.ocupanteActual?.persona
+                    ? `${estadoCuentaData.departamento.ocupanteActual.tipoOcupante}: ${estadoCuentaData.departamento.ocupanteActual.persona.nombres || ''} ${estadoCuentaData.departamento.ocupanteActual.persona.apellidos || ''}`.trim()
+                    : (estadoCuentaData.departamento?.inquilino?.nombres || 'Vive el Propietario')}
                 </span>
+              </div>
+            </div>
+
+            {/* BARRA DE FILTROS DEL ESTADO DE CUENTA */}
+            <div className="p-3 bg-[#dfd9ce]/60 dark:bg-slate-950/60 rounded-2xl border border-[#cec8bc] dark:border-slate-800 space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold text-[#262422] dark:text-white flex items-center gap-1.5">
+                  <Filter className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
+                  Filtros de Consulta Financiera
+                </span>
+                {isLoadingEC && (
+                  <span className="text-[11px] font-bold text-blue-600 dark:text-blue-400 animate-pulse">
+                    Actualizando...
+                  </span>
+                )}
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-4 gap-2 text-xs">
+                <div>
+                  <label className="text-[10px] font-bold text-[#7d776f] uppercase block mb-1">
+                    Estado
+                  </label>
+                  <select
+                    value={filtroECEstado}
+                    onChange={(e) => setFiltroECEstado(e.target.value)}
+                    className="w-full px-2.5 py-1.5 rounded-xl border border-[#cec8bc] dark:border-slate-700 bg-white dark:bg-slate-900 text-[#262422] dark:text-slate-100 font-semibold"
+                  >
+                    <option value="Todos">Todos los Estados</option>
+                    <option value="Pendiente">Pendiente</option>
+                    <option value="Moroso">Moroso</option>
+                    <option value="Pagado">Pagado</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="text-[10px] font-bold text-[#7d776f] uppercase block mb-1">
+                    Período (Mes)
+                  </label>
+                  <input
+                    type="month"
+                    value={filtroECPeriodo}
+                    onChange={(e) => setFiltroECPeriodo(e.target.value)}
+                    className="w-full px-2.5 py-1.5 rounded-xl border border-[#cec8bc] dark:border-slate-700 bg-white dark:bg-slate-900 text-[#262422] dark:text-slate-100 font-mono text-xs"
+                  />
+                </div>
+                <div>
+                  <label className="text-[10px] font-bold text-[#7d776f] uppercase block mb-1">
+                    Desde
+                  </label>
+                  <input
+                    type="date"
+                    value={filtroECDesde}
+                    onChange={(e) => setFiltroECDesde(e.target.value)}
+                    className="w-full px-2.5 py-1.5 rounded-xl border border-[#cec8bc] dark:border-slate-700 bg-white dark:bg-slate-900 text-[#262422] dark:text-slate-100 font-mono text-xs"
+                  />
+                </div>
+                <div>
+                  <label className="text-[10px] font-bold text-[#7d776f] uppercase block mb-1">
+                    Hasta
+                  </label>
+                  <input
+                    type="date"
+                    value={filtroECHasta}
+                    onChange={(e) => setFiltroECHasta(e.target.value)}
+                    className="w-full px-2.5 py-1.5 rounded-xl border border-[#cec8bc] dark:border-slate-700 bg-white dark:bg-slate-900 text-[#262422] dark:text-slate-100 font-mono text-xs"
+                  />
+                </div>
+              </div>
+              <div className="flex justify-end gap-2 pt-1">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setFiltroECPeriodo('')
+                    setFiltroECEstado('Todos')
+                    setFiltroECDesde('')
+                    setFiltroECHasta('')
+                    if (selectedDeptoIdParaEstadoCuenta) {
+                      handleVerEstadoCuenta(selectedDeptoIdParaEstadoCuenta, {
+                        periodo: '',
+                        estado: 'Todos',
+                        desde: '',
+                        hasta: ''
+                      })
+                    }
+                  }}
+                  className="px-3 py-1 rounded-lg text-xs font-bold text-[#5c5750] dark:text-slate-400 hover:bg-[#ded8cc] dark:hover:bg-slate-800"
+                >
+                  Limpiar Filtros
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (selectedDeptoIdParaEstadoCuenta) {
+                      handleVerEstadoCuenta(selectedDeptoIdParaEstadoCuenta)
+                    }
+                  }}
+                  className="px-3 py-1 bg-blue-700 hover:bg-blue-800 text-white rounded-lg text-xs font-bold shadow-xs cursor-pointer"
+                >
+                  Aplicar Filtro
+                </button>
               </div>
             </div>
 
             {/* Tarjetas KPI de Saldos */}
             <div className="grid grid-cols-3 gap-3">
               <div className="p-3.5 rounded-2xl bg-[#dfd9ce]/60 dark:bg-slate-950/60 border border-[#cec8bc] dark:border-slate-800 text-center">
-                <span className="text-[10px] uppercase font-bold text-[#7d776f] block">Total Facturado</span>
+                <span className="text-[10px] uppercase font-bold text-[#7d776f] block">Total Obligaciones</span>
                 <span className="text-base sm:text-lg font-black font-mono text-[#262422] dark:text-white">
-                  Bs. {estadoCuentaData.resumen?.totalObligaciones?.toFixed(2) || '0.00'}
+                  Bs. {Number(estadoCuentaData.resumen?.totalObligaciones || 0).toFixed(2)}
                 </span>
               </div>
               <div className="p-3.5 rounded-2xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-900/60 text-center">
                 <span className="text-[10px] uppercase font-bold text-emerald-800 dark:text-emerald-400 block">Total Pagado</span>
                 <span className="text-base sm:text-lg font-black font-mono text-emerald-700 dark:text-emerald-300">
-                  Bs. {estadoCuentaData.resumen?.totalPagado?.toFixed(2) || '0.00'}
+                  Bs. {Number(estadoCuentaData.resumen?.totalPagado || 0).toFixed(2)}
                 </span>
               </div>
               <div className={`p-3.5 rounded-2xl text-center border ${
@@ -1750,67 +1882,130 @@ export default function ExpensasPage() {
                   ? 'bg-red-50 dark:bg-red-950/40 border-red-200 dark:border-red-900/60 text-red-700 dark:text-red-300'
                   : 'bg-emerald-50 dark:bg-emerald-950/40 border-emerald-200 dark:border-emerald-900/60 text-emerald-700 dark:text-emerald-300'
               }`}>
-                <span className="text-[10px] uppercase font-bold block">Saldo Pendiente</span>
+                <span className="text-[10px] uppercase font-bold block">
+                  Saldo Pendiente {estadoCuentaData.resumen?.estadoGlobal && `(${estadoCuentaData.resumen.estadoGlobal})`}
+                </span>
                 <span className="text-base sm:text-lg font-black font-mono">
-                  Bs. {estadoCuentaData.resumen?.saldoPendienteTotal?.toFixed(2) || '0.00'}
+                  Bs. {Number(estadoCuentaData.resumen?.saldoPendienteTotal || 0).toFixed(2)}
                 </span>
               </div>
             </div>
 
-            {/* Tabla de Obligaciones y Pagos Históricos */}
+            {/* Indicador de Anticipos si los tiene */}
+            {(estadoCuentaData.resumen?.totalAnticiposDisponibles || 0) > 0 && (
+              <div className="p-3 rounded-2xl bg-indigo-50 dark:bg-indigo-950/40 border border-indigo-200 dark:border-indigo-900/60 flex items-center justify-between text-xs">
+                <div className="flex items-center gap-2">
+                  <CreditCard className="w-4 h-4 text-indigo-700 dark:text-indigo-400" />
+                  <span className="font-bold text-indigo-900 dark:text-indigo-200">
+                    Anticipos y Saldo a Favor Disponible:
+                  </span>
+                </div>
+                <span className="font-mono font-black text-indigo-700 dark:text-indigo-300 text-sm">
+                  Bs. {Number(estadoCuentaData.resumen.totalAnticiposDisponibles).toFixed(2)}
+                </span>
+              </div>
+            )}
+
+            {/* Tabla de Historial Cronológico y Línea de Tiempo de Movimientos */}
             <div className="rounded-2xl bg-white/80 dark:bg-slate-950/80 border border-[#cec8bc] dark:border-slate-800 overflow-hidden shadow-xs">
               <div className="p-3 border-b border-[#cec8bc] dark:border-slate-800 bg-[#dfd9ce]/40 dark:bg-slate-950/40 flex justify-between items-center text-xs">
                 <span className="font-extrabold text-[#262422] dark:text-white">
-                  Historial de Períodos y Obligaciones de Expensas
+                  Línea de Tiempo y Movimientos Financieros
                 </span>
-                <span className="text-[11px] text-[#7d776f]">Registro Oficial</span>
+                <span className="text-[11px] text-[#7d776f]">Registro Consolidado</span>
               </div>
-              <div className="overflow-x-auto">
-                <table className="w-full text-left border-collapse text-xs">
-                  <thead>
-                    <tr className="border-b border-[#cec8bc] dark:border-slate-800 bg-[#dfd9ce]/60 dark:bg-slate-950/60 text-[#7d776f] uppercase text-[10px] font-bold">
-                      <th className="py-2.5 px-3">Período</th>
-                      <th className="py-2.5 px-3">Concepto</th>
-                      <th className="py-2.5 px-3 font-mono">Cuota (Bs)</th>
-                      <th className="py-2.5 px-3">Vencimiento</th>
-                      <th className="py-2.5 px-3">Estado</th>
-                      <th className="py-2.5 px-3">Medio / Fecha de Pago</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-[#cec8bc] dark:divide-slate-800">
-                    {(estadoCuentaData.movimientos || []).map((mov: any, idx: number) => (
-                      <tr key={idx} className="hover:bg-[#dfd9ce]/30 dark:hover:bg-slate-800/30">
-                        <td className="py-2.5 px-3 font-bold font-mono text-[#262422] dark:text-white">
-                          {mov.periodo}
-                        </td>
-                        <td className="py-2.5 px-3 text-[#5c5750] dark:text-slate-300">
-                          {mov.concepto}
-                        </td>
-                        <td className="py-2.5 px-3 font-bold font-mono text-[#262422] dark:text-white">
-                          Bs. {Number(mov.monto).toFixed(2)}
-                        </td>
-                        <td className="py-2.5 px-3 font-mono text-[#7d776f]">
-                          {mov.vencimiento}
-                        </td>
-                        <td className="py-2.5 px-3">
-                          <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-extrabold ${
-                            mov.estado === 'Pagado'
-                              ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-400'
-                              : mov.estado === 'Pendiente'
-                                ? 'bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-400'
-                                : 'bg-red-100 text-red-800 dark:bg-red-950/60 dark:text-red-400'
-                          }`}>
-                            {mov.estado}
-                          </span>
-                        </td>
-                        <td className="py-2.5 px-3 text-[11px] text-[#5c5750] dark:text-slate-400">
-                          {mov.metodo} {mov.fechaPago !== '—' && `(${mov.fechaPago})`}
-                        </td>
+
+              {estadoCuentaData.sinMovimientos || (!estadoCuentaData.movimientos || estadoCuentaData.movimientos.length === 0) ? (
+                <div className="p-8 text-center space-y-2">
+                  <FileText className="w-8 h-8 text-[#7d776f] mx-auto opacity-50" />
+                  <p className="text-xs font-bold text-[#262422] dark:text-slate-300">
+                    Sin movimientos registrados
+                  </p>
+                  <p className="text-[11px] text-[#7d776f] dark:text-slate-400 max-w-sm mx-auto">
+                    No se encontraron obligaciones ni pagos para los filtros de búsqueda seleccionados.
+                  </p>
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left border-collapse text-xs">
+                    <thead>
+                      <tr className="border-b border-[#cec8bc] dark:border-slate-800 bg-[#dfd9ce]/60 dark:bg-slate-950/60 text-[#7d776f] uppercase text-[10px] font-bold">
+                        <th className="py-2.5 px-3">Fecha / Período</th>
+                        <th className="py-2.5 px-3">Tipo</th>
+                        <th className="py-2.5 px-3">Concepto & Detalle</th>
+                        <th className="py-2.5 px-3 text-right font-mono">Debe (Bs)</th>
+                        <th className="py-2.5 px-3 text-right font-mono">Haber (Bs)</th>
+                        <th className="py-2.5 px-3 text-right font-mono">Saldo</th>
+                        <th className="py-2.5 px-3 text-center">Estado</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+                    </thead>
+                    <tbody className="divide-y divide-[#cec8bc] dark:divide-slate-800">
+                      {estadoCuentaData.movimientos.map((mov: any, idx: number) => {
+                        const esObligacion = mov.tipo === 'OBLIGACION'
+                        const esPago = mov.tipo === 'PAGO'
+                        const esAnticipo = mov.tipo === 'ANTICIPO'
+                        return (
+                          <tr key={mov.id || idx} className="hover:bg-[#dfd9ce]/30 dark:hover:bg-slate-800/30">
+                            <td className="py-2.5 px-3 font-bold font-mono text-[#262422] dark:text-white whitespace-nowrap">
+                              {mov.fecha ? new Date(mov.fecha).toISOString().split('T')[0] : mov.periodo}
+                            </td>
+                            <td className="py-2.5 px-3">
+                              <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[9px] font-extrabold ${
+                                esObligacion
+                                  ? 'bg-blue-100 text-blue-800 dark:bg-blue-950/60 dark:text-blue-400'
+                                  : esAnticipo
+                                  ? 'bg-purple-100 text-purple-800 dark:bg-purple-950/60 dark:text-purple-300'
+                                  : 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-400'
+                              }`}>
+                                {mov.tipo || (mov.concepto?.includes('Pago') ? 'PAGO' : 'OBLIGACION')}
+                              </span>
+                            </td>
+                            <td className="py-2.5 px-3 text-[#5c5750] dark:text-slate-300">
+                              <div className="font-semibold">{mov.concepto}</div>
+                              {mov.pagador && (
+                                <div className="text-[10px] text-[#7d776f]">Pagado por: {mov.pagador}</div>
+                              )}
+                              {mov.vencimiento && (
+                                <div className="text-[10px] text-[#7d776f]">Vence: {mov.vencimiento}</div>
+                              )}
+                            </td>
+                            <td className="py-2.5 px-3 text-right font-bold font-mono text-[#262422] dark:text-white">
+                              {Number(mov.debe || (esObligacion ? mov.monto : 0)) > 0
+                                ? `Bs. ${Number(mov.debe || mov.monto).toFixed(2)}`
+                                : '—'}
+                            </td>
+                            <td className="py-2.5 px-3 text-right font-bold font-mono text-emerald-700 dark:text-emerald-400">
+                              {Number(mov.haber || (esPago || esAnticipo ? mov.monto : 0)) > 0
+                                ? `Bs. ${Number(mov.haber || mov.monto).toFixed(2)}`
+                                : '—'}
+                            </td>
+                            <td className="py-2.5 px-3 text-right font-mono text-[#7d776f] dark:text-slate-400">
+                              {mov.saldoPendiente !== undefined
+                                ? `Bs. ${Number(mov.saldoPendiente).toFixed(2)}`
+                                : (mov.saldo !== undefined ? `Bs. ${Number(mov.saldo).toFixed(2)}` : '—')}
+                            </td>
+                            <td className="py-2.5 px-3 text-center whitespace-nowrap">
+                              <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-extrabold ${
+                                mov.estado === 'Pagado'
+                                  ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-400'
+                                  : mov.estado === 'Pendiente'
+                                  ? 'bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-400'
+                                  : mov.estado === 'Moroso'
+                                  ? 'bg-red-100 text-red-800 dark:bg-red-950/60 dark:text-red-400'
+                                  : mov.anulado
+                                  ? 'bg-slate-200 text-slate-700 dark:bg-slate-800 dark:text-slate-400'
+                                  : 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-400'
+                              }`}>
+                                {mov.anulado ? 'Anulado' : (mov.estado || 'Efectuado')}
+                              </span>
+                            </td>
+                          </tr>
+                        )
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
             </div>
 
             {/* Nota Informativa */}
