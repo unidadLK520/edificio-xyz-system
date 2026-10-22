@@ -26,8 +26,12 @@ import {
   UploadCloud,
   FileCheck,
   AlertCircle,
+  AlertTriangle,
+  RotateCcw,
   Scale
 } from 'lucide-react'
+import { apiFetch } from '@/lib/api'
+import { fechaSolo } from '@/lib/fecha'
 
 export interface MovimientoItem {
   id: number
@@ -63,139 +67,11 @@ const DEFAULT_CATEGORIAS: CategoriaItem[] = [
   { idCategoria: 9, nombre: 'Intereses y Rendimientos', tipo: 'Ingreso' },
 ]
 
-const DEFAULT_MOVIMIENTOS_SEED: MovimientoItem[] = [
-  {
-    id: 1,
-    tipo: 'Egreso',
-    codigo: 'EGR-2026-001',
-    fecha: '2026-10-02',
-    idCategoria: 3,
-    categoria: 'Seguridad y Vigilancia',
-    tercero: 'Seguritas Integral Ltda.',
-    descripcion: 'Servicio de vigilancia física 24/7 y control de accesos peatonales y vehiculares.',
-    nroFactura: 'FAC-11928',
-    monto: 5600.0,
-    metodoPago: 'Transferencia Bancaria',
-    registradoPor: 'admin'
-  },
-  {
-    id: 2,
-    tipo: 'Egreso',
-    codigo: 'EGR-2026-002',
-    fecha: '2026-10-03',
-    idCategoria: 4,
-    categoria: 'Limpieza y Desinfección',
-    tercero: 'Servicios Limpios del Valle',
-    descripcion: 'Personal de limpieza para áreas comunes, pasillos, gradas y retiro de residuos.',
-    nroFactura: 'FAC-4891',
-    monto: 2200.0,
-    metodoPago: 'Transferencia Bancaria',
-    registradoPor: 'admin'
-  },
-  {
-    id: 3,
-    tipo: 'Egreso',
-    codigo: 'EGR-2026-003',
-    fecha: '2026-10-04',
-    idCategoria: 1,
-    categoria: 'Mantenimiento y Reparaciones',
-    tercero: 'Otis Elevadores Bolivia S.A.',
-    descripcion: 'Mantenimiento preventivo reglamentario mensual de ascensores torre principal.',
-    nroFactura: 'FAC-90182',
-    monto: 700.0,
-    metodoPago: 'Transferencia Bancaria',
-    registradoPor: 'admin'
-  },
-  {
-    id: 4,
-    tipo: 'Egreso',
-    codigo: 'EGR-2026-004',
-    fecha: '2026-10-05',
-    idCategoria: 2,
-    categoria: 'Servicios Básicos Comunes (Luz/Agua)',
-    tercero: 'ELFEC S.A. (Medidor Común)',
-    descripcion: 'Energía eléctrica de pasillos, iluminación perimetral, bomba de agua y áreas comunes.',
-    nroFactura: 'FAC-349012',
-    monto: 800.0,
-    metodoPago: 'Débito Automático',
-    registradoPor: 'admin'
-  },
-  {
-    id: 5,
-    tipo: 'Egreso',
-    codigo: 'EGR-2026-005',
-    fecha: '2026-10-05',
-    idCategoria: 2,
-    categoria: 'Servicios Básicos Comunes (Luz/Agua)',
-    tercero: 'SEMAPA (Consumo Común)',
-    descripcion: 'Consumo de agua para limpieza de áreas comunes, jardineras y cisterna central.',
-    nroFactura: 'FAC-78190',
-    monto: 300.0,
-    metodoPago: 'Débito Automático',
-    registradoPor: 'admin'
-  },
-  {
-    id: 6,
-    tipo: 'Ingreso',
-    codigo: 'ING-2026-001',
-    fecha: '2026-10-05',
-    idCategoria: 6,
-    categoria: 'Cobro de Expensas Ordinarias',
-    tercero: 'María López (Inquilina Dpto 305)',
-    descripcion: 'Cobro de Expensa mensual Dpto 305 (Tipo B, 80 m², Alícuota 5%). Propietario responsable: Juan Pérez.',
-    nroFactura: 'REC-2026-10-305',
-    monto: 775.0,
-    metodoPago: 'QR Simple Interbancario',
-    registradoPor: 'admin'
-  },
-  {
-    id: 7,
-    tipo: 'Ingreso',
-    codigo: 'ING-2026-002',
-    fecha: '2026-10-06',
-    idCategoria: 6,
-    categoria: 'Cobro de Expensas Ordinarias',
-    tercero: 'Pedro Ramírez (Inquilino Dpto 101)',
-    descripcion: 'Cobro de Expensa mensual Dpto 101 (Tipo A, 60 m², Alícuota 3.75%). Propietaria responsable: Ana Valdivia.',
-    nroFactura: 'REC-2026-10-101',
-    monto: 581.25,
-    metodoPago: 'Transferencia Bancaria',
-    registradoPor: 'admin'
-  },
-  {
-    id: 8,
-    tipo: 'Ingreso',
-    codigo: 'ING-2026-003',
-    fecha: '2026-10-06',
-    idCategoria: 6,
-    categoria: 'Cobro de Expensas Ordinarias',
-    tercero: 'Laura Céspedes (Propietaria Dpto 103)',
-    descripcion: 'Cobro de Expensa mensual Dpto 103 desocupado/vacío (Tipo C, 100 m², Alícuota 6.25%). Genera expensa obligatoria.',
-    nroFactura: 'REC-2026-10-103',
-    monto: 968.75,
-    metodoPago: 'Transferencia Bancaria',
-    registradoPor: 'admin'
-  },
-  {
-    id: 9,
-    tipo: 'Ingreso',
-    codigo: 'ING-2026-004',
-    fecha: '2026-10-07',
-    idCategoria: 6,
-    categoria: 'Cobro de Expensas Ordinarias',
-    tercero: 'Alejandro Gómez (Propietario Dpto 204)',
-    descripcion: 'Cobro de Expensa mensual Dpto 204 (Tipo B, 80 m², Alícuota 5%). Habitado por su propietario.',
-    nroFactura: 'REC-2026-10-204',
-    monto: 775.0,
-    metodoPago: 'QR Simple BNB',
-    registradoPor: 'admin'
-  }
-]
-
 export default function FinanzasPage() {
-  const [movimientos, setMovimientos] = useState<MovimientoItem[]>(DEFAULT_MOVIMIENTOS_SEED)
+  const [movimientos, setMovimientos] = useState<MovimientoItem[]>([])
   const [categorias, setCategorias] = useState<CategoriaItem[]>(DEFAULT_CATEGORIAS)
   const [loading, setLoading] = useState<boolean>(true)
+  const [apiError, setApiError] = useState<string | null>(null)
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false)
   const [feedbackMsg, setFeedbackMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
 
@@ -234,7 +110,7 @@ export default function FinanzasPage() {
   const [formTercero, setFormTercero] = useState('')
   const [formDescripcion, setFormDescripcion] = useState('')
   const [formMonto, setFormMonto] = useState<number>(0)
-  const [formFecha, setFormFecha] = useState(new Date().toISOString().split('T')[0])
+  const [formFecha, setFormFecha] = useState(fechaSolo(new Date()))
   const [formNroFactura, setFormNroFactura] = useState('')
   const [formMetodoPago, setFormMetodoPago] = useState('Transferencia Bancaria')
   const [formComprobanteUrl, setFormComprobanteUrl] = useState<string>('')
@@ -248,7 +124,7 @@ export default function FinanzasPage() {
   // Cargar categorías disponibles desde API
   const fetchCategorias = useCallback(async () => {
     try {
-      const res = await fetch('/api/v1/movimientos/categorias')
+      const res = await apiFetch('/api/v1/movimientos/categorias')
       if (res.ok) {
         const data = await res.json()
         if (Array.isArray(data) && data.length > 0) {
@@ -263,6 +139,7 @@ export default function FinanzasPage() {
   // Cargar movimientos desde backend API
   const fetchMovimientos = useCallback(async () => {
     setLoading(true)
+    setApiError(null)
     try {
       const params = new URLSearchParams()
       if (tabTipo !== 'Todos') params.append('tipo', tabTipo)
@@ -271,7 +148,7 @@ export default function FinanzasPage() {
       if (fechaHasta) params.append('fechaHasta', fechaHasta)
 
       const url = `/api/v1/movimientos?${params.toString()}`
-      const res = await fetch(url)
+      const res = await apiFetch(url)
       if (res.ok) {
         const json = await res.json()
         const rawData = Array.isArray(json.data) ? json.data : Array.isArray(json) ? json : []
@@ -303,9 +180,7 @@ export default function FinanzasPage() {
               `${item.tipo === 'Ingreso' ? 'ING' : 'EGR'}-2026-${String(
                 item.idMovimiento || item.id || 1
               ).padStart(3, '0')}`,
-            fecha: item.fecha
-              ? new Date(item.fecha).toISOString().split('T')[0]
-              : new Date().toISOString().split('T')[0],
+            fecha: fechaSolo(item.fecha) || fechaSolo(new Date()),
             idCategoria: catId,
             categoria: catName,
             tercero,
@@ -317,17 +192,16 @@ export default function FinanzasPage() {
             registradoPor: item.usuarioRegistro?.nombreUsuario || 'admin'
           }
         })
-        if (mapped.length > 0) {
-          setMovimientos(mapped)
-        } else {
-          setMovimientos(DEFAULT_MOVIMIENTOS_SEED)
-        }
+        setMovimientos(mapped)
       } else {
-        setMovimientos(DEFAULT_MOVIMIENTOS_SEED)
+        const errJson = await res.json().catch(() => ({}))
+        setApiError(errJson.message || 'Error al conectar con el servidor de movimientos.')
+        setMovimientos([])
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error('Error al cargar movimientos desde la API:', err)
-      setMovimientos(DEFAULT_MOVIMIENTOS_SEED)
+      setApiError(err?.message || 'Error de conexión al cargar movimientos financieros.')
+      setMovimientos([])
     } finally {
       setLoading(false)
     }
@@ -367,13 +241,13 @@ export default function FinanzasPage() {
     } else if (filtroPeriodo === 'mes_actual') {
       const inicio = new Date(hoy.getFullYear(), hoy.getMonth(), 1)
       const fin = new Date(hoy.getFullYear(), hoy.getMonth() + 1, 0)
-      setFechaDesde(inicio.toISOString().split('T')[0])
-      setFechaHasta(fin.toISOString().split('T')[0])
+      setFechaDesde(fechaSolo(inicio))
+      setFechaHasta(fechaSolo(fin))
     } else if (filtroPeriodo === 'mes_anterior') {
       const inicio = new Date(hoy.getFullYear(), hoy.getMonth() - 1, 1)
       const fin = new Date(hoy.getFullYear(), hoy.getMonth(), 0)
-      setFechaDesde(inicio.toISOString().split('T')[0])
-      setFechaHasta(fin.toISOString().split('T')[0])
+      setFechaDesde(fechaSolo(inicio))
+      setFechaHasta(fechaSolo(fin))
     }
   }, [filtroPeriodo])
 
@@ -466,7 +340,7 @@ export default function FinanzasPage() {
     setFormTercero('')
     setFormDescripcion('')
     setFormMonto(0)
-    setFormFecha(new Date().toISOString().split('T')[0])
+    setFormFecha(fechaSolo(new Date()))
     setFormNroFactura('')
     setFormComprobanteUrl('')
     setFileNameAttached('')
@@ -519,7 +393,7 @@ export default function FinanzasPage() {
         comprobanteUrl: comprobanteVal
       }
 
-      const res = await fetch('/api/v1/movimientos', {
+      const res = await apiFetch('/api/v1/movimientos', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(bodyPayload)
@@ -534,30 +408,13 @@ export default function FinanzasPage() {
           showNotification('error', 'Error 403: No posee permisos para realizar esta acción.')
           return
         }
-        // Fallback local
-        const nuevo: MovimientoItem = {
-          id: Date.now(),
-          tipo: formTipo,
-          codigo: `${formTipo === 'Ingreso' ? 'ING' : 'EGR'}-2026-${String(movimientos.length + 1).padStart(3, '0')}`,
-          fecha: formFecha,
-          idCategoria: formIdCategoria,
-          categoria: selectedCat?.nombre || 'General',
-          tercero: formTercero.trim(),
-          descripcion: formDescripcion.trim() || 'Sin descripción detallada',
-          nroFactura: formNroFactura.trim() || (formTipo === 'Ingreso' ? 'REC-ING' : 'FAC-EGR'),
-          comprobanteUrl: formComprobanteUrl || null,
-          monto: Number(formMonto),
-          metodoPago: formMetodoPago,
-          registradoPor: 'admin'
-        }
-        setMovimientos((prev) => [nuevo, ...prev])
-        showNotification('success', `¡${formTipo} guardado con éxito!`)
+        showNotification('error', errorJson.message || 'Error al procesar el registro.')
       }
 
       setIsCreateModalOpen(false)
-    } catch (err) {
+    } catch (err: any) {
       console.error('Error creando movimiento:', err)
-      showNotification('error', 'Ocurrió un error al procesar el registro.')
+      showNotification('error', err?.message || 'Ocurrió un error al procesar el registro.')
     } finally {
       setIsSubmitting(false)
     }
@@ -590,7 +447,7 @@ export default function FinanzasPage() {
         comprobanteUrl: comprobanteVal
       }
 
-      const res = await fetch(`/api/v1/movimientos/${movimientoParaEditar.id}`, {
+      const res = await apiFetch(`/api/v1/movimientos/${movimientoParaEditar.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(bodyPayload)
@@ -604,34 +461,15 @@ export default function FinanzasPage() {
           showNotification('error', 'Error 403: No posee permisos para modificar este registro.')
           return
         }
-        // Fallback local actualizando campos editados y preservando los no editados
-        setMovimientos((prev) =>
-          prev.map((item) =>
-            item.id === movimientoParaEditar.id
-              ? {
-                  ...item,
-                  tipo: formTipo,
-                  idCategoria: formIdCategoria,
-                  categoria: selectedCat?.nombre || item.categoria,
-                  tercero: formTercero.trim(),
-                  descripcion: formDescripcion.trim() || item.descripcion,
-                  monto: Number(formMonto),
-                  fecha: formFecha,
-                  nroFactura: formNroFactura.trim() || item.nroFactura,
-                  comprobanteUrl: formComprobanteUrl || item.comprobanteUrl,
-                  metodoPago: formMetodoPago
-                }
-              : item
-          )
-        )
-        showNotification('success', 'Registro financiero actualizado exitosamente.')
+        const errJson = await res.json().catch(() => ({}))
+        showNotification('error', errJson.message || 'Error al actualizar el registro financiero.')
       }
 
       setIsEditModalOpen(false)
       setMovimientoParaEditar(null)
-    } catch (err) {
+    } catch (err: any) {
       console.error('Error al editar movimiento:', err)
-      showNotification('error', 'Error al guardar los cambios.')
+      showNotification('error', err?.message || 'Error al guardar los cambios.')
     } finally {
       setIsSubmitting(false)
     }
@@ -646,7 +484,7 @@ export default function FinanzasPage() {
     }
 
     try {
-      const res = await fetch(`/api/v1/movimientos/${movimientoParaEliminar.id}`, {
+      const res = await apiFetch(`/api/v1/movimientos/${movimientoParaEliminar.id}`, {
         method: 'DELETE'
       })
       if (res.ok || res.status === 404) {
@@ -654,9 +492,9 @@ export default function FinanzasPage() {
       }
       setMovimientos((prev) => prev.filter((m) => m.id !== movimientoParaEliminar.id))
       setMovimientoParaEliminar(null)
-    } catch (err) {
+    } catch (err: any) {
       console.error('Error eliminando movimiento:', err)
-      showNotification('error', 'No se pudo eliminar el registro.')
+      showNotification('error', err?.message || 'No se pudo eliminar el registro.')
     }
   }
 
@@ -739,10 +577,49 @@ export default function FinanzasPage() {
         </div>
       )}
 
-      {/* KPIS FINANCIEROS Y RESUMEN DE TOTALES (CA10) */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
-        {/* Total Ingresos */}
-        <div className="p-4 rounded-2xl bg-[#ede9e1] dark:bg-slate-900 border border-[#cec8bc] dark:border-slate-800 shadow-xs">
+      {/* ERROR CON REINTENTAR SI LA API FALLA Y NO HAY MOVIMIENTOS */}
+      {apiError && movimientos.length === 0 && !loading ? (
+        <div className="p-8 sm:p-12 text-center rounded-2xl bg-rose-500/5 dark:bg-rose-950/20 border border-rose-500/20 max-w-xl mx-auto space-y-4 shadow-sm">
+          <div className="w-12 h-12 rounded-full bg-rose-500/10 text-rose-600 dark:text-rose-400 flex items-center justify-center mx-auto">
+            <AlertTriangle className="w-6 h-6" />
+          </div>
+          <div>
+            <h3 className="text-base font-bold text-slate-900 dark:text-white">
+              Error al cargar los movimientos financieros
+            </h3>
+            <p className="text-sm text-slate-600 dark:text-slate-400 mt-1">
+              {apiError}
+            </p>
+          </div>
+          <button
+            onClick={fetchMovimientos}
+            className="inline-flex items-center gap-2 px-4 py-2 bg-rose-600 hover:bg-rose-500 text-white rounded-xl text-sm font-semibold transition-colors cursor-pointer shadow-md shadow-rose-600/20"
+          >
+            <RotateCcw className="w-4 h-4" />
+            <span>Reintentar</span>
+          </button>
+        </div>
+      ) : (
+        <>
+          {apiError && (
+            <div className="p-3.5 rounded-2xl bg-rose-500/10 border border-rose-500/20 text-rose-700 dark:text-rose-400 text-xs flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <AlertTriangle className="w-4 h-4 shrink-0" />
+                <span>{apiError}</span>
+              </div>
+              <button
+                onClick={() => setApiError(null)}
+                className="text-rose-400 hover:text-rose-600 p-1"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          )}
+
+          {/* KPIS FINANCIEROS Y RESUMEN DE TOTALES (CA10) */}
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+            {/* Total Ingresos */}
+            <div className="p-4 rounded-2xl bg-[#ede9e1] dark:bg-slate-900 border border-[#cec8bc] dark:border-slate-800 shadow-xs">
           <div className="flex items-center justify-between text-xs font-semibold text-[#66615b] dark:text-slate-400 mb-1">
             <span>Total Ingresos</span>
             <TrendingUp className="w-4 h-4 text-emerald-700 dark:text-emerald-400" />
@@ -1070,6 +947,8 @@ export default function FinanzasPage() {
           </table>
         </div>
       </div>
+      </>
+      )}
 
       {/* MODAL REGISTRAR MOVIMIENTO (CA1, CA2, CA3, CA4, CA5) */}
       {isCreateModalOpen && (

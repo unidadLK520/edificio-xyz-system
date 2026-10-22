@@ -28,8 +28,7 @@ import {
   UnidadItem,
   DepartamentoFormData,
   TipoUnidad,
-  TipoDepartamentoItem,
-  DEFAULT_TIPOS_DEPARTAMENTO
+  TipoDepartamentoItem
 } from '@/components/departamentos/types'
 import DepartamentosKpis from '@/components/departamentos/DepartamentosKpis'
 import CrearDepartamentoModal from '@/components/departamentos/CrearDepartamentoModal'
@@ -38,439 +37,13 @@ import FichaTecnicaModal from '@/components/departamentos/FichaTecnicaModal'
 import AsignarUnidadModal from '@/components/departamentos/AsignarUnidadModal'
 import ParametrosDepartamentosTab from '@/components/departamentos/ParametrosDepartamentosTab'
 import TiposDepartamentosTab from '@/components/departamentos/TiposDepartamentosTab'
-
-// Semilla basada en el modelo administrativo real de 20 departamentos (1,600 m² totales)
-const UNIDADES_SEED: UnidadItem[] = [
-  // Piso 1
-  {
-    id: 1,
-    tipoUnidad: 'Departamento',
-    numero: '101',
-    piso: 1,
-    areaM2: 60.0,
-    tipologia: 'Tipo A (60 m²)',
-    alicuota: 3.75,
-    estado: 'Alquilado',
-    propietario: {
-      id: 1,
-      nombre: 'Ana Valdivia Morales',
-      ci: '4829103 CBBA',
-      telefono: '+591 71234567',
-      correo: 'ana.valdivia@email.com'
-    },
-    inquilinoActual: { id: 101, nombre: 'Pedro Ramírez Soto', telefono: '+591 79876543' },
-    parqueo: 'P-01',
-    baulera: 'B-01',
-    fechaRegistro: '2023-01-15'
-  },
-  {
-    id: 2,
-    tipoUnidad: 'Departamento',
-    numero: '102',
-    piso: 1,
-    areaM2: 80.0,
-    tipologia: 'Tipo B (80 m²)',
-    alicuota: 5.0,
-    estado: 'Alquilado',
-    propietario: {
-      id: 2,
-      nombre: 'Carlos Mendoza Rojas',
-      ci: '5920144 SCZ',
-      telefono: '+591 79876543',
-      correo: 'carlos.mendoza@email.com'
-    },
-    inquilinoActual: { id: 102, nombre: 'María Fernández Arce', telefono: '+591 67123980' },
-    parqueo: 'P-02',
-    baulera: 'Sin baulera',
-    fechaRegistro: '2023-02-01'
-  },
-  {
-    id: 3,
-    tipoUnidad: 'Departamento',
-    numero: '103',
-    piso: 1,
-    areaM2: 100.0,
-    tipologia: 'Tipo C (100 m²)',
-    alicuota: 6.25,
-    estado: 'Desocupado',
-    propietario: {
-      id: 3,
-      nombre: 'Laura Céspedes Villarroel',
-      ci: '3948120 LPZ',
-      telefono: '+591 67123980',
-      correo: 'laura.cespedes@email.com'
-    },
-    inquilinoActual: null,
-    parqueo: 'P-03',
-    baulera: 'B-02',
-    fechaRegistro: '2023-01-20'
-  },
-  {
-    id: 4,
-    tipoUnidad: 'Departamento',
-    numero: '104',
-    piso: 1,
-    areaM2: 60.0,
-    tipologia: 'Tipo A (60 m²)',
-    alicuota: 3.75,
-    estado: 'Alquilado',
-    propietario: {
-      id: 4,
-      nombre: 'José Vargas Quiroga',
-      ci: '6129841 CBBA',
-      telefono: '+591 75432198',
-      correo: 'jose.vargas@email.com'
-    },
-    inquilinoActual: { id: 104, nombre: 'Roberto Daza Méndez', telefono: '+591 76543210' },
-    parqueo: 'P-04',
-    baulera: 'Sin baulera',
-    fechaRegistro: '2023-03-01'
-  },
-  {
-    id: 5,
-    tipoUnidad: 'Departamento',
-    numero: '105',
-    piso: 1,
-    areaM2: 80.0,
-    tipologia: 'Tipo B (80 m²)',
-    alicuota: 5.0,
-    estado: 'Desocupado',
-    propietario: {
-      id: 5,
-      nombre: 'Sofía Romero Paz',
-      ci: '4918230 CBBA',
-      telefono: '+591 72198450',
-      correo: 'sofia.romero@email.com'
-    },
-    inquilinoActual: null,
-    parqueo: 'Sin parqueo',
-    baulera: 'Sin baulera',
-    fechaRegistro: '2023-01-10'
-  },
-  // Piso 2
-  {
-    id: 6,
-    tipoUnidad: 'Departamento',
-    numero: '201',
-    piso: 2,
-    areaM2: 60.0,
-    tipologia: 'Tipo A (60 m²)',
-    alicuota: 3.75,
-    estado: 'Ocupado por Propietario',
-    propietario: {
-      id: 6,
-      nombre: 'Gabriel Romero Soria',
-      ci: '4829104 LPZ',
-      telefono: '+591 71239988',
-      correo: 'gabriel.romero@email.com'
-    },
-    inquilinoActual: null,
-    parqueo: 'P-05',
-    baulera: 'B-03',
-    fechaRegistro: '2023-02-15'
-  },
-  {
-    id: 7,
-    tipoUnidad: 'Departamento',
-    numero: '202',
-    piso: 2,
-    areaM2: 80.0,
-    tipologia: 'Tipo B (80 m²)',
-    alicuota: 5.0,
-    estado: 'Alquilado',
-    propietario: {
-      id: 7,
-      nombre: 'Patricia Quiroga Daza',
-      ci: '3920194 CBBA',
-      telefono: '+591 79871122',
-      correo: 'patricia.quiroga@email.com'
-    },
-    inquilinoActual: { id: 105, nombre: 'Martín Suárez Flores', telefono: '+591 77334455' },
-    parqueo: 'P-06',
-    baulera: 'B-04',
-    fechaRegistro: '2023-01-18'
-  },
-  {
-    id: 8,
-    tipoUnidad: 'Departamento',
-    numero: '203',
-    piso: 2,
-    areaM2: 80.0,
-    tipologia: 'Tipo B (80 m²)',
-    alicuota: 5.0,
-    estado: 'Alquilado',
-    propietario: {
-      id: 8,
-      nombre: 'Diego Claros Torrico',
-      ci: '5192843 CBBA',
-      telefono: '+591 60123456',
-      correo: 'diego.claros@email.com'
-    },
-    inquilinoActual: { id: 106, nombre: 'Andrea Mercado Bellot', telefono: '+591 71987654' },
-    parqueo: 'P-07',
-    baulera: 'Sin baulera',
-    fechaRegistro: '2023-03-10'
-  },
-  {
-    id: 9,
-    tipoUnidad: 'Departamento',
-    numero: '204',
-    piso: 2,
-    areaM2: 80.0,
-    tipologia: 'Tipo B (80 m²)',
-    alicuota: 5.0,
-    estado: 'Ocupado por Propietario',
-    propietario: {
-      id: 9,
-      nombre: 'Alejandro Gómez Salces',
-      ci: '6192834 SCZ',
-      telefono: '+591 60123987',
-      correo: 'alejandro.gomez@email.com'
-    },
-    inquilinoActual: null,
-    parqueo: 'P-08',
-    baulera: 'B-05',
-    fechaRegistro: '2023-01-25'
-  },
-  {
-    id: 10,
-    tipoUnidad: 'Departamento',
-    numero: '205',
-    piso: 2,
-    areaM2: 100.0,
-    tipologia: 'Tipo C (100 m²)',
-    alicuota: 6.25,
-    estado: 'Desocupado',
-    propietario: {
-      id: 10,
-      nombre: 'Elena Bellot Mercado',
-      ci: '7192834 CBBA',
-      telefono: '+591 73456789',
-      correo: 'elena.bellot@email.com'
-    },
-    inquilinoActual: null,
-    parqueo: 'P-09',
-    baulera: 'B-06',
-    fechaRegistro: '2023-04-01'
-  },
-  // Piso 3
-  {
-    id: 11,
-    tipoUnidad: 'Departamento',
-    numero: '301',
-    piso: 3,
-    areaM2: 60.0,
-    tipologia: 'Tipo A (60 m²)',
-    alicuota: 3.75,
-    estado: 'Alquilado',
-    propietario: {
-      id: 11,
-      nombre: 'Fernando Castro Ortiz',
-      ci: '4918231 CBBA',
-      telefono: '+591 72198451',
-      correo: 'fernando.castro@email.com'
-    },
-    inquilinoActual: { id: 107, nombre: 'Camila Rojas Rios', telefono: '+591 74567890' },
-    parqueo: 'P-10',
-    baulera: 'B-07',
-    fechaRegistro: '2023-01-12'
-  },
-  {
-    id: 12,
-    tipoUnidad: 'Departamento',
-    numero: '302',
-    piso: 3,
-    areaM2: 80.0,
-    tipologia: 'Tipo B (80 m²)',
-    alicuota: 5.0,
-    estado: 'Alquilado',
-    propietario: {
-      id: 12,
-      nombre: 'Mariana Flores Soliz',
-      ci: '5920145 SCZ',
-      telefono: '+591 79876544',
-      correo: 'mariana.flores@email.com'
-    },
-    inquilinoActual: { id: 108, nombre: 'Lucía Gutiérrez Daza', telefono: '+591 78901234' },
-    parqueo: 'P-11',
-    baulera: 'Sin baulera',
-    fechaRegistro: '2023-02-20'
-  },
-  {
-    id: 13,
-    tipoUnidad: 'Departamento',
-    numero: '303',
-    piso: 3,
-    areaM2: 80.0,
-    tipologia: 'Tipo B (80 m²)',
-    alicuota: 5.0,
-    estado: 'Alquilado',
-    propietario: {
-      id: 13,
-      nombre: 'Rodrigo Heredia Zalles',
-      ci: '8291044 CBBA',
-      telefono: '+591 71239900',
-      correo: 'rodrigo.heredia@email.com'
-    },
-    inquilinoActual: { id: 109, nombre: 'Gonzalo Navia Ramos', telefono: '+591 65432109' },
-    parqueo: 'P-12',
-    baulera: 'B-08',
-    fechaRegistro: '2023-01-30'
-  },
-  {
-    id: 14,
-    tipoUnidad: 'Departamento',
-    numero: '304',
-    piso: 3,
-    areaM2: 80.0,
-    tipologia: 'Tipo B (80 m²)',
-    alicuota: 5.0,
-    estado: 'Desocupado',
-    propietario: {
-      id: 14,
-      nombre: 'Beatriz Salazar Camacho',
-      ci: '9182045 LPZ',
-      telefono: '+591 70123456',
-      correo: 'beatriz.salazar@email.com'
-    },
-    inquilinoActual: null,
-    parqueo: 'P-13',
-    baulera: 'Sin baulera',
-    fechaRegistro: '2023-03-05'
-  },
-  {
-    id: 15,
-    tipoUnidad: 'Departamento',
-    numero: '305',
-    piso: 3,
-    areaM2: 80.0,
-    tipologia: 'Tipo B (80 m²)',
-    alicuota: 5.0,
-    estado: 'Alquilado',
-    propietario: {
-      id: 15,
-      nombre: 'Juan Pérez Montaño',
-      ci: '3819204 CBBA',
-      telefono: '+591 76543219',
-      correo: 'juan.perez@email.com'
-    },
-    inquilinoActual: { id: 110, nombre: 'María López Arteaga', telefono: '+591 79123456' },
-    parqueo: 'P-14',
-    baulera: 'B-09',
-    fechaRegistro: '2023-01-15'
-  },
-  // Piso 4
-  {
-    id: 16,
-    tipoUnidad: 'Departamento',
-    numero: '401',
-    piso: 4,
-    areaM2: 60.0,
-    tipologia: 'Tipo A (60 m²)',
-    alicuota: 3.75,
-    estado: 'Ocupado por Propietario',
-    propietario: {
-      id: 16,
-      nombre: 'Javier Torrico Alba',
-      ci: '4729103 CBBA',
-      telefono: '+591 71234411',
-      correo: 'javier.torrico@email.com'
-    },
-    inquilinoActual: null,
-    parqueo: 'P-15',
-    baulera: 'Sin baulera',
-    fechaRegistro: '2023-02-10'
-  },
-  {
-    id: 17,
-    tipoUnidad: 'Departamento',
-    numero: '402',
-    piso: 4,
-    areaM2: 100.0,
-    tipologia: 'Tipo C (100 m²)',
-    alicuota: 6.25,
-    estado: 'Ocupado por Propietario',
-    propietario: {
-      id: 17,
-      nombre: 'Claudia Daza Mendez',
-      ci: '5819204 SCZ',
-      telefono: '+591 79872233',
-      correo: 'claudia.daza@email.com'
-    },
-    inquilinoActual: null,
-    parqueo: 'P-16',
-    baulera: 'B-10',
-    fechaRegistro: '2023-01-14'
-  },
-  {
-    id: 18,
-    tipoUnidad: 'Departamento',
-    numero: '403',
-    piso: 4,
-    areaM2: 100.0,
-    tipologia: 'Tipo C (100 m²)',
-    alicuota: 6.25,
-    estado: 'Alquilado',
-    propietario: {
-      id: 18,
-      nombre: 'Marcelo Rios Quiroga',
-      ci: '6918234 CBBA',
-      telefono: '+591 67124455',
-      correo: 'marcelo.rios@email.com'
-    },
-    inquilinoActual: { id: 111, nombre: 'Esteban Morales Zeballos', telefono: '+591 76549988' },
-    parqueo: 'P-17',
-    baulera: 'Sin baulera',
-    fechaRegistro: '2023-02-28'
-  },
-  {
-    id: 19,
-    tipoUnidad: 'Departamento',
-    numero: '404',
-    piso: 4,
-    areaM2: 100.0,
-    tipologia: 'Tipo C (100 m²)',
-    alicuota: 6.25,
-    estado: 'Desocupado',
-    propietario: {
-      id: 19,
-      nombre: 'Valeria Soliz Mercado',
-      ci: '7182934 LPZ',
-      telefono: '+591 75439900',
-      correo: 'valeria.soliz@email.com'
-    },
-    inquilinoActual: null,
-    parqueo: 'P-18',
-    baulera: 'Sin baulera',
-    fechaRegistro: '2023-03-15'
-  },
-  {
-    id: 20,
-    tipoUnidad: 'Departamento',
-    numero: '405',
-    piso: 4,
-    areaM2: 80.0,
-    tipologia: 'Tipo B (80 m²)',
-    alicuota: 5.0,
-    estado: 'Ocupado por Propietario',
-    propietario: {
-      id: 20,
-      nombre: 'Rubén Guzmán Villarroel',
-      ci: '8192044 CBBA',
-      telefono: '+591 72199911',
-      correo: 'ruben.guzman@email.com'
-    },
-    inquilinoActual: null,
-    parqueo: 'P-19',
-    baulera: 'Sin baulera',
-    fechaRegistro: '2023-01-08'
-  }
-]
+import AguaDepartamentosTab from '@/components/departamentos/AguaDepartamentosTab'
+import { apiFetch } from '@/lib/api'
 
 export default function DepartamentosPage() {
-  const [unidades, setUnidades] = useState<UnidadItem[]>(UNIDADES_SEED)
-  const [activeTab, setActiveTab] = useState<'catastro' | 'tipos' | 'parametros'>('catastro')
-  const [tiposDepto, setTiposDepto] = useState<TipoDepartamentoItem[]>(DEFAULT_TIPOS_DEPARTAMENTO)
+  const [unidades, setUnidades] = useState<UnidadItem[]>([])
+  const [activeTab, setActiveTab] = useState<'catastro' | 'tipos' | 'parametros' | 'agua'>('catastro')
+  const [tiposDepto, setTiposDepto] = useState<TipoDepartamentoItem[]>([])
   const [searchTerm, setSearchTerm] = useState('')
   const [filtroTipo, setFiltroTipo] = useState<string>('Todos')
   const [filtroEstado, setFiltroEstado] = useState('Todos')
@@ -485,210 +58,231 @@ export default function DepartamentosPage() {
   const [unidadToAssign, setUnidadToAssign] = useState<UnidadItem | null>(null)
   const [createErrorMessage, setCreateErrorMessage] = useState<string | null>(null)
   const [successToast, setSuccessToast] = useState<string | null>(null)
+  const [apiError, setApiError] = useState<string | null>(null)
+  const [isLoading, setIsLoading] = useState<boolean>(false)
 
-  // Cargar parámetros y tipos de departamentos guardados en localStorage
-  useEffect(() => {
+  // Cargar tipos de departamentos desde la API
+  const fetchTiposDepto = useCallback(async () => {
     try {
-      // 1. Tipologías editables
-      const savedTipos = localStorage.getItem('edificio_xyz_tipos_departamento')
-      if (savedTipos) {
-        const parsed = JSON.parse(savedTipos)
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          setTiposDepto(parsed)
+      const res = await apiFetch('/api/v1/tipos-departamento')
+      if (res.ok) {
+        const json = await res.json()
+        if (json.data && Array.isArray(json.data)) {
+          const mapped: TipoDepartamentoItem[] = json.data.map((t: any) => ({
+            id: String(t.idTipo),
+            idTipo: t.idTipo,
+            nombre: t.nombre,
+            codigo: t.nombre.slice(0, 3).toUpperCase(),
+            areaM2: t.areaM2 || 0,
+            expensaBase: t.montoExpensa,
+            montoExpensa: t.montoExpensa,
+            activo: t.activo !== false,
+            departamentosAsignados: t.departamentosAsignados || 0
+          }))
+          setTiposDepto(mapped)
         }
-      }
-
-      // 2. Parámetros de unidades
-      const savedUnidades = localStorage.getItem('edificio_xyz_unidades_parametros')
-      if (savedUnidades) {
-        const map = JSON.parse(savedUnidades)
-        setUnidades((prev) => prev.map((u) => (map[u.id] ? { ...u, ...map[u.id] } : u)))
       }
     } catch {}
   }, [])
 
-  // Manejadores para Tipos de Departamentos (100% Editables)
-  const handleSaveTipoDepto = (tipoGuardado: TipoDepartamentoItem, cascada: boolean) => {
-    setTiposDepto((prev) => {
-      const exists = prev.some((t) => t.id === tipoGuardado.id)
-      const nuevos = exists
-        ? prev.map((t) => (t.id === tipoGuardado.id ? tipoGuardado : t))
-        : [...prev, tipoGuardado]
+  useEffect(() => {
+    fetchTiposDepto()
+  }, [fetchTiposDepto])
 
-      try {
-        localStorage.setItem('edificio_xyz_tipos_departamento', JSON.stringify(nuevos))
-      } catch {}
-      return nuevos
-    })
+  // Manejadores para Tipos de Departamentos conectados a la API
+  const handleSaveTipoDepto = async (tipoGuardado: TipoDepartamentoItem, cascada: boolean): Promise<string | null> => {
+    try {
+      const idNumerico = tipoGuardado.idTipo || (!isNaN(Number(tipoGuardado.id)) ? Number(tipoGuardado.id) : null)
+      const isEdit = !!idNumerico
 
-    // Si se activó la opción de actualizar departamentos asociados
-    if (cascada) {
-      setUnidades((prev) => {
-        const updated = prev.map((u) => {
-          const match =
-            (u.tipologia &&
-              u.tipologia.toLowerCase().includes(tipoGuardado.nombre.toLowerCase())) ||
-            (u.tipologia && u.tipologia.includes(tipoGuardado.codigo)) ||
-            (u.areaM2 && Math.abs(u.areaM2 - tipoGuardado.areaM2) < 0.1)
+      const url = isEdit ? `/api/v1/tipos-departamento/${idNumerico}` : '/api/v1/tipos-departamento'
+      const method = isEdit ? 'PUT' : 'POST'
+      const payload: any = {
+        nombre: tipoGuardado.nombre.trim(),
+        montoExpensa: tipoGuardado.expensaBase,
+        areaM2: tipoGuardado.areaM2 > 0 ? tipoGuardado.areaM2 : null,
+        activo: tipoGuardado.activo !== false
+      }
 
-          if (match) {
-            return {
-              ...u,
-              tipologia: tipoGuardado.nombre,
-              areaM2: tipoGuardado.areaM2,
-              expensaBase: tipoGuardado.expensaBase,
-              alicuota: Number(((tipoGuardado.areaM2 / 1600) * 100).toFixed(2))
-            }
-          }
-          return u
-        })
-
-        try {
-          const existingSaved = localStorage.getItem('edificio_xyz_unidades_parametros')
-          const map = existingSaved ? JSON.parse(existingSaved) : {}
-          updated.forEach((u) => {
-            map[u.id] = u
-          })
-          localStorage.setItem('edificio_xyz_unidades_parametros', JSON.stringify(map))
-        } catch {}
-
-        return updated
+      const res = await apiFetch(url, {
+        method,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
       })
-    }
 
-    showToast(`¡Tipo de departamento "${tipoGuardado.nombre}" guardado exitosamente!`)
+      const json = await res.json().catch(() => ({}))
+
+      if (!res.ok) {
+        const errorMsg = json.message || (res.status === 409 ? 'Conflicto: Ya existe un tipo con ese nombre o no se puede desactivar con unidades asignadas.' : 'Error al guardar el tipo de departamento')
+        showToast(errorMsg)
+        return errorMsg
+      }
+
+      await fetchTiposDepto()
+      await fetchUnidades()
+      showToast(`¡Tipo de departamento "${tipoGuardado.nombre}" guardado exitosamente!`)
+      return null
+    } catch (e: any) {
+      const msg = e?.message || 'Error de conexión al guardar tipo de departamento'
+      showToast(msg)
+      return msg
+    }
   }
 
-  const handleDeleteTipoDepto = (id: string) => {
-    setTiposDepto((prev) => {
-      const filtered = prev.filter((t) => t.id !== id)
-      try {
-        localStorage.setItem('edificio_xyz_tipos_departamento', JSON.stringify(filtered))
-      } catch {}
-      return filtered
-    })
+  const handleDeleteTipoDepto = async (id: string): Promise<string | null> => {
+    try {
+      const idNumerico = Number(id)
+      if (isNaN(idNumerico)) {
+        setTiposDepto((prev) => prev.filter((t) => t.id !== id))
+        return null
+      }
+
+      const res = await apiFetch(`/api/v1/tipos-departamento/${idNumerico}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ activo: false })
+      })
+
+      const json = await res.json().catch(() => ({}))
+
+      if (!res.ok) {
+        const msg = json.message || 'No se puede desactivar el tipo de departamento'
+        showToast(msg)
+        return msg
+      }
+
+      await fetchTiposDepto()
+      showToast('Tipo de departamento desactivado correctamente.')
+      return null
+    } catch {
+      const msg = 'Error de conexión al desactivar tipo de departamento'
+      showToast(msg)
+      return msg
+    }
   }
 
   const handleResetDefaultTipos = () => {
-    setTiposDepto(DEFAULT_TIPOS_DEPARTAMENTO)
-    try {
-      localStorage.setItem(
-        'edificio_xyz_tipos_departamento',
-        JSON.stringify(DEFAULT_TIPOS_DEPARTAMENTO)
-      )
-    } catch {}
-    showToast('Tipologías restablecidas a los valores por defecto (Tipos A, B y C).')
+    fetchTiposDepto()
+    showToast('Tipologías recargadas desde el servidor.')
   }
 
-  const handleSincronizarUnidadesTipo = (tipo: TipoDepartamentoItem) => {
-    let count = 0
-    setUnidades((prev) => {
-      const updated = prev.map((u) => {
-        const match =
-          (u.tipologia && u.tipologia.toLowerCase().includes(tipo.nombre.toLowerCase())) ||
-          (u.tipologia && u.tipologia.includes(tipo.codigo)) ||
-          (u.areaM2 && Math.abs(u.areaM2 - tipo.areaM2) < 0.1)
+  const handleSincronizarUnidadesTipo = async (tipo: TipoDepartamentoItem) => {
+    try {
+      const idTipoNum = tipo.idTipo || Number(tipo.id)
+      if (!idTipoNum || isNaN(idTipoNum)) {
+        showToast('Tipo no válido para sincronización masiva')
+        return
+      }
 
-        if (match) {
-          count++
-          return {
-            ...u,
-            tipologia: tipo.nombre,
-            areaM2: tipo.areaM2,
-            expensaBase: tipo.expensaBase,
-            alicuota: Number(((tipo.areaM2 / 1600) * 100).toFixed(2))
-          }
-        }
-        return u
+      const deptosCoincidentes = unidades.filter((u) => {
+        if (u.tipoUnidad !== 'Departamento') return false
+        return (
+          (u.tipologia && u.tipologia.toLowerCase().includes(tipo.nombre.toLowerCase())) ||
+          (u.tipologia && tipo.codigo && u.tipologia.includes(tipo.codigo)) ||
+          (u.areaM2 && tipo.areaM2 && Math.abs(u.areaM2 - tipo.areaM2) < 0.1)
+        )
       })
 
-      try {
-        const existingSaved = localStorage.getItem('edificio_xyz_unidades_parametros')
-        const map = existingSaved ? JSON.parse(existingSaved) : {}
-        updated.forEach((u) => {
-          map[u.id] = u
-        })
-        localStorage.setItem('edificio_xyz_unidades_parametros', JSON.stringify(map))
-      } catch {}
+      if (deptosCoincidentes.length === 0) {
+        showToast(`No se encontraron departamentos para asociar a "${tipo.nombre}".`)
+        return
+      }
 
-      return updated
-    })
+      const asignaciones = deptosCoincidentes.map((d) => ({
+        idDepartamento: d.id,
+        idTipo: idTipoNum
+      }))
 
-    showToast(`¡${count} departamentos sincronizados con la tipología "${tipo.nombre}"!`)
+      const res = await apiFetch('/api/v1/departamentos/asignar-tipo', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ asignaciones })
+      })
+
+      const json = await res.json().catch(() => ({}))
+
+      if (!res.ok) {
+        showToast(json.message || `Error al sincronizar departamentos con "${tipo.nombre}" (Código ${res.status})`)
+        return
+      }
+
+      await fetchUnidades()
+      await fetchTiposDepto()
+      showToast(`¡${asignaciones.length} departamentos sincronizados y asignados a "${tipo.nombre}"!`)
+    } catch {
+      showToast('Error de conexión al sincronizar tipologías')
+    }
   }
 
   const handleUpdateUnidadParametros = (updated: UnidadItem) => {
     setUnidades((prev) => prev.map((u) => (u.id === updated.id ? { ...u, ...updated } : u)))
-    try {
-      const existingSaved = localStorage.getItem('edificio_xyz_unidades_parametros')
-      const map = existingSaved ? JSON.parse(existingSaved) : {}
-      map[updated.id] = updated
-      localStorage.setItem('edificio_xyz_unidades_parametros', JSON.stringify(map))
-    } catch {}
   }
 
   const handleUpdateMultipleParametros = (updatedList: UnidadItem[]) => {
     const updatedMap = new Map(updatedList.map((u) => [u.id, u]))
     setUnidades((prev) => prev.map((u) => updatedMap.get(u.id) || u))
-    try {
-      const existingSaved = localStorage.getItem('edificio_xyz_unidades_parametros')
-      const map = existingSaved ? JSON.parse(existingSaved) : {}
-      updatedList.forEach((u) => {
-        map[u.id] = u
-      })
-      localStorage.setItem('edificio_xyz_unidades_parametros', JSON.stringify(map))
-    } catch {}
   }
 
-  // Fetch unidades desde la API con fallback inteligente
+  // Fetch unidades desde la API
   const fetchUnidades = useCallback(async () => {
+    setIsLoading(true)
+    setApiError(null)
     try {
-      const res = await fetch(
+      const res = await apiFetch(
         `/api/v1/unidades?tipo=${filtroTipo}&estado=${filtroEstado}&search=${encodeURIComponent(searchTerm)}`
       )
-      if (res.ok) {
-        const json = await res.json()
-        if (json.data && Array.isArray(json.data) && json.data.length > 0) {
-          const mapped: UnidadItem[] = json.data.map((item: any) => ({
-            id: item.id,
-            tipoUnidad: item.tipoUnidad,
-            numero: item.numero,
-            piso: item.piso,
-            areaM2: item.areaM2,
-            tipologia:
-              item.areaM2 === 60
-                ? 'Tipo A (60 m²)'
-                : item.areaM2 === 80
-                  ? 'Tipo B (80 m²)'
-                  : item.areaM2 === 100
-                    ? 'Tipo C (100 m²)'
-                    : undefined,
-            alicuota:
-              item.alicuota ||
-              (item.areaM2 ? Number(((item.areaM2 / 1600) * 100).toFixed(2)) : undefined),
-            estado: item.estado || 'Desocupado',
-            parqueo: item.parqueos?.[0]?.numero || item.parqueo || 'Sin parqueo',
-            baulera: item.bauleras?.[0]?.numero || item.baulera || 'Sin baulera',
-            propietario: item.propietario
-              ? {
-                  id: item.propietario.idPersona,
-                  nombre:
-                    `${item.propietario.nombres || ''} ${item.propietario.apellidos || ''}`.trim() ||
-                    item.propietario.nombre,
-                  ci: item.propietario.ciNit || item.propietario.ci,
-                  telefono: item.propietario.telefono,
-                  correo: item.propietario.correo
-                }
-              : null,
-            inquilinoActual: item.inquilinoActual || null,
-            persona: item.persona,
-            departamento: item.departamento,
-            fechaRegistro: item.fechaRegistro || '2023-01-01'
-          }))
-          setUnidades(mapped)
-        }
+      if (!res.ok) {
+        setApiError('Error al conectar con el servidor de unidades.')
+        setUnidades([])
+        return
       }
-    } catch {}
+      const json = await res.json()
+      if (json.data && Array.isArray(json.data)) {
+        const mapped: UnidadItem[] = json.data.map((item: any) => ({
+          id: item.id,
+          tipoUnidad: item.tipoUnidad,
+          numero: item.numero,
+          piso: item.piso,
+          areaM2: item.areaM2,
+          tipologia:
+            item.tipologia ||
+            item.departamento?.tipo?.nombre ||
+            (item.areaM2 === 60
+              ? 'Tipo A (60 m²)'
+              : item.areaM2 === 80
+                ? 'Tipo B (80 m²)'
+                : item.areaM2 === 100
+                  ? 'Tipo C (100 m²)'
+                  : undefined),
+          estado: item.estado || 'Desocupado',
+          parqueo: item.parqueos?.[0]?.numero || item.parqueo || 'Sin parqueo',
+          baulera: item.bauleras?.[0]?.numero || item.baulera || 'Sin baulera',
+          propietario: item.propietario
+            ? {
+                id: item.propietario.idPersona,
+                nombre:
+                  `${item.propietario.nombres || ''} ${item.propietario.apellidos || ''}`.trim() ||
+                  item.propietario.nombre,
+                ci: item.propietario.ciNit || item.propietario.ci,
+                telefono: item.propietario.telefono,
+                correo: item.propietario.correo
+              }
+            : null,
+          inquilinoActual: item.inquilinoActual || null,
+          persona: item.persona,
+          departamento: item.departamento,
+          fechaRegistro: item.fechaRegistro || '2023-01-01'
+        }))
+        setUnidades(mapped)
+      } else {
+        setUnidades([])
+      }
+    } catch {
+      setApiError('Error de red al conectar con el servidor de unidades.')
+      setUnidades([])
+    } finally {
+      setIsLoading(false)
+    }
   }, [filtroTipo, filtroEstado, searchTerm])
 
   useEffect(() => {
@@ -747,7 +341,7 @@ export default function DepartamentosPage() {
     }
 
     try {
-      const res = await fetch('/api/v1/unidades', {
+      const res = await apiFetch('/api/v1/unidades', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
@@ -782,21 +376,38 @@ export default function DepartamentosPage() {
       areaM2: formData.areaM2,
       tipologia: formData.tipologia || unidadToEdit.tipologia,
       expensaBase: formData.expensaBase ?? unidadToEdit.expensaBase,
-      alicuota: formData.areaM2
-        ? Number(((formData.areaM2 / 1600) * 100).toFixed(2))
-        : unidadToEdit.alicuota,
       estado: formData.estado
     }
     handleUpdateUnidadParametros(updatedUnidad)
 
+    // Si es departamento y cambió tipología, asignar tipo en backend (PUT /api/v1/departamentos/:id/tipo)
+    if (unidadToEdit.tipoUnidad === 'Departamento' && formData.tipologia) {
+      const tipoSel = tiposDepto.find((t) => t.nombre === formData.tipologia)
+      const idTipoNum = tipoSel?.idTipo || (tipoSel ? Number(tipoSel.id) : null)
+      if (idTipoNum && !isNaN(idTipoNum)) {
+        try {
+          const resTipo = await apiFetch(`/api/v1/departamentos/${unidadToEdit.id}/tipo`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ idTipo: idTipoNum })
+          })
+          if (!resTipo.ok) {
+            const errJson = await resTipo.json().catch(() => ({}))
+            showToast(errJson.message || `Error 422: No se pudo asignar el tipo al departamento`)
+          }
+        } catch {}
+      }
+    }
+
     try {
-      const res = await fetch(`/api/v1/unidades/${unidadToEdit.id}`, {
-        method: 'PATCH',
+      const tipoUnidadParam = unidadToEdit.tipoUnidad || 'Departamento'
+      const res = await apiFetch(`/api/v1/unidades/${tipoUnidadParam}/${unidadToEdit.id}`, {
+        method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           numero: formData.numero,
-          piso: formData.piso,
-          areaM2: formData.areaM2,
+          piso: formData.piso !== undefined ? Number(formData.piso) : undefined,
+          areaM2: formData.areaM2 !== undefined ? Number(formData.areaM2) : undefined,
           estado: formData.estado
         })
       })
@@ -821,18 +432,34 @@ export default function DepartamentosPage() {
         </div>
       )}
 
+      {/* Error de conexión con botón de reintentar */}
+      {apiError && (
+        <div className="p-4 bg-red-100 dark:bg-red-950/70 border border-red-300 dark:border-red-800 text-red-900 dark:text-red-200 rounded-2xl flex items-center justify-between gap-3 shadow-md">
+          <div className="flex items-center gap-3">
+            <AlertCircle className="w-5 h-5 text-red-600 dark:text-red-400 shrink-0" />
+            <span className="text-xs sm:text-sm font-bold">{apiError}</span>
+          </div>
+          <button
+            onClick={() => fetchUnidades()}
+            className="px-3 py-1.5 bg-red-700 hover:bg-red-800 text-white text-xs font-bold rounded-xl transition-all cursor-pointer"
+          >
+            Reintentar
+          </button>
+        </div>
+      )}
+
       {/* HEADER */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-[#cec8bc] dark:border-slate-800">
         <div>
           <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-blue-500/10 border border-blue-500/20 text-blue-800 dark:text-blue-400 text-xs font-semibold mb-2">
             <Building2 className="w-3.5 h-3.5" />
-            Catastro de Departamentos & Alícuotas
+            Catastro de Departamentos & Unidades
           </div>
           <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-[#262422] dark:text-white">
             Unidades, Propietarios e Inquilinos
           </h1>
           <p className="text-xs sm:text-sm text-[#66615b] dark:text-slate-400 mt-1">
-            Catastro del Edificio XYZ (20 departamentos, 1,600 m²). Todas las unidades generan
+            Catastro del Edificio XYZ ({totalDeptos} departamentos). Todas las unidades generan
             expensas sin importar si están ocupadas o vacías.
           </p>
         </div>
@@ -879,6 +506,19 @@ export default function DepartamentosPage() {
 
         <button
           type="button"
+          onClick={() => setActiveTab('agua')}
+          className={`inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition-all cursor-pointer ${
+            activeTab === 'agua'
+              ? 'bg-rose-700 text-white shadow-md shadow-rose-900/20'
+              : 'bg-[#ede9e1] dark:bg-slate-900 text-[#66615b] dark:text-slate-400 hover:text-[#262422] dark:hover:text-white border border-[#cec8bc] dark:border-slate-800'
+          }`}
+        >
+          <Building2 className="w-4 h-4 text-blue-500" />
+          <span>Consumo de Agua (Bs)</span>
+        </button>
+
+        <button
+          type="button"
           onClick={() => setActiveTab('parametros')}
           className={`inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition-all cursor-pointer ${
             activeTab === 'parametros'
@@ -887,7 +527,7 @@ export default function DepartamentosPage() {
           }`}
         >
           <Sliders className="w-4 h-4 text-amber-500" />
-          <span>Parámetros & Medidores</span>
+          <span>Reglas & Mora</span>
         </button>
       </div>
 
@@ -959,7 +599,7 @@ export default function DepartamentosPage() {
                     <th className="py-3 px-4">Unidad / Tipología</th>
                     <th className="py-3 px-4">Propietario Responsable</th>
                     <th className="py-3 px-4">Ocupante / Inquilino</th>
-                    <th className="py-3 px-4">Superficie & Alícuota</th>
+                    <th className="py-3 px-4">Superficie</th>
                     <th className="py-3 px-4">Parqueo / Baulera</th>
                     <th className="py-3 px-4">Estado Ocupación</th>
                     <th className="py-3 px-4 text-right">Acciones</th>
@@ -1041,21 +681,11 @@ export default function DepartamentosPage() {
                           <div className="font-bold text-[#262422] dark:text-white font-mono">
                             {unidad.areaM2 ? `${unidad.areaM2} m²` : '—'}
                           </div>
-                          <div className="text-[11px] text-[#7d776f] dark:text-slate-400">
-                            Alícuota:{' '}
-                            <span className="font-bold">
-                              {unidad.alicuota ? `${unidad.alicuota}%` : '—'}
-                            </span>
-                          </div>
-                          <div className="text-[11px] text-blue-700 dark:text-blue-400 font-mono font-bold mt-0.5">
-                            Bs.{' '}
-                            {(
-                              (15500 *
-                                (unidad.alicuota || (unidad.areaM2 ? unidad.areaM2 / 16 : 0))) /
-                              100
-                            ).toFixed(2)}
-                            /mes
-                          </div>
+                          {unidad.tipologia && (
+                            <div className="text-[11px] text-[#7d776f] dark:text-slate-400">
+                              {unidad.tipologia}
+                            </div>
+                          )}
                         </td>
 
                         <td className="py-3 px-4">
@@ -1121,6 +751,11 @@ export default function DepartamentosPage() {
           onDeleteTipo={handleDeleteTipoDepto}
           onResetDefaults={handleResetDefaultTipos}
           onSincronizarUnidadesTipo={handleSincronizarUnidadesTipo}
+          showToast={showToast}
+        />
+      ) : activeTab === 'agua' ? (
+        <AguaDepartamentosTab
+          unidades={unidades}
           showToast={showToast}
         />
       ) : (
