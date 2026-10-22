@@ -27,6 +27,7 @@ import {
   ShieldCheck,
   AlertCircle
 } from 'lucide-react'
+import { apiFetch } from '@/lib/api'
 
 export interface ExpensaItem {
   idExpensa: number
@@ -139,7 +140,7 @@ export default function ExpensasPage() {
 
   const fetchPersonas = useCallback(async () => {
     try {
-      const res = await fetch('/api/v1/personas?limit=100')
+      const res = await apiFetch('/api/v1/personas?limit=100')
       if (res.ok) {
         const json = await res.json()
         if (json.data && Array.isArray(json.data)) {
@@ -156,7 +157,7 @@ export default function ExpensasPage() {
     setIsLoading(true)
     setApiError(null)
     try {
-      const res = await fetch(`/api/v1/expensas?estado=${filtroEstado}`)
+      const res = await apiFetch(`/api/v1/expensas?estado=${filtroEstado}`)
       if (!res.ok) {
         const errJson = await res.json().catch(() => ({}))
         setApiError(errJson.message || 'Error al conectar con el servidor de expensas.')
@@ -190,8 +191,8 @@ export default function ExpensasPage() {
       } else {
         setExpensas([])
       }
-    } catch {
-      setApiError('Error de red al conectar con el servidor de expensas.')
+    } catch (err: any) {
+      setApiError(err?.message || 'Error de red al conectar con el servidor de expensas.')
       setExpensas([])
     } finally {
       setIsLoading(false)
@@ -200,7 +201,7 @@ export default function ExpensasPage() {
 
   const fetchMorosos = useCallback(async () => {
     try {
-      const res = await fetch('/api/v1/expensas/morosos')
+      const res = await apiFetch('/api/v1/expensas/morosos')
       if (res.ok) {
         const json = await res.json()
         if (json.data && Array.isArray(json.data)) {
@@ -212,7 +213,7 @@ export default function ExpensasPage() {
 
   const fetchReglasMora = useCallback(async () => {
     try {
-      const res = await fetch('/api/v1/expensas/reglas-mora')
+      const res = await apiFetch('/api/v1/expensas/reglas-mora')
       if (res.ok) {
         const json = await res.json()
         setReglaMoraActiva(json.activa || null)
@@ -252,7 +253,7 @@ export default function ExpensasPage() {
     setEmisionError(null)
 
     try {
-      const res = await fetch('/api/v1/expensas/generar-masivo', {
+      const res = await apiFetch('/api/v1/expensas/generar-masivo', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -293,7 +294,7 @@ export default function ExpensasPage() {
     if (!confirm('¿Desea calcular y aplicar los recargos por mora a todas las expensas vencidas?')) return
 
     try {
-      const res = await fetch('/api/v1/expensas/calcular-mora', { method: 'POST' })
+      const res = await apiFetch('/api/v1/expensas/calcular-mora', { method: 'POST' })
       const json = await res.json()
       if (res.ok) {
         await fetchExpensas()
@@ -317,7 +318,7 @@ export default function ExpensasPage() {
     setMoraError(null)
 
     try {
-      const res = await fetch('/api/v1/expensas/reglas-mora', {
+      const res = await apiFetch('/api/v1/expensas/reglas-mora', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -365,7 +366,7 @@ export default function ExpensasPage() {
     setModalError(null)
 
     try {
-      const res = await fetch(`/api/v1/expensas/${expensaAPagar.idExpensa}/pagos`, {
+      const res = await apiFetch(`/api/v1/expensas/${expensaAPagar.idExpensa}/pagos`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -418,7 +419,7 @@ export default function ExpensasPage() {
     const qStr = qParams.toString() ? `?${qParams.toString()}` : ''
 
     try {
-      const res = await fetch(`/api/v1/expensas/estado-cuenta/${idDepartamento}${qStr}`)
+      const res = await apiFetch(`/api/v1/expensas/estado-cuenta/${idDepartamento}${qStr}`)
       if (res.ok) {
         const json = await res.json()
         setEstadoCuentaData(json)

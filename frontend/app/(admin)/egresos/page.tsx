@@ -28,6 +28,7 @@ import {
   AlertCircle,
   Scale
 } from 'lucide-react'
+import { apiFetch } from '@/lib/api'
 
 export interface MovimientoItem {
   id: number
@@ -248,7 +249,7 @@ export default function FinanzasPage() {
   // Cargar categorías disponibles desde API
   const fetchCategorias = useCallback(async () => {
     try {
-      const res = await fetch('/api/v1/movimientos/categorias')
+      const res = await apiFetch('/api/v1/movimientos/categorias')
       if (res.ok) {
         const data = await res.json()
         if (Array.isArray(data) && data.length > 0) {
@@ -271,7 +272,7 @@ export default function FinanzasPage() {
       if (fechaHasta) params.append('fechaHasta', fechaHasta)
 
       const url = `/api/v1/movimientos?${params.toString()}`
-      const res = await fetch(url)
+      const res = await apiFetch(url)
       if (res.ok) {
         const json = await res.json()
         const rawData = Array.isArray(json.data) ? json.data : Array.isArray(json) ? json : []
@@ -519,7 +520,7 @@ export default function FinanzasPage() {
         comprobanteUrl: comprobanteVal
       }
 
-      const res = await fetch('/api/v1/movimientos', {
+      const res = await apiFetch('/api/v1/movimientos', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(bodyPayload)
@@ -534,30 +535,13 @@ export default function FinanzasPage() {
           showNotification('error', 'Error 403: No posee permisos para realizar esta acción.')
           return
         }
-        // Fallback local
-        const nuevo: MovimientoItem = {
-          id: Date.now(),
-          tipo: formTipo,
-          codigo: `${formTipo === 'Ingreso' ? 'ING' : 'EGR'}-2026-${String(movimientos.length + 1).padStart(3, '0')}`,
-          fecha: formFecha,
-          idCategoria: formIdCategoria,
-          categoria: selectedCat?.nombre || 'General',
-          tercero: formTercero.trim(),
-          descripcion: formDescripcion.trim() || 'Sin descripción detallada',
-          nroFactura: formNroFactura.trim() || (formTipo === 'Ingreso' ? 'REC-ING' : 'FAC-EGR'),
-          comprobanteUrl: formComprobanteUrl || null,
-          monto: Number(formMonto),
-          metodoPago: formMetodoPago,
-          registradoPor: 'admin'
-        }
-        setMovimientos((prev) => [nuevo, ...prev])
-        showNotification('success', `¡${formTipo} guardado con éxito!`)
+        showNotification('error', errorJson.message || 'Error al procesar el registro.')
       }
 
       setIsCreateModalOpen(false)
-    } catch (err) {
+    } catch (err: any) {
       console.error('Error creando movimiento:', err)
-      showNotification('error', 'Ocurrió un error al procesar el registro.')
+      showNotification('error', err?.message || 'Ocurrió un error al procesar el registro.')
     } finally {
       setIsSubmitting(false)
     }
@@ -590,7 +574,7 @@ export default function FinanzasPage() {
         comprobanteUrl: comprobanteVal
       }
 
-      const res = await fetch(`/api/v1/movimientos/${movimientoParaEditar.id}`, {
+      const res = await apiFetch(`/api/v1/movimientos/${movimientoParaEditar.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(bodyPayload)
@@ -604,34 +588,15 @@ export default function FinanzasPage() {
           showNotification('error', 'Error 403: No posee permisos para modificar este registro.')
           return
         }
-        // Fallback local actualizando campos editados y preservando los no editados
-        setMovimientos((prev) =>
-          prev.map((item) =>
-            item.id === movimientoParaEditar.id
-              ? {
-                  ...item,
-                  tipo: formTipo,
-                  idCategoria: formIdCategoria,
-                  categoria: selectedCat?.nombre || item.categoria,
-                  tercero: formTercero.trim(),
-                  descripcion: formDescripcion.trim() || item.descripcion,
-                  monto: Number(formMonto),
-                  fecha: formFecha,
-                  nroFactura: formNroFactura.trim() || item.nroFactura,
-                  comprobanteUrl: formComprobanteUrl || item.comprobanteUrl,
-                  metodoPago: formMetodoPago
-                }
-              : item
-          )
-        )
-        showNotification('success', 'Registro financiero actualizado exitosamente.')
+        const errJson = await res.json().catch(() => ({}))
+        showNotification('error', errJson.message || 'Error al actualizar el registro financiero.')
       }
 
       setIsEditModalOpen(false)
       setMovimientoParaEditar(null)
-    } catch (err) {
+    } catch (err: any) {
       console.error('Error al editar movimiento:', err)
-      showNotification('error', 'Error al guardar los cambios.')
+      showNotification('error', err?.message || 'Error al guardar los cambios.')
     } finally {
       setIsSubmitting(false)
     }
@@ -646,7 +611,7 @@ export default function FinanzasPage() {
     }
 
     try {
-      const res = await fetch(`/api/v1/movimientos/${movimientoParaEliminar.id}`, {
+      const res = await apiFetch(`/api/v1/movimientos/${movimientoParaEliminar.id}`, {
         method: 'DELETE'
       })
       if (res.ok || res.status === 404) {
@@ -654,9 +619,9 @@ export default function FinanzasPage() {
       }
       setMovimientos((prev) => prev.filter((m) => m.id !== movimientoParaEliminar.id))
       setMovimientoParaEliminar(null)
-    } catch (err) {
+    } catch (err: any) {
       console.error('Error eliminando movimiento:', err)
-      showNotification('error', 'No se pudo eliminar el registro.')
+      showNotification('error', err?.message || 'No se pudo eliminar el registro.')
     }
   }
 

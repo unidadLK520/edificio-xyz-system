@@ -6,6 +6,7 @@ import { ShieldCheck, AlertTriangle, CheckCircle2, X, RotateCcw } from 'lucide-r
 import { PersonaItem, UsuarioItem } from '@/components/usuarios/types'
 import { UsuariosTable } from '@/components/usuarios/UsuariosTable'
 import { CreateUsuarioModal } from '@/components/usuarios/CreateUsuarioModal'
+import { apiFetch } from '@/lib/api'
 
 export type { PersonaItem, UsuarioItem }
 
@@ -22,7 +23,7 @@ export default function UsuariosPage() {
     setLoading(true)
     setErrorMessage('')
     try {
-      const res = await fetch('/api/v1/usuarios')
+      const res = await apiFetch('/api/v1/usuarios')
       if (res.ok) {
         const data = await res.json()
         setUsuarios(data)
@@ -30,8 +31,8 @@ export default function UsuariosPage() {
         const err = await res.json().catch(() => ({}))
         setErrorMessage(err.message || 'No se pudo obtener la lista de usuarios')
       }
-    } catch {
-      setErrorMessage('Error de conexión al cargar usuarios')
+    } catch (err: any) {
+      setErrorMessage(err?.message || 'Error de conexión al cargar usuarios')
     } finally {
       setLoading(false)
     }
@@ -44,7 +45,7 @@ export default function UsuariosPage() {
   const handleToggleEstado = async (idUsuario: number, estadoActual: boolean) => {
     const nuevoEstado = !estadoActual
     try {
-      const res = await fetch(`/api/v1/usuarios/${idUsuario}/estado`, {
+      const res = await apiFetch(`/api/v1/usuarios/${idUsuario}/estado`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ activo: nuevoEstado })
@@ -59,14 +60,14 @@ export default function UsuariosPage() {
         const err = await res.json().catch(() => ({}))
         setErrorMessage(err.message || 'Error al actualizar el estado del usuario')
       }
-    } catch {
-      setErrorMessage('Error de conexión al cambiar el estado')
+    } catch (err: any) {
+      setErrorMessage(err?.message || 'Error de conexión al cambiar el estado')
     }
   }
 
   const handleChangeRol = async (idUsuario: number, nuevoRol: string) => {
     try {
-      const res = await fetch(`/api/v1/usuarios/${idUsuario}/rol`, {
+      const res = await apiFetch(`/api/v1/usuarios/${idUsuario}/rol`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ rol: nuevoRol })
@@ -79,8 +80,8 @@ export default function UsuariosPage() {
         const err = await res.json().catch(() => ({}))
         setErrorMessage(err.message || 'Error al cambiar el rol')
       }
-    } catch {
-      setErrorMessage('Error de conexión al cambiar el rol')
+    } catch (err: any) {
+      setErrorMessage(err?.message || 'Error de conexión al cambiar el rol')
     }
   }
 

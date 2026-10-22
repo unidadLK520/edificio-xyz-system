@@ -38,6 +38,7 @@ import AsignarUnidadModal from '@/components/departamentos/AsignarUnidadModal'
 import ParametrosDepartamentosTab from '@/components/departamentos/ParametrosDepartamentosTab'
 import TiposDepartamentosTab from '@/components/departamentos/TiposDepartamentosTab'
 import AguaDepartamentosTab from '@/components/departamentos/AguaDepartamentosTab'
+import { apiFetch } from '@/lib/api'
 
 export default function DepartamentosPage() {
   const [unidades, setUnidades] = useState<UnidadItem[]>([])
@@ -63,7 +64,7 @@ export default function DepartamentosPage() {
   // Cargar tipos de departamentos desde la API
   const fetchTiposDepto = useCallback(async () => {
     try {
-      const res = await fetch('/api/v1/tipos-departamento')
+      const res = await apiFetch('/api/v1/tipos-departamento')
       if (res.ok) {
         const json = await res.json()
         if (json.data && Array.isArray(json.data)) {
@@ -103,7 +104,7 @@ export default function DepartamentosPage() {
         activo: tipoGuardado.activo !== false
       }
 
-      const res = await fetch(url, {
+      const res = await apiFetch(url, {
         method,
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
@@ -122,7 +123,7 @@ export default function DepartamentosPage() {
       showToast(`¡Tipo de departamento "${tipoGuardado.nombre}" guardado exitosamente!`)
       return null
     } catch (e: any) {
-      const msg = 'Error de conexión al guardar tipo de departamento'
+      const msg = e?.message || 'Error de conexión al guardar tipo de departamento'
       showToast(msg)
       return msg
     }
@@ -136,7 +137,7 @@ export default function DepartamentosPage() {
         return null
       }
 
-      const res = await fetch(`/api/v1/tipos-departamento/${idNumerico}`, {
+      const res = await apiFetch(`/api/v1/tipos-departamento/${idNumerico}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ activo: false })
@@ -192,7 +193,7 @@ export default function DepartamentosPage() {
         idTipo: idTipoNum
       }))
 
-      const res = await fetch('/api/v1/departamentos/asignar-tipo', {
+      const res = await apiFetch('/api/v1/departamentos/asignar-tipo', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ asignaciones })
@@ -227,7 +228,7 @@ export default function DepartamentosPage() {
     setIsLoading(true)
     setApiError(null)
     try {
-      const res = await fetch(
+      const res = await apiFetch(
         `/api/v1/unidades?tipo=${filtroTipo}&estado=${filtroEstado}&search=${encodeURIComponent(searchTerm)}`
       )
       if (!res.ok) {
@@ -340,7 +341,7 @@ export default function DepartamentosPage() {
     }
 
     try {
-      const res = await fetch('/api/v1/unidades', {
+      const res = await apiFetch('/api/v1/unidades', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
@@ -385,7 +386,7 @@ export default function DepartamentosPage() {
       const idTipoNum = tipoSel?.idTipo || (tipoSel ? Number(tipoSel.id) : null)
       if (idTipoNum && !isNaN(idTipoNum)) {
         try {
-          const resTipo = await fetch(`/api/v1/departamentos/${unidadToEdit.id}/tipo`, {
+          const resTipo = await apiFetch(`/api/v1/departamentos/${unidadToEdit.id}/tipo`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ idTipo: idTipoNum })
@@ -400,7 +401,7 @@ export default function DepartamentosPage() {
 
     try {
       const tipoUnidadParam = unidadToEdit.tipoUnidad || 'Departamento'
-      const res = await fetch(`/api/v1/unidades/${tipoUnidadParam}/${unidadToEdit.id}`, {
+      const res = await apiFetch(`/api/v1/unidades/${tipoUnidadParam}/${unidadToEdit.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
