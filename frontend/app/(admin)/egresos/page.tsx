@@ -31,6 +31,7 @@ import {
   Scale
 } from 'lucide-react'
 import { apiFetch } from '@/lib/api'
+import { fechaSolo } from '@/lib/fecha'
 
 export interface MovimientoItem {
   id: number
@@ -109,7 +110,7 @@ export default function FinanzasPage() {
   const [formTercero, setFormTercero] = useState('')
   const [formDescripcion, setFormDescripcion] = useState('')
   const [formMonto, setFormMonto] = useState<number>(0)
-  const [formFecha, setFormFecha] = useState(new Date().toISOString().split('T')[0])
+  const [formFecha, setFormFecha] = useState(fechaSolo(new Date()))
   const [formNroFactura, setFormNroFactura] = useState('')
   const [formMetodoPago, setFormMetodoPago] = useState('Transferencia Bancaria')
   const [formComprobanteUrl, setFormComprobanteUrl] = useState<string>('')
@@ -179,9 +180,7 @@ export default function FinanzasPage() {
               `${item.tipo === 'Ingreso' ? 'ING' : 'EGR'}-2026-${String(
                 item.idMovimiento || item.id || 1
               ).padStart(3, '0')}`,
-            fecha: item.fecha
-              ? new Date(item.fecha).toISOString().split('T')[0]
-              : new Date().toISOString().split('T')[0],
+            fecha: fechaSolo(item.fecha) || fechaSolo(new Date()),
             idCategoria: catId,
             categoria: catName,
             tercero,
@@ -242,13 +241,13 @@ export default function FinanzasPage() {
     } else if (filtroPeriodo === 'mes_actual') {
       const inicio = new Date(hoy.getFullYear(), hoy.getMonth(), 1)
       const fin = new Date(hoy.getFullYear(), hoy.getMonth() + 1, 0)
-      setFechaDesde(inicio.toISOString().split('T')[0])
-      setFechaHasta(fin.toISOString().split('T')[0])
+      setFechaDesde(fechaSolo(inicio))
+      setFechaHasta(fechaSolo(fin))
     } else if (filtroPeriodo === 'mes_anterior') {
       const inicio = new Date(hoy.getFullYear(), hoy.getMonth() - 1, 1)
       const fin = new Date(hoy.getFullYear(), hoy.getMonth(), 0)
-      setFechaDesde(inicio.toISOString().split('T')[0])
-      setFechaHasta(fin.toISOString().split('T')[0])
+      setFechaDesde(fechaSolo(inicio))
+      setFechaHasta(fechaSolo(fin))
     }
   }, [filtroPeriodo])
 
@@ -341,7 +340,7 @@ export default function FinanzasPage() {
     setFormTercero('')
     setFormDescripcion('')
     setFormMonto(0)
-    setFormFecha(new Date().toISOString().split('T')[0])
+    setFormFecha(fechaSolo(new Date()))
     setFormNroFactura('')
     setFormComprobanteUrl('')
     setFileNameAttached('')

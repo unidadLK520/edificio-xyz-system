@@ -28,6 +28,7 @@ import {
   AlertCircle
 } from 'lucide-react'
 import { apiFetch } from '@/lib/api'
+import { fechaSolo, fechaHoraBolivia } from '@/lib/fecha'
 
 export interface ExpensaItem {
   idExpensa: number
@@ -169,13 +170,13 @@ export default function ExpensasPage() {
         const mapped: ExpensaItem[] = json.data.map((item: any) => ({
           idExpensa: item.idExpensa,
           idDepartamento: item.idDepartamento,
-          periodo: new Date(item.periodo).toISOString().split('T')[0],
+          periodo: fechaSolo(item.periodo),
           monto: Number(item.monto),
           montoBase: item.montoBase !== undefined && item.montoBase !== null ? Number(item.montoBase) : Number(item.monto) - Number(item.montoAgua || 0),
           montoAgua: Number(item.montoAgua || 0),
           saldoPendiente: Number(item.saldoPendiente),
           tasaInteresMora: Number(item.tasaInteresMora || 0),
-          fechaVencimiento: new Date(item.fechaVencimiento).toISOString().split('T')[0],
+          fechaVencimiento: fechaSolo(item.fechaVencimiento),
           estado: item.estado,
           departamento: item.departamento,
           propietarioNombre: item.departamento?.propietario
@@ -1269,7 +1270,7 @@ export default function ExpensasPage() {
                         <div>
                           <span className="font-bold font-mono text-xs">{reg.tasaInteres}%</span>
                           <span className="text-[10px] block text-[#7d776f]">
-                            {new Date(reg.fechaCreacion).toLocaleDateString()} {reg.usuarioCreacion?.nombreUsuario ? `• ${reg.usuarioCreacion.nombreUsuario}` : ''}
+                            {fechaHoraBolivia(reg.fechaCreacion)} {reg.usuarioCreacion?.nombreUsuario ? `• ${reg.usuarioCreacion.nombreUsuario}` : ''}
                           </span>
                         </div>
                         <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
@@ -1948,7 +1949,7 @@ export default function ExpensasPage() {
                         return (
                           <tr key={mov.id || idx} className="hover:bg-[#dfd9ce]/30 dark:hover:bg-slate-800/30">
                             <td className="py-2.5 px-3 font-bold font-mono text-[#262422] dark:text-white whitespace-nowrap">
-                              {mov.fecha ? new Date(mov.fecha).toISOString().split('T')[0] : mov.periodo}
+                              {fechaSolo(mov.fecha || mov.periodo)}
                             </td>
                             <td className="py-2.5 px-3">
                               <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[9px] font-extrabold ${

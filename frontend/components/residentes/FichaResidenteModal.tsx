@@ -3,6 +3,8 @@
 
 import React, { useState, useEffect } from 'react';
 import { User, AlertTriangle, Home, Key, Building2, History } from 'lucide-react';
+import { apiFetch } from '@/lib/api';
+import { fechaSolo } from '@/lib/fecha';
 
 interface FichaResidenteModalProps {
   isOpen: boolean;
@@ -68,10 +70,10 @@ export default function FichaResidenteModal({
 
     setFinalizingId(idOcupacion);
     try {
-      const res = await fetch(`/api/v1/personas/ocupaciones/${idOcupacion}/finalizar`, {
+      const res = await apiFetch(`/api/v1/personas/ocupaciones/${idOcupacion}/finalizar`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ fechaFin: new Date().toISOString().slice(0, 10) }),
+        body: JSON.stringify({ fechaFin: fechaSolo(new Date()) }),
       });
 
       const data = await res.json();
@@ -280,12 +282,12 @@ export default function FichaResidenteModal({
                             <div className="text-slate-600 dark:text-slate-400">
                               Inicio:{' '}
                               <strong className="text-slate-800 dark:text-slate-200">
-                                {new Date(ocu.fechaInicio).toLocaleDateString()}
+                                {fechaSolo(ocu.fechaInicio)}
                               </strong>{' '}
                               | Fin:{' '}
                               <strong className="text-slate-800 dark:text-slate-200">
                                 {ocu.fechaFin
-                                  ? new Date(ocu.fechaFin).toLocaleDateString()
+                                  ? fechaSolo(ocu.fechaFin)
                                   : 'Actualmente vigente'}
                               </strong>
                             </div>
