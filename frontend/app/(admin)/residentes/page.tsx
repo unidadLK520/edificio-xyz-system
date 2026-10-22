@@ -24,6 +24,7 @@ import {
 import ResidentesModal, { PersonaData } from '@/components/residentes/ResidentesModal'
 import FichaResidenteModal from '@/components/residentes/FichaResidenteModal'
 import AsignarUnidadModal from '@/components/residentes/AsignarUnidadModal'
+import { apiFetch } from '@/lib/api'
 
 export default function ResidentesPage() {
   const [personas, setPersonas] = useState<any[]>([])
@@ -74,7 +75,7 @@ export default function ResidentesPage() {
       if (searchTerm.trim()) queryParams.set('buscar', searchTerm.trim())
       if (tipoOcupanteFilter) queryParams.set('tipoOcupante', tipoOcupanteFilter)
 
-      const res = await fetch(`/api/v1/personas?${queryParams.toString()}`)
+      const res = await apiFetch(`/api/v1/personas?${queryParams.toString()}`)
       const json = await res.json()
 
       if (!res.ok) {
