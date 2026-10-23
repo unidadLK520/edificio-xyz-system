@@ -106,6 +106,21 @@ export default function ExpensasPage() {
   const [comprobanteUrlInput, setComprobanteUrlInput] = useState<string>('')
   const [isSubmittingPago, setIsSubmittingPago] = useState<boolean>(false)
 
+  // Anulación de Pagos (Estado de Cuenta)
+  const [pagoAAnular, setPagoAAnular] = useState<any | null>(null)
+  const [motivoAnulacionInput, setMotivoAnulacionInput] = useState<string>('')
+  const [isSubmittingAnulacion, setIsSubmittingAnulacion] = useState<boolean>(false)
+  const [anulacionError, setAnulacionError] = useState<string | null>(null)
+
+  // Corrección de Pagos (Estado de Cuenta)
+  const [pagoACorregir, setPagoACorregir] = useState<any | null>(null)
+  const [corregirMontoInput, setCorregirMontoInput] = useState<number>(0)
+  const [corregirMetodoInput, setCorregirMetodoInput] = useState<string>('Transferencia')
+  const [corregirIdPersonaInput, setCorregirIdPersonaInput] = useState<number | ''>('')
+  const [corregirMotivoInput, setCorregirMotivoInput] = useState<string>('')
+  const [isSubmittingCorregir, setIsSubmittingCorregir] = useState<boolean>(false)
+  const [corregirError, setCorregirError] = useState<string | null>(null)
+
   // Formulario Emisión Masiva (Requisitos HU04)
   const [nuevoPeriodo, setNuevoPeriodo] = useState('2026-11-01')
   const [nuevaFechaVencimiento, setNuevaFechaVencimiento] = useState('2026-11-10')
@@ -374,7 +389,7 @@ export default function ExpensasPage() {
           idPersonaPagador: Number(idPersonaPagadorInput),
           montoPagado: Number(montoPagoInput),
           metodoPago: metodoPagoInput,
-          esAnticipado: esAnticipadoInput,
+          esAnticipado: false, // anticipos ya no se usan
           comprobanteUrl: comprobanteUrlInput.trim() || undefined
         })
       })
@@ -383,6 +398,7 @@ export default function ExpensasPage() {
 
       if (!res.ok) {
         const errorMsg = data.message || data.error || 'Error al registrar el pago'
+        setModalError(errorMsg)
         showErrorToast(errorMsg)
         return
       }
@@ -392,9 +408,125 @@ export default function ExpensasPage() {
       setExpensaAPagar(null)
       showToast(data.message || '¡Pago registrado y conciliado exitosamente!')
     } catch (err: any) {
-      showErrorToast(err?.message || 'Error de conexión al registrar el pago')
+      const errMsg = err?.message || 'Error de conexión al registrar el pago'
+      setModalError(errMsg)
+      showErrorToast(errMsg)
     } finally {
       setIsSubmittingPago(false)
+    }
+  }
+
+  // Anular Pago de Expensa (DELETE /api/v1/expensas/pagos/:idPago)
+  const handleAnularPagoSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!pagoAAnular) return
+
+    if (!motivoAnulacionInput.trim()) {
+      setAnulacionError('El motivo de anulación es obligatorio.')
+      return
+    }
+
+    setIsSubmittingAnulacion(true)
+    setAnulacionError(null)
+
+    try {
+      const idPago = pagoAAnular.idReferencia || pagoAAnular.idPago || Number(String(pagoAAnular.id).replace('PAG-', ''))
+      const res = await apiFetch(`/api/v1/expensas/pagos/${idPago}`, {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          motivo: motivoAnulacionInput.trim()
+        })
+      })
+
+      const data = await res.json().catch(() => ({}))
+
+      if (!res.ok) {
+        const errorMsg = data.message || data.error || 'Error al anular el pago'
+        setAnulacionError(errorMsg)
+        return
+      }
+
+      showToast(data.message || 'Pago anulado exitosamente')
+      setPagoAAnular(null)
+      setMotivoAnulacionInput('')
+
+      // Recargar estado de cuenta y listado general
+      if (selectedDeptoIdParaEstadoCuenta) {
+        await handleVerEstadoCuenta(selectedDeptoIdParaEstadoCuenta)
+      }
+      await fetchExpensas()
+    } catch (err: any) {
+      setAnulacionError(err?.message || 'Error de conexión al anular el pago')
+    } finally {
+      setIsSubmittingAnulacion(false)
+    }
+  }
+
+  // Corregir Pago de Expensa (PATCH /api/v1/expensas/pagos/:idPago/corregir)
+  const handleCorregirPagoSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!pagoACorregir) return
+
+    if (!corregirMotivoInput.trim()) {
+      setCorregirError('El motivo de corrección es obligatorio.')
+      return
+    }
+
+    if (!corregirIdPersonaInput) {
+      setCorregirError('Debe seleccionar la persona pagadora.')
+      return
+    }
+
+    if (Number(corregirMontoInput) <= 0) {
+      setCorregirError('El monto pagado debe ser mayor a cero.')
+      return
+    }
+
+    setIsSubmittingCorregir(true)
+    setCorregirError(null)
+
+    try {
+      const idPago = pagoACorregir.idReferencia || pagoACorregir.idPago || Number(String(pagoACorregir.id).replace('PAG-', ''))
+      const res = await apiFetch(`/api/v1/expensas/pagos/${idPago}/corregir`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          idPersonaPagador: Number(corregirIdPersonaInput),
+          montoPagado: Number(corregirMontoInput),
+          metodoPago: corregirMetodoInput,
+          motivo: corregirMotivoInput.trim(),
+          esAnticipado: false
+        })
+      })
+
+      const data = await res.json().catch(() => ({}))
+
+      if (!res.ok) {
+        let errorMsg = data.message || data.error || 'Error al corregir el pago'
+        if (data.details) {
+          const detailStr = Object.entries(data.details)
+            .map(([k, v]: [string, any]) => `${k}: ${Array.isArray(v) ? v.join(', ') : v}`)
+            .join(' | ')
+          errorMsg = `${errorMsg} (${detailStr})`
+        }
+        setCorregirError(errorMsg)
+        return
+      }
+
+      showToast(data.message || 'Pago corregido exitosamente')
+      setPagoACorregir(null)
+      setCorregirMotivoInput('')
+
+      // Recargar estado de cuenta y listado general
+      if (selectedDeptoIdParaEstadoCuenta) {
+        await handleVerEstadoCuenta(selectedDeptoIdParaEstadoCuenta)
+      }
+      await fetchExpensas()
+    } catch (err: any) {
+      setCorregirError(err?.message || 'Error de conexión al corregir el pago')
+    } finally {
+      setIsSubmittingCorregir(false)
     }
   }
 
@@ -1939,6 +2071,7 @@ export default function ExpensasPage() {
                         <th className="py-2.5 px-3 text-right font-mono">Haber (Bs)</th>
                         <th className="py-2.5 px-3 text-right font-mono">Saldo</th>
                         <th className="py-2.5 px-3 text-center">Estado</th>
+                        <th className="py-2.5 px-3 text-right">Acciones</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-[#cec8bc] dark:divide-slate-800">
@@ -2001,6 +2134,50 @@ export default function ExpensasPage() {
                                 {mov.anulado ? 'Anulado' : (mov.estado || 'Efectuado')}
                               </span>
                             </td>
+                            <td className="py-2.5 px-3 text-right whitespace-nowrap">
+                              {(esPago || esAnticipo) && !mov.anulado ? (
+                                <div className="flex items-center justify-end gap-1.5">
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      const idPago = mov.idReferencia || Number(String(mov.id).replace('PAG-', ''))
+                                      const pagoOriginal = estadoCuentaData.pagos?.find((p: any) => p.idPago === idPago)
+                                      setPagoACorregir({
+                                        ...mov,
+                                        idPago,
+                                        montoPagado: pagoOriginal?.montoPagado || mov.monto,
+                                        metodoPago: pagoOriginal?.metodoPago || mov.metodo || 'Transferencia',
+                                        idPersonaPagador: pagoOriginal?.idPersonaPagador || (estadoCuentaData.departamento?.propietario?.idPersona || '')
+                                      })
+                                      setCorregirMontoInput(Number(pagoOriginal?.montoPagado || mov.monto))
+                                      setCorregirMetodoInput(pagoOriginal?.metodoPago || mov.metodo || 'Transferencia')
+                                      setCorregirIdPersonaInput(pagoOriginal?.idPersonaPagador || (estadoCuentaData.departamento?.propietario?.idPersona || ''))
+                                      setCorregirMotivoInput('')
+                                      setCorregirError(null)
+                                    }}
+                                    className="px-2 py-1 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-[10px] font-bold shadow-xs transition-colors cursor-pointer"
+                                    title="Corregir pago"
+                                  >
+                                    Corregir
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      const idPago = mov.idReferencia || Number(String(mov.id).replace('PAG-', ''))
+                                      setPagoAAnular({ ...mov, idPago })
+                                      setMotivoAnulacionInput('')
+                                      setAnulacionError(null)
+                                    }}
+                                    className="px-2 py-1 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-[10px] font-bold shadow-xs transition-colors cursor-pointer"
+                                    title="Anular pago"
+                                  >
+                                    Anular
+                                  </button>
+                                </div>
+                              ) : (
+                                <span className="text-[#7d776f] text-[10px]">—</span>
+                              )}
+                            </td>
                           </tr>
                         )
                       })}
@@ -2031,6 +2208,180 @@ export default function ExpensasPage() {
                 Cerrar
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL ANULAR PAGO */}
+      {pagoAAnular && (
+        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 backdrop-blur-xs">
+          <div className="w-full max-w-md bg-[#ede9e1] dark:bg-slate-900 rounded-3xl border border-[#cec8bc] dark:border-slate-800 p-6 space-y-4 shadow-2xl animate-in fade-in zoom-in-95 duration-200">
+            <div className="flex justify-between items-center border-b border-[#cec8bc] dark:border-slate-800 pb-3">
+              <div>
+                <h3 className="font-extrabold text-base text-rose-700 dark:text-rose-400 flex items-center gap-2">
+                  <AlertCircle className="w-5 h-5 shrink-0" />
+                  Anular Pago de Expensa
+                </h3>
+                <p className="text-xs text-[#7d776f]">
+                  Pago #{pagoAAnular.idReferencia || pagoAAnular.idPago || pagoAAnular.id} • Monto: Bs. {Number(pagoAAnular.monto || pagoAAnular.montoPagado || 0).toFixed(2)}
+                </p>
+              </div>
+              <button onClick={() => { setPagoAAnular(null); setAnulacionError(null) }}>
+                <X className="w-5 h-5 text-[#7d776f] hover:text-[#262422]" />
+              </button>
+            </div>
+
+            {anulacionError && (
+              <div className="p-3 bg-rose-100 dark:bg-rose-950/70 border border-rose-300 dark:border-rose-800 text-rose-900 dark:text-rose-200 rounded-xl flex items-center gap-2 text-xs">
+                <AlertCircle className="w-4 h-4 shrink-0 text-rose-600 dark:text-rose-400" />
+                <span>{anulacionError}</span>
+              </div>
+            )}
+
+            <form onSubmit={handleAnularPagoSubmit} className="space-y-4 text-xs">
+              <div className="p-3 bg-rose-50/60 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-900/40 rounded-2xl text-[11px] text-rose-900 dark:text-rose-300">
+                ⚠️ Al anular el pago, el saldo de la expensa correspondiente será recalculado automáticamente y quedará registrado en la auditoría del sistema.
+              </div>
+
+              <div>
+                <label className="block font-bold text-[#262422] dark:text-white mb-1">
+                  Motivo de la Anulación *
+                </label>
+                <textarea
+                  required
+                  rows={3}
+                  value={motivoAnulacionInput}
+                  onChange={(e) => setMotivoAnulacionInput(e.target.value)}
+                  placeholder="Explique detalladamente el motivo de la anulación (ej. Error en número de comprobante, duplicado por el banco, etc.)..."
+                  className="w-full px-3 py-2 rounded-xl bg-[#dfd9ce] dark:bg-slate-800 border border-[#cec8bc] dark:border-slate-700 text-[#262422] dark:text-white text-xs resize-none"
+                />
+              </div>
+
+              <div className="flex justify-end gap-2 pt-3 border-t border-[#cec8bc] dark:border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => { setPagoAAnular(null); setAnulacionError(null) }}
+                  className="px-4 py-2 rounded-xl text-xs font-bold text-[#7d776f] hover:bg-[#ded8cc] dark:hover:bg-slate-800"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSubmittingAnulacion || !motivoAnulacionInput.trim()}
+                  className="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold shadow-md cursor-pointer disabled:opacity-50"
+                >
+                  {isSubmittingAnulacion ? 'Anulando...' : 'Confirmar Anulación'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL CORREGIR PAGO */}
+      {pagoACorregir && (
+        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 backdrop-blur-xs">
+          <div className="w-full max-w-md bg-[#ede9e1] dark:bg-slate-900 rounded-3xl border border-[#cec8bc] dark:border-slate-800 p-6 space-y-4 shadow-2xl animate-in fade-in zoom-in-95 duration-200">
+            <div className="flex justify-between items-center border-b border-[#cec8bc] dark:border-slate-800 pb-3">
+              <div>
+                <h3 className="font-extrabold text-base text-amber-700 dark:text-amber-400 flex items-center gap-2">
+                  <CreditCard className="w-5 h-5 shrink-0" />
+                  Corregir Pago de Expensa
+                </h3>
+                <p className="text-xs text-[#7d776f]">
+                  Pago #{pagoACorregir.idReferencia || pagoACorregir.idPago || pagoACorregir.id}
+                </p>
+              </div>
+              <button onClick={() => { setPagoACorregir(null); setCorregirError(null) }}>
+                <X className="w-5 h-5 text-[#7d776f] hover:text-[#262422]" />
+              </button>
+            </div>
+
+            {corregirError && (
+              <div className="p-3 bg-rose-100 dark:bg-rose-950/70 border border-rose-300 dark:border-rose-800 text-rose-900 dark:text-rose-200 rounded-xl flex items-center gap-2 text-xs">
+                <AlertCircle className="w-4 h-4 shrink-0 text-rose-600 dark:text-rose-400" />
+                <span>{corregirError}</span>
+              </div>
+            )}
+
+            <form onSubmit={handleCorregirPagoSubmit} className="space-y-3.5 text-xs">
+              <div className="p-3 bg-amber-50/60 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900/40 rounded-2xl text-[11px] text-amber-900 dark:text-amber-300">
+                ℹ️ Esta acción anula el pago anterior y registra uno nuevo corregido con trazabilidad completa.
+              </div>
+
+              <div>
+                <label className="block font-bold mb-1">Monto Pagado (Bs.) *</label>
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0.01"
+                  required
+                  value={corregirMontoInput}
+                  onChange={(e) => setCorregirMontoInput(Number(e.target.value))}
+                  className="w-full px-3 py-2 rounded-xl bg-[#dfd9ce] dark:bg-slate-800 border border-[#cec8bc] dark:border-slate-700 font-mono font-bold text-sm text-emerald-700 dark:text-emerald-400"
+                />
+              </div>
+
+              <div>
+                <label className="block font-bold mb-1">Persona Pagadora *</label>
+                <select
+                  required
+                  value={corregirIdPersonaInput}
+                  onChange={(e) => setCorregirIdPersonaInput(Number(e.target.value))}
+                  className="w-full px-3 py-2 rounded-xl bg-[#dfd9ce] dark:bg-slate-800 border border-[#cec8bc] dark:border-slate-700 text-xs"
+                >
+                  <option value="" disabled>Seleccione persona pagadora...</option>
+                  {personasList.map((p) => (
+                    <option key={p.idPersona} value={p.idPersona}>
+                      {p.nombres} {p.apellidos} {p.ciNit ? `(CI: ${p.ciNit})` : ''}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block font-bold mb-1">Forma de Pago *</label>
+                <select
+                  value={corregirMetodoInput}
+                  onChange={(e) => setCorregirMetodoInput(e.target.value)}
+                  className="w-full px-3 py-2 rounded-xl bg-[#dfd9ce] dark:bg-slate-800 border border-[#cec8bc] dark:border-slate-700 text-xs"
+                >
+                  <option value="Transferencia">Transferencia Bancaria</option>
+                  <option value="QR">Pago QR</option>
+                  <option value="Efectivo">Efectivo en Caja</option>
+                  <option value="Cheque">Cheque</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block font-bold mb-1">Motivo de Corrección *</label>
+                <textarea
+                  required
+                  rows={2}
+                  value={corregirMotivoInput}
+                  onChange={(e) => setCorregirMotivoInput(e.target.value)}
+                  placeholder="Indique la justificación de la corrección..."
+                  className="w-full px-3 py-2 rounded-xl bg-[#dfd9ce] dark:bg-slate-800 border border-[#cec8bc] dark:border-slate-700 text-xs resize-none"
+                />
+              </div>
+
+              <div className="flex justify-end gap-2 pt-3 border-t border-[#cec8bc] dark:border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => { setPagoACorregir(null); setCorregirError(null) }}
+                  className="px-4 py-2 rounded-xl text-xs font-bold text-[#7d776f] hover:bg-[#ded8cc] dark:hover:bg-slate-800"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSubmittingCorregir || !corregirMotivoInput.trim() || !corregirIdPersonaInput || Number(corregirMontoInput) <= 0}
+                  className="px-4 py-2 rounded-xl bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold shadow-md cursor-pointer disabled:opacity-50"
+                >
+                  {isSubmittingCorregir ? 'Guardando...' : 'Guardar Corrección'}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}
