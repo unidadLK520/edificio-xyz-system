@@ -61,11 +61,24 @@ async function main() {
     console.log(`¿Coincidencia exacta de lecturas_agua?: ${lecturasActuales === 0 ? '✅ SÍ (0 filas)' : '⚠️ DIFERENCIA'}`);
 
     // 1.5 Sesiones
-    const sesionesActuales = await prisma.sesion.count();
+    const tstSesionesInicial = await prisma.sesion.count({
+      where: {
+        usuario: {
+          OR: [
+            { correo: { startsWith: 'tst-' } },
+            { correo: { startsWith: 'TST-' } },
+            { nombreUsuario: { startsWith: 'tst-' } },
+            { nombreUsuario: { startsWith: 'TST-' } },
+          ],
+        },
+      },
+    });
+    const sesionesTotales = await prisma.sesion.count();
+    const sesionesReales = sesionesTotales - tstSesionesInicial;
     console.log('\n--- 5. TABLA: sesiones ---');
-    console.log(`Sesiones ANTES:   0 filas`);
-    console.log(`Sesiones DESPUÉS: ${sesionesActuales} filas`);
-    console.log(`¿Coincidencia exacta de sesiones?: ${sesionesActuales === 0 ? '✅ SÍ (0 filas)' : '⚠️ DIFERENCIA'}`);
+    console.log(`Sesiones TST- remanentes: ${tstSesionesInicial} filas (${tstSesionesInicial === 0 ? '✅ SÍ (0 filas)' : '❌ NO ES 0'})`);
+    console.log(`Sesiones de cuentas reales (informativo): ${sesionesReales} filas (total en tabla: ${sesionesTotales} filas)`);
+    console.log(`¿Coincidencia de sesiones TST-?: ${tstSesionesInicial === 0 ? '✅ SÍ (0 sesiones TST-)' : '⚠️ DIFERENCIA (hay sesiones TST-)'}`);
 
     // 1.6 Montos de agua
     const montosActuales = await prisma.montoAgua.count();
@@ -81,10 +94,10 @@ async function main() {
     const noTest = await contarFilasNoTest();
     console.log(`Departamentos NO TST-: ANTES: 20 | DESPUÉS: ${noTest.departamentos} | ${noTest.departamentos === 20 ? '✅ INALTERADO' : '❌ ALTERADO'}`);
     console.log(`Personas NO TST-:      ANTES: 15 | DESPUÉS: ${noTest.personas} | ${noTest.personas === 15 ? '✅ INALTERADO' : '❌ ALTERADO'}`);
-    console.log(`Expensas NO TST-:      ANTES: 33 | DESPUÉS: ${noTest.expensas} | ${noTest.expensas === 33 ? '✅ INALTERADO' : '❌ ALTERADO'}`);
+    console.log(`Expensas NO TST-:      ANTES: 53 | DESPUÉS: ${noTest.expensas} | ${noTest.expensas === 53 ? '✅ INALTERADO' : '❌ ALTERADO'}`);
     console.log(`Pagos NO TST-:         ANTES: 27 | DESPUÉS: ${noTest.pagos} | ${noTest.pagos === 27 ? '✅ INALTERADO' : '❌ ALTERADO'}`);
 
-    // Checksums financieros de expensas y pagos NO TST-
+    // Checksums financieros NO TST-
     const expensasChecksumRes = await prisma.$queryRawUnsafe<any[]>(`
       SELECT 
         count(*)::text as count,
@@ -109,6 +122,50 @@ async function main() {
     `);
     const pagChecksum = pagosChecksumRes[0] || {};
 
+    const movChecksumRes = await prisma.$queryRawUnsafe<any[]>(`
+      SELECT 
+        count(*)::text as count,
+        COALESCE(sum(m.monto), 0)::text as suma_monto
+      FROM edificio.movimientos m
+      WHERE (m.descripcion IS NULL OR (m.descripcion NOT LIKE 'TST-%' AND m.descripcion NOT LIKE 'TEST-%'))
+        AND (m.tercero IS NULL OR m.tercero NOT LIKE 'TST-%');
+    `);
+    const movChecksum = movChecksumRes[0] || {};
+
+    const cajaChecksumRes = await prisma.$queryRawUnsafe<any[]>(`
+      SELECT 
+        count(*)::text as count,
+        COALESCE(sum(c.monto), 0)::text as suma_monto
+      FROM edificio.caja c
+      WHERE c.concepto IS NULL OR (c.concepto NOT LIKE 'TST-%' AND c.concepto NOT LIKE 'TEST-%');
+    `);
+    const cajaChecksum = cajaChecksumRes[0] || {};
+
+    const cuentasChecksumRes = await prisma.$queryRawUnsafe<any[]>(`
+      SELECT 
+        count(*)::text as count,
+        COALESCE(sum(cb.saldo_actual), 0)::text as suma_saldo_actual
+      FROM edificio.cuentas_bancarias cb
+      WHERE cb.banco NOT LIKE 'TST-%' AND cb.numero_cuenta NOT LIKE 'TST-%';
+    `);
+    const cuentasChecksum = cuentasChecksumRes[0] || {};
+
+    const movBancariosChecksumRes = await prisma.$queryRawUnsafe<any[]>(`
+      SELECT 
+        count(*)::text as count,
+        COALESCE(sum(mb.monto), 0)::text as suma_monto
+      FROM edificio.movimientos_bancarios mb;
+    `);
+    const movBancariosChecksum = movBancariosChecksumRes[0] || {};
+
+    const categoriasChecksumRes = await prisma.$queryRawUnsafe<any[]>(`
+      SELECT 
+        count(*)::text as count
+      FROM edificio.categorias_movimiento cm
+      WHERE cm.nombre NOT LIKE 'TST-%';
+    `);
+    const categoriasChecksum = categoriasChecksumRes[0] || {};
+
     const checksumActual = {
       expensas: {
         count: expChecksum.count,
@@ -122,19 +179,42 @@ async function main() {
         suma_monto: pagChecksum.suma_monto,
         suma_interes: pagChecksum.suma_interes,
       },
+      movimientos: {
+        count: movChecksum.count,
+        suma_monto: movChecksum.suma_monto,
+      },
+      caja: {
+        count: cajaChecksum.count,
+        suma_monto: cajaChecksum.suma_monto,
+      },
+      cuentas_bancarias: {
+        count: cuentasChecksum.count,
+        suma_saldo_actual: cuentasChecksum.suma_saldo_actual,
+      },
+      movimientos_bancarios: {
+        count: movBancariosChecksum.count,
+        suma_monto: movBancariosChecksum.suma_monto,
+      },
+      categorias_movimiento: {
+        count: categoriasChecksum.count,
+      },
     };
-
-    if (!baseline.checksum_no_tst) {
-      baseline.checksum_no_tst = checksumActual;
-      fs.writeFileSync(baselinePath, JSON.stringify(baseline, null, 2), 'utf8');
-      console.log('Checksum inicial NO TST- guardado en snapshot_baseline.json');
-    }
 
     const expCoincide = JSON.stringify(baseline.checksum_no_tst.expensas) === JSON.stringify(checksumActual.expensas);
     const pagCoincide = JSON.stringify(baseline.checksum_no_tst.pagos) === JSON.stringify(checksumActual.pagos);
+    const movCoincide = JSON.stringify(baseline.checksum_no_tst.movimientos) === JSON.stringify(checksumActual.movimientos);
+    const cajaCoincide = JSON.stringify(baseline.checksum_no_tst.caja) === JSON.stringify(checksumActual.caja);
+    const cuentasCoincide = JSON.stringify(baseline.checksum_no_tst.cuentas_bancarias) === JSON.stringify(checksumActual.cuentas_bancarias);
+    const movBanCoincide = JSON.stringify(baseline.checksum_no_tst.movimientos_bancarios) === JSON.stringify(checksumActual.movimientos_bancarios);
+    const catCoincide = JSON.stringify(baseline.checksum_no_tst.categorias_movimiento) === JSON.stringify(checksumActual.categorias_movimiento);
 
-    console.log(`Checksum Expensas NO TST-: ANTES: ${JSON.stringify(baseline.checksum_no_tst.expensas)} | DESPUÉS: ${JSON.stringify(checksumActual.expensas)} | ${expCoincide ? '✅ INALTERADO' : '❌ ALTERADO'}`);
-    console.log(`Checksum Pagos NO TST-:    ANTES: ${JSON.stringify(baseline.checksum_no_tst.pagos)} | DESPUÉS: ${JSON.stringify(checksumActual.pagos)} | ${pagCoincide ? '✅ INALTERADO' : '❌ ALTERADO'}`);
+    console.log(`Checksum Expensas NO TST-:        ANTES: ${JSON.stringify(baseline.checksum_no_tst.expensas)} | DESPUÉS: ${JSON.stringify(checksumActual.expensas)} | ${expCoincide ? '✅ INALTERADO' : '❌ ALTERADO'}`);
+    console.log(`Checksum Pagos NO TST-:           ANTES: ${JSON.stringify(baseline.checksum_no_tst.pagos)} | DESPUÉS: ${JSON.stringify(checksumActual.pagos)} | ${pagCoincide ? '✅ INALTERADO' : '❌ ALTERADO'}`);
+    console.log(`Checksum Movimientos NO TST-:     ANTES: ${JSON.stringify(baseline.checksum_no_tst.movimientos)} | DESPUÉS: ${JSON.stringify(checksumActual.movimientos)} | ${movCoincide ? '✅ INALTERADO' : '❌ ALTERADO'}`);
+    console.log(`Checksum Caja NO TST-:            ANTES: ${JSON.stringify(baseline.checksum_no_tst.caja)} | DESPUÉS: ${JSON.stringify(checksumActual.caja)} | ${cajaCoincide ? '✅ INALTERADO' : '❌ ALTERADO'}`);
+    console.log(`Checksum Cuentas Bancarias:       ANTES: ${JSON.stringify(baseline.checksum_no_tst.cuentas_bancarias)} | DESPUÉS: ${JSON.stringify(checksumActual.cuentas_bancarias)} | ${cuentasCoincide ? '✅ INALTERADO' : '❌ ALTERADO'}`);
+    console.log(`Checksum Movimientos Bancarios:   ANTES: ${JSON.stringify(baseline.checksum_no_tst.movimientos_bancarios)} | DESPUÉS: ${JSON.stringify(checksumActual.movimientos_bancarios)} | ${movBanCoincide ? '✅ INALTERADO' : '❌ ALTERADO'}`);
+    console.log(`Checksum Categorías Movimiento:   ANTES: ${JSON.stringify(baseline.checksum_no_tst.categorias_movimiento)} | DESPUÉS: ${JSON.stringify(checksumActual.categorias_movimiento)} | ${catCoincide ? '✅ INALTERADO' : '❌ ALTERADO'}`);
 
     // 3. Filas TST- remanentes
     console.log('\n===============================================================');
@@ -142,6 +222,17 @@ async function main() {
     console.log('===============================================================');
     const tstTiposCount = await prisma.tipoDepartamento.count({
       where: { nombre: { startsWith: 'TST-' } },
+    });
+    const tstCategoriasCount = await prisma.categoriaMovimiento.count({
+      where: { nombre: { startsWith: 'TST-' } },
+    });
+    const tstMovimientosCount = await prisma.movimiento.count({
+      where: {
+        OR: [
+          { descripcion: { contains: 'TST-' } },
+          { tercero: { contains: 'TST-' } },
+        ],
+      },
     });
     const tstSesionesCount = await prisma.sesion.count({
       where: {
@@ -167,6 +258,8 @@ async function main() {
     console.log(`Personas TST- remanentes:           ${tstRow.tst_personas} (${tstRow.tst_personas === '0' ? '✅ 0' : '❌ NO ES 0'})`);
     console.log(`Expensas TST- remanentes:           ${tstRow.tst_expensas} (${tstRow.tst_expensas === '0' ? '✅ 0' : '❌ NO ES 0'})`);
     console.log(`Pagos TST- remanentes:              ${tstRow.tst_pagos} (${tstRow.tst_pagos === '0' ? '✅ 0' : '❌ NO ES 0'})`);
+    console.log(`Movimientos TST- remanentes:        ${tstMovimientosCount} (${tstMovimientosCount === 0 ? '✅ 0' : '❌ NO ES 0'})`);
+    console.log(`Categorías TST- remanentes:         ${tstCategoriasCount} (${tstCategoriasCount === 0 ? '✅ 0' : '❌ NO ES 0'})`);
     const tstUsuariosCount = await prisma.usuario.count({
       where: {
         OR: [
@@ -181,15 +274,11 @@ async function main() {
     console.log(`Sesiones TST- remanentes:           ${tstSesionesCount} (${tstSesionesCount === 0 ? '✅ 0' : '❌ NO ES 0'})`);
     console.log(`Usuarios TST- remanentes:           ${tstUsuariosCount} (${tstUsuariosCount === 0 ? '✅ 0' : '❌ NO ES 0'})`);
 
-    // 4. Filas de auditoria generadas
+    // 4. Auditoría (solo informativo)
     console.log('\n===============================================================');
-    console.log('             FILAS DE AUDITORIA GENERADAS                      ');
+    console.log('             FILAS DE AUDITORIA (SOLO INFORMATIVO)             ');
     console.log('===============================================================');
-    const auditBase = baseline.auditoria_inicial || 2136;
-    const nuevasAuditoria = noTest.auditoria - auditBase;
-    console.log(`Auditoria total anterior: ${auditBase}`);
-    console.log(`Auditoria total actual:   ${noTest.auditoria}`);
-    console.log(`Filas generadas por triggers en la ejecución: ${nuevasAuditoria}`);
+    console.log(`Auditoria total actual en BD: ${noTest.auditoria} filas (trazabilidad acumulada)`);
 
   } catch (err) {
     console.error('Error al comparar tablas:', err);

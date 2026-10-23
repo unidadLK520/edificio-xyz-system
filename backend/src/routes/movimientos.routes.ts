@@ -22,23 +22,72 @@ import { config } from '../config';
 export const movimientosRouter: IRouter = Router();
 movimientosRouter.use(authMiddleware);
 
+// -- Helpers ------------------------------------------------------------------
+const sanitizeOptionalString = (maxLen: number, fieldName: string) =>
+  z.preprocess((val) => {
+    if (val === undefined) return undefined;
+    if (val === null) return null;
+    if (typeof val === 'string') {
+      const trimmed = val.trim();
+      return trimmed === '' ? null : trimmed;
+    }
+    return val;
+  }, z.string({ invalid_type_error: `${fieldName} debe ser una cadena de texto` }).max(maxLen, `${fieldName} no puede exceder ${maxLen} caracteres`).nullable().optional());
+
 // -- Schemas ------------------------------------------------------------------
 const movimientoSchema = z.object({
-  tipo: z.enum(['Ingreso', 'Egreso']),
-  idCategoria: z.number().int().positive(),
-  monto: z.number().positive(),
-  descripcion: z.string().optional().default(''),
-  fecha: z.coerce.date().optional(),
+  tipo: z.enum(['Ingreso', 'Egreso'], {
+    required_error: 'El tipo es obligatorio',
+    invalid_type_error: "El tipo debe ser 'Ingreso' o 'Egreso'",
+  }),
+  idCategoria: z.number({
+    required_error: 'La categoría es obligatoria',
+    invalid_type_error: 'La categoría debe ser un ID numérico',
+  }).int().positive('La categoría debe ser un ID positivo'),
+  monto: z.number({
+    required_error: 'El monto es obligatorio',
+    invalid_type_error: 'El monto debe ser numérico',
+  }).positive('El monto debe ser mayor a 0'),
+  descripcion: z.string({
+    required_error: 'La descripción es obligatoria',
+    invalid_type_error: 'La descripción es obligatoria',
+  }).trim().min(1, 'La descripción es obligatoria'),
+  fecha: z.coerce.date({
+    required_error: 'La fecha es obligatoria',
+    invalid_type_error: 'La fecha es obligatoria y debe ser válida',
+  }),
   comprobanteUrl: z.string().optional().nullable(),
+  tercero: sanitizeOptionalString(120, 'tercero'),
+  nroFactura: sanitizeOptionalString(50, 'nroFactura'),
+  metodoPago: sanitizeOptionalString(30, 'metodoPago'),
 });
 
 const movimientoUpdateSchema = z.object({
   tipo: z.enum(['Ingreso', 'Egreso']).optional(),
   idCategoria: z.number().int().positive().optional(),
   monto: z.number().positive().optional(),
-  descripcion: z.string().optional().nullable(),
+  descripcion: z.string().trim().min(1, 'La descripción no puede estar vacía').optional(),
   fecha: z.coerce.date().optional(),
   comprobanteUrl: z.string().optional().nullable(),
+  tercero: sanitizeOptionalString(120, 'tercero'),
+  nroFactura: sanitizeOptionalString(50, 'nroFactura'),
+  metodoPago: sanitizeOptionalString(30, 'metodoPago'),
+});
+
+const categoriaSchema = z.object({
+  nombre: z.string({
+    required_error: 'El nombre es obligatorio',
+    invalid_type_error: 'El nombre es obligatorio',
+  }).trim().min(1, 'El nombre es obligatorio').max(80, 'El nombre no puede exceder 80 caracteres'),
+  tipo: z.enum(['Ingreso', 'Egreso'], {
+    required_error: 'El tipo es obligatorio',
+    invalid_type_error: "El tipo debe ser 'Ingreso' o 'Egreso'",
+  }),
+});
+
+const categoriaUpdateSchema = z.object({
+  nombre: z.string().trim().min(1, 'El nombre no puede estar vacío').max(80, 'El nombre no puede exceder 80 caracteres').optional(),
+  tipo: z.enum(['Ingreso', 'Egreso']).optional(),
 });
 
 const anularMovimientoSchema = z
@@ -95,6 +144,155 @@ movimientosRouter.get(
       }
 
       res.json(categorias);
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+// -- POST /movimientos/categorias ---------------------------------------------
+// Crear categoría de movimientos (solo Administrador)
+movimientosRouter.post(
+  '/categorias',
+  authorizeRoles('Administrador'),
+  async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const result = categoriaSchema.safeParse(req.body);
+      if (!result.success) {
+        res.status(400).json({
+          error: 'Validation Error',
+          message: 'Datos inválidos',
+          details: result.error.flatten().fieldErrors,
+        });
+        return;
+      }
+
+      const { nombre, tipo } = result.data;
+
+      // Unicidad: nombre único por tipo
+      const existing = await prisma.categoriaMovimiento.findFirst({
+        where: {
+          nombre: { equals: nombre, mode: 'insensitive' },
+          tipo,
+        },
+      });
+
+      if (existing) {
+        res.status(409).json({
+          error: 'Conflict',
+          code: 'CATEGORIA_DUPLICADA',
+          message: `Ya existe una categoría de tipo '${tipo}' con el nombre '${nombre}'`,
+        });
+        return;
+      }
+
+      const categoria = await prisma.categoriaMovimiento.create({
+        data: { nombre, tipo },
+      });
+
+      await auditoriaService.registrarEvento({
+        tablaAfectada: 'categorias_movimiento',
+        idRegistro: categoria.idCategoria.toString(),
+        accion: 'CREAR_CATEGORIA',
+        resultado: 'EXITO',
+        datosNuevos: categoria,
+        idUsuario: req.user!.idUsuario,
+      });
+
+      res.status(201).json(categoria);
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+// -- PUT /movimientos/categorias/:id ------------------------------------------
+// Modificar categoría de movimientos (solo Administrador)
+movimientosRouter.put(
+  '/categorias/:id',
+  authorizeRoles('Administrador'),
+  async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const id = parseInt(req.params.id);
+      if (isNaN(id) || id <= 0) {
+        res.status(400).json({ error: 'Bad Request', message: 'ID de categoría inválido' });
+        return;
+      }
+
+      const existing = await prisma.categoriaMovimiento.findUnique({
+        where: { idCategoria: id },
+      });
+
+      if (!existing) {
+        res.status(404).json({ error: 'Not Found', message: 'Categoría no encontrada' });
+        return;
+      }
+
+      const result = categoriaUpdateSchema.safeParse(req.body);
+      if (!result.success) {
+        res.status(400).json({
+          error: 'Validation Error',
+          message: 'Datos inválidos',
+          details: result.error.flatten().fieldErrors,
+        });
+        return;
+      }
+
+      const nuevoNombre = result.data.nombre ?? existing.nombre;
+      const nuevoTipo = result.data.tipo ?? existing.tipo;
+
+      // Si cambia el tipo, verificar si existen movimientos asociados a esta categoría
+      if (nuevoTipo !== existing.tipo) {
+        const movimientosAsociados = await prisma.movimiento.count({
+          where: { idCategoria: id },
+        });
+        if (movimientosAsociados > 0) {
+          res.status(409).json({
+            error: 'Conflict',
+            code: 'CATEGORIA_CON_MOVIMIENTOS',
+            message: 'No se puede cambiar el tipo de una categoría que tiene movimientos asociados',
+          });
+          return;
+        }
+      }
+
+      if (nuevoNombre !== existing.nombre || nuevoTipo !== existing.tipo) {
+        const dup = await prisma.categoriaMovimiento.findFirst({
+          where: {
+            idCategoria: { not: id },
+            nombre: { equals: nuevoNombre, mode: 'insensitive' },
+            tipo: nuevoTipo,
+          },
+        });
+        if (dup) {
+          res.status(409).json({
+            error: 'Conflict',
+            code: 'CATEGORIA_DUPLICADA',
+            message: `Ya existe una categoría de tipo '${nuevoTipo}' con el nombre '${nuevoNombre}'`,
+          });
+          return;
+        }
+      }
+
+      const updated = await prisma.categoriaMovimiento.update({
+        where: { idCategoria: id },
+        data: {
+          ...(result.data.nombre !== undefined && { nombre: result.data.nombre }),
+          ...(result.data.tipo !== undefined && { tipo: result.data.tipo }),
+        },
+      });
+
+      await auditoriaService.registrarEvento({
+        tablaAfectada: 'categorias_movimiento',
+        idRegistro: updated.idCategoria.toString(),
+        accion: 'MODIFICAR_CATEGORIA',
+        resultado: 'EXITO',
+        datosAnteriores: existing,
+        datosNuevos: updated,
+        idUsuario: req.user!.idUsuario,
+      });
+
+      res.json(updated);
     } catch (err) {
       next(err);
     }
@@ -210,10 +408,14 @@ movimientosRouter.get(
         };
       }
       if (q) {
-        where.descripcion = {
-          contains: String(q),
-          mode: 'insensitive',
-        };
+        const query = String(q).trim();
+        if (query) {
+          where.OR = [
+            { descripcion: { contains: query, mode: 'insensitive' } },
+            { tercero: { contains: query, mode: 'insensitive' } },
+            { nroFactura: { contains: query, mode: 'insensitive' } },
+          ];
+        }
       }
 
       const skip = (parseInt(String(page)) - 1) * parseInt(String(limit));
@@ -293,12 +495,45 @@ movimientosRouter.post(
   authorizeRoles('Administrador'),
   async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
     try {
-      const result = movimientoSchema.safeParse(req.body);
+      const rawBody = req.body || {};
+      const normalizedBody: any = { ...rawBody };
+
+      if ('idCategoria' in rawBody) {
+        normalizedBody.idCategoria = rawBody.idCategoria;
+      } else if (typeof rawBody.categoria === 'number') {
+        normalizedBody.idCategoria = rawBody.categoria;
+      } else if ('id_categoria' in rawBody) {
+        normalizedBody.idCategoria = rawBody.id_categoria;
+      }
+
+      if ('nroFactura' in rawBody) {
+        normalizedBody.nroFactura = rawBody.nroFactura;
+      } else if ('nro_factura' in rawBody) {
+        normalizedBody.nroFactura = rawBody.nro_factura;
+      }
+
+      if ('metodoPago' in rawBody) {
+        normalizedBody.metodoPago = rawBody.metodoPago;
+      } else if ('metodo_pago' in rawBody) {
+        normalizedBody.metodoPago = rawBody.metodo_pago;
+      }
+
+      const result = movimientoSchema.safeParse(normalizedBody);
       if (!result.success) {
+        const details: Record<string, string[] | undefined> = { ...result.error.flatten().fieldErrors };
+        if (details.idCategoria && !details.categoria) {
+          details.categoria = details.idCategoria;
+        }
+        if (details.nroFactura && !details.nro_factura) {
+          details.nro_factura = details.nroFactura;
+        }
+        if (details.metodoPago && !details.metodo_pago) {
+          details.metodo_pago = details.metodoPago;
+        }
         res.status(400).json({
           error: 'Validation Error',
           message: 'Datos inválidos',
-          details: result.error.flatten().fieldErrors,
+          details,
         });
         return;
       }
@@ -317,9 +552,12 @@ movimientosRouter.post(
           tipo: result.data.tipo,
           idCategoria: result.data.idCategoria,
           monto: result.data.monto,
-          descripcion: result.data.descripcion || null,
-          fecha: result.data.fecha || new Date(),
+          descripcion: result.data.descripcion,
+          fecha: result.data.fecha,
           comprobanteUrl: result.data.comprobanteUrl || null,
+          tercero: result.data.tercero ?? null,
+          nroFactura: result.data.nroFactura ?? null,
+          metodoPago: result.data.metodoPago ?? null,
           idUsuarioRegistro: req.user!.idUsuario,
         },
         include: {
@@ -375,12 +613,45 @@ movimientosRouter.put(
         return;
       }
 
-      const result = movimientoUpdateSchema.safeParse(req.body);
+      const rawBody = req.body || {};
+      const normalizedBody: any = { ...rawBody };
+
+      if ('idCategoria' in rawBody) {
+        normalizedBody.idCategoria = rawBody.idCategoria;
+      } else if (typeof rawBody.categoria === 'number') {
+        normalizedBody.idCategoria = rawBody.categoria;
+      } else if ('id_categoria' in rawBody) {
+        normalizedBody.idCategoria = rawBody.id_categoria;
+      }
+
+      if ('nroFactura' in rawBody) {
+        normalizedBody.nroFactura = rawBody.nroFactura;
+      } else if ('nro_factura' in rawBody) {
+        normalizedBody.nroFactura = rawBody.nro_factura;
+      }
+
+      if ('metodoPago' in rawBody) {
+        normalizedBody.metodoPago = rawBody.metodoPago;
+      } else if ('metodo_pago' in rawBody) {
+        normalizedBody.metodoPago = rawBody.metodo_pago;
+      }
+
+      const result = movimientoUpdateSchema.safeParse(normalizedBody);
       if (!result.success) {
+        const details: Record<string, string[] | undefined> = { ...result.error.flatten().fieldErrors };
+        if (details.idCategoria && !details.categoria) {
+          details.categoria = details.idCategoria;
+        }
+        if (details.nroFactura && !details.nro_factura) {
+          details.nro_factura = details.nroFactura;
+        }
+        if (details.metodoPago && !details.metodo_pago) {
+          details.metodo_pago = details.metodoPago;
+        }
         res.status(400).json({
           error: 'Validation Error',
           message: 'Datos inválidos',
-          details: result.error.flatten().fieldErrors,
+          details,
         });
         return;
       }
@@ -406,6 +677,9 @@ movimientosRouter.put(
           ...(result.data.descripcion !== undefined && { descripcion: result.data.descripcion }),
           ...(result.data.fecha !== undefined && { fecha: result.data.fecha }),
           ...(result.data.comprobanteUrl !== undefined && { comprobanteUrl: result.data.comprobanteUrl }),
+          ...(result.data.tercero !== undefined && { tercero: result.data.tercero }),
+          ...(result.data.nroFactura !== undefined && { nroFactura: result.data.nroFactura }),
+          ...(result.data.metodoPago !== undefined && { metodoPago: result.data.metodoPago }),
         },
         include: {
           categoria: { select: { idCategoria: true, nombre: true, tipo: true } },
