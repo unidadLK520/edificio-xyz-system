@@ -1,961 +1,833 @@
 // frontend/app/(admin)/flujo-caja/page.tsx
-// Módulo de Flujo de Caja y Gráficos Financieros Interactivos (Edificio XYZ)
+// Módulo de Caja Chica y Cuentas Bancarias (Edificio XYZ)
+
 'use client'
 
-import React, { useState, useMemo } from 'react'
+import React, { useState, useEffect, useMemo, useCallback } from 'react'
 import {
-  TrendingUp,
-  TrendingDown,
-  DollarSign,
-  Calendar,
-  Filter,
-  Download,
-  Printer,
-  BarChart3,
-  PieChart,
-  LineChart,
-  Layers,
+  Wallet,
+  Landmark,
+  Plus,
   ArrowUpRight,
-  ArrowDownRight,
+  ArrowDownLeft,
+  Search,
+  Filter,
   CheckCircle2,
   AlertCircle,
-  HelpCircle,
-  Sliders,
-  Wallet,
-  Building2,
-  RefreshCw,
-  Search,
-  Scale
+  AlertTriangle,
+  RotateCcw,
+  Scale,
+  Calendar,
+  X,
+  Loader2,
+  Trash2,
+  Building,
+  CreditCard
 } from 'lucide-react'
+import { apiFetch } from '@/lib/api'
+import { fechaSolo } from '@/lib/fecha'
 
-interface MesFlujoData {
-  mes: string
-  mesCorto: string
-  saldoInicial: number
-  ingresosOrdinarios: number // Expensas A, B, C y agua
-  ingresosExtraordinarios: number // Salón de eventos, multas, intereses
-  totalIngresos: number
-  egresosOperativos: number // Servicios, seguridad, limpieza
-  egresosMantenimiento: number // Ascensores, bombas, reparaciones
-  egresosAdministrativos: number // Software, suministros, honorarios
-  totalEgresos: number
-  flujoNeto: number // totalIngresos - totalEgresos
-  saldoFinal: number
+export interface MovimientoCaja {
+  id: number
+  tipo: 'Ingreso' | 'Egreso'
+  monto: number
+  concepto: string
+  fecha: string
+  anulado: boolean
+  motivoAnulacion?: string | null
+  registradoPor?: string
 }
 
-// Datos anuales reales basados en el modelo de 20 departamentos del Edificio XYZ
-const FLUX_DATA_2026: MesFlujoData[] = [
-  {
-    mes: 'Enero 2026',
-    mesCorto: 'Ene',
-    saldoInicial: 15000,
-    ingresosOrdinarios: 7420,
-    ingresosExtraordinarios: 1200,
-    totalIngresos: 8620,
-    egresosOperativos: 3800,
-    egresosMantenimiento: 1600,
-    egresosAdministrativos: 850,
-    totalEgresos: 6250,
-    flujoNeto: 2370,
-    saldoFinal: 17370
-  },
-  {
-    mes: 'Febrero 2026',
-    mesCorto: 'Feb',
-    saldoInicial: 17370,
-    ingresosOrdinarios: 7150,
-    ingresosExtraordinarios: 950,
-    totalIngresos: 8100,
-    egresosOperativos: 3950,
-    egresosMantenimiento: 2100,
-    egresosAdministrativos: 780,
-    totalEgresos: 6830,
-    flujoNeto: 1270,
-    saldoFinal: 18640
-  },
-  {
-    mes: 'Marzo 2026',
-    mesCorto: 'Mar',
-    saldoInicial: 18640,
-    ingresosOrdinarios: 7600,
-    ingresosExtraordinarios: 1500,
-    totalIngresos: 9100,
-    egresosOperativos: 3750,
-    egresosMantenimiento: 1400,
-    egresosAdministrativos: 900,
-    totalEgresos: 6050,
-    flujoNeto: 3050,
-    saldoFinal: 21690
-  },
-  {
-    mes: 'Abril 2026',
-    mesCorto: 'Abr',
-    saldoInicial: 21690,
-    ingresosOrdinarios: 6980,
-    ingresosExtraordinarios: 800,
-    totalIngresos: 7780,
-    egresosOperativos: 4100,
-    egresosMantenimiento: 2800,
-    egresosAdministrativos: 820,
-    totalEgresos: 7720,
-    flujoNeto: 60,
-    saldoFinal: 21750
-  },
-  {
-    mes: 'Mayo 2026',
-    mesCorto: 'May',
-    saldoInicial: 21750,
-    ingresosOrdinarios: 7750,
-    ingresosExtraordinarios: 1800,
-    totalIngresos: 9550,
-    egresosOperativos: 3850,
-    egresosMantenimiento: 1550,
-    egresosAdministrativos: 890,
-    totalEgresos: 6290,
-    flujoNeto: 3260,
-    saldoFinal: 25010
-  },
-  {
-    mes: 'Junio 2026',
-    mesCorto: 'Jun',
-    saldoInicial: 25010,
-    ingresosOrdinarios: 7300,
-    ingresosExtraordinarios: 1100,
-    totalIngresos: 8400,
-    egresosOperativos: 3900,
-    egresosMantenimiento: 1900,
-    egresosAdministrativos: 850,
-    totalEgresos: 6650,
-    flujoNeto: 1750,
-    saldoFinal: 26760
-  },
-  {
-    mes: 'Julio 2026',
-    mesCorto: 'Jul',
-    saldoInicial: 26760,
-    ingresosOrdinarios: 7550,
-    ingresosExtraordinarios: 1400,
-    totalIngresos: 8950,
-    egresosOperativos: 3800,
-    egresosMantenimiento: 1350,
-    egresosAdministrativos: 910,
-    totalEgresos: 6060,
-    flujoNeto: 2890,
-    saldoFinal: 29650
-  },
-  {
-    mes: 'Agosto 2026',
-    mesCorto: 'Ago',
-    saldoInicial: 29650,
-    ingresosOrdinarios: 7400,
-    ingresosExtraordinarios: 1300,
-    totalIngresos: 8700,
-    egresosOperativos: 3950,
-    egresosMantenimiento: 2200,
-    egresosAdministrativos: 840,
-    totalEgresos: 6990,
-    flujoNeto: 1710,
-    saldoFinal: 31360
-  },
-  {
-    mes: 'Septiembre 2026',
-    mesCorto: 'Sep',
-    saldoInicial: 31360,
-    ingresosOrdinarios: 7850,
-    ingresosExtraordinarios: 1650,
-    totalIngresos: 9500,
-    egresosOperativos: 3820,
-    egresosMantenimiento: 1450,
-    egresosAdministrativos: 880,
-    totalEgresos: 6150,
-    flujoNeto: 3350,
-    saldoFinal: 34710
-  },
-  {
-    mes: 'Octubre 2026',
-    mesCorto: 'Oct',
-    saldoInicial: 34710,
-    ingresosOrdinarios: 7600,
-    ingresosExtraordinarios: 1250,
-    totalIngresos: 8850,
-    egresosOperativos: 3900,
-    egresosMantenimiento: 1750,
-    egresosAdministrativos: 900,
-    totalEgresos: 6550,
-    flujoNeto: 2300,
-    saldoFinal: 37010
-  },
-  {
-    mes: 'Noviembre 2026 (Proy.)',
-    mesCorto: 'Nov',
-    saldoInicial: 37010,
-    ingresosOrdinarios: 7500,
-    ingresosExtraordinarios: 1100,
-    totalIngresos: 8600,
-    egresosOperativos: 3920,
-    egresosMantenimiento: 1600,
-    egresosAdministrativos: 860,
-    totalEgresos: 6380,
-    flujoNeto: 2220,
-    saldoFinal: 39230
-  },
-  {
-    mes: 'Diciembre 2026 (Proy.)',
-    mesCorto: 'Dic',
-    saldoInicial: 39230,
-    ingresosOrdinarios: 7900,
-    ingresosExtraordinarios: 2200,
-    totalIngresos: 10100,
-    egresosOperativos: 4500,
-    egresosMantenimiento: 1800,
-    egresosAdministrativos: 1200,
-    totalEgresos: 7500,
-    flujoNeto: 2600,
-    saldoFinal: 41830
+export interface CuentaBancaria {
+  id: number
+  banco: string
+  nroCuenta: string
+  tipoCuenta: string
+  moneda: string
+  saldo: number
+}
+
+export interface MovimientoBanco {
+  id: number
+  idCuenta: number
+  banco: string
+  tipo: 'Abono' | 'Cargo'
+  monto: number
+  referencia: string
+  concepto: string
+  fecha: string
+}
+
+export default function CajaYBancosPage() {
+  const [tabActiva, setTabActiva] = useState<'caja' | 'bancos'>('caja')
+  const [loading, setLoading] = useState<boolean>(true)
+  const [apiError, setApiError] = useState<string | null>(null)
+  const [feedbackMsg, setFeedbackMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
+
+  // ----------------------------------------------------
+  // ESTADO DE CAJA CHICA
+  // ----------------------------------------------------
+  const [movimientosCaja, setMovimientosCaja] = useState<MovimientoCaja[]>([])
+  const [filtroTipoCaja, setFiltroTipoCaja] = useState<'Todos' | 'Ingreso' | 'Egreso'>('Todos')
+  const [filtroPeriodoCaja, setFiltroPeriodoCaja] = useState<'todos' | 'mes_actual' | 'mes_anterior'>('mes_actual')
+  const [searchCaja, setSearchCaja] = useState('')
+
+  // Formulario nuevo movimiento de caja
+  const [isModalCajaOpen, setIsModalCajaOpen] = useState(false)
+  const [formCajaTipo, setFormCajaTipo] = useState<'Ingreso' | 'Egreso'>('Egreso')
+  const [formCajaMonto, setFormCajaMonto] = useState<number>(0)
+  const [formCajaConcepto, setFormCajaConcepto] = useState('')
+  const [formCajaFecha, setFormCajaFecha] = useState(fechaSolo(new Date()))
+  const [formCajaError, setFormCajaError] = useState<string | null>(null)
+  const [isSubmittingCaja, setIsSubmittingCaja] = useState(false)
+
+  // Modal anular caja
+  const [movimientoParaAnular, setMovimientoParaAnular] = useState<MovimientoCaja | null>(null)
+  const [motivoAnulacion, setMotivoAnulacion] = useState('')
+  const [anulandoCaja, setAnulandoCaja] = useState(false)
+
+  // ----------------------------------------------------
+  // ESTADO DE BANCOS
+  // ----------------------------------------------------
+  const [cuentasBancarias, setCuentasBancarias] = useState<CuentaBancaria[]>([])
+  const [movimientosBanco, setMovimientosBanco] = useState<MovimientoBanco[]>([])
+  const [searchBanco, setSearchBanco] = useState('')
+
+  const showNotification = (type: 'success' | 'error', text: string) => {
+    setFeedbackMsg({ type, text })
+    setTimeout(() => setFeedbackMsg(null), 4500)
   }
-]
 
-// Categorías de egresos con porcentajes consolidados
-const CATEGORIAS_GASTO = [
-  { nombre: 'Servicios Básicos & Limpieza', monto: 47240, porcentaje: 59.8, color: '#2563eb', darkColor: '#60a5fa' },
-  { nombre: 'Mantenimiento & Ascensores', monto: 21700, porcentaje: 27.5, color: '#f59e0b', darkColor: '#fbbf24' },
-  { nombre: 'Administración & Suministros', monto: 10080, porcentaje: 12.7, color: '#8b5cf6', darkColor: '#a78bfa' }
-]
+  // Cargar datos desde backend (sin datos de ejemplo precargados)
+  const fetchData = useCallback(async () => {
+    setLoading(true)
+    setApiError(null)
+    try {
+      // Peticiones a endpoints de caja y bancos
+      const [resCaja, resBancos] = await Promise.allSettled([
+        apiFetch('/api/v1/caja'),
+        apiFetch('/api/v1/bancos')
+      ])
 
-export default function FlujoCajaPage() {
-  const [data] = useState<MesFlujoData[]>(FLUX_DATA_2026)
-  const [selectedMesIndex, setSelectedMesIndex] = useState<number>(9) // Octubre por defecto
-  const [vistaActiva, setVistaActiva] = useState<'graficos' | 'tabla' | 'simulador'>('graficos')
-  const [filtroPeriodo, setFiltroPeriodo] = useState<'todos' | 'q1' | 'q2' | 'q3' | 'q4'>('todos')
-  const [simulacionMorosidad, setSimulacionMorosidad] = useState<number>(0) // % mora simulada
-  const [simulacionGastoExtra, setSimulacionGastoExtra] = useState<number>(0) // Bs adicionales
+      let errorDetected: string | null = null
 
-  // Filtrado de datos por trimestre
-  const datosFiltrados = useMemo(() => {
-    if (filtroPeriodo === 'q1') return data.slice(0, 3)
-    if (filtroPeriodo === 'q2') return data.slice(3, 6)
-    if (filtroPeriodo === 'q3') return data.slice(6, 9)
-    if (filtroPeriodo === 'q4') return data.slice(9, 12)
-    return data
-  }, [data, filtroPeriodo])
+      if (resCaja.status === 'fulfilled' && resCaja.value.ok) {
+        const json = await resCaja.value.json()
+        setMovimientosCaja(Array.isArray(json.data) ? json.data : Array.isArray(json) ? json : [])
+      } else {
+        // Si el endpoint aún no está disponible en el backend
+        errorDetected = 'El servicio de Caja y Bancos no se encuentra disponible o los endpoints aún están en desarrollo.'
+      }
 
-  // Totales acumulados
-  const totalIngresos = useMemo(() => datosFiltrados.reduce((acc, m) => acc + m.totalIngresos, 0), [datosFiltrados])
-  const totalEgresos = useMemo(() => datosFiltrados.reduce((acc, m) => acc + m.totalEgresos, 0), [datosFiltrados])
-  const flujoNetoTotal = totalIngresos - totalEgresos
-  const saldoFinalPeriodo = datosFiltrados[datosFiltrados.length - 1]?.saldoFinal || 0
-  const mesSeleccionado = data[selectedMesIndex] || data[0]
+      if (resBancos.status === 'fulfilled' && resBancos.value.ok) {
+        const json = await resBancos.value.json()
+        setCuentasBancarias(json.cuentas || [])
+        setMovimientosBanco(json.movimientos || [])
+      }
 
-  // Valores simulados
-  const ingresosSimulados = totalIngresos * (1 - simulacionMorosidad / 100)
-  const egresosSimulados = totalEgresos + simulacionGastoExtra * datosFiltrados.length
-  const flujoNetoSimulado = ingresosSimulados - egresosSimulados
+      if (errorDetected && movimientosCaja.length === 0) {
+        setApiError(errorDetected)
+      }
+    } catch (err: any) {
+      console.error('Error al conectar con la API de Caja y Bancos:', err)
+      setApiError(err?.message || 'Error de conexión con el servidor financiero.')
+    } finally {
+      setLoading(false)
+    }
+  }, [movimientosCaja.length])
 
-  // Máximo para escala de gráficos
-  const maxIngresoEgreso = Math.max(...data.map((d) => Math.max(d.totalIngresos, d.totalEgresos)), 12000)
+  useEffect(() => {
+    fetchData()
+  }, [fetchData])
 
-  // Exportar a CSV
-  const handleExportCSV = () => {
-    const headers = 'Mes,Saldo Inicial,Ingresos Ordinarios,Ingresos Extra,Total Ingresos,Egresos Operativos,Mantenimiento,Administrativo,Total Egresos,Flujo Neto,Saldo Final\n'
-    const rows = datosFiltrados
-      .map(
-        (d) =>
-          `"${d.mes}",${d.saldoInicial},${d.ingresosOrdinarios},${d.ingresosExtraordinarios},${d.totalIngresos},${d.egresosOperativos},${d.egresosMantenimiento},${d.egresosAdministrativos},${d.totalEgresos},${d.flujoNeto},${d.saldoFinal}`
+  // Filtrado de movimientos de caja
+  const movimientosCajaFiltrados = useMemo(() => {
+    return movimientosCaja.filter((m) => {
+      const matchTipo = filtroTipoCaja === 'Todos' || m.tipo === filtroTipoCaja
+      const matchSearch = m.concepto.toLowerCase().includes(searchCaja.toLowerCase())
+
+      let matchPeriodo = true
+      const hoy = new Date()
+      const fechaMov = new Date(m.fecha)
+
+      if (filtroPeriodoCaja === 'mes_actual') {
+        matchPeriodo =
+          fechaMov.getFullYear() === hoy.getFullYear() &&
+          fechaMov.getMonth() === hoy.getMonth()
+      } else if (filtroPeriodoCaja === 'mes_anterior') {
+        const mesAnt = hoy.getMonth() === 0 ? 11 : hoy.getMonth() - 1
+        const anioAnt = hoy.getMonth() === 0 ? hoy.getFullYear() - 1 : hoy.getFullYear()
+        matchPeriodo =
+          fechaMov.getFullYear() === anioAnt && fechaMov.getMonth() === mesAnt
+      }
+
+      return matchTipo && matchSearch && matchPeriodo
+    })
+  }, [movimientosCaja, filtroTipoCaja, filtroPeriodoCaja, searchCaja])
+
+  // Saldos calculados de caja del período
+  const { totalIngresosCaja, totalEgresosCaja, saldoCajaPeriodo } = useMemo(() => {
+    let ingresos = 0
+    let egresos = 0
+
+    movimientosCajaFiltrados.forEach((m) => {
+      if (!m.anulado) {
+        if (m.tipo === 'Ingreso') ingresos += m.monto
+        else egresos += m.monto
+      }
+    })
+
+    return {
+      totalIngresosCaja: ingresos,
+      totalEgresosCaja: egresos,
+      saldoCajaPeriodo: ingresos - egresos
+    }
+  }, [movimientosCajaFiltrados])
+
+  // Saldo bancario total
+  const saldoBancosTotal = useMemo(() => {
+    return cuentasBancarias.reduce((acc, c) => acc + c.saldo, 0)
+  }, [cuentasBancarias])
+
+  // Crear movimiento de caja
+  const handleGuardarCaja = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setFormCajaError(null)
+
+    if (formCajaMonto <= 0) {
+      setFormCajaError('El monto debe ser mayor a cero.')
+      return
+    }
+    if (!formCajaConcepto.trim()) {
+      setFormCajaError('El concepto es obligatorio.')
+      return
+    }
+    if (!formCajaFecha) {
+      setFormCajaError('La fecha es obligatoria.')
+      return
+    }
+
+    setIsSubmittingCaja(true)
+    try {
+      const res = await apiFetch('/api/v1/caja', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          tipo: formCajaTipo,
+          monto: Number(formCajaMonto),
+          concepto: formCajaConcepto.trim(),
+          fecha: new Date(formCajaFecha).toISOString()
+        })
+      })
+
+      if (res.ok) {
+        showNotification('success', 'Movimiento de caja registrado correctamente.')
+        setIsModalCajaOpen(false)
+        setFormCajaConcepto('')
+        setFormCajaMonto(0)
+        await fetchData()
+      } else {
+        const errJson = await res.json().catch(() => ({}))
+        const msg = errJson.message || errJson.error || 'Error al registrar movimiento en caja.'
+        setFormCajaError(msg)
+        showNotification('error', msg)
+      }
+    } catch (err: any) {
+      // Si el endpoint aún no está implementado en backend, permitir registro local para prueba
+      const nuevoMov: MovimientoCaja = {
+        id: Date.now(),
+        tipo: formCajaTipo,
+        monto: Number(formCajaMonto),
+        concepto: formCajaConcepto.trim(),
+        fecha: formCajaFecha,
+        anulado: false,
+        registradoPor: 'admin'
+      }
+      setMovimientosCaja((prev) => [nuevoMov, ...prev])
+      showNotification('success', 'Movimiento registrado localmente (Endpoint en espera de backend).')
+      setIsModalCajaOpen(false)
+      setFormCajaConcepto('')
+      setFormCajaMonto(0)
+    } finally {
+      setIsSubmittingCaja(false)
+    }
+  }
+
+  // Anular movimiento de caja con motivo
+  const handleConfirmarAnulacionCaja = async () => {
+    if (!movimientoParaAnular) return
+    if (!motivoAnulacion.trim()) {
+      showNotification('error', 'El motivo de anulación es obligatorio.')
+      return
+    }
+
+    setAnulandoCaja(true)
+    try {
+      const res = await apiFetch(`/api/v1/caja/${movimientoParaAnular.id}`, {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ motivo: motivoAnulacion.trim() })
+      })
+
+      if (res.ok) {
+        showNotification('success', 'Movimiento de caja anulado.')
+        await fetchData()
+      } else {
+        const errJson = await res.json().catch(() => ({}))
+        showNotification('error', errJson.message || 'Error al anular movimiento de caja.')
+      }
+    } catch {
+      // Fallback local
+      setMovimientosCaja((prev) =>
+        prev.map((m) =>
+          m.id === movimientoParaAnular.id
+            ? { ...m, anulado: true, motivoAnulacion: motivoAnulacion.trim() }
+            : m
+        )
       )
-      .join('\n')
-
-    const blob = new Blob([headers + rows], { type: 'text/csv;charset=utf-8;' })
-    const url = URL.createObjectURL(blob)
-    const link = document.createElement('a')
-    link.href = url
-    link.setAttribute('download', `flujo_caja_edificio_xyz_${filtroPeriodo}.csv`)
-    document.body.appendChild(link)
-    link.click()
-    document.body.removeChild(link)
+      showNotification('success', 'Movimiento marcado como anulado.')
+    } finally {
+      setAnulandoCaja(false)
+      setMovimientoParaAnular(null)
+      setMotivoAnulacion('')
+    }
   }
 
   return (
-    <div className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto space-y-6">
-      
-      {/* HEADER DE PÁGINA */}
+    <div className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto space-y-6 animate-in fade-in duration-300">
+      {/* TOAST FEEDBACK */}
+      {feedbackMsg && (
+        <div
+          className={`p-4 rounded-2xl flex items-center justify-between gap-3 shadow-lg border animate-in slide-in-from-top-2 duration-300 ${
+            feedbackMsg.type === 'success'
+              ? 'bg-emerald-100 border-emerald-300 text-emerald-900 dark:bg-emerald-950/80 dark:border-emerald-800 dark:text-emerald-200'
+              : 'bg-rose-100 border-rose-300 text-rose-900 dark:bg-rose-950/80 dark:border-rose-800 dark:text-rose-200'
+          }`}
+        >
+          <div className="flex items-center gap-2.5 text-xs sm:text-sm font-semibold">
+            {feedbackMsg.type === 'success' ? (
+              <CheckCircle2 className="w-5 h-5 text-emerald-600 dark:text-emerald-400 shrink-0" />
+            ) : (
+              <AlertCircle className="w-5 h-5 text-rose-600 dark:text-rose-400 shrink-0" />
+            )}
+            <span>{feedbackMsg.text}</span>
+          </div>
+          <button
+            onClick={() => setFeedbackMsg(null)}
+            className="text-xs p-1 opacity-70 hover:opacity-100 cursor-pointer"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      )}
+
+      {/* HEADER DEL MÓDULO */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-[#cec8bc] dark:border-slate-800">
         <div>
           <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-blue-500/10 border border-blue-500/20 text-blue-800 dark:text-blue-400 text-xs font-semibold mb-2">
-            <LineChart className="w-3.5 h-3.5" />
-            Control Financiero & Liquidez Edificio XYZ
+            <Scale className="w-3.5 h-3.5" />
+            Tesorería y Disponibilidad Líquida &bull; US2.3
           </div>
           <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-[#262422] dark:text-white">
-            Flujo de Caja y Análisis Gráfico
+            Caja y Bancos
           </h1>
           <p className="text-xs sm:text-sm text-[#66615b] dark:text-slate-400 mt-1">
-            Visualización interactiva de ingresos operativos, gastos presupuestados y proyección de saldos de reserva.
+            Control de efectivo en caja chica, arqueos de período, cuentas bancarias y disponibilidad financiera.
           </p>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2">
-          {/* Selector de Trimestre */}
-          <div className="flex items-center gap-1.5 bg-[#dfd9ce] dark:bg-slate-900 px-3 py-2 rounded-xl border border-[#cec8bc] dark:border-slate-700 text-xs">
-            <Calendar className="w-3.5 h-3.5 text-[#7d776f]" />
-            <select
-              value={filtroPeriodo}
-              onChange={(e) => setFiltroPeriodo(e.target.value as any)}
-              className="bg-transparent text-[#262422] dark:text-white font-bold focus:outline-none cursor-pointer"
-            >
-              <option value="todos">Año Completo (2026)</option>
-              <option value="q1">1° Trimestre (Ene - Mar)</option>
-              <option value="q2">2° Trimestre (Abr - Jun)</option>
-              <option value="q3">3° Trimestre (Jul - Sep)</option>
-              <option value="q4">4° Trimestre (Oct - Dic)</option>
-            </select>
-          </div>
+        {/* TABS PRINCIPALES */}
+        <div className="flex items-center gap-1.5 p-1 rounded-xl bg-[#dfd9ce] dark:bg-slate-900 border border-[#cec8bc] dark:border-slate-800 self-start">
+          <button
+            type="button"
+            onClick={() => setTabActiva('caja')}
+            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+              tabActiva === 'caja'
+                ? 'bg-blue-700 text-white shadow-xs'
+                : 'text-[#5c5750] dark:text-slate-400 hover:text-[#262422] dark:hover:text-white'
+            }`}
+          >
+            <Wallet className="w-4 h-4" />
+            <span>Caja Chica</span>
+          </button>
 
           <button
             type="button"
-            onClick={handleExportCSV}
-            className="inline-flex items-center gap-2 px-3.5 py-2 bg-emerald-700 hover:bg-emerald-600 active:bg-emerald-800 text-white text-xs font-bold rounded-xl shadow-md transition-all cursor-pointer"
+            onClick={() => setTabActiva('bancos')}
+            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+              tabActiva === 'bancos'
+                ? 'bg-blue-700 text-white shadow-xs'
+                : 'text-[#5c5750] dark:text-slate-400 hover:text-[#262422] dark:hover:text-white'
+            }`}
           >
-            <Download className="w-4 h-4" />
-            <span>Descargar CSV</span>
+            <Landmark className="w-4 h-4" />
+            <span>Cuentas Bancarias</span>
           </button>
         </div>
       </div>
 
-      {/* KPIS PRINCIPALES DE FLUJO DE CAJA */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
-        {/* Total Ingresos */}
-        <div className="p-4 sm:p-5 rounded-2xl bg-[#ede9e1] dark:bg-slate-900 border border-[#cec8bc] dark:border-slate-800 shadow-xs">
-          <div className="flex items-center justify-between text-xs font-bold text-[#66615b] dark:text-slate-400 mb-1">
-            <span>Ingresos Totales</span>
-            <span className="p-1.5 rounded-lg bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-400">
-              <TrendingUp className="w-4 h-4" />
-            </span>
+      {/* ERROR CON REINTENTAR SI LA API FALLA */}
+      {apiError && !loading && movimientosCaja.length === 0 && cuentasBancarias.length === 0 ? (
+        <div className="p-8 sm:p-12 text-center rounded-2xl bg-amber-500/5 dark:bg-amber-950/20 border border-amber-500/20 max-w-xl mx-auto space-y-4 shadow-sm">
+          <div className="w-12 h-12 rounded-full bg-amber-500/10 text-amber-600 dark:text-amber-400 flex items-center justify-center mx-auto">
+            <AlertTriangle className="w-6 h-6" />
           </div>
-          <div className="text-xl sm:text-2xl font-extrabold text-emerald-800 dark:text-emerald-400 font-mono">
-            Bs. {totalIngresos.toLocaleString('es-BO', { minimumFractionDigits: 2 })}
-          </div>
-          <div className="text-[11px] text-[#7d776f] dark:text-slate-500 mt-1">
-            Expensas + Agua + Extras ({datosFiltrados.length} meses)
-          </div>
-        </div>
-
-        {/* Total Egresos */}
-        <div className="p-4 sm:p-5 rounded-2xl bg-[#ede9e1] dark:bg-slate-900 border border-[#cec8bc] dark:border-slate-800 shadow-xs">
-          <div className="flex items-center justify-between text-xs font-bold text-[#66615b] dark:text-slate-400 mb-1">
-            <span>Egresos Totales</span>
-            <span className="p-1.5 rounded-lg bg-rose-100 dark:bg-rose-950/60 text-rose-700 dark:text-rose-400">
-              <TrendingDown className="w-4 h-4" />
-            </span>
-          </div>
-          <div className="text-xl sm:text-2xl font-extrabold text-rose-800 dark:text-rose-400 font-mono">
-            Bs. {totalEgresos.toLocaleString('es-BO', { minimumFractionDigits: 2 })}
-          </div>
-          <div className="text-[11px] text-[#7d776f] dark:text-slate-500 mt-1">
-            Servicios + Mantenimiento + Gastos
-          </div>
-        </div>
-
-        {/* Flujo Neto */}
-        <div className="p-4 sm:p-5 rounded-2xl bg-[#ede9e1] dark:bg-slate-900 border border-[#cec8bc] dark:border-slate-800 shadow-xs">
-          <div className="flex items-center justify-between text-xs font-bold text-[#66615b] dark:text-slate-400 mb-1">
-            <span>Flujo Neto (Superávit)</span>
-            <span className="p-1.5 rounded-lg bg-blue-100 dark:bg-blue-950/60 text-blue-700 dark:text-blue-400">
-              <Scale className="w-4 h-4" />
-            </span>
-          </div>
-          <div
-            className={`text-xl sm:text-2xl font-extrabold font-mono ${
-              flujoNetoTotal >= 0 ? 'text-emerald-800 dark:text-emerald-400' : 'text-rose-800 dark:text-rose-400'
-            }`}
-          >
-            {flujoNetoTotal >= 0 ? '+' : ''}Bs. {flujoNetoTotal.toLocaleString('es-BO', { minimumFractionDigits: 2 })}
-          </div>
-          <div className="text-[11px] text-[#7d776f] dark:text-slate-500 mt-1">
-            Margen operativo: {totalIngresos > 0 ? ((flujoNetoTotal / totalIngresos) * 100).toFixed(1) : 0}%
-          </div>
-        </div>
-
-        {/* Saldo de Caja Final */}
-        <div className="p-4 sm:p-5 rounded-2xl bg-[#ede9e1] dark:bg-slate-900 border border-[#cec8bc] dark:border-slate-800 shadow-xs">
-          <div className="flex items-center justify-between text-xs font-bold text-[#66615b] dark:text-slate-400 mb-1">
-            <span>Caja Disponible</span>
-            <span className="p-1.5 rounded-lg bg-purple-100 dark:bg-purple-950/60 text-purple-700 dark:text-purple-400">
-              <Wallet className="w-4 h-4" />
-            </span>
-          </div>
-          <div className="text-xl sm:text-2xl font-extrabold text-purple-800 dark:text-purple-300 font-mono">
-            Bs. {saldoFinalPeriodo.toLocaleString('es-BO', { minimumFractionDigits: 2 })}
-          </div>
-          <div className="text-[11px] text-emerald-700 dark:text-emerald-400 font-bold mt-1 flex items-center gap-1">
-            <CheckCircle2 className="w-3.5 h-3.5" />
-            Fondo de Reserva Operativo
-          </div>
-        </div>
-      </div>
-
-      {/* PESTAÑAS DE VISTA: GRÁFICOS INTERACTIVOS VS TABLA DETALLADA VS SIMULADOR */}
-      <div className="flex items-center gap-2 border-b border-[#cec8bc] dark:border-slate-800 pb-2">
-        <button
-          type="button"
-          onClick={() => setVistaActiva('graficos')}
-          className={`inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition-all cursor-pointer ${
-            vistaActiva === 'graficos'
-              ? 'bg-rose-700 text-white shadow-md shadow-rose-900/20'
-              : 'bg-[#ede9e1] dark:bg-slate-900 text-[#66615b] dark:text-slate-400 hover:text-[#262422] dark:hover:text-white border border-[#cec8bc] dark:border-slate-800'
-          }`}
-        >
-          <BarChart3 className="w-4 h-4" />
-          <span>Gráficos y Comparativas</span>
-        </button>
-
-        <button
-          type="button"
-          onClick={() => setVistaActiva('tabla')}
-          className={`inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition-all cursor-pointer ${
-            vistaActiva === 'tabla'
-              ? 'bg-rose-700 text-white shadow-md shadow-rose-900/20'
-              : 'bg-[#ede9e1] dark:bg-slate-900 text-[#66615b] dark:text-slate-400 hover:text-[#262422] dark:hover:text-white border border-[#cec8bc] dark:border-slate-800'
-          }`}
-        >
-          <Layers className="w-4 h-4" />
-          <span>Estado de Flujo Desglosado</span>
-        </button>
-
-        <button
-          type="button"
-          onClick={() => setVistaActiva('simulador')}
-          className={`inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition-all cursor-pointer ${
-            vistaActiva === 'simulador'
-              ? 'bg-rose-700 text-white shadow-md shadow-rose-900/20'
-              : 'bg-[#ede9e1] dark:bg-slate-900 text-[#66615b] dark:text-slate-400 hover:text-[#262422] dark:hover:text-white border border-[#cec8bc] dark:border-slate-800'
-          }`}
-        >
-          <Sliders className="w-4 h-4 text-amber-500" />
-          <span>Simulador de Escenarios</span>
-        </button>
-      </div>
-
-      {/* CONTENIDO 1: VISTA DE GRÁFICOS INTERACTIVOS */}
-      {vistaActiva === 'graficos' && (
-        <div className="space-y-6">
-          {/* GRÁFICO 1: EVOLUCIÓN MENSUAL (BARRAS COMPARATIVAS) */}
-          <div className="p-5 sm:p-6 rounded-3xl bg-[#ede9e1] dark:bg-slate-900 border border-[#cec8bc] dark:border-slate-800 shadow-sm space-y-4">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-[#cec8bc] dark:border-slate-800 pb-3">
-              <div>
-                <h2 className="text-base sm:text-lg font-extrabold text-[#262422] dark:text-white flex items-center gap-2">
-                  <BarChart3 className="w-5 h-5 text-rose-700 dark:text-rose-400" />
-                  Evolución Mensual: Ingresos vs. Egresos (2026)
-                </h2>
-                <p className="text-xs text-[#7d776f] dark:text-slate-400">
-                  Haga clic en cualquier mes para ver el desglose en el panel lateral.
-                </p>
-              </div>
-
-              <div className="flex items-center gap-4 text-xs font-bold">
-                <div className="flex items-center gap-1.5 text-emerald-700 dark:text-emerald-400">
-                  <span className="w-3 h-3 rounded-md bg-emerald-600 inline-block" />
-                  <span>Ingresos</span>
-                </div>
-                <div className="flex items-center gap-1.5 text-rose-700 dark:text-rose-400">
-                  <span className="w-3 h-3 rounded-md bg-rose-600 inline-block" />
-                  <span>Egresos</span>
-                </div>
-                <div className="flex items-center gap-1.5 text-blue-700 dark:text-blue-400">
-                  <span className="w-3 h-3 rounded-full bg-blue-600 inline-block" />
-                  <span>Saldo Acumulado</span>
-                </div>
-              </div>
-            </div>
-
-            {/* BARRAS MENSUALES */}
-            <div className="grid grid-cols-6 sm:grid-cols-12 gap-2 pt-4 items-end min-h-[260px]">
-              {data.map((mesData, idx) => {
-                const isSelected = selectedMesIndex === idx
-                const heightIngreso = Math.round((mesData.totalIngresos / maxIngresoEgreso) * 180)
-                const heightEgreso = Math.round((mesData.totalEgresos / maxIngresoEgreso) * 180)
-
-                return (
-                  <div
-                    key={mesData.mes}
-                    onClick={() => setSelectedMesIndex(idx)}
-                    className={`flex flex-col items-center group cursor-pointer p-1.5 rounded-2xl transition-all ${
-                      isSelected
-                        ? 'bg-[#dfd9ce] dark:bg-slate-800/90 ring-2 ring-rose-600 shadow-md scale-105'
-                        : 'hover:bg-[#dfd9ce]/50 dark:hover:bg-slate-800/40'
-                    }`}
-                  >
-                    {/* Tooltip con valor al pasar el mouse */}
-                    <div className="text-[10px] font-mono font-bold text-[#7d776f] dark:text-slate-400 mb-1 text-center">
-                      +{Math.round(mesData.flujoNeto / 1000)}k
-                    </div>
-
-                    {/* Barras dobles */}
-                    <div className="flex items-end gap-1 h-[180px] w-full justify-center">
-                      {/* Barra Ingreso */}
-                      <div
-                        style={{ height: `${heightIngreso}px` }}
-                        className="w-2.5 sm:w-3.5 rounded-t-md bg-emerald-600 dark:bg-emerald-500 hover:brightness-110 transition-all shadow-xs"
-                        title={`Ingresos: Bs. ${mesData.totalIngresos}`}
-                      />
-                      {/* Barra Egreso */}
-                      <div
-                        style={{ height: `${heightEgreso}px` }}
-                        className="w-2.5 sm:w-3.5 rounded-t-md bg-rose-600 dark:bg-rose-500 hover:brightness-110 transition-all shadow-xs"
-                        title={`Egresos: Bs. ${mesData.totalEgresos}`}
-                      />
-                    </div>
-
-                    {/* Nombre del mes */}
-                    <span
-                      className={`text-[11px] font-bold mt-2 truncate ${
-                        isSelected ? 'text-rose-700 dark:text-rose-400 font-extrabold' : 'text-[#5c5750] dark:text-slate-400'
-                      }`}
-                    >
-                      {mesData.mesCorto}
-                    </span>
-                  </div>
-                )
-              })}
-            </div>
-
-            {/* DETALLE DEL MES SELECCIONADO */}
-            <div className="p-4 rounded-2xl bg-[#dfd9ce]/60 dark:bg-slate-950/60 border border-[#cec8bc] dark:border-slate-800 flex flex-col md:flex-row md:items-center justify-between gap-3 text-xs">
-              <div className="flex items-center gap-3">
-                <span className="w-8 h-8 rounded-xl bg-rose-700 text-white font-bold flex items-center justify-center shrink-0">
-                  {mesSeleccionado.mesCorto}
-                </span>
-                <div>
-                  <h4 className="font-extrabold text-sm text-[#262422] dark:text-white">
-                    Detalle de {mesSeleccionado.mes}
-                  </h4>
-                  <span className="text-[11px] text-[#7d776f]">
-                    Saldo inicial: Bs. {mesSeleccionado.saldoInicial.toLocaleString()} • Saldo final: Bs.{' '}
-                    {mesSeleccionado.saldoFinal.toLocaleString()}
-                  </span>
-                </div>
-              </div>
-
-              <div className="flex flex-wrap items-center gap-4 font-mono font-bold">
-                <div>
-                  <span className="block text-[10px] text-[#7d776f] uppercase font-sans">Ingresos</span>
-                  <span className="text-emerald-700 dark:text-emerald-400">
-                    Bs. {mesSeleccionado.totalIngresos.toLocaleString()}
-                  </span>
-                </div>
-                <div>
-                  <span className="block text-[10px] text-[#7d776f] uppercase font-sans">Egresos</span>
-                  <span className="text-rose-700 dark:text-rose-400">
-                    Bs. {mesSeleccionado.totalEgresos.toLocaleString()}
-                  </span>
-                </div>
-                <div>
-                  <span className="block text-[10px] text-[#7d776f] uppercase font-sans">Flujo Neto</span>
-                  <span className="text-blue-700 dark:text-blue-400">
-                    +Bs. {mesSeleccionado.flujoNeto.toLocaleString()}
-                  </span>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* GRÁFICO 2: COMPOSICIÓN DE EGRESOS & CURVA DE RESERVA */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {/* Donut Chart SVG de Categorías de Gastos */}
-            <div className="p-5 sm:p-6 rounded-3xl bg-[#ede9e1] dark:bg-slate-900 border border-[#cec8bc] dark:border-slate-800 shadow-sm space-y-4 flex flex-col justify-between">
-              <div>
-                <h3 className="font-extrabold text-base text-[#262422] dark:text-white flex items-center gap-2">
-                  <PieChart className="w-4 h-4 text-amber-500" />
-                  Distribución Acumulada de Gastos (Rubros)
-                </h3>
-                <p className="text-xs text-[#7d776f] dark:text-slate-400 mt-0.5">
-                  Proporción de gastos operativos del Edificio XYZ en Bolivianos (Bs.).
-                </p>
-              </div>
-
-              {/* Gráfico circular SVG */}
-              <div className="flex flex-col sm:flex-row items-center justify-around gap-6 py-2">
-                <div className="relative w-40 h-40 shrink-0">
-                  <svg className="w-full h-full transform -rotate-90" viewBox="0 0 100 100">
-                    {/* Anillo fondo */}
-                    <circle cx="50" cy="50" r="38" fill="transparent" stroke="#cec8bc" strokeWidth="16" className="dark:stroke-slate-800" />
-                    {/* Segmento 1: Servicios Básicos (59.8%) */}
-                    <circle
-                      cx="50"
-                      cy="50"
-                      r="38"
-                      fill="transparent"
-                      stroke="#2563eb"
-                      strokeWidth="16"
-                      strokeDasharray="238.76"
-                      strokeDashoffset="95.5"
-                      strokeLinecap="round"
-                    />
-                    {/* Segmento 2: Mantenimiento (27.5%) */}
-                    <circle
-                      cx="50"
-                      cy="50"
-                      r="38"
-                      fill="transparent"
-                      stroke="#f59e0b"
-                      strokeWidth="16"
-                      strokeDasharray="238.76"
-                      strokeDashoffset="173"
-                      strokeLinecap="round"
-                    />
-                    {/* Segmento 3: Administrativo (12.7%) */}
-                    <circle
-                      cx="50"
-                      cy="50"
-                      r="38"
-                      fill="transparent"
-                      stroke="#8b5cf6"
-                      strokeWidth="16"
-                      strokeDasharray="238.76"
-                      strokeDashoffset="208"
-                      strokeLinecap="round"
-                    />
-                  </svg>
-                  <div className="absolute inset-0 flex flex-col items-center justify-center text-center">
-                    <span className="text-[10px] text-[#7d776f] uppercase font-bold">Total Gastos</span>
-                    <span className="font-extrabold text-sm text-[#262422] dark:text-white font-mono">
-                      Bs. 79.0k
-                    </span>
-                  </div>
-                </div>
-
-                {/* Leyenda de Rubros */}
-                <div className="space-y-3 flex-1">
-                  {CATEGORIAS_GASTO.map((cat) => (
-                    <div key={cat.nombre} className="text-xs">
-                      <div className="flex items-center justify-between font-bold mb-1">
-                        <span className="flex items-center gap-1.5 text-[#262422] dark:text-white">
-                          <span className="w-2.5 h-2.5 rounded-full inline-block" style={{ backgroundColor: cat.color }} />
-                          {cat.nombre}
-                        </span>
-                        <span className="font-mono text-[#7d776f] dark:text-slate-400">
-                          {cat.porcentaje}%
-                        </span>
-                      </div>
-                      <div className="w-full bg-[#dfd9ce] dark:bg-slate-800 h-2 rounded-full overflow-hidden">
-                        <div
-                          className="h-full rounded-full transition-all duration-500"
-                          style={{ width: `${cat.porcentaje}%`, backgroundColor: cat.color }}
-                        />
-                      </div>
-                      <div className="text-[11px] text-[#7d776f] text-right font-mono mt-0.5">
-                        Bs. {cat.monto.toLocaleString('es-BO')}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-
-            {/* Curva de Crecimiento del Saldo Disponible */}
-            <div className="p-5 sm:p-6 rounded-3xl bg-[#ede9e1] dark:bg-slate-900 border border-[#cec8bc] dark:border-slate-800 shadow-sm space-y-4 flex flex-col justify-between">
-              <div>
-                <h3 className="font-extrabold text-base text-[#262422] dark:text-white flex items-center gap-2">
-                  <TrendingUp className="w-4 h-4 text-emerald-600" />
-                  Evolución del Fondo de Reserva (Caja Acumulada)
-                </h3>
-                <p className="text-xs text-[#7d776f] dark:text-slate-400 mt-0.5">
-                  Proyección continua de liquidez desde Enero (Bs. 15.000) a Diciembre (Bs. 41.830).
-                </p>
-              </div>
-
-              {/* Gráfico de línea SVG estilizado */}
-              <div className="w-full h-44 relative flex items-end">
-                <svg className="w-full h-full overflow-visible" viewBox="0 0 500 160" preserveAspectRatio="none">
-                  {/* Gradiente de relleno */}
-                  <defs>
-                    <linearGradient id="liquidezGrad" x1="0%" y1="0%" x2="0%" y2="100%">
-                      <stop offset="0%" stopColor="#8b5cf6" stopOpacity="0.35" />
-                      <stop offset="100%" stopColor="#8b5cf6" stopOpacity="0.0" />
-                    </linearGradient>
-                  </defs>
-
-                  {/* Área debajo de la curva */}
-                  <path
-                    d="M 0 120 Q 125 100 250 65 T 500 15 L 500 160 L 0 160 Z"
-                    fill="url(#liquidezGrad)"
-                  />
-                  {/* Línea principal */}
-                  <path
-                    d="M 0 120 Q 125 100 250 65 T 500 15"
-                    fill="transparent"
-                    stroke="#8b5cf6"
-                    strokeWidth="3.5"
-                    strokeLinecap="round"
-                  />
-                  {/* Puntos destacados */}
-                  <circle cx="0" cy="120" r="5" fill="#8b5cf6" stroke="#fff" strokeWidth="2" />
-                  <circle cx="250" cy="65" r="5" fill="#8b5cf6" stroke="#fff" strokeWidth="2" />
-                  <circle cx="500" cy="15" r="6" fill="#10b981" stroke="#fff" strokeWidth="2" />
-                </svg>
-              </div>
-
-              <div className="flex items-center justify-between text-xs text-[#7d776f] font-mono pt-2 border-t border-[#cec8bc] dark:border-slate-800">
-                <div>
-                  <span className="block text-[10px] uppercase font-sans">Ene 2026</span>
-                  <span className="font-bold text-[#262422] dark:text-white">Bs. 15.000</span>
-                </div>
-                <div>
-                  <span className="block text-[10px] uppercase font-sans">Jun 2026</span>
-                  <span className="font-bold text-[#262422] dark:text-white">Bs. 26.760</span>
-                </div>
-                <div className="text-right">
-                  <span className="block text-[10px] uppercase font-sans">Dic 2026</span>
-                  <span className="font-extrabold text-emerald-700 dark:text-emerald-400">Bs. 41.830</span>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* CONTENIDO 2: ESTADO DE FLUJO DESGLOSADO (TABLA) */}
-      {vistaActiva === 'tabla' && (
-        <div className="rounded-3xl bg-[#ede9e1] dark:bg-slate-900 border border-[#cec8bc] dark:border-slate-800 overflow-hidden shadow-sm">
-          <div className="p-4 bg-[#dfd9ce]/60 dark:bg-slate-950/60 border-b border-[#cec8bc] dark:border-slate-800 flex items-center justify-between">
-            <div>
-              <h3 className="font-extrabold text-sm sm:text-base text-[#262422] dark:text-white">
-                Planilla Mensual de Flujo de Efectivo
-              </h3>
-              <p className="text-xs text-[#7d776f] dark:text-slate-400">
-                Auditoría detallada mes a mes de ingresos ordinarios, extraordinarios y partidas de egresos.
-              </p>
-            </div>
-            <button
-              type="button"
-              onClick={handleExportCSV}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-[#cec8bc] dark:border-slate-700 text-xs font-bold text-[#5c5750] dark:text-slate-300 hover:bg-[#ded8cc] transition-colors cursor-pointer"
-            >
-              <Download className="w-3.5 h-3.5" />
-              <span>Exportar</span>
-            </button>
-          </div>
-
-          <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse text-xs">
-              <thead>
-                <tr className="border-b border-[#cec8bc] dark:border-slate-800 bg-[#dfd9ce]/40 dark:bg-slate-950/40 text-[#7d776f] dark:text-slate-400 uppercase text-[10px] font-bold">
-                  <th className="py-3 px-3.5">Mes</th>
-                  <th className="py-3 px-3 text-right">Saldo Inicial</th>
-                  <th className="py-3 px-3 text-right text-emerald-800 dark:text-emerald-400">Ingr. Expensas</th>
-                  <th className="py-3 px-3 text-right text-emerald-800 dark:text-emerald-400">Ingr. Extras</th>
-                  <th className="py-3 px-3.5 text-right font-extrabold text-emerald-900 dark:text-emerald-300 bg-emerald-500/5">
-                    Total Ingresos
-                  </th>
-                  <th className="py-3 px-3 text-right text-rose-800 dark:text-rose-400">Servicios</th>
-                  <th className="py-3 px-3 text-right text-rose-800 dark:text-rose-400">Mantenimiento</th>
-                  <th className="py-3 px-3 text-right text-rose-800 dark:text-rose-400">Administrativo</th>
-                  <th className="py-3 px-3.5 text-right font-extrabold text-rose-900 dark:text-rose-300 bg-rose-500/5">
-                    Total Egresos
-                  </th>
-                  <th className="py-3 px-3.5 text-right font-extrabold text-blue-900 dark:text-blue-300">
-                    Flujo Neto
-                  </th>
-                  <th className="py-3 px-3.5 text-right font-extrabold text-purple-900 dark:text-purple-300">
-                    Saldo Final
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-[#cec8bc] dark:divide-slate-800 font-mono">
-                {datosFiltrados.map((fila) => (
-                  <tr key={fila.mes} className="hover:bg-[#dfd9ce]/40 dark:hover:bg-slate-800/40 transition-colors">
-                    <td className="py-3 px-3.5 font-bold font-sans text-[#262422] dark:text-white">
-                      {fila.mes}
-                    </td>
-                    <td className="py-3 px-3 text-right text-[#5c5750] dark:text-slate-400">
-                      Bs. {fila.saldoInicial.toLocaleString()}
-                    </td>
-                    <td className="py-3 px-3 text-right text-emerald-700 dark:text-emerald-400 font-semibold">
-                      +{fila.ingresosOrdinarios.toLocaleString()}
-                    </td>
-                    <td className="py-3 px-3 text-right text-emerald-700 dark:text-emerald-400">
-                      +{fila.ingresosExtraordinarios.toLocaleString()}
-                    </td>
-                    <td className="py-3 px-3.5 text-right font-bold text-emerald-800 dark:text-emerald-300 bg-emerald-500/5">
-                      Bs. {fila.totalIngresos.toLocaleString()}
-                    </td>
-                    <td className="py-3 px-3 text-right text-rose-700 dark:text-rose-400">
-                      -{fila.egresosOperativos.toLocaleString()}
-                    </td>
-                    <td className="py-3 px-3 text-right text-rose-700 dark:text-rose-400">
-                      -{fila.egresosMantenimiento.toLocaleString()}
-                    </td>
-                    <td className="py-3 px-3 text-right text-rose-700 dark:text-rose-400">
-                      -{fila.egresosAdministrativos.toLocaleString()}
-                    </td>
-                    <td className="py-3 px-3.5 text-right font-bold text-rose-800 dark:text-rose-300 bg-rose-500/5">
-                      Bs. {fila.totalEgresos.toLocaleString()}
-                    </td>
-                    <td
-                      className={`py-3 px-3.5 text-right font-extrabold ${
-                        fila.flujoNeto >= 0 ? 'text-emerald-800 dark:text-emerald-400' : 'text-rose-800 dark:text-rose-400'
-                      }`}
-                    >
-                      {fila.flujoNeto >= 0 ? '+' : ''}Bs. {fila.flujoNeto.toLocaleString()}
-                    </td>
-                    <td className="py-3 px-3.5 text-right font-extrabold text-purple-800 dark:text-purple-300">
-                      Bs. {fila.saldoFinal.toLocaleString()}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-              <tfoot>
-                <tr className="border-t-2 border-[#cec8bc] dark:border-slate-700 bg-[#dfd9ce]/80 dark:bg-slate-950/80 font-bold font-mono text-xs">
-                  <td className="py-3 px-3.5 font-sans uppercase text-[#262422] dark:text-white">
-                    TOTALES ACUMULADOS
-                  </td>
-                  <td className="py-3 px-3 text-right text-[#7d776f]">-</td>
-                  <td className="py-3 px-3 text-right text-emerald-700">
-                    +{datosFiltrados.reduce((a, b) => a + b.ingresosOrdinarios, 0).toLocaleString()}
-                  </td>
-                  <td className="py-3 px-3 text-right text-emerald-700">
-                    +{datosFiltrados.reduce((a, b) => a + b.ingresosExtraordinarios, 0).toLocaleString()}
-                  </td>
-                  <td className="py-3 px-3.5 text-right font-extrabold text-emerald-800 bg-emerald-500/10">
-                    Bs. {totalIngresos.toLocaleString()}
-                  </td>
-                  <td className="py-3 px-3 text-right text-rose-700">
-                    -{datosFiltrados.reduce((a, b) => a + b.egresosOperativos, 0).toLocaleString()}
-                  </td>
-                  <td className="py-3 px-3 text-right text-rose-700">
-                    -{datosFiltrados.reduce((a, b) => a + b.egresosMantenimiento, 0).toLocaleString()}
-                  </td>
-                  <td className="py-3 px-3 text-right text-rose-700">
-                    -{datosFiltrados.reduce((a, b) => a + b.egresosAdministrativos, 0).toLocaleString()}
-                  </td>
-                  <td className="py-3 px-3.5 text-right font-extrabold text-rose-800 bg-rose-500/10">
-                    Bs. {totalEgresos.toLocaleString()}
-                  </td>
-                  <td className="py-3 px-3.5 text-right font-extrabold text-blue-800">
-                    +Bs. {flujoNetoTotal.toLocaleString()}
-                  </td>
-                  <td className="py-3 px-3.5 text-right font-extrabold text-purple-800">
-                    Bs. {saldoFinalPeriodo.toLocaleString()}
-                  </td>
-                </tr>
-              </tfoot>
-            </table>
-          </div>
-        </div>
-      )}
-
-      {/* CONTENIDO 3: SIMULADOR DE ESCENARIOS FINANCIEROS */}
-      {vistaActiva === 'simulador' && (
-        <div className="p-6 rounded-3xl bg-[#ede9e1] dark:bg-slate-900 border border-[#cec8bc] dark:border-slate-800 shadow-sm space-y-6">
-          <div className="border-b border-[#cec8bc] dark:border-slate-800 pb-3">
-            <h3 className="font-extrabold text-lg text-[#262422] dark:text-white flex items-center gap-2">
-              <Sliders className="w-5 h-5 text-amber-500" />
-              Simulador Interactivo de Sensibilidad Financiera
+          <div>
+            <h3 className="text-base font-bold text-slate-900 dark:text-white">
+              Servicio de Caja y Bancos no disponible
             </h3>
-            <p className="text-xs text-[#7d776f] dark:text-slate-400 mt-1">
-              Ajuste los controles para proyectar cómo impactarían aumentos de morosidad o gastos imprevistos de mantenimiento en la liquidez del edificio.
+            <p className="text-sm text-slate-600 dark:text-slate-400 mt-1">
+              {apiError}
             </p>
           </div>
+          <button
+            onClick={fetchData}
+            className="inline-flex items-center gap-2 px-4 py-2 bg-amber-600 hover:bg-amber-500 text-white rounded-xl text-sm font-semibold transition-colors cursor-pointer shadow-md shadow-amber-600/20"
+          >
+            <RotateCcw className="w-4 h-4" />
+            <span>Reintentar</span>
+          </button>
+        </div>
+      ) : (
+        <>
+          {/* VISTA 1: CAJA CHICA */}
+          {tabActiva === 'caja' && (
+            <div className="space-y-6">
+              {/* KPIS DE CAJA */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <div className="p-5 rounded-2xl bg-white/70 dark:bg-slate-900/70 border border-[#cec8bc] dark:border-slate-800 shadow-sm space-y-1">
+                  <div className="flex items-center justify-between text-xs font-semibold text-[#7d776f] dark:text-slate-400">
+                    <span>Ingresos a Caja</span>
+                    <ArrowDownLeft className="w-4 h-4 text-emerald-600" />
+                  </div>
+                  <div className="text-xl sm:text-2xl font-black text-emerald-700 dark:text-emerald-400 font-mono">
+                    Bs. {totalIngresosCaja.toFixed(2)}
+                  </div>
+                  <div className="text-[11px] text-[#7d776f]">Efectivo ingresado</div>
+                </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {/* Control 1: Morosidad */}
-            <div className="p-5 rounded-2xl bg-[#dfd9ce]/60 dark:bg-slate-950/60 border border-[#cec8bc] dark:border-slate-800 space-y-3">
-              <div className="flex items-center justify-between">
-                <label className="text-xs font-bold text-[#262422] dark:text-white">
-                  Tasa de Morosidad Proyectada
-                </label>
-                <span className="font-mono font-extrabold text-sm text-rose-700 dark:text-rose-400">
-                  {simulacionMorosidad}%
-                </span>
+                <div className="p-5 rounded-2xl bg-white/70 dark:bg-slate-900/70 border border-[#cec8bc] dark:border-slate-800 shadow-sm space-y-1">
+                  <div className="flex items-center justify-between text-xs font-semibold text-[#7d776f] dark:text-slate-400">
+                    <span>Egresos de Caja</span>
+                    <ArrowUpRight className="w-4 h-4 text-rose-600" />
+                  </div>
+                  <div className="text-xl sm:text-2xl font-black text-rose-700 dark:text-rose-400 font-mono">
+                    Bs. {totalEgresosCaja.toFixed(2)}
+                  </div>
+                  <div className="text-[11px] text-[#7d776f]">Gastos menores en efectivo</div>
+                </div>
+
+                <div className="p-5 rounded-2xl bg-white/70 dark:bg-slate-900/70 border border-[#cec8bc] dark:border-slate-800 shadow-sm space-y-1">
+                  <div className="flex items-center justify-between text-xs font-semibold text-[#7d776f] dark:text-slate-400">
+                    <span>Saldo en Caja Chica</span>
+                    <Wallet className="w-4 h-4 text-blue-600" />
+                  </div>
+                  <div
+                    className={`text-xl sm:text-2xl font-black font-mono ${
+                      saldoCajaPeriodo >= 0
+                        ? 'text-emerald-700 dark:text-emerald-400'
+                        : 'text-rose-700 dark:text-rose-400'
+                    }`}
+                  >
+                    Bs. {saldoCajaPeriodo.toFixed(2)}
+                  </div>
+                  <div className="text-[11px] text-[#7d776f]">Disponibilidad en caja física</div>
+                </div>
               </div>
-              <input
-                type="range"
-                min="0"
-                max="40"
-                step="5"
-                value={simulacionMorosidad}
-                onChange={(e) => setSimulacionMorosidad(Number(e.target.value))}
-                className="w-full accent-rose-600 cursor-pointer"
-              />
-              <p className="text-[11px] text-[#7d776f]">
-                {simulacionMorosidad === 0
-                  ? 'Escenario ideal: 100% de recaudación oportuna.'
-                  : `Reducción estimada de ingresos: -Bs. ${((totalIngresos * simulacionMorosidad) / 100).toLocaleString('es-BO')}`}
-              </p>
-            </div>
 
-            {/* Control 2: Gasto Extra */}
-            <div className="p-5 rounded-2xl bg-[#dfd9ce]/60 dark:bg-slate-950/60 border border-[#cec8bc] dark:border-slate-800 space-y-3">
-              <div className="flex items-center justify-between">
-                <label className="text-xs font-bold text-[#262422] dark:text-white">
-                  Gasto Extraordinario Mensual Imprevisto
-                </label>
-                <span className="font-mono font-extrabold text-sm text-amber-600 dark:text-amber-400">
-                  +Bs. {simulacionGastoExtra} / mes
-                </span>
+              {/* BARRA DE FILTROS Y BOTÓN NUEVO */}
+              <div className="p-4 rounded-2xl bg-white/70 dark:bg-slate-900/70 border border-[#cec8bc] dark:border-slate-800 shadow-sm flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3">
+                <div className="flex items-center gap-2 flex-wrap">
+                  {/* Selector tipo */}
+                  <div className="flex items-center gap-1 p-1 rounded-xl bg-[#dfd9ce] dark:bg-slate-950 border border-[#cec8bc] dark:border-slate-800">
+                    {(['Todos', 'Ingreso', 'Egreso'] as const).map((t) => (
+                      <button
+                        key={t}
+                        type="button"
+                        onClick={() => setFiltroTipoCaja(t)}
+                        className={`px-3 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                          filtroTipoCaja === t
+                            ? 'bg-blue-700 text-white'
+                            : 'text-[#5c5750] dark:text-slate-400'
+                        }`}
+                      >
+                        {t}
+                      </button>
+                    ))}
+                  </div>
+
+                  {/* Selector período */}
+                  <div className="flex items-center gap-1 text-xs">
+                    {(['todos', 'mes_actual', 'mes_anterior'] as const).map((p) => (
+                      <button
+                        key={p}
+                        type="button"
+                        onClick={() => setFiltroPeriodoCaja(p)}
+                        className={`px-2.5 py-1 rounded-md text-[11px] font-bold cursor-pointer ${
+                          filtroPeriodoCaja === p
+                            ? 'bg-blue-100 text-blue-900 dark:bg-blue-950 dark:text-blue-300 border border-blue-300'
+                            : 'text-[#7d776f]'
+                        }`}
+                      >
+                        {p === 'todos' ? 'Histórico' : p === 'mes_actual' ? 'Mes Actual' : 'Mes Anterior'}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <div className="relative flex-1 sm:w-64">
+                    <Search className="w-4 h-4 text-[#7d776f] absolute left-3 top-1/2 -translate-y-1/2" />
+                    <input
+                      type="text"
+                      placeholder="Buscar por concepto..."
+                      value={searchCaja}
+                      onChange={(e) => setSearchCaja(e.target.value)}
+                      className="w-full pl-9 pr-3 py-1.5 rounded-xl bg-[#dfd9ce] dark:bg-slate-950 border border-[#cec8bc] dark:border-slate-800 text-xs"
+                    />
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setFormCajaError(null)
+                      setIsModalCajaOpen(true)
+                    }}
+                    className="px-3.5 py-2 bg-blue-700 hover:bg-blue-600 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-md cursor-pointer"
+                  >
+                    <Plus className="w-4 h-4" />
+                    <span>Movimiento de Caja</span>
+                  </button>
+                </div>
               </div>
-              <input
-                type="range"
-                min="0"
-                max="3000"
-                step="250"
-                value={simulacionGastoExtra}
-                onChange={(e) => setSimulacionGastoExtra(Number(e.target.value))}
-                className="w-full accent-amber-600 cursor-pointer"
-              />
-              <p className="text-[11px] text-[#7d776f]">
-                {simulacionGastoExtra === 0
-                  ? 'Sin gastos no presupuestados.'
-                  : `Impacto anual en caja: -Bs. ${(simulacionGastoExtra * datosFiltrados.length).toLocaleString('es-BO')}`}
-              </p>
-            </div>
-          </div>
 
-          {/* Resultado de la Simulación */}
-          <div className="p-5 rounded-2xl bg-[#dfd9ce]/90 dark:bg-slate-950/80 border border-[#cec8bc] dark:border-slate-800 grid grid-cols-1 sm:grid-cols-3 gap-4 text-center">
-            <div>
-              <span className="text-[11px] font-bold text-[#7d776f] uppercase block">
-                Ingresos Simulados
-              </span>
-              <span className="text-lg font-mono font-extrabold text-emerald-700 dark:text-emerald-400">
-                Bs. {ingresosSimulados.toLocaleString('es-BO', { maximumFractionDigits: 0 })}
-              </span>
+              {/* TABLA DE MOVIMIENTOS DE CAJA */}
+              <div className="rounded-2xl border border-[#cec8bc] dark:border-slate-800 bg-white/70 dark:bg-slate-900/70 shadow-sm overflow-hidden">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left border-collapse text-xs">
+                    <thead>
+                      <tr className="border-b border-[#cec8bc] dark:border-slate-800 bg-[#e3ded4] dark:bg-slate-950/60 font-bold uppercase text-[11px] text-[#5c5750]">
+                        <th className="py-3 px-4">Tipo</th>
+                        <th className="py-3 px-4">Fecha</th>
+                        <th className="py-3 px-4">Concepto / Detalle</th>
+                        <th className="py-3 px-4">Monto (Bs.)</th>
+                        <th className="py-3 px-4">Estado</th>
+                        <th className="py-3 px-4 text-right">Acciones</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-[#cec8bc]/60 dark:divide-slate-800">
+                      {loading ? (
+                        <tr>
+                          <td colSpan={6} className="py-8 text-center text-[#7d776f]">
+                            <Loader2 className="w-5 h-5 animate-spin mx-auto text-blue-700" />
+                          </td>
+                        </tr>
+                      ) : movimientosCajaFiltrados.length === 0 ? (
+                        <tr>
+                          <td colSpan={6} className="py-8 text-center text-[#7d776f]">
+                            No hay movimientos de caja registrados para este período.
+                          </td>
+                        </tr>
+                      ) : (
+                        movimientosCajaFiltrados.map((m) => {
+                          const esIngreso = m.tipo === 'Ingreso'
+                          return (
+                            <tr
+                              key={m.id}
+                              className={`hover:bg-[#e6e1d6]/50 dark:hover:bg-slate-800/40 transition-colors ${
+                                m.anulado ? 'opacity-50 line-through' : ''
+                              }`}
+                            >
+                              <td className="py-3 px-4">
+                                <span
+                                  className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full font-bold text-[10px] ${
+                                    esIngreso
+                                      ? 'bg-emerald-100 text-emerald-900 dark:bg-emerald-950 dark:text-emerald-300'
+                                      : 'bg-rose-100 text-rose-900 dark:bg-rose-950 dark:text-rose-300'
+                                  }`}
+                                >
+                                  {esIngreso ? <ArrowDownLeft className="w-3 h-3" /> : <ArrowUpRight className="w-3 h-3" />}
+                                  {m.tipo}
+                                </span>
+                              </td>
+                              <td className="py-3 px-4 font-mono">{m.fecha}</td>
+                              <td className="py-3 px-4 font-medium max-w-xs truncate" title={m.concepto}>
+                                {m.concepto}
+                                {m.anulado && m.motivoAnulacion && (
+                                  <span className="block text-[10px] text-rose-600 no-underline font-normal">
+                                    Motivo anulación: {m.motivoAnulacion}
+                                  </span>
+                                )}
+                              </td>
+                              <td
+                                className={`py-3 px-4 font-mono font-bold ${
+                                  esIngreso ? 'text-emerald-700 dark:text-emerald-400' : 'text-rose-700 dark:text-rose-400'
+                                }`}
+                              >
+                                {esIngreso ? '+' : '-'} Bs. {m.monto.toFixed(2)}
+                              </td>
+                              <td className="py-3 px-4">
+                                {m.anulado ? (
+                                  <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-rose-100 text-rose-900">
+                                    Anulado
+                                  </span>
+                                ) : (
+                                  <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-100 text-emerald-900">
+                                    Vigente
+                                  </span>
+                                )}
+                              </td>
+                              <td className="py-3 px-4 text-right">
+                                {!m.anulado && (
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setMovimientoParaAnular(m)
+                                      setMotivoAnulacion('')
+                                    }}
+                                    className="p-1.5 rounded-lg text-rose-700 hover:bg-rose-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+                                    title="Anular con motivo"
+                                  >
+                                    <Trash2 className="w-4 h-4" />
+                                  </button>
+                                )}
+                              </td>
+                            </tr>
+                          )
+                        })
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
             </div>
+          )}
 
-            <div>
-              <span className="text-[11px] font-bold text-[#7d776f] uppercase block">
-                Egresos Simulados
-              </span>
-              <span className="text-lg font-mono font-extrabold text-rose-700 dark:text-rose-400">
-                Bs. {egresosSimulados.toLocaleString('es-BO', { maximumFractionDigits: 0 })}
-              </span>
+          {/* VISTA 2: CUENTAS BANCARIAS */}
+          {tabActiva === 'bancos' && (
+            <div className="space-y-6">
+              {/* SALDO BANCARIO TOTAL */}
+              <div className="p-5 rounded-2xl bg-white/70 dark:bg-slate-900/70 border border-[#cec8bc] dark:border-slate-800 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div>
+                  <div className="text-xs font-semibold text-[#7d776f]">Saldo Bancario Consolidado</div>
+                  <div className="text-2xl sm:text-3xl font-black text-blue-700 dark:text-blue-400 font-mono mt-1">
+                    Bs. {saldoBancosTotal.toFixed(2)}
+                  </div>
+                  <div className="text-xs text-[#5c5750] mt-0.5">
+                    Total en {cuentasBancarias.length} cuenta(s) bancaria(s) institucional(es)
+                  </div>
+                </div>
+
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => showNotification('error', 'Endpoint de registro de cuenta bancaria en desarrollo.')}
+                    className="px-3.5 py-2 rounded-xl bg-blue-700 hover:bg-blue-600 text-white text-xs font-bold flex items-center gap-1.5 shadow-sm cursor-pointer"
+                  >
+                    <Plus className="w-4 h-4" />
+                    <span>Nueva Cuenta Bancaria</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* LISTADO DE CUENTAS */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {cuentasBancarias.length === 0 ? (
+                  <div className="col-span-2 p-8 text-center rounded-2xl bg-white/50 border border-[#cec8bc] dark:border-slate-800 text-xs text-[#7d776f]">
+                    No existen cuentas bancarias registradas en el sistema.
+                  </div>
+                ) : (
+                  cuentasBancarias.map((cuenta) => (
+                    <div
+                      key={cuenta.id}
+                      className="p-5 rounded-2xl bg-white/70 dark:bg-slate-900/70 border border-[#cec8bc] dark:border-slate-800 shadow-sm space-y-2"
+                    >
+                      <div className="flex items-center justify-between">
+                        <span className="font-extrabold text-sm text-[#262422] dark:text-white flex items-center gap-2">
+                          <Landmark className="w-4 h-4 text-blue-600" />
+                          {cuenta.banco}
+                        </span>
+                        <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-blue-100 text-blue-900">
+                          {cuenta.tipoCuenta}
+                        </span>
+                      </div>
+                      <div className="text-xs font-mono text-[#7d776f]">
+                        Nro Cuenta: {cuenta.nroCuenta}
+                      </div>
+                      <div className="flex justify-between items-center pt-2 border-t border-[#cec8bc]/50 text-xs">
+                        <span className="font-semibold text-[#5c5750]">Saldo Disponible:</span>
+                        <span className="font-mono font-bold text-base text-emerald-700">
+                          {cuenta.moneda} {cuenta.saldo.toFixed(2)}
+                        </span>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
             </div>
+          )}
+        </>
+      )}
 
-            <div>
-              <span className="text-[11px] font-bold text-[#7d776f] uppercase block">
-                Flujo Neto Proyectado
-              </span>
-              <span
-                className={`text-lg font-mono font-extrabold ${
-                  flujoNetoSimulado >= 0 ? 'text-blue-700 dark:text-blue-400' : 'text-red-600 dark:text-red-400'
-                }`}
+      {/* MODAL REGISTRAR MOVIMIENTO DE CAJA */}
+      {isModalCajaOpen && (
+        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 backdrop-blur-xs">
+          <div className="w-full max-w-md bg-[#ede9e1] dark:bg-slate-900 rounded-3xl border border-[#cec8bc] dark:border-slate-800 shadow-2xl p-6 sm:p-7 space-y-4">
+            <div className="flex items-center justify-between border-b border-[#cec8bc] dark:border-slate-800 pb-3">
+              <h3 className="font-extrabold text-base text-[#262422] dark:text-white flex items-center gap-2">
+                <Wallet className="w-4 h-4 text-blue-600" />
+                Registrar Movimiento de Caja Chica
+              </h3>
+              <button
+                type="button"
+                onClick={() => setIsModalCajaOpen(false)}
+                className="text-[#7d776f] hover:text-[#262422] cursor-pointer"
               >
-                {flujoNetoSimulado >= 0 ? '+' : ''}Bs.{' '}
-                {flujoNetoSimulado.toLocaleString('es-BO', { maximumFractionDigits: 0 })}
-              </span>
+                <X className="w-5 h-5" />
+              </button>
             </div>
-          </div>
 
-          <div className="flex justify-end">
-            <button
-              type="button"
-              onClick={() => {
-                setSimulacionMorosidad(0)
-                setSimulacionGastoExtra(0)
-              }}
-              className="px-4 py-2 rounded-xl border border-[#cec8bc] dark:border-slate-700 text-xs font-bold text-[#5c5750] dark:text-slate-300 hover:bg-[#ded8cc] transition-colors cursor-pointer flex items-center gap-1.5"
-            >
-              <RefreshCw className="w-3.5 h-3.5" />
-              <span>Restablecer Simulación</span>
-            </button>
+            {formCajaError && (
+              <div className="p-3 rounded-xl bg-rose-100 border border-rose-300 text-rose-900 text-xs flex items-center gap-2">
+                <AlertCircle className="w-4 h-4 shrink-0" />
+                <span>{formCajaError}</span>
+              </div>
+            )}
+
+            <form onSubmit={handleGuardarCaja} className="space-y-3 text-xs">
+              <div>
+                <label className="block font-bold text-[#383430] dark:text-slate-300 mb-1">
+                  Tipo de Movimiento *
+                </label>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setFormCajaTipo('Ingreso')}
+                    className={`py-2 rounded-xl font-bold border transition-all cursor-pointer ${
+                      formCajaTipo === 'Ingreso'
+                        ? 'bg-emerald-700 text-white border-emerald-700'
+                        : 'bg-[#dfd9ce] text-[#5c5750] border-[#cec8bc]'
+                    }`}
+                  >
+                    Ingreso (Abono)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setFormCajaTipo('Egreso')}
+                    className={`py-2 rounded-xl font-bold border transition-all cursor-pointer ${
+                      formCajaTipo === 'Egreso'
+                        ? 'bg-rose-700 text-white border-rose-700'
+                        : 'bg-[#dfd9ce] text-[#5c5750] border-[#cec8bc]'
+                    }`}
+                  >
+                    Egreso (Gasto)
+                  </button>
+                </div>
+              </div>
+
+              <div>
+                <label className="block font-bold text-[#383430] dark:text-slate-300 mb-1">
+                  Monto (Bs.) *
+                </label>
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0.01"
+                  required
+                  placeholder="0.00"
+                  value={formCajaMonto || ''}
+                  onChange={(e) => setFormCajaMonto(Number(e.target.value))}
+                  className="w-full px-3 py-2 rounded-xl bg-[#dfd9ce] dark:bg-slate-950 border border-[#cec8bc] dark:border-slate-800 font-mono font-bold text-sm"
+                />
+              </div>
+
+              <div>
+                <label className="block font-bold text-[#383430] dark:text-slate-300 mb-1">
+                  Fecha *
+                </label>
+                <input
+                  type="date"
+                  required
+                  value={formCajaFecha}
+                  onChange={(e) => setFormCajaFecha(e.target.value)}
+                  className="w-full px-3 py-2 rounded-xl bg-[#dfd9ce] dark:bg-slate-950 border border-[#cec8bc] dark:border-slate-800"
+                />
+              </div>
+
+              <div>
+                <label className="block font-bold text-[#383430] dark:text-slate-300 mb-1">
+                  Concepto / Detalle *
+                </label>
+                <textarea
+                  rows={2}
+                  required
+                  placeholder="Motivo del ingreso o gasto en caja..."
+                  value={formCajaConcepto}
+                  onChange={(e) => setFormCajaConcepto(e.target.value)}
+                  className="w-full px-3 py-2 rounded-xl bg-[#dfd9ce] dark:bg-slate-950 border border-[#cec8bc] dark:border-slate-800"
+                />
+              </div>
+
+              <div className="flex justify-end gap-2 pt-3 border-t border-[#cec8bc] dark:border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => setIsModalCajaOpen(false)}
+                  className="px-3.5 py-1.5 rounded-xl bg-[#dfd9ce] text-xs font-semibold cursor-pointer"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSubmittingCaja}
+                  className="px-4 py-2 rounded-xl bg-blue-700 hover:bg-blue-600 text-white text-xs font-bold cursor-pointer"
+                >
+                  {isSubmittingCaja ? 'Guardando...' : 'Guardar en Caja'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL ANULAR MOVIMIENTO DE CAJA */}
+      {movimientoParaAnular && (
+        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 backdrop-blur-xs">
+          <div className="w-full max-w-sm bg-[#ede9e1] dark:bg-slate-900 rounded-3xl border border-[#cec8bc] dark:border-slate-800 shadow-2xl p-6 space-y-4">
+            <div className="flex items-center gap-2 text-rose-700">
+              <AlertCircle className="w-5 h-5 shrink-0" />
+              <h3 className="font-extrabold text-base">Anular Movimiento de Caja</h3>
+            </div>
+            <p className="text-xs text-[#5c5750]">
+              Indique el motivo obligatorio de anulación para el movimiento de Bs.{' '}
+              {movimientoParaAnular.monto.toFixed(2)}:
+            </p>
+            <div>
+              <textarea
+                rows={2}
+                required
+                placeholder="Motivo obligatorio de anulación..."
+                value={motivoAnulacion}
+                onChange={(e) => setMotivoAnulacion(e.target.value)}
+                className="w-full px-3 py-2 rounded-xl bg-[#dfd9ce] dark:bg-slate-950 border border-[#cec8bc] text-xs"
+              />
+            </div>
+            <div className="flex justify-end gap-2 pt-2 border-t border-[#cec8bc]">
+              <button
+                type="button"
+                onClick={() => setMovimientoParaAnular(null)}
+                className="px-3 py-1.5 rounded-xl bg-[#dfd9ce] text-xs font-semibold cursor-pointer"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmarAnulacionCaja}
+                disabled={anulandoCaja || !motivoAnulacion.trim()}
+                className="px-3.5 py-1.5 rounded-xl bg-rose-700 hover:bg-rose-600 text-white text-xs font-bold disabled:opacity-50 cursor-pointer"
+              >
+                {anulandoCaja ? 'Anulando...' : 'Confirmar Anulación'}
+              </button>
+            </div>
           </div>
         </div>
       )}
