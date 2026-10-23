@@ -28,7 +28,10 @@ import {
   AlertCircle,
   AlertTriangle,
   RotateCcw,
-  Scale
+  Scale,
+  ExternalLink,
+  Save,
+  Check
 } from 'lucide-react'
 import { apiFetch } from '@/lib/api'
 import { fechaSolo } from '@/lib/fecha'
@@ -40,12 +43,12 @@ export interface MovimientoItem {
   fecha: string
   idCategoria: number
   categoria: string
-  tercero: string // Proveedor en egreso, Pagador / Origen en ingreso
+  tercero?: string | null
   descripcion: string
-  nroFactura: string
+  nroFactura?: string | null
   comprobanteUrl?: string | null
   monto: number
-  metodoPago: string
+  metodoPago?: string | null
   registradoPor?: string
 }
 
@@ -100,9 +103,16 @@ export default function FinanzasPage() {
   // Modales
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false)
   const [isEditModalOpen, setIsEditModalOpen] = useState(false)
+  const [isCategoriasModalOpen, setIsCategoriasModalOpen] = useState(false)
   const [selectedMovimiento, setSelectedMovimiento] = useState<MovimientoItem | null>(null)
   const [movimientoParaEditar, setMovimientoParaEditar] = useState<MovimientoItem | null>(null)
   const [movimientoParaEliminar, setMovimientoParaEliminar] = useState<MovimientoItem | null>(null)
+
+  // Errores específicos dentro de los modales (no cierran el modal si falla)
+  const [createModalError, setCreateModalError] = useState<string | null>(null)
+  const [editModalError, setEditModalError] = useState<string | null>(null)
+  const [catModalError, setCatModalError] = useState<string | null>(null)
+  const [catModalSuccess, setCatModalSuccess] = useState<string | null>(null)
 
   // Formulario de Registro / Edición
   const [formTipo, setFormTipo] = useState<'Ingreso' | 'Egreso'>('Egreso')
@@ -112,13 +122,21 @@ export default function FinanzasPage() {
   const [formMonto, setFormMonto] = useState<number>(0)
   const [formFecha, setFormFecha] = useState(fechaSolo(new Date()))
   const [formNroFactura, setFormNroFactura] = useState('')
-  const [formMetodoPago, setFormMetodoPago] = useState('Transferencia Bancaria')
+  const [formMetodoPago, setFormMetodoPago] = useState('')
   const [formComprobanteUrl, setFormComprobanteUrl] = useState<string>('')
+  const [selectedFile, setSelectedFile] = useState<File | null>(null)
   const [fileNameAttached, setFileNameAttached] = useState<string>('')
+
+  // Estado para gestión de categorías
+  const [newCatNombre, setNewCatNombre] = useState('')
+  const [newCatTipo, setNewCatTipo] = useState<'Ingreso' | 'Egreso'>('Egreso')
+  const [editingCatId, setEditingCatId] = useState<number | null>(null)
+  const [editingCatNombre, setEditingCatNombre] = useState('')
+  const [catFiltroTipo, setCatFiltroTipo] = useState<'Todos' | 'Ingreso' | 'Egreso'>('Todos')
 
   const showNotification = (type: 'success' | 'error', text: string) => {
     setFeedbackMsg({ type, text })
-    setTimeout(() => setFeedbackMsg(null), 4500)
+    setTimeout(() => setFeedbackMsg(null), 5000)
   }
 
   // Cargar categorías disponibles desde API
@@ -154,16 +172,13 @@ export default function FinanzasPage() {
         const rawData = Array.isArray(json.data) ? json.data : Array.isArray(json) ? json : []
 
         const mapped: MovimientoItem[] = rawData.map((item: any) => {
-          let tercero = item.proveedor || item.tercero || ''
+          let tercero = item.tercero ?? item.proveedor ?? null
           let descripcionClean = item.descripcion || ''
 
-          if (descripcionClean.includes('|')) {
+          if (!tercero && descripcionClean.includes('|')) {
             const parts = descripcionClean.split('|')
             tercero = parts[0].trim()
             descripcionClean = parts.slice(1).join('|').trim()
-          }
-          if (!tercero) {
-            tercero = item.tipo === 'Ingreso' ? 'Copropietario / Pagador' : 'Proveedor General'
           }
 
           const catId = item.idCategoria || (item.categoria && item.categoria.idCategoria) || 1
@@ -183,12 +198,12 @@ export default function FinanzasPage() {
             fecha: fechaSolo(item.fecha) || fechaSolo(new Date()),
             idCategoria: catId,
             categoria: catName,
-            tercero,
-            descripcion: descripcionClean || 'Sin descripción detallada',
-            nroFactura: item.comprobanteUrl?.startsWith('data:') ? 'Documento Adjunto' : item.comprobanteUrl || item.nroFactura || 'REC-0000',
+            tercero: tercero || '',
+            descripcion: descripcionClean || 'Sin descripción',
+            nroFactura: item.nroFactura ?? item.nro_factura ?? '',
             comprobanteUrl: item.comprobanteUrl || null,
             monto: Number(item.monto || 0),
-            metodoPago: item.metodoPago || 'Transferencia Bancaria',
+            metodoPago: item.metodoPago ?? item.metodo_pago ?? '',
             registradoPor: item.usuarioRegistro?.nombreUsuario || 'admin'
           }
         })
@@ -220,16 +235,11 @@ export default function FinanzasPage() {
     const file = e.target.files?.[0]
     if (!file) return
 
+    setSelectedFile(file)
     setFileNameAttached(file.name)
-    const reader = new FileReader()
-    reader.onload = (event) => {
-      const result = event.target?.result as string
-      setFormComprobanteUrl(result)
-      if (!formNroFactura) {
-        setFormNroFactura(`DOC-${file.name.slice(0, 12)}`)
-      }
+    if (!formNroFactura) {
+      setFormNroFactura(`DOC-${file.name.slice(0, 15)}`)
     }
-    reader.readAsDataURL(file)
   }
 
   // Sincronizar fechas según filtro de período (CA6)
@@ -257,9 +267,9 @@ export default function FinanzasPage() {
       const matchTipo = tabTipo === 'Todos' || m.tipo === tabTipo
       const matchCat = filtroCategoria === 'Todos' || String(m.idCategoria) === filtroCategoria || m.categoria === filtroCategoria
       const matchSearch =
-        m.tercero.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        (m.tercero || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
         m.descripcion.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        m.nroFactura.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        (m.nroFactura || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
         m.codigo.toLowerCase().includes(searchTerm.toLowerCase())
 
       let matchFecha = true
@@ -304,29 +314,31 @@ export default function FinanzasPage() {
     return categorias.filter((c) => c.tipo === formTipo)
   }, [categorias, formTipo])
 
-  // Mayor Rubro de gastos
-  const mayorRubroInfo = useMemo(() => {
-    const egresosList = movimientosFiltrados.filter((m) => m.tipo === 'Egreso')
-    if (egresosList.length === 0 || totalEgresos === 0) {
-      return { nombre: 'Sin egresos registrados', porcentaje: 0 }
+  // Subir archivo al endpoint de comprobantes
+  const uploadArchivoComprobante = async (file: File): Promise<string> => {
+    const base64Data = await new Promise<string>((resolve, reject) => {
+      const reader = new FileReader()
+      reader.onload = () => resolve(reader.result as string)
+      reader.onerror = reject
+      reader.readAsDataURL(file)
+    })
+
+    const uploadRes = await apiFetch('/api/v1/movimientos/upload-comprobante', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        archivoBase64: base64Data,
+        nombreArchivo: file.name
+      })
+    })
+
+    const uploadData = await uploadRes.json().catch(() => ({}))
+    if (!uploadRes.ok) {
+      throw new Error(uploadData.message || uploadData.error || 'Error al subir el comprobante')
     }
-    const totalsByCat: Record<string, number> = {}
-    egresosList.forEach((e) => {
-      totalsByCat[e.categoria] = (totalsByCat[e.categoria] || 0) + e.monto
-    })
 
-    let maxCat = ''
-    let maxVal = 0
-    Object.entries(totalsByCat).forEach(([cat, val]) => {
-      if (val > maxVal) {
-        maxVal = val
-        maxCat = cat
-      }
-    })
-
-    const porcentaje = Math.round((maxVal / totalEgresos) * 100)
-    return { nombre: maxCat, porcentaje }
-  }, [movimientosFiltrados, totalEgresos])
+    return uploadData.comprobanteUrl || ''
+  }
 
   // Abrir modal de creación
   const handleOpenCreateModal = (tipoInicial: 'Ingreso' | 'Egreso') => {
@@ -342,8 +354,11 @@ export default function FinanzasPage() {
     setFormMonto(0)
     setFormFecha(fechaSolo(new Date()))
     setFormNroFactura('')
+    setFormMetodoPago('')
     setFormComprobanteUrl('')
+    setSelectedFile(null)
     setFileNameAttached('')
+    setCreateModalError(null)
     setIsCreateModalOpen(true)
   }
 
@@ -356,41 +371,68 @@ export default function FinanzasPage() {
     setMovimientoParaEditar(mov)
     setFormTipo(mov.tipo)
     setFormIdCategoria(mov.idCategoria)
-    setFormTercero(mov.tercero)
-    setFormDescripcion(mov.descripcion)
+    setFormTercero(mov.tercero || '')
+    setFormDescripcion(mov.descripcion || '')
     setFormMonto(mov.monto)
     setFormFecha(mov.fecha)
-    setFormNroFactura(mov.nroFactura)
+    setFormNroFactura(mov.nroFactura || '')
+    setFormMetodoPago(mov.metodoPago || '')
     setFormComprobanteUrl(mov.comprobanteUrl || '')
-    setFileNameAttached(mov.comprobanteUrl?.startsWith('data:') ? 'Documento adjunto existente' : '')
-    setFormMetodoPago(mov.metodoPago)
+    setSelectedFile(null)
+    setFileNameAttached(mov.comprobanteUrl ? 'Comprobante digital adjunto' : '')
+    setEditModalError(null)
     setIsEditModalOpen(true)
   }
 
-  // Guardar nuevo movimiento (CA1, CA2, CA3, CA4, CA5, CA9)
+  // Guardar nuevo movimiento (Campos obligatorios: fecha, descripcion, monto; opcionales: tercero, nroFactura, metodoPago)
   const handleCrearMovimiento = async (e: React.FormEvent) => {
     e.preventDefault()
+    setCreateModalError(null)
+
     if (!hasFinancialPermission) {
-      showNotification('error', 'Operación impedida: Permisos insuficientes.')
+      setCreateModalError('Operación impedida: Permisos insuficientes.')
       return
     }
-    if (!formTercero.trim() || formMonto <= 0) {
-      showNotification('error', 'Por favor complete todos los datos obligatorios con valores válidos.')
+
+    // Validaciones obligatorias de contrato
+    if (!formFecha) {
+      setCreateModalError('La fecha del movimiento es estrictamente obligatoria.')
+      return
+    }
+    if (!formDescripcion.trim()) {
+      setCreateModalError('La descripción o concepto es estrictamente obligatoria.')
+      return
+    }
+    if (formMonto <= 0) {
+      setCreateModalError('El monto debe ser un valor numérico mayor a cero.')
       return
     }
 
     setIsSubmitting(true)
     try {
-      const selectedCat = categorias.find((c) => c.idCategoria === formIdCategoria)
-      const comprobanteVal = formComprobanteUrl || formNroFactura.trim() || null
+      let finalComprobanteUrl = formComprobanteUrl.trim() || undefined
+
+      // Si seleccionó un archivo nuevo, subirlo al endpoint dedicado
+      if (selectedFile) {
+        try {
+          finalComprobanteUrl = await uploadArchivoComprobante(selectedFile)
+        } catch (uploadErr: any) {
+          setCreateModalError(`Error en subida de comprobante: ${uploadErr.message}`)
+          setIsSubmitting(false)
+          return // No cerrar el modal
+        }
+      }
 
       const bodyPayload = {
         tipo: formTipo,
         idCategoria: formIdCategoria,
         monto: Number(formMonto),
-        descripcion: `${formTercero.trim()} | ${formDescripcion.trim() || 'Sin descripción detallada'}`,
         fecha: formFecha ? new Date(formFecha).toISOString() : new Date().toISOString(),
-        comprobanteUrl: comprobanteVal
+        descripcion: formDescripcion.trim(),
+        tercero: formTercero.trim() || undefined,
+        nroFactura: formNroFactura.trim() || undefined,
+        metodoPago: formMetodoPago.trim() || undefined,
+        comprobanteUrl: finalComprobanteUrl
       }
 
       const res = await apiFetch('/api/v1/movimientos', {
@@ -401,50 +443,81 @@ export default function FinanzasPage() {
 
       if (res.ok) {
         showNotification('success', `¡${formTipo} registrado correctamente!`)
+        setIsCreateModalOpen(false)
         await fetchMovimientos()
       } else {
         const errorJson = await res.json().catch(() => ({}))
-        if (res.status === 403) {
-          showNotification('error', 'Error 403: No posee permisos para realizar esta acción.')
-          return
+        let errorMsg = errorJson.message || errorJson.error || 'Error al procesar el registro.'
+        if (errorJson.details && typeof errorJson.details === 'object') {
+          const detailEntries = Object.entries(errorJson.details)
+            .map(([field, msgs]) => `${field}: ${Array.isArray(msgs) ? msgs.join(', ') : msgs}`)
+            .join(' | ')
+          if (detailEntries) {
+            errorMsg = `${errorMsg} (${detailEntries})`
+          }
         }
-        showNotification('error', errorJson.message || 'Error al procesar el registro.')
+        // Mostrar mensaje exacto del backend y NO cerrar modal
+        setCreateModalError(errorMsg)
+        showNotification('error', errorMsg)
       }
-
-      setIsCreateModalOpen(false)
     } catch (err: any) {
       console.error('Error creando movimiento:', err)
-      showNotification('error', err?.message || 'Ocurrió un error al procesar el registro.')
+      const errTxt = err?.message || 'Ocurrió un error al procesar el registro.'
+      setCreateModalError(errTxt)
+      showNotification('error', errTxt)
     } finally {
       setIsSubmitting(false)
     }
   }
 
-  // Guardar edición de movimiento (CA8, CA9)
+  // Guardar edición de movimiento
   const handleGuardarEdicion = async (e: React.FormEvent) => {
     e.preventDefault()
+    setEditModalError(null)
+
     if (!movimientoParaEditar) return
     if (!hasFinancialPermission) {
-      showNotification('error', 'Operación impedida: Permisos insuficientes.')
+      setEditModalError('Operación impedida: Permisos insuficientes.')
       return
     }
-    if (!formTercero.trim() || formMonto <= 0) {
-      showNotification('error', 'Valide los datos modificados antes de guardar.')
+
+    if (!formFecha) {
+      setEditModalError('La fecha del movimiento es estrictamente obligatoria.')
+      return
+    }
+    if (!formDescripcion.trim()) {
+      setEditModalError('La descripción o concepto es estrictamente obligatoria.')
+      return
+    }
+    if (formMonto <= 0) {
+      setEditModalError('El monto debe ser un valor numérico mayor a cero.')
       return
     }
 
     setIsSubmitting(true)
     try {
-      const selectedCat = categorias.find((c) => c.idCategoria === formIdCategoria)
-      const comprobanteVal = formComprobanteUrl || formNroFactura.trim() || null
+      let finalComprobanteUrl = formComprobanteUrl.trim() || undefined
+
+      if (selectedFile) {
+        try {
+          finalComprobanteUrl = await uploadArchivoComprobante(selectedFile)
+        } catch (uploadErr: any) {
+          setEditModalError(`Error en subida de comprobante: ${uploadErr.message}`)
+          setIsSubmitting(false)
+          return
+        }
+      }
 
       const bodyPayload = {
         tipo: formTipo,
         idCategoria: formIdCategoria,
         monto: Number(formMonto),
-        descripcion: `${formTercero.trim()} | ${formDescripcion.trim() || 'Sin descripción detallada'}`,
         fecha: formFecha ? new Date(formFecha).toISOString() : new Date().toISOString(),
-        comprobanteUrl: comprobanteVal
+        descripcion: formDescripcion.trim(),
+        tercero: formTercero.trim() || undefined,
+        nroFactura: formNroFactura.trim() || undefined,
+        metodoPago: formMetodoPago.trim() || undefined,
+        comprobanteUrl: finalComprobanteUrl
       }
 
       const res = await apiFetch(`/api/v1/movimientos/${movimientoParaEditar.id}`, {
@@ -455,21 +528,28 @@ export default function FinanzasPage() {
 
       if (res.ok) {
         showNotification('success', 'Movimiento financiero actualizado correctamente.')
+        setIsEditModalOpen(false)
+        setMovimientoParaEditar(null)
         await fetchMovimientos()
       } else {
-        if (res.status === 403) {
-          showNotification('error', 'Error 403: No posee permisos para modificar este registro.')
-          return
+        const errorJson = await res.json().catch(() => ({}))
+        let errorMsg = errorJson.message || errorJson.error || 'Error al actualizar el registro financiero.'
+        if (errorJson.details && typeof errorJson.details === 'object') {
+          const detailEntries = Object.entries(errorJson.details)
+            .map(([field, msgs]) => `${field}: ${Array.isArray(msgs) ? msgs.join(', ') : msgs}`)
+            .join(' | ')
+          if (detailEntries) {
+            errorMsg = `${errorMsg} (${detailEntries})`
+          }
         }
-        const errJson = await res.json().catch(() => ({}))
-        showNotification('error', errJson.message || 'Error al actualizar el registro financiero.')
+        setEditModalError(errorMsg)
+        showNotification('error', errorMsg)
       }
-
-      setIsEditModalOpen(false)
-      setMovimientoParaEditar(null)
     } catch (err: any) {
       console.error('Error al editar movimiento:', err)
-      showNotification('error', err?.message || 'Error al guardar los cambios.')
+      const errTxt = err?.message || 'Error al guardar los cambios.'
+      setEditModalError(errTxt)
+      showNotification('error', errTxt)
     } finally {
       setIsSubmitting(false)
     }
@@ -479,22 +559,96 @@ export default function FinanzasPage() {
   const handleConfirmarEliminacion = async () => {
     if (!movimientoParaEliminar) return
     if (!hasFinancialPermission) {
-      showNotification('error', 'Acceso denegado: No posee permisos para eliminar movimientos.')
+      showNotification('error', 'Acceso denegado: No posee permisos para anular movimientos.')
       return
     }
 
     try {
       const res = await apiFetch(`/api/v1/movimientos/${movimientoParaEliminar.id}`, {
-        method: 'DELETE'
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ motivo: 'Anulación solicitada por el administrador' })
       })
       if (res.ok || res.status === 404) {
-        showNotification('success', 'Movimiento eliminado correctamente.')
+        showNotification('success', 'Movimiento anulado correctamente.')
+        await fetchMovimientos()
+      } else {
+        const errJson = await res.json().catch(() => ({}))
+        showNotification('error', errJson.message || 'Error al anular movimiento.')
       }
-      setMovimientos((prev) => prev.filter((m) => m.id !== movimientoParaEliminar.id))
       setMovimientoParaEliminar(null)
     } catch (err: any) {
       console.error('Error eliminando movimiento:', err)
       showNotification('error', err?.message || 'No se pudo eliminar el registro.')
+    }
+  }
+
+  // Crear categoría (POST /api/v1/movimientos/categorias)
+  const handleCrearCategoria = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setCatModalError(null)
+    setCatModalSuccess(null)
+
+    if (!newCatNombre.trim()) {
+      setCatModalError('El nombre de la categoría es obligatorio.')
+      return
+    }
+
+    try {
+      const res = await apiFetch('/api/v1/movimientos/categorias', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          nombre: newCatNombre.trim(),
+          tipo: newCatTipo
+        })
+      })
+
+      const data = await res.json().catch(() => ({}))
+      if (res.ok) {
+        setCatModalSuccess(`Categoría "${newCatNombre.trim()}" creada exitosamente.`)
+        setNewCatNombre('')
+        await fetchCategorias()
+      } else {
+        const errMsg = data.message || data.error || 'Error al crear categoría'
+        setCatModalError(errMsg)
+      }
+    } catch (err: any) {
+      setCatModalError(err?.message || 'Error de conexión al crear categoría')
+    }
+  }
+
+  // Editar categoría (PUT /api/v1/movimientos/categorias/:id)
+  const handleEditarCategoria = async (idCat: number) => {
+    setCatModalError(null)
+    setCatModalSuccess(null)
+
+    if (!editingCatNombre.trim()) {
+      setCatModalError('El nombre no puede estar vacío.')
+      return
+    }
+
+    try {
+      const res = await apiFetch(`/api/v1/movimientos/categorias/${idCat}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          nombre: editingCatNombre.trim()
+        })
+      })
+
+      const data = await res.json().catch(() => ({}))
+      if (res.ok) {
+        setCatModalSuccess('Categoría actualizada correctamente.')
+        setEditingCatId(null)
+        setEditingCatNombre('')
+        await fetchCategorias()
+      } else {
+        const errMsg = data.message || data.error || 'Error al actualizar categoría'
+        setCatModalError(errMsg)
+      }
+    } catch (err: any) {
+      setCatModalError(err?.message || 'Error de conexión al modificar categoría')
     }
   }
 
@@ -541,8 +695,24 @@ export default function FinanzasPage() {
           </p>
         </div>
 
-        {/* BOTONES DE REGISTRO RÁPIDO */}
-        <div className="flex items-center gap-2">
+        {/* BOTONES DE ACCIÓN RÁPIDA */}
+        <div className="flex items-center gap-2 flex-wrap">
+          {hasFinancialPermission && (
+            <button
+              type="button"
+              onClick={() => {
+                setCatModalError(null)
+                setCatModalSuccess(null)
+                setIsCategoriasModalOpen(true)
+              }}
+              className="inline-flex items-center justify-center gap-1.5 px-3.5 py-2.5 bg-[#dfd9ce] dark:bg-slate-800 hover:bg-[#d5cfc2] dark:hover:bg-slate-700 text-[#262422] dark:text-white text-xs sm:text-sm font-bold rounded-xl border border-[#cec8bc] dark:border-slate-700 transition-all cursor-pointer shadow-xs"
+              title="Crear y editar categorías de ingresos y egresos (Solo Administrador)"
+            >
+              <Tag className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+              <span>Categorías</span>
+            </button>
+          )}
+
           <button
             type="button"
             onClick={() => handleOpenCreateModal('Ingreso')}
@@ -601,353 +771,310 @@ export default function FinanzasPage() {
         </div>
       ) : (
         <>
-          {apiError && (
-            <div className="p-3.5 rounded-2xl bg-rose-500/10 border border-rose-500/20 text-rose-700 dark:text-rose-400 text-xs flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <AlertTriangle className="w-4 h-4 shrink-0" />
-                <span>{apiError}</span>
+          {/* CARDS DE BALANCE Y TOTALES (CA10) */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div className="p-5 rounded-2xl bg-white/70 dark:bg-slate-900/70 border border-[#cec8bc] dark:border-slate-800 shadow-sm space-y-1">
+              <div className="flex items-center justify-between text-xs font-semibold text-[#7d776f] dark:text-slate-400">
+                <span>Ingresos Extraordinarios</span>
+                <ArrowDownLeft className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
               </div>
-              <button
-                onClick={() => setApiError(null)}
-                className="text-rose-400 hover:text-rose-600 p-1"
+              <div className="text-xl sm:text-2xl font-black text-emerald-700 dark:text-emerald-400 font-mono">
+                Bs. {totalIngresos.toFixed(2)}
+              </div>
+              <div className="text-[11px] text-[#7d776f] dark:text-slate-500">
+                {cantidadIngresos} movimiento(s) computado(s)
+              </div>
+            </div>
+
+            <div className="p-5 rounded-2xl bg-white/70 dark:bg-slate-900/70 border border-[#cec8bc] dark:border-slate-800 shadow-sm space-y-1">
+              <div className="flex items-center justify-between text-xs font-semibold text-[#7d776f] dark:text-slate-400">
+                <span>Egresos y Gastos Operativos</span>
+                <ArrowUpRight className="w-4 h-4 text-rose-600 dark:text-rose-400" />
+              </div>
+              <div className="text-xl sm:text-2xl font-black text-rose-700 dark:text-rose-400 font-mono">
+                Bs. {totalEgresos.toFixed(2)}
+              </div>
+              <div className="text-[11px] text-[#7d776f] dark:text-slate-500">
+                {cantidadEgresos} gasto(s) computado(s)
+              </div>
+            </div>
+
+            <div className="p-5 rounded-2xl bg-white/70 dark:bg-slate-900/70 border border-[#cec8bc] dark:border-slate-800 shadow-sm space-y-1">
+              <div className="flex items-center justify-between text-xs font-semibold text-[#7d776f] dark:text-slate-400">
+                <span>Balance Neto del Filtro</span>
+                <Scale className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+              </div>
+              <div
+                className={`text-xl sm:text-2xl font-black font-mono ${
+                  balanceNeto >= 0
+                    ? 'text-emerald-700 dark:text-emerald-400'
+                    : 'text-rose-700 dark:text-rose-400'
+                }`}
               >
-                <X className="w-3.5 h-3.5" />
-              </button>
+                Bs. {balanceNeto.toFixed(2)}
+              </div>
+              <div className="text-[11px] text-[#7d776f] dark:text-slate-500">
+                {balanceNeto >= 0 ? 'Superávit en el período' : 'Déficit en el período'}
+              </div>
             </div>
-          )}
-
-          {/* KPIS FINANCIEROS Y RESUMEN DE TOTALES (CA10) */}
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
-            {/* Total Ingresos */}
-            <div className="p-4 rounded-2xl bg-[#ede9e1] dark:bg-slate-900 border border-[#cec8bc] dark:border-slate-800 shadow-xs">
-          <div className="flex items-center justify-between text-xs font-semibold text-[#66615b] dark:text-slate-400 mb-1">
-            <span>Total Ingresos</span>
-            <TrendingUp className="w-4 h-4 text-emerald-700 dark:text-emerald-400" />
           </div>
-          <div className="text-xl sm:text-2xl font-bold text-emerald-900 dark:text-emerald-400">
-            Bs. {totalIngresos.toLocaleString('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-          </div>
-          <span className="text-[11px] text-[#7d776f] dark:text-slate-500">
-            {cantidadIngresos} {cantidadIngresos === 1 ? 'movimiento' : 'movimientos'} registrados
-          </span>
-        </div>
 
-        {/* Total Egresos */}
-        <div className="p-4 rounded-2xl bg-[#ede9e1] dark:bg-slate-900 border border-[#cec8bc] dark:border-slate-800 shadow-xs">
-          <div className="flex items-center justify-between text-xs font-semibold text-[#66615b] dark:text-slate-400 mb-1">
-            <span>Total Egresos</span>
-            <TrendingDown className="w-4 h-4 text-rose-700 dark:text-rose-400" />
-          </div>
-          <div className="text-xl sm:text-2xl font-bold text-rose-900 dark:text-rose-400">
-            Bs. {totalEgresos.toLocaleString('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-          </div>
-          <span className="text-[11px] text-[#7d776f] dark:text-slate-500">
-            {cantidadEgresos} {cantidadEgresos === 1 ? 'gasto' : 'gastos'} ejecutados
-          </span>
-        </div>
-
-        {/* Balance Neto */}
-        <div className="p-4 rounded-2xl bg-[#ede9e1] dark:bg-slate-900 border border-[#cec8bc] dark:border-slate-800 shadow-xs">
-          <div className="flex items-center justify-between text-xs font-semibold text-[#66615b] dark:text-slate-400 mb-1">
-            <span>Balance Financiero</span>
-            <Scale className="w-4 h-4 text-blue-700 dark:text-indigo-400" />
-          </div>
-          <div
-            className={`text-xl sm:text-2xl font-bold ${
-              balanceNeto >= 0
-                ? 'text-emerald-800 dark:text-emerald-400'
-                : 'text-rose-800 dark:text-rose-400'
-            }`}
-          >
-            Bs. {balanceNeto.toLocaleString('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-          </div>
-          <span className="text-[11px] font-semibold text-[#7d776f] dark:text-slate-500">
-            {balanceNeto >= 0 ? 'Superávit en período' : 'Déficit en período'}
-          </span>
-        </div>
-
-        {/* Mayor Rubro */}
-        <div className="p-4 rounded-2xl bg-[#ede9e1] dark:bg-slate-900 border border-[#cec8bc] dark:border-slate-800 shadow-xs">
-          <div className="flex items-center justify-between text-xs font-semibold text-[#66615b] dark:text-slate-400 mb-1">
-            <span>Mayor Rubro de Gasto</span>
-            <Tag className="w-4 h-4 text-blue-700 dark:text-blue-400" />
-          </div>
-          <div className="text-base sm:text-lg font-bold text-[#262422] dark:text-white truncate">
-            {mayorRubroInfo.nombre}
-          </div>
-          <span className="text-[11px] text-[#7d776f] dark:text-slate-500">
-            {mayorRubroInfo.porcentaje}% del total de egresos
-          </span>
-        </div>
-      </div>
-
-      {/* PESTAÑAS POR TIPO (Todos, Ingresos Extraordinarios, Egresos) (CA1, CA2, CA3) */}
-      <div className="flex border-b border-[#cec8bc] dark:border-slate-800 gap-2">
-        <button
-          type="button"
-          onClick={() => setTabTipo('Todos')}
-          className={`pb-3 px-3 text-xs sm:text-sm font-bold border-b-2 transition-colors cursor-pointer flex items-center gap-1.5 ${
-            tabTipo === 'Todos'
-              ? 'border-blue-700 text-blue-800 dark:border-blue-500 dark:text-blue-400'
-              : 'border-transparent text-[#7d776f] hover:text-[#262422] dark:hover:text-white'
-          }`}
-        >
-          <Scale className="w-4 h-4" />
-          <span>Todos los Movimientos ({movimientos.length})</span>
-        </button>
-
-        <button
-          type="button"
-          onClick={() => setTabTipo('Ingreso')}
-          className={`pb-3 px-3 text-xs sm:text-sm font-bold border-b-2 transition-colors cursor-pointer flex items-center gap-1.5 ${
-            tabTipo === 'Ingreso'
-              ? 'border-emerald-600 text-emerald-800 dark:border-emerald-500 dark:text-emerald-400'
-              : 'border-transparent text-[#7d776f] hover:text-[#262422] dark:hover:text-white'
-          }`}
-        >
-          <ArrowDownLeft className="w-4 h-4 text-emerald-600" />
-          <span>Ingresos Extraordinarios ({movimientos.filter((m) => m.tipo === 'Ingreso').length})</span>
-        </button>
-
-        <button
-          type="button"
-          onClick={() => setTabTipo('Egreso')}
-          className={`pb-3 px-3 text-xs sm:text-sm font-bold border-b-2 transition-colors cursor-pointer flex items-center gap-1.5 ${
-            tabTipo === 'Egreso'
-              ? 'border-rose-600 text-rose-800 dark:border-rose-500 dark:text-rose-400'
-              : 'border-transparent text-[#7d776f] hover:text-[#262422] dark:hover:text-white'
-          }`}
-        >
-          <ArrowUpRight className="w-4 h-4 text-rose-600" />
-          <span>Egresos y Gastos ({movimientos.filter((m) => m.tipo === 'Egreso').length})</span>
-        </button>
-      </div>
-
-      {/* BARRA DE BÚSQUEDA Y FILTROS AVANZADOS (CA4, CA6, CA7) */}
-      <div className="p-4 rounded-2xl bg-[#ede9e1] dark:bg-slate-900 border border-[#cec8bc] dark:border-slate-800 flex flex-col lg:flex-row gap-3 items-stretch lg:items-center justify-between shadow-xs">
-        {/* Buscador */}
-        <div className="relative flex-1">
-          <Search className="w-4 h-4 text-[#7d776f] dark:text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
-          <input
-            type="text"
-            placeholder="Buscar por pagador, proveedor, concepto o comprobante..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full pl-10 pr-4 py-2 bg-[#dfd9ce] dark:bg-slate-950 border border-[#cec8bc] dark:border-slate-700 rounded-xl text-xs sm:text-sm text-[#1c1917] dark:text-white placeholder-[#857f76] dark:placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-600 transition-all"
-          />
-        </div>
-
-        {/* Filtros: Categoría y Período */}
-        <div className="flex flex-wrap items-center gap-2">
-          {/* Categoría (CA4) */}
-          <div className="flex items-center gap-1.5 bg-[#dfd9ce] dark:bg-slate-950 px-3 py-2 rounded-xl border border-[#cec8bc] dark:border-slate-700 text-xs">
-            <Filter className="w-3.5 h-3.5 text-[#7d776f]" />
-            <select
-              value={filtroCategoria}
-              onChange={(e) => setFiltroCategoria(e.target.value)}
-              className="bg-transparent text-[#262422] dark:text-white focus:outline-none cursor-pointer font-medium max-w-[160px] truncate"
-            >
-              <option value="Todos">Categoría: Todas</option>
-              {categorias
-                .filter((c) => tabTipo === 'Todos' || c.tipo === tabTipo)
-                .map((cat) => (
-                  <option key={cat.idCategoria} value={cat.idCategoria}>
-                    {cat.nombre}
-                  </option>
+          {/* BARRA DE FILTROS Y BÚSQUEDA (CA6, CA7) */}
+          <div className="p-4 rounded-2xl bg-white/70 dark:bg-slate-900/70 border border-[#cec8bc] dark:border-slate-800 shadow-sm space-y-3">
+            <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3">
+              {/* TABS TIPO */}
+              <div className="flex items-center gap-1 p-1 rounded-xl bg-[#dfd9ce] dark:bg-slate-950 border border-[#cec8bc] dark:border-slate-800 self-start">
+                {(['Todos', 'Ingreso', 'Egreso'] as const).map((t) => (
+                  <button
+                    key={t}
+                    type="button"
+                    onClick={() => setTabTipo(t)}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                      tabTipo === t
+                        ? 'bg-blue-700 text-white shadow-xs'
+                        : 'text-[#5c5750] dark:text-slate-400 hover:text-[#262422] dark:hover:text-white'
+                    }`}
+                  >
+                    {t === 'Todos' ? 'Todos los Flujos' : t === 'Ingreso' ? 'Ingresos' : 'Egresos'}
+                  </button>
                 ))}
-            </select>
-          </div>
+              </div>
 
-          {/* Período (CA6) */}
-          <div className="flex items-center gap-1.5 bg-[#dfd9ce] dark:bg-slate-950 px-3 py-2 rounded-xl border border-[#cec8bc] dark:border-slate-700 text-xs">
-            <Calendar className="w-3.5 h-3.5 text-[#7d776f]" />
-            <select
-              value={filtroPeriodo}
-              onChange={(e) => setFiltroPeriodo(e.target.value as any)}
-              className="bg-transparent text-[#262422] dark:text-white focus:outline-none cursor-pointer font-medium"
-            >
-              <option value="todos">Período: Histórico completo</option>
-              <option value="mes_actual">Este Mes</option>
-              <option value="mes_anterior">Mes Anterior</option>
-              <option value="personalizado">Rango Personalizado</option>
-            </select>
-          </div>
+              {/* BÚSQUEDA */}
+              <div className="relative flex-1 max-w-md">
+                <Search className="w-4 h-4 text-[#7d776f] absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                <input
+                  type="text"
+                  placeholder="Buscar por tercero, detalle, factura o código..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="w-full pl-9 pr-4 py-2 rounded-xl bg-[#dfd9ce] dark:bg-slate-950 border border-[#cec8bc] dark:border-slate-800 text-xs text-[#1c1917] dark:text-white placeholder-[#7d776f] focus:outline-none focus:ring-2 focus:ring-blue-600"
+                />
+              </div>
 
-          {/* Rango de Fechas específico */}
-          {filtroPeriodo === 'personalizado' && (
-            <div className="flex items-center gap-1 bg-[#dfd9ce] dark:bg-slate-950 px-2 py-1.5 rounded-xl border border-[#cec8bc] dark:border-slate-700 text-xs">
-              <input
-                type="date"
-                value={fechaDesde}
-                onChange={(e) => setFechaDesde(e.target.value)}
-                className="bg-transparent text-[#262422] dark:text-white text-xs focus:outline-none"
-              />
-              <span className="text-[#7d776f]">&rarr;</span>
-              <input
-                type="date"
-                value={fechaHasta}
-                onChange={(e) => setFechaHasta(e.target.value)}
-                className="bg-transparent text-[#262422] dark:text-white text-xs focus:outline-none"
-              />
+              {/* SELECTOR CATEGORÍA */}
+              <div className="flex items-center gap-2">
+                <Filter className="w-4 h-4 text-[#7d776f] shrink-0" />
+                <select
+                  value={filtroCategoria}
+                  onChange={(e) => setFiltroCategoria(e.target.value)}
+                  className="px-3 py-2 rounded-xl bg-[#dfd9ce] dark:bg-slate-950 border border-[#cec8bc] dark:border-slate-800 text-xs font-semibold text-[#1c1917] dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-600 cursor-pointer"
+                >
+                  <option value="Todos">Todas las Categorías</option>
+                  {categorias.map((cat) => (
+                    <option key={cat.idCategoria} value={cat.idCategoria}>
+                      [{cat.tipo}] {cat.nombre}
+                    </option>
+                  ))}
+                </select>
+              </div>
             </div>
-          )}
-        </div>
-      </div>
 
-      {/* TABLA PRINCIPAL DE MOVIMIENTOS FINANCIEROS */}
-      <div className="rounded-2xl bg-[#ede9e1] dark:bg-slate-900 border border-[#cec8bc] dark:border-slate-800 overflow-hidden shadow-xs">
-        <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse">
-            <thead>
-              <tr className="border-b border-[#cec8bc] dark:border-slate-800 bg-[#e3ded4] dark:bg-slate-950/60 text-[11px] font-bold uppercase tracking-wider text-[#5c5750] dark:text-slate-400">
-                <th className="py-3 px-4">Tipo</th>
-                <th className="py-3 px-4">Código / Fecha</th>
-                <th className="py-3 px-4">Origen / Beneficiario</th>
-                <th className="py-3 px-4">Categoría</th>
-                <th className="py-3 px-4">Concepto / Detalle</th>
-                <th className="py-3 px-4">Monto (Bs.)</th>
-                <th className="py-3 px-4">Comprobante</th>
-                <th className="py-3 px-4 text-right">Acciones</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-[#cec8bc]/60 dark:divide-slate-800 text-xs">
-              {loading ? (
-                <tr>
-                  <td colSpan={8} className="py-10 text-center text-[#7d776f] dark:text-slate-500">
-                    <div className="flex items-center justify-center gap-2">
-                      <Loader2 className="w-5 h-5 animate-spin text-blue-700" />
-                      <span>Cargando movimientos financieros...</span>
-                    </div>
-                  </td>
-                </tr>
-              ) : movimientosFiltrados.length === 0 ? (
-                <tr>
-                  <td colSpan={8} className="py-10 text-center text-[#7d776f] dark:text-slate-500">
-                    No se encontraron movimientos financieros con los filtros seleccionados.
-                  </td>
-                </tr>
-              ) : (
-                movimientosFiltrados.map((mov) => {
-                  const esIngreso = mov.tipo === 'Ingreso'
-                  return (
-                    <tr
-                      key={mov.id}
-                      className="hover:bg-[#e6e1d6]/50 dark:hover:bg-slate-800/40 transition-colors"
-                    >
-                      {/* Tipo */}
-                      <td className="py-3 px-4">
-                        <span
-                          className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold ${
-                            esIngreso
-                              ? 'bg-emerald-100 text-emerald-900 dark:bg-emerald-500/20 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-500/30'
-                              : 'bg-rose-100 text-rose-900 dark:bg-rose-500/20 dark:text-rose-300 border border-rose-300 dark:border-rose-500/30'
-                          }`}
-                        >
-                          {esIngreso ? (
-                            <ArrowDownLeft className="w-3.5 h-3.5" />
-                          ) : (
-                            <ArrowUpRight className="w-3.5 h-3.5" />
-                          )}
-                          {mov.tipo}
-                        </span>
-                      </td>
+            {/* FILTROS POR FECHA */}
+            <div className="flex items-center gap-3 pt-2 border-t border-[#cec8bc]/50 dark:border-slate-800 text-xs flex-wrap">
+              <span className="font-semibold text-[#7d776f]">Período:</span>
+              {(['todos', 'mes_actual', 'mes_anterior'] as const).map((p) => (
+                <button
+                  key={p}
+                  type="button"
+                  onClick={() => setFiltroPeriodo(p)}
+                  className={`px-2.5 py-1 rounded-md text-[11px] font-bold transition-all cursor-pointer ${
+                    filtroPeriodo === p
+                      ? 'bg-blue-100 text-blue-900 dark:bg-blue-950 dark:text-blue-300 border border-blue-300 dark:border-blue-800'
+                      : 'text-[#7d776f] hover:text-[#262422] dark:hover:text-white'
+                  }`}
+                >
+                  {p === 'todos' ? 'Histórico Completo' : p === 'mes_actual' ? 'Mes Actual' : 'Mes Anterior'}
+                </button>
+              ))}
 
-                      {/* Código / Fecha */}
-                      <td className="py-3 px-4">
-                        <div className="font-bold text-[#262422] dark:text-white font-mono text-xs">
-                          {mov.codigo}
-                        </div>
-                        <div className="text-[11px] text-[#7d776f] dark:text-slate-400">
-                          {mov.fecha}
-                        </div>
-                      </td>
+              <div className="flex items-center gap-2 ml-auto">
+                <span className="text-[11px] text-[#7d776f]">Desde:</span>
+                <input
+                  type="date"
+                  value={fechaDesde}
+                  onChange={(e) => {
+                    setFechaDesde(e.target.value)
+                    setFiltroPeriodo('personalizado')
+                  }}
+                  className="px-2 py-1 rounded-lg bg-[#dfd9ce] dark:bg-slate-950 border border-[#cec8bc] dark:border-slate-800 text-xs"
+                />
+                <span className="text-[11px] text-[#7d776f]">Hasta:</span>
+                <input
+                  type="date"
+                  value={fechaHasta}
+                  onChange={(e) => {
+                    setFechaHasta(e.target.value)
+                    setFiltroPeriodo('personalizado')
+                  }}
+                  className="px-2 py-1 rounded-lg bg-[#dfd9ce] dark:bg-slate-950 border border-[#cec8bc] dark:border-slate-800 text-xs"
+                />
+              </div>
+            </div>
+          </div>
 
-                      {/* Origen / Proveedor */}
-                      <td className="py-3 px-4">
-                        <div className="font-bold text-[#262422] dark:text-white flex items-center gap-1.5 max-w-[180px] truncate">
-                          <Building className="w-3.5 h-3.5 text-[#7d776f] shrink-0" />
-                          <span className="truncate">{mov.tercero}</span>
-                        </div>
-                        <div className="text-[10px] text-[#7d776f] dark:text-slate-400">
-                          Método: {mov.metodoPago}
-                        </div>
-                      </td>
-
-                      {/* Categoría (CA4) */}
-                      <td className="py-3 px-4">
-                        <span className="px-2 py-0.5 rounded-md bg-[#dfd9ce] dark:bg-slate-800 text-[#4a4641] dark:text-slate-300 font-semibold text-[11px] inline-block max-w-[150px] truncate">
-                          {mov.categoria}
-                        </span>
-                      </td>
-
-                      {/* Concepto */}
-                      <td className="py-3 px-4 text-[#5c5750] dark:text-slate-300 max-w-xs truncate">
-                        {mov.descripcion}
-                      </td>
-
-                      {/* Monto */}
-                      <td
-                        className={`py-3 px-4 font-black text-sm ${
-                          esIngreso
-                            ? 'text-emerald-700 dark:text-emerald-400'
-                            : 'text-rose-700 dark:text-rose-400'
-                        }`}
-                      >
-                        {esIngreso ? '+' : '-'} Bs. {mov.monto.toFixed(2)}
-                      </td>
-
-                      {/* Comprobante (CA5) */}
-                      <td className="py-3 px-4">
-                        <span className="inline-flex items-center gap-1 text-[11px] font-mono px-2 py-0.5 rounded bg-white/70 dark:bg-slate-950/70 border border-[#cec8bc] dark:border-slate-800 text-[#4a4641] dark:text-slate-300">
-                          <FileCheck className="w-3 h-3 text-blue-600" />
-                          <span className="max-w-[100px] truncate">{mov.nroFactura}</span>
-                        </span>
-                      </td>
-
-                      {/* Acciones (CA5, CA8) */}
-                      <td className="py-3 px-4 text-right">
-                        <div className="inline-flex items-center gap-1">
-                          <button
-                            type="button"
-                            onClick={() => setSelectedMovimiento(mov)}
-                            className="p-1.5 rounded-lg text-[#5c5750] hover:text-[#262422] hover:bg-[#ded8cc] dark:text-slate-400 dark:hover:text-white dark:hover:bg-slate-800 transition-colors cursor-pointer"
-                            title="Ver Comprobante y Detalle"
-                          >
-                            <Eye className="w-4 h-4" />
-                          </button>
-
-                          {hasFinancialPermission && (
-                            <>
-                              <button
-                                type="button"
-                                onClick={() => handleOpenEditModal(mov)}
-                                className="p-1.5 rounded-lg text-blue-700 hover:text-blue-900 hover:bg-blue-100/60 dark:text-blue-400 dark:hover:text-blue-300 dark:hover:bg-slate-800 transition-colors cursor-pointer"
-                                title="Editar Movimiento (CA8)"
-                              >
-                                <Edit2 className="w-4 h-4" />
-                              </button>
-
-                              <button
-                                type="button"
-                                onClick={() => setMovimientoParaEliminar(mov)}
-                                className="p-1.5 rounded-lg text-rose-700 hover:text-rose-900 hover:bg-rose-100/60 dark:text-rose-400 dark:hover:text-rose-300 dark:hover:bg-slate-800 transition-colors cursor-pointer"
-                                title="Eliminar Movimiento"
-                              >
-                                <Trash2 className="w-4 h-4" />
-                              </button>
-                            </>
-                          )}
+          {/* TABLA DE MOVIMIENTOS */}
+          <div className="rounded-2xl border border-[#cec8bc] dark:border-slate-800 bg-white/70 dark:bg-slate-900/70 shadow-sm overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full text-left border-collapse">
+                <thead>
+                  <tr className="border-b border-[#cec8bc] dark:border-slate-800 bg-[#e3ded4] dark:bg-slate-950/60 text-[11px] font-bold uppercase tracking-wider text-[#5c5750] dark:text-slate-400">
+                    <th className="py-3 px-4">Tipo</th>
+                    <th className="py-3 px-4">Código / Fecha</th>
+                    <th className="py-3 px-4">Tercero / Origen / Beneficiario</th>
+                    <th className="py-3 px-4">Categoría</th>
+                    <th className="py-3 px-4">Concepto / Descripción</th>
+                    <th className="py-3 px-4">Monto (Bs.)</th>
+                    <th className="py-3 px-4">Factura / Recibo</th>
+                    <th className="py-3 px-4 text-right">Acciones</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-[#cec8bc]/60 dark:divide-slate-800 text-xs">
+                  {loading ? (
+                    <tr>
+                      <td colSpan={8} className="py-10 text-center text-[#7d776f] dark:text-slate-500">
+                        <div className="flex items-center justify-center gap-2">
+                          <Loader2 className="w-5 h-5 animate-spin text-blue-700" />
+                          <span>Cargando movimientos financieros...</span>
                         </div>
                       </td>
                     </tr>
-                  )
-                })
-              )}
-            </tbody>
-          </table>
-        </div>
-      </div>
-      </>
+                  ) : movimientosFiltrados.length === 0 ? (
+                    <tr>
+                      <td colSpan={8} className="py-10 text-center text-[#7d776f] dark:text-slate-500">
+                        No se encontraron movimientos financieros con los filtros seleccionados.
+                      </td>
+                    </tr>
+                  ) : (
+                    movimientosFiltrados.map((mov) => {
+                      const esIngreso = mov.tipo === 'Ingreso'
+                      return (
+                        <tr
+                          key={mov.id}
+                          className="hover:bg-[#e6e1d6]/50 dark:hover:bg-slate-800/40 transition-colors"
+                        >
+                          {/* Tipo */}
+                          <td className="py-3 px-4">
+                            <span
+                              className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold ${
+                                esIngreso
+                                  ? 'bg-emerald-100 text-emerald-900 dark:bg-emerald-500/20 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-500/30'
+                                  : 'bg-rose-100 text-rose-900 dark:bg-rose-500/20 dark:text-rose-300 border border-rose-300 dark:border-rose-500/30'
+                              }`}
+                            >
+                              {esIngreso ? (
+                                <ArrowDownLeft className="w-3.5 h-3.5" />
+                              ) : (
+                                <ArrowUpRight className="w-3.5 h-3.5" />
+                              )}
+                              {mov.tipo}
+                            </span>
+                          </td>
+
+                          {/* Código / Fecha */}
+                          <td className="py-3 px-4">
+                            <div className="font-bold text-[#262422] dark:text-white font-mono text-xs">
+                              {mov.codigo}
+                            </div>
+                            <div className="text-[11px] text-[#7d776f] dark:text-slate-400">
+                              {mov.fecha}
+                            </div>
+                          </td>
+
+                          {/* Tercero */}
+                          <td className="py-3 px-4">
+                            <div className="font-bold text-[#262422] dark:text-white flex items-center gap-1.5 max-w-[180px] truncate">
+                              <Building className="w-3.5 h-3.5 text-[#7d776f] shrink-0" />
+                              <span className="truncate">{mov.tercero || 'Sin especificar'}</span>
+                            </div>
+                            {mov.metodoPago && (
+                              <div className="text-[10px] text-[#7d776f] dark:text-slate-400">
+                                Método: {mov.metodoPago}
+                              </div>
+                            )}
+                          </td>
+
+                          {/* Categoría */}
+                          <td className="py-3 px-4">
+                            <span className="px-2 py-0.5 rounded-md bg-[#dfd9ce] dark:bg-slate-800 text-[#4a4641] dark:text-slate-300 font-semibold text-[11px] inline-block max-w-[150px] truncate">
+                              {mov.categoria}
+                            </span>
+                          </td>
+
+                          {/* Concepto / Descripción */}
+                          <td className="py-3 px-4 text-[#5c5750] dark:text-slate-300 max-w-xs truncate" title={mov.descripcion}>
+                            {mov.descripcion}
+                          </td>
+
+                          {/* Monto */}
+                          <td
+                            className={`py-3 px-4 font-black text-sm font-mono ${
+                              esIngreso
+                                ? 'text-emerald-700 dark:text-emerald-400'
+                                : 'text-rose-700 dark:text-rose-400'
+                            }`}
+                          >
+                            {esIngreso ? '+' : '-'} Bs. {mov.monto.toFixed(2)}
+                          </td>
+
+                          {/* Nro Factura / Comprobante */}
+                          <td className="py-3 px-4">
+                            {mov.nroFactura ? (
+                              <span className="inline-flex items-center gap-1 text-[11px] font-mono px-2 py-0.5 rounded bg-white/70 dark:bg-slate-950/70 border border-[#cec8bc] dark:border-slate-800 text-[#4a4641] dark:text-slate-300">
+                                <FileCheck className="w-3 h-3 text-blue-600" />
+                                <span className="max-w-[100px] truncate">{mov.nroFactura}</span>
+                              </span>
+                            ) : mov.comprobanteUrl ? (
+                              <span className="text-[11px] text-blue-600 font-semibold">Adjunto</span>
+                            ) : (
+                              <span className="text-[10px] text-[#7d776f]">Ninguno</span>
+                            )}
+                          </td>
+
+                          {/* Acciones */}
+                          <td className="py-3 px-4 text-right">
+                            <div className="inline-flex items-center gap-1">
+                              <button
+                                type="button"
+                                onClick={() => setSelectedMovimiento(mov)}
+                                className="p-1.5 rounded-lg text-[#5c5750] hover:text-[#262422] hover:bg-[#ded8cc] dark:text-slate-400 dark:hover:text-white dark:hover:bg-slate-800 transition-colors cursor-pointer"
+                                title="Ver Detalle y Comprobante"
+                              >
+                                <Eye className="w-4 h-4" />
+                              </button>
+
+                              {hasFinancialPermission && (
+                                <>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleOpenEditModal(mov)}
+                                    className="p-1.5 rounded-lg text-blue-700 hover:text-blue-900 hover:bg-blue-100/60 dark:text-blue-400 dark:hover:text-blue-300 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+                                    title="Editar Movimiento"
+                                  >
+                                    <Edit2 className="w-4 h-4" />
+                                  </button>
+
+                                  <button
+                                    type="button"
+                                    onClick={() => setMovimientoParaEliminar(mov)}
+                                    className="p-1.5 rounded-lg text-rose-700 hover:text-rose-900 hover:bg-rose-100/60 dark:text-rose-400 dark:hover:text-rose-300 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+                                    title="Anular Movimiento"
+                                  >
+                                    <Trash2 className="w-4 h-4" />
+                                  </button>
+                                </>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      )
+                    })
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </>
       )}
 
       {/* MODAL REGISTRAR MOVIMIENTO (CA1, CA2, CA3, CA4, CA5) */}
@@ -968,14 +1095,22 @@ export default function FinanzasPage() {
               <button
                 type="button"
                 onClick={() => setIsCreateModalOpen(false)}
-                className="text-[#7d776f] hover:text-[#262422] dark:hover:text-white"
+                className="text-[#7d776f] hover:text-[#262422] dark:hover:text-white cursor-pointer"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
+            {/* Error específico del backend dentro del modal */}
+            {createModalError && (
+              <div className="p-3 rounded-xl bg-rose-100 border border-rose-300 text-rose-900 dark:bg-rose-950/60 dark:border-rose-800 dark:text-rose-200 text-xs flex items-center gap-2">
+                <AlertCircle className="w-4 h-4 shrink-0 text-rose-600 dark:text-rose-400" />
+                <span className="font-semibold">{createModalError}</span>
+              </div>
+            )}
+
             <form onSubmit={handleCrearMovimiento} className="space-y-4">
-              {/* Selector de Tipo (CA1) */}
+              {/* Selector de Tipo */}
               <div>
                 <label className="block text-xs font-bold text-[#383430] dark:text-slate-300 mb-1.5">
                   Tipo de Movimiento Financiero *
@@ -1017,26 +1152,7 @@ export default function FinanzasPage() {
                 </div>
               </div>
 
-              {/* Tercero (Proveedor / Pagador) */}
-              <div>
-                <label className="block text-xs font-bold text-[#383430] dark:text-slate-300 mb-1">
-                  {formTipo === 'Ingreso' ? 'Copropietario / Pagador / Origen *' : 'Proveedor / Beneficiario *'}
-                </label>
-                <input
-                  type="text"
-                  required
-                  placeholder={
-                    formTipo === 'Ingreso'
-                      ? 'Ej. Dpto 402 - Sra. Mariana Flores, Donación Vecinal'
-                      : 'Ej. ELFEC S.A., Tigo Bolivia, Otis Ascensores'
-                  }
-                  value={formTercero}
-                  onChange={(e) => setFormTercero(e.target.value)}
-                  className="w-full px-3 py-2 rounded-xl bg-[#dfd9ce] dark:bg-slate-950 border border-[#cec8bc] dark:border-slate-800 text-xs text-[#1c1917] dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-600"
-                />
-              </div>
-
-              {/* Categoría y Monto (CA3, CA4) */}
+              {/* Categoría y Monto */}
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs font-bold text-[#383430] dark:text-slate-300 mb-1">
@@ -1060,67 +1176,101 @@ export default function FinanzasPage() {
                   </label>
                   <input
                     type="number"
-                    step="0.5"
+                    step="0.01"
                     min="0.01"
                     required
                     placeholder="0.00"
                     value={formMonto || ''}
                     onChange={(e) => setFormMonto(Number(e.target.value))}
-                    className="w-full px-3 py-2 rounded-xl bg-[#dfd9ce] dark:bg-slate-950 border border-[#cec8bc] dark:border-slate-800 text-xs text-[#1c1917] dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-600 font-bold"
+                    className="w-full px-3 py-2 rounded-xl bg-[#dfd9ce] dark:bg-slate-950 border border-[#cec8bc] dark:border-slate-800 text-xs text-[#1c1917] dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-600 font-bold font-mono"
                   />
                 </div>
               </div>
 
-              {/* Fecha y Método de Pago (CA3, CA6) */}
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-bold text-[#383430] dark:text-slate-300 mb-1">
-                    Fecha del Movimiento *
-                  </label>
-                  <input
-                    type="date"
-                    required
-                    value={formFecha}
-                    onChange={(e) => setFormFecha(e.target.value)}
-                    className="w-full px-3 py-2 rounded-xl bg-[#dfd9ce] dark:bg-slate-950 border border-[#cec8bc] dark:border-slate-800 text-xs text-[#1c1917] dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-600"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-bold text-[#383430] dark:text-slate-300 mb-1">
-                    Forma de Pago
-                  </label>
-                  <select
-                    value={formMetodoPago}
-                    onChange={(e) => setFormMetodoPago(e.target.value)}
-                    className="w-full px-3 py-2 rounded-xl bg-[#dfd9ce] dark:bg-slate-950 border border-[#cec8bc] dark:border-slate-800 text-xs text-[#1c1917] dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-600 cursor-pointer"
-                  >
-                    <option value="Transferencia Bancaria">Transferencia Bancaria</option>
-                    <option value="QR Simple Interbancario">QR Simple</option>
-                    <option value="Efectivo en Caja">Efectivo en Caja</option>
-                    <option value="Cheque">Cheque</option>
-                    <option value="Débito Automático">Débito Automático</option>
-                  </select>
-                </div>
-              </div>
-
-              {/* Número de Comprobante y Archivo Adjunto (CA5) */}
+              {/* Fecha OBLIGATORIA */}
               <div>
                 <label className="block text-xs font-bold text-[#383430] dark:text-slate-300 mb-1">
-                  Nro Factura / Recibo / Código
+                  Fecha del Movimiento * (Obligatoria)
                 </label>
                 <input
-                  type="text"
-                  placeholder={formTipo === 'Ingreso' ? 'REC-0982 o REF-1234' : 'FAC-89012'}
-                  value={formNroFactura}
-                  onChange={(e) => setFormNroFactura(e.target.value)}
-                  className="w-full px-3 py-2 rounded-xl bg-[#dfd9ce] dark:bg-slate-950 border border-[#cec8bc] dark:border-slate-800 text-xs text-[#1c1917] dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-600 font-mono"
+                  type="date"
+                  required
+                  value={formFecha}
+                  onChange={(e) => setFormFecha(e.target.value)}
+                  className="w-full px-3 py-2 rounded-xl bg-[#dfd9ce] dark:bg-slate-950 border border-[#cec8bc] dark:border-slate-800 text-xs text-[#1c1917] dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-600"
                 />
               </div>
 
-              {/* Adjuntar Archivo de Comprobante (CA5) */}
+              {/* Concepto / Descripción OBLIGATORIA */}
               <div>
                 <label className="block text-xs font-bold text-[#383430] dark:text-slate-300 mb-1">
-                  Adjuntar Comprobante o Factura (PDF, Imagen)
+                  Descripción / Concepto * (Obligatoria)
+                </label>
+                <textarea
+                  rows={2}
+                  required
+                  placeholder="Detalles sobre el motivo del ingreso o egreso..."
+                  value={formDescripcion}
+                  onChange={(e) => setFormDescripcion(e.target.value)}
+                  className="w-full px-3 py-2 rounded-xl bg-[#dfd9ce] dark:bg-slate-950 border border-[#cec8bc] dark:border-slate-800 text-xs text-[#1c1917] dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-600"
+                />
+              </div>
+
+              {/* Campos Opcionales: Tercero, NroFactura, Método de Pago */}
+              <div className="p-3.5 rounded-2xl bg-white/50 dark:bg-slate-950/50 border border-[#cec8bc]/70 dark:border-slate-800 space-y-3">
+                <span className="block text-[11px] font-bold uppercase tracking-wider text-[#7d776f]">
+                  Datos Adicionales (Opcionales)
+                </span>
+
+                <div>
+                  <label className="block text-[11px] font-medium text-[#5c5750] dark:text-slate-400 mb-1">
+                    Tercero / Proveedor / Beneficiario / Pagador (Opcional)
+                  </label>
+                  <input
+                    type="text"
+                    maxLength={120}
+                    placeholder="Ej. Schindler Ascensores, Propietario Dpto 302..."
+                    value={formTercero}
+                    onChange={(e) => setFormTercero(e.target.value)}
+                    className="w-full px-3 py-1.5 rounded-xl bg-[#dfd9ce] dark:bg-slate-950 border border-[#cec8bc] dark:border-slate-800 text-xs text-[#1c1917] dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-600"
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-[11px] font-medium text-[#5c5750] dark:text-slate-400 mb-1">
+                      Nro Factura / Recibo (Opcional)
+                    </label>
+                    <input
+                      type="text"
+                      maxLength={50}
+                      placeholder="Ej. FAC-9912, REC-001"
+                      value={formNroFactura}
+                      onChange={(e) => setFormNroFactura(e.target.value)}
+                      className="w-full px-3 py-1.5 rounded-xl bg-[#dfd9ce] dark:bg-slate-950 border border-[#cec8bc] dark:border-slate-800 text-xs text-[#1c1917] dark:text-white font-mono"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-medium text-[#5c5750] dark:text-slate-400 mb-1">
+                      Método de Pago (Opcional)
+                    </label>
+                    <input
+                      type="text"
+                      maxLength={30}
+                      placeholder="Ej. Transferencia QR, Efectivo..."
+                      value={formMetodoPago}
+                      onChange={(e) => setFormMetodoPago(e.target.value)}
+                      className="w-full px-3 py-1.5 rounded-xl bg-[#dfd9ce] dark:bg-slate-950 border border-[#cec8bc] dark:border-slate-800 text-xs text-[#1c1917] dark:text-white"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Subida de Comprobante */}
+              <div>
+                <label className="block text-xs font-bold text-[#383430] dark:text-slate-300 mb-1">
+                  Comprobante de Respaldo (PDF, Imagen)
                 </label>
                 <div className="relative border-2 border-dashed border-[#cec8bc] dark:border-slate-700 rounded-2xl p-3 text-center bg-[#dfd9ce]/50 dark:bg-slate-950/50 hover:bg-[#dfd9ce] transition-colors">
                   <input
@@ -1140,25 +1290,11 @@ export default function FinanzasPage() {
                         <span className="text-xs font-semibold text-[#4a4641] dark:text-slate-300">
                           Haga clic o arrastre el archivo de comprobante aquí
                         </span>
-                        <span className="text-[10px] text-[#7d776f]">Formatos: JPG, PNG o PDF</span>
+                        <span className="text-[10px] text-[#7d776f]">Formatos: JPG, PNG o PDF (se almacenará con URL oficial)</span>
                       </>
                     )}
                   </div>
                 </div>
-              </div>
-
-              {/* Concepto / Descripción */}
-              <div>
-                <label className="block text-xs font-bold text-[#383430] dark:text-slate-300 mb-1">
-                  Concepto / Detalle de la Operación
-                </label>
-                <textarea
-                  rows={2}
-                  placeholder="Detalles sobre el motivo del ingreso o egreso..."
-                  value={formDescripcion}
-                  onChange={(e) => setFormDescripcion(e.target.value)}
-                  className="w-full px-3 py-2 rounded-xl bg-[#dfd9ce] dark:bg-slate-950 border border-[#cec8bc] dark:border-slate-800 text-xs text-[#1c1917] dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-600"
-                />
               </div>
 
               <div className="flex justify-end gap-2 pt-3 border-t border-[#cec8bc] dark:border-slate-800">
@@ -1187,14 +1323,14 @@ export default function FinanzasPage() {
         </div>
       )}
 
-      {/* MODAL EDITAR MOVIMIENTO (CA8, CA9) */}
+      {/* MODAL EDITAR MOVIMIENTO */}
       {isEditModalOpen && movimientoParaEditar && (
         <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 backdrop-blur-xs">
           <div className="w-full max-w-lg bg-[#ede9e1] dark:bg-slate-900 rounded-3xl border border-[#cec8bc] dark:border-slate-800 shadow-2xl p-6 sm:p-8 space-y-4 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between border-b border-[#cec8bc] dark:border-slate-800 pb-3">
               <div>
                 <h3 className="font-extrabold text-lg text-[#262422] dark:text-white">
-                  Modificar Movimiento Financiero (CA8)
+                  Modificar Movimiento Financiero
                 </h3>
                 <span className="text-[11px] text-[#7d776f] font-mono">
                   Código: {movimientoParaEditar.codigo}
@@ -1206,27 +1342,21 @@ export default function FinanzasPage() {
                   setIsEditModalOpen(false)
                   setMovimientoParaEditar(null)
                 }}
-                className="text-[#7d776f] hover:text-[#262422] dark:hover:text-white"
+                className="text-[#7d776f] hover:text-[#262422] dark:hover:text-white cursor-pointer"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            <form onSubmit={handleGuardarEdicion} className="space-y-4">
-              {/* Tercero */}
-              <div>
-                <label className="block text-xs font-bold text-[#383430] dark:text-slate-300 mb-1">
-                  {formTipo === 'Ingreso' ? 'Copropietario / Pagador *' : 'Proveedor / Beneficiario *'}
-                </label>
-                <input
-                  type="text"
-                  required
-                  value={formTercero}
-                  onChange={(e) => setFormTercero(e.target.value)}
-                  className="w-full px-3 py-2 rounded-xl bg-[#dfd9ce] dark:bg-slate-950 border border-[#cec8bc] dark:border-slate-800 text-xs text-[#1c1917] dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-600"
-                />
+            {/* Error específico dentro del modal */}
+            {editModalError && (
+              <div className="p-3 rounded-xl bg-rose-100 border border-rose-300 text-rose-900 dark:bg-rose-950/60 dark:border-rose-800 dark:text-rose-200 text-xs flex items-center gap-2">
+                <AlertCircle className="w-4 h-4 shrink-0 text-rose-600 dark:text-rose-400" />
+                <span className="font-semibold">{editModalError}</span>
               </div>
+            )}
 
+            <form onSubmit={handleGuardarEdicion} className="space-y-4">
               {/* Categoría y Monto */}
               <div className="grid grid-cols-2 gap-3">
                 <div>
@@ -1251,65 +1381,96 @@ export default function FinanzasPage() {
                   </label>
                   <input
                     type="number"
-                    step="0.5"
+                    step="0.01"
                     min="0.01"
                     required
                     value={formMonto || ''}
                     onChange={(e) => setFormMonto(Number(e.target.value))}
-                    className="w-full px-3 py-2 rounded-xl bg-[#dfd9ce] dark:bg-slate-950 border border-[#cec8bc] dark:border-slate-800 text-xs text-[#1c1917] dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-600 font-bold"
+                    className="w-full px-3 py-2 rounded-xl bg-[#dfd9ce] dark:bg-slate-950 border border-[#cec8bc] dark:border-slate-800 text-xs text-[#1c1917] dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-600 font-bold font-mono"
                   />
                 </div>
               </div>
 
-              {/* Fecha y Método */}
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-bold text-[#383430] dark:text-slate-300 mb-1">
-                    Fecha Registrada
-                  </label>
-                  <input
-                    type="date"
-                    required
-                    value={formFecha}
-                    onChange={(e) => setFormFecha(e.target.value)}
-                    className="w-full px-3 py-2 rounded-xl bg-[#dfd9ce] dark:bg-slate-950 border border-[#cec8bc] dark:border-slate-800 text-xs text-[#1c1917] dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-600"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-bold text-[#383430] dark:text-slate-300 mb-1">
-                    Método de Pago
-                  </label>
-                  <select
-                    value={formMetodoPago}
-                    onChange={(e) => setFormMetodoPago(e.target.value)}
-                    className="w-full px-3 py-2 rounded-xl bg-[#dfd9ce] dark:bg-slate-950 border border-[#cec8bc] dark:border-slate-800 text-xs text-[#1c1917] dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-600 cursor-pointer"
-                  >
-                    <option value="Transferencia Bancaria">Transferencia Bancaria</option>
-                    <option value="QR Simple Interbancario">QR Simple</option>
-                    <option value="Efectivo en Caja">Efectivo en Caja</option>
-                    <option value="Cheque">Cheque</option>
-                    <option value="Débito Automático">Débito Automático</option>
-                  </select>
-                </div>
-              </div>
-
-              {/* Comprobante */}
+              {/* Fecha OBLIGATORIA */}
               <div>
                 <label className="block text-xs font-bold text-[#383430] dark:text-slate-300 mb-1">
-                  Nro Factura / Recibo
+                  Fecha Registrada * (Obligatoria)
                 </label>
                 <input
-                  type="text"
-                  value={formNroFactura}
-                  onChange={(e) => setFormNroFactura(e.target.value)}
-                  className="w-full px-3 py-2 rounded-xl bg-[#dfd9ce] dark:bg-slate-950 border border-[#cec8bc] dark:border-slate-800 text-xs text-[#1c1917] dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-600 font-mono"
+                  type="date"
+                  required
+                  value={formFecha}
+                  onChange={(e) => setFormFecha(e.target.value)}
+                  className="w-full px-3 py-2 rounded-xl bg-[#dfd9ce] dark:bg-slate-950 border border-[#cec8bc] dark:border-slate-800 text-xs text-[#1c1917] dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-600"
                 />
               </div>
 
-              {/* Reemplazar Comprobante Adjunto */}
+              {/* Concepto OBLIGATORIO */}
               <div>
                 <label className="block text-xs font-bold text-[#383430] dark:text-slate-300 mb-1">
-                  Actualizar Archivo Comprobante
+                  Descripción / Concepto * (Obligatoria)
+                </label>
+                <textarea
+                  rows={2}
+                  required
+                  value={formDescripcion}
+                  onChange={(e) => setFormDescripcion(e.target.value)}
+                  className="w-full px-3 py-2 rounded-xl bg-[#dfd9ce] dark:bg-slate-950 border border-[#cec8bc] dark:border-slate-800 text-xs text-[#1c1917] dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-600"
+                />
+              </div>
+
+              {/* Datos Opcionales */}
+              <div className="p-3.5 rounded-2xl bg-white/50 dark:bg-slate-950/50 border border-[#cec8bc]/70 dark:border-slate-800 space-y-3">
+                <span className="block text-[11px] font-bold uppercase tracking-wider text-[#7d776f]">
+                  Datos Adicionales (Opcionales)
+                </span>
+
+                <div>
+                  <label className="block text-[11px] font-medium text-[#5c5750] dark:text-slate-400 mb-1">
+                    Tercero / Proveedor / Beneficiario
+                  </label>
+                  <input
+                    type="text"
+                    maxLength={120}
+                    value={formTercero}
+                    onChange={(e) => setFormTercero(e.target.value)}
+                    className="w-full px-3 py-1.5 rounded-xl bg-[#dfd9ce] dark:bg-slate-950 border border-[#cec8bc] dark:border-slate-800 text-xs text-[#1c1917] dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-600"
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-[11px] font-medium text-[#5c5750] dark:text-slate-400 mb-1">
+                      Nro Factura / Recibo
+                    </label>
+                    <input
+                      type="text"
+                      maxLength={50}
+                      value={formNroFactura}
+                      onChange={(e) => setFormNroFactura(e.target.value)}
+                      className="w-full px-3 py-1.5 rounded-xl bg-[#dfd9ce] dark:bg-slate-950 border border-[#cec8bc] dark:border-slate-800 text-xs text-[#1c1917] dark:text-white font-mono"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-medium text-[#5c5750] dark:text-slate-400 mb-1">
+                      Método de Pago
+                    </label>
+                    <input
+                      type="text"
+                      maxLength={30}
+                      value={formMetodoPago}
+                      onChange={(e) => setFormMetodoPago(e.target.value)}
+                      className="w-full px-3 py-1.5 rounded-xl bg-[#dfd9ce] dark:bg-slate-950 border border-[#cec8bc] dark:border-slate-800 text-xs text-[#1c1917] dark:text-white"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Actualizar Archivo Comprobante */}
+              <div>
+                <label className="block text-xs font-bold text-[#383430] dark:text-slate-300 mb-1">
+                  Reemplazar Archivo Comprobante
                 </label>
                 <div className="relative border-2 border-dashed border-[#cec8bc] dark:border-slate-700 rounded-2xl p-3 text-center bg-[#dfd9ce]/50 dark:bg-slate-950/50 hover:bg-[#dfd9ce] transition-colors">
                   <input
@@ -1331,19 +1492,6 @@ export default function FinanzasPage() {
                     )}
                   </div>
                 </div>
-              </div>
-
-              {/* Concepto */}
-              <div>
-                <label className="block text-xs font-bold text-[#383430] dark:text-slate-300 mb-1">
-                  Concepto / Descripción
-                </label>
-                <textarea
-                  rows={2}
-                  value={formDescripcion}
-                  onChange={(e) => setFormDescripcion(e.target.value)}
-                  className="w-full px-3 py-2 rounded-xl bg-[#dfd9ce] dark:bg-slate-950 border border-[#cec8bc] dark:border-slate-800 text-xs text-[#1c1917] dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-600"
-                />
               </div>
 
               <div className="flex justify-end gap-2 pt-3 border-t border-[#cec8bc] dark:border-slate-800">
@@ -1379,13 +1527,13 @@ export default function FinanzasPage() {
               <div className="flex items-center gap-2">
                 <FileText className="w-5 h-5 text-blue-600" />
                 <h3 className="font-extrabold text-base text-[#262422] dark:text-white">
-                  Comprobante de {selectedMovimiento.tipo}
+                  Detalle de {selectedMovimiento.tipo}
                 </h3>
               </div>
               <button
                 type="button"
                 onClick={() => setSelectedMovimiento(null)}
-                className="text-[#7d776f] hover:text-[#262422] dark:hover:text-white"
+                className="text-[#7d776f] hover:text-[#262422] dark:hover:text-white cursor-pointer"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -1400,10 +1548,10 @@ export default function FinanzasPage() {
               </div>
               <div className="flex justify-between py-1 border-b border-[#cec8bc]/40 dark:border-slate-800">
                 <span className="text-[#7d776f]">
-                  {selectedMovimiento.tipo === 'Ingreso' ? 'Pagador / Origen:' : 'Proveedor / Beneficiario:'}
+                  {selectedMovimiento.tipo === 'Ingreso' ? 'Pagador / Tercero:' : 'Proveedor / Beneficiario:'}
                 </span>
                 <span className="font-bold text-[#262422] dark:text-white">
-                  {selectedMovimiento.tercero}
+                  {selectedMovimiento.tercero || 'No especificado'}
                 </span>
               </div>
               <div className="flex justify-between py-1 border-b border-[#cec8bc]/40 dark:border-slate-800">
@@ -1414,15 +1562,15 @@ export default function FinanzasPage() {
               </div>
               <div className="flex justify-between py-1 border-b border-[#cec8bc]/40 dark:border-slate-800">
                 <span className="text-[#7d776f]">Nro de Factura / Recibo:</span>
-                <span className="font-bold font-mono">{selectedMovimiento.nroFactura}</span>
+                <span className="font-bold font-mono">{selectedMovimiento.nroFactura || 'Sin factura'}</span>
               </div>
               <div className="flex justify-between py-1 border-b border-[#cec8bc]/40 dark:border-slate-800">
                 <span className="text-[#7d776f]">Fecha de Operación:</span>
                 <span className="font-bold">{selectedMovimiento.fecha}</span>
               </div>
               <div className="flex justify-between py-1 border-b border-[#cec8bc]/40 dark:border-slate-800">
-                <span className="text-[#7d776f]">Forma de Pago:</span>
-                <span className="font-bold">{selectedMovimiento.metodoPago}</span>
+                <span className="text-[#7d776f]">Forma / Método de Pago:</span>
+                <span className="font-bold">{selectedMovimiento.metodoPago || 'No especificado'}</span>
               </div>
               <div className="flex justify-between py-1 border-b border-[#cec8bc]/40 dark:border-slate-800">
                 <span className="text-[#7d776f]">Registrado por:</span>
@@ -1431,7 +1579,7 @@ export default function FinanzasPage() {
                 </span>
               </div>
 
-              {/* Concepto */}
+              {/* Concepto / Descripción */}
               <div className="p-3 rounded-xl bg-white/70 dark:bg-slate-950/70 border border-[#cec8bc] dark:border-slate-800 mt-2">
                 <span className="font-bold block text-[10px] uppercase text-[#7d776f] mb-1">
                   Concepto / Justificación
@@ -1441,14 +1589,28 @@ export default function FinanzasPage() {
                 </p>
               </div>
 
-              {/* Previsualización del Comprobante Adjunto (CA5) */}
+              {/* Enlace y Previsualización del Comprobante Adjunto (CA5) */}
               {selectedMovimiento.comprobanteUrl && (
-                <div className="mt-3 p-3 rounded-xl bg-white/70 dark:bg-slate-950/70 border border-[#cec8bc] dark:border-slate-800 space-y-2">
-                  <span className="font-bold block text-[10px] uppercase text-[#7d776f]">
-                    Archivo Adjunto / Respaldo Digital
-                  </span>
-                  {selectedMovimiento.comprobanteUrl.startsWith('data:image/') ? (
-                    <div className="rounded-xl overflow-hidden max-h-56 flex items-center justify-center bg-black/5 dark:bg-white/5">
+                <div className="mt-3 p-3.5 rounded-xl bg-white/80 dark:bg-slate-950/80 border border-[#cec8bc] dark:border-slate-800 space-y-2.5">
+                  <div className="flex items-center justify-between">
+                    <span className="font-bold text-[11px] uppercase text-[#7d776f] flex items-center gap-1.5">
+                      <FileCheck className="w-4 h-4 text-emerald-600" />
+                      Comprobante de Respaldo Oficial
+                    </span>
+                    <a
+                      href={selectedMovimiento.comprobanteUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-blue-700 hover:bg-blue-600 text-white text-xs font-bold transition-all shadow-xs cursor-pointer"
+                    >
+                      <ExternalLink className="w-3.5 h-3.5" />
+                      <span>Ver Comprobante</span>
+                    </a>
+                  </div>
+
+                  {selectedMovimiento.comprobanteUrl.match(/\.(jpg|jpeg|png|webp)($|\?)/i) ||
+                  selectedMovimiento.comprobanteUrl.startsWith('data:image/') ? (
+                    <div className="rounded-xl overflow-hidden max-h-56 flex items-center justify-center bg-black/5 dark:bg-white/5 border border-[#cec8bc]/50 dark:border-slate-800">
                       <img
                         src={selectedMovimiento.comprobanteUrl}
                         alt="Comprobante adjunto"
@@ -1456,24 +1618,8 @@ export default function FinanzasPage() {
                       />
                     </div>
                   ) : (
-                    <div className="p-3 rounded-xl bg-[#dfd9ce] dark:bg-slate-800 flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <FileCheck className="w-5 h-5 text-emerald-600" />
-                        <span className="font-medium text-xs">
-                          {selectedMovimiento.comprobanteUrl.startsWith('data:application/pdf')
-                            ? 'Documento PDF adjunto'
-                            : selectedMovimiento.comprobanteUrl}
-                        </span>
-                      </div>
-                      <a
-                        href={selectedMovimiento.comprobanteUrl}
-                        download={`comprobante_${selectedMovimiento.codigo}`}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="px-2.5 py-1 rounded-lg bg-blue-700 text-white text-[11px] font-bold"
-                      >
-                        Abrir / Descargar
-                      </a>
+                    <div className="p-2.5 rounded-lg bg-[#dfd9ce]/60 dark:bg-slate-900 flex items-center justify-between text-xs font-mono text-[#5c5750] dark:text-slate-400">
+                      <span className="truncate max-w-xs">{selectedMovimiento.comprobanteUrl}</span>
                     </div>
                   )}
                 </div>
@@ -1481,7 +1627,7 @@ export default function FinanzasPage() {
 
               {/* Total */}
               <div
-                className={`flex justify-between font-black text-base pt-3 border-t border-[#cec8bc] dark:border-slate-800 ${
+                className={`flex justify-between font-black text-base pt-3 border-t border-[#cec8bc] dark:border-slate-800 font-mono ${
                   selectedMovimiento.tipo === 'Ingreso'
                     ? 'text-emerald-800 dark:text-emerald-400'
                     : 'text-rose-800 dark:text-rose-400'
@@ -1508,20 +1654,204 @@ export default function FinanzasPage() {
         </div>
       )}
 
-      {/* MODAL CONFIRMAR ELIMINACIÓN */}
+      {/* MODAL GESTIÓN DE CATEGORÍAS (POST / PUT /api/v1/movimientos/categorias) */}
+      {isCategoriasModalOpen && (
+        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 backdrop-blur-xs">
+          <div className="w-full max-w-xl bg-[#ede9e1] dark:bg-slate-900 rounded-3xl border border-[#cec8bc] dark:border-slate-800 shadow-2xl p-6 sm:p-7 space-y-4 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between border-b border-[#cec8bc] dark:border-slate-800 pb-3">
+              <div className="flex items-center gap-2">
+                <Tag className="w-5 h-5 text-blue-600" />
+                <h3 className="font-extrabold text-base text-[#262422] dark:text-white">
+                  Gestión de Categorías Financieras
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsCategoriasModalOpen(false)}
+                className="text-[#7d776f] hover:text-[#262422] dark:hover:text-white cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Alertas de error y éxito de categorías */}
+            {catModalError && (
+              <div className="p-3 rounded-xl bg-rose-100 border border-rose-300 text-rose-900 dark:bg-rose-950/60 dark:border-rose-800 dark:text-rose-200 text-xs flex items-center gap-2">
+                <AlertCircle className="w-4 h-4 shrink-0 text-rose-600" />
+                <span>{catModalError}</span>
+              </div>
+            )}
+            {catModalSuccess && (
+              <div className="p-3 rounded-xl bg-emerald-100 border border-emerald-300 text-emerald-900 dark:bg-emerald-950/60 dark:border-emerald-800 dark:text-emerald-200 text-xs flex items-center gap-2">
+                <Check className="w-4 h-4 shrink-0 text-emerald-600" />
+                <span>{catModalSuccess}</span>
+              </div>
+            )}
+
+            {/* Formulario para Crear Nueva Categoría */}
+            <form onSubmit={handleCrearCategoria} className="p-4 rounded-2xl bg-white/70 dark:bg-slate-950/70 border border-[#cec8bc] dark:border-slate-800 space-y-3">
+              <span className="block text-xs font-bold uppercase tracking-wider text-[#383430] dark:text-slate-300">
+                + Crear Nueva Categoría (Solo Administrador)
+              </span>
+              <div className="grid grid-cols-1 sm:grid-cols-12 gap-2">
+                <div className="sm:col-span-4">
+                  <select
+                    value={newCatTipo}
+                    onChange={(e) => setNewCatTipo(e.target.value as 'Ingreso' | 'Egreso')}
+                    className="w-full px-3 py-2 rounded-xl bg-[#dfd9ce] dark:bg-slate-950 border border-[#cec8bc] dark:border-slate-800 text-xs text-[#1c1917] dark:text-white cursor-pointer font-bold"
+                  >
+                    <option value="Egreso">Egreso / Gasto</option>
+                    <option value="Ingreso">Ingreso Extraordinario</option>
+                  </select>
+                </div>
+                <div className="sm:col-span-5">
+                  <input
+                    type="text"
+                    maxLength={80}
+                    placeholder="Nombre de la categoría..."
+                    value={newCatNombre}
+                    onChange={(e) => setNewCatNombre(e.target.value)}
+                    className="w-full px-3 py-2 rounded-xl bg-[#dfd9ce] dark:bg-slate-950 border border-[#cec8bc] dark:border-slate-800 text-xs text-[#1c1917] dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-600"
+                  />
+                </div>
+                <div className="sm:col-span-3">
+                  <button
+                    type="submit"
+                    className="w-full py-2 px-3 rounded-xl bg-blue-700 hover:bg-blue-600 text-white text-xs font-bold transition-all shadow-xs cursor-pointer flex items-center justify-center gap-1.5"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>Crear</span>
+                  </button>
+                </div>
+              </div>
+            </form>
+
+            {/* Listado y Edición de Categorías */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between text-xs">
+                <span className="font-bold text-[#5c5750] dark:text-slate-400">
+                  Catálogo Existente ({categorias.length})
+                </span>
+                <div className="flex items-center gap-1">
+                  {(['Todos', 'Ingreso', 'Egreso'] as const).map((t) => (
+                    <button
+                      key={t}
+                      type="button"
+                      onClick={() => setCatFiltroTipo(t)}
+                      className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                        catFiltroTipo === t
+                          ? 'bg-blue-700 text-white'
+                          : 'bg-[#dfd9ce] dark:bg-slate-800 text-[#5c5750] dark:text-slate-400'
+                      }`}
+                    >
+                      {t}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="space-y-1.5 max-h-60 overflow-y-auto pr-1">
+                {categorias
+                  .filter((c) => catFiltroTipo === 'Todos' || c.tipo === catFiltroTipo)
+                  .map((cat) => {
+                    const isEditing = editingCatId === cat.idCategoria
+                    return (
+                      <div
+                        key={cat.idCategoria}
+                        className="p-2.5 rounded-xl bg-white/60 dark:bg-slate-950/60 border border-[#cec8bc]/70 dark:border-slate-800 flex items-center justify-between gap-2 text-xs"
+                      >
+                        <div className="flex items-center gap-2 flex-1 min-w-0">
+                          <span
+                            className={`px-2 py-0.5 rounded text-[10px] font-bold shrink-0 ${
+                              cat.tipo === 'Ingreso'
+                                ? 'bg-emerald-100 text-emerald-900 dark:bg-emerald-950 dark:text-emerald-300'
+                                : 'bg-rose-100 text-rose-900 dark:bg-rose-950 dark:text-rose-300'
+                            }`}
+                          >
+                            {cat.tipo}
+                          </span>
+                          {isEditing ? (
+                            <input
+                              type="text"
+                              maxLength={80}
+                              value={editingCatNombre}
+                              onChange={(e) => setEditingCatNombre(e.target.value)}
+                              autoFocus
+                              className="w-full px-2 py-1 rounded-lg bg-[#dfd9ce] dark:bg-slate-900 border border-blue-600 text-xs font-semibold"
+                            />
+                          ) : (
+                            <span className="font-semibold text-[#262422] dark:text-white truncate">
+                              {cat.nombre}
+                            </span>
+                          )}
+                        </div>
+
+                        <div className="flex items-center gap-1 shrink-0">
+                          {isEditing ? (
+                            <>
+                              <button
+                                type="button"
+                                onClick={() => handleEditarCategoria(cat.idCategoria)}
+                                className="px-2.5 py-1 rounded-lg bg-blue-700 hover:bg-blue-600 text-white text-[11px] font-bold flex items-center gap-1 cursor-pointer"
+                              >
+                                <Save className="w-3 h-3" />
+                                <span>Guardar</span>
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setEditingCatId(null)}
+                                className="p-1 rounded-lg hover:bg-[#dfd9ce] dark:hover:bg-slate-800 text-[#7d776f] cursor-pointer"
+                              >
+                                <X className="w-3.5 h-3.5" />
+                              </button>
+                            </>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setEditingCatId(cat.idCategoria)
+                                setEditingCatNombre(cat.nombre)
+                              }}
+                              className="p-1.5 rounded-lg text-blue-700 hover:bg-blue-100/60 dark:text-blue-400 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+                              title="Editar nombre de categoría"
+                            >
+                              <Edit2 className="w-3.5 h-3.5" />
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    )
+                  })}
+              </div>
+            </div>
+
+            <div className="flex justify-end pt-3 border-t border-[#cec8bc] dark:border-slate-800">
+              <button
+                type="button"
+                onClick={() => setIsCategoriasModalOpen(false)}
+                className="px-4 py-2 rounded-xl bg-[#dfd9ce] dark:bg-slate-800 text-xs font-bold text-[#262422] dark:text-white cursor-pointer"
+              >
+                Cerrar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL CONFIRMAR ANULACIÓN */}
       {movimientoParaEliminar && (
         <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 backdrop-blur-xs">
           <div className="w-full max-w-sm bg-[#ede9e1] dark:bg-slate-900 rounded-3xl border border-[#cec8bc] dark:border-slate-800 shadow-2xl p-6 space-y-4">
             <div className="flex items-center gap-2.5 text-rose-700 dark:text-rose-400">
               <AlertCircle className="w-6 h-6 shrink-0" />
               <h3 className="font-extrabold text-base text-[#262422] dark:text-white">
-                Eliminar Movimiento
+                Anular Movimiento
               </h3>
             </div>
             <p className="text-xs text-[#5c5750] dark:text-slate-300">
-              ¿Está seguro de que desea eliminar el movimiento{' '}
+              ¿Está seguro de que desea anular el movimiento{' '}
               <strong>{movimientoParaEliminar.codigo}</strong> por Bs.{' '}
-              {movimientoParaEliminar.monto.toFixed(2)}? Esta acción no se puede deshacer.
+              {movimientoParaEliminar.monto.toFixed(2)}? Esta acción se registrará con auditoría formal.
             </p>
             <div className="flex justify-end gap-2 pt-2 border-t border-[#cec8bc] dark:border-slate-800">
               <button
@@ -1536,7 +1866,7 @@ export default function FinanzasPage() {
                 onClick={handleConfirmarEliminacion}
                 className="px-3.5 py-2 rounded-xl bg-rose-700 hover:bg-rose-600 text-white text-xs font-bold cursor-pointer shadow-md"
               >
-                Sí, Eliminar
+                Sí, Anular
               </button>
             </div>
           </div>
