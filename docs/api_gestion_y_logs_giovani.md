@@ -961,7 +961,9 @@ El filtro `q` busca coincidencias parciales (case-insensitive) tanto en `descrip
 Incluye categoría, usuario, `tercero`, `nroFactura`, `metodoPago`, `movimientosBancarios` y `pagosEmpleados`.
 5.5 Registrar movimiento
 `POST /api/v1/movimientos` · Rol: Administrador.
-Campos obligatorios: `tipo` ('Ingreso' | 'Egreso'), `idCategoria` (entero positivo), `monto` (positivo), `fecha` (válida), `descripcion` (string no vacío). Si falta algún campo obligatorio, responde `400 Validation Error` con `details` estructurado por campo.
+> **Cambio de contrato (US2.3):** `fecha` y `descripcion` son estrictamente obligatorios (anteriormente `fecha` admitía fallback automático a la fecha del servidor y `descripcion` era opcional). Si `fecha` o `descripcion` faltan o están vacías, responde `400 Validation Error` con `details` estructurado.
+
+Campos obligatorios: `tipo` ('Ingreso' | 'Egreso'), `idCategoria` (entero positivo), `monto` (positivo), `fecha` (válida, obligatoria), `descripcion` (string no vacío, obligatorio). Si falta algún campo obligatorio, responde `400 Validation Error` con `details` estructurado por campo.
 Campos opcionales:
 - `tercero`: string, hasta 120 caracteres.
 - `nroFactura`: string (acepta también `nro_factura`), hasta 50 caracteres.
@@ -998,6 +1000,26 @@ Respuesta 200:
 ```json
 { "success": true, "message": "Movimiento anulado correctamente", "data": { "idMovimiento": 15, "anulado": true, "motivoAnulacion": "Cancelación de reserva y devolución formal del dinero al solicitante", "fechaAnulacion": "2026-10-06T12:00:00.000Z", "idUsuarioAnulacion": 1 } }
 ```
+
+5.8 Carga y almacenamiento de comprobantes (US2.3-T35)
+`POST /api/v1/movimientos/upload-comprobante` y `POST /api/v1/movimientos/comprobantes/upload` · Roles: Administrador, Directorio.
+Almacena comprobantes de respaldo para ingresos y egresos.
+- Entrada aceptada:
+  - `url` (string): URL externa válida (ej. Supabase Storage, CDN o S3). Responde `200 OK` con tipo `URL_EXTERNA`.
+  - `archivoBase64` (string con o sin prefijo Data URI) y opcionalmente `nombreArchivo` (string): Convierte a binario y valida tamaño contra `STORAGE_MAX_FILE_SIZE_MB` (máximo 10 MB por defecto; responde `413 Payload Too Large` si excede). Determina extensión por tipo MIME (PDF, PNG, JPG, WebP) o nombre original, generando un archivo único `comp_<timestamp>_<randomHex>.<ext>` en el directorio configurado en `STORAGE_UPLOAD_DIR` (`./uploads/comprobantes`).
+- Salida 201 Created:
+```json
+{
+  "success": true,
+  "message": "Comprobante almacenado exitosamente",
+  "comprobanteUrl": "http://localhost:4000/uploads/comprobantes/comp_1729641600000_a1b2c3d4e5f6g7h8.pdf",
+  "nombreArchivo": "comp_1729641600000_a1b2c3d4e5f6g7h8.pdf",
+  "mimeType": "application/pdf",
+  "pesoBytes": 1048576
+}
+```
+Servido de forma estática en Express bajo `/uploads`.
+
 ---
 ## 6. Subsistema de Logs y Auditoría (US1.3)
 Trazabilidad de todas las operaciones que modifican el estado del sistema.
@@ -1231,6 +1253,8 @@ Movimientos	/movimientos/:id	GET	✅	✅	❌
 Movimientos	/movimientos	POST	✅	❌	❌
 Movimientos	/movimientos/:id	PUT	✅	❌	❌
 Movimientos	/movimientos/:id	DELETE	✅	❌	❌
+Movimientos	/movimientos/upload-comprobante	POST	✅	✅	❌
+Movimientos	/movimientos/comprobantes/upload	POST	✅	✅	❌
 Auditoria	/auditoria	GET	✅	✅	❌
 Auditoria	/auditoria/:id	GET	✅	✅	❌
 Health/Failover	/health/db	GET	✅	❌	❌
