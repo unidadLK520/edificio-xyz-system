@@ -369,25 +369,99 @@ expensasRouter.get(
         return;
       }
 
+      // Consulta de ocupante actual activo
+      const ocupacionActiva = await prisma.ocupanteDepartamento.findFirst({
+        where: {
+          idDepartamento,
+          fechaFin: null,
+        },
+        include: { persona: true },
+        orderBy: { fechaInicio: 'desc' },
+      });
+
+      // Query params opcionales para filtros
+      const { periodo, desde, hasta, estado } = req.query as {
+        periodo?: string;
+        desde?: string;
+        hasta?: string;
+        estado?: string;
+      };
+
+      // Construcción dinámica de filtros para Expensas
+      const expensaWhere: any = { idDepartamento };
+      if (estado && typeof estado === 'string' && estado.trim() !== '' && estado.toLowerCase() !== 'todos') {
+        expensaWhere.estado = { equals: estado.trim(), mode: 'insensitive' };
+      }
+
+      let periodoDateGte: Date | undefined;
+      let periodoDateLte: Date | undefined;
+
+      if (periodo && typeof periodo === 'string' && periodo.trim() !== '') {
+        const pTrim = periodo.trim();
+        if (/^\d{4}-\d{2}$/.test(pTrim)) {
+          const [y, m] = pTrim.split('-').map(Number);
+          periodoDateGte = new Date(Date.UTC(y, m - 1, 1, 0, 0, 0));
+          periodoDateLte = new Date(Date.UTC(y, m, 0, 23, 59, 59, 999));
+        } else {
+          const parsed = new Date(pTrim);
+          if (!isNaN(parsed.getTime())) {
+            periodoDateGte = new Date(Date.UTC(parsed.getUTCFullYear(), parsed.getUTCMonth(), 1, 0, 0, 0));
+            periodoDateLte = new Date(Date.UTC(parsed.getUTCFullYear(), parsed.getUTCMonth() + 1, 0, 23, 59, 59, 999));
+          }
+        }
+      }
+
+      if (desde && typeof desde === 'string' && desde.trim() !== '') {
+        const d = new Date(desde.trim());
+        if (!isNaN(d.getTime())) {
+          periodoDateGte = periodoDateGte ? (d > periodoDateGte ? d : periodoDateGte) : d;
+        }
+      }
+
+      if (hasta && typeof hasta === 'string' && hasta.trim() !== '') {
+        const h = new Date(hasta.trim());
+        if (!isNaN(h.getTime())) {
+          // Si no tiene hora explícita, cubrir todo el día
+          h.setUTCHours(23, 59, 59, 999);
+          periodoDateLte = periodoDateLte ? (h < periodoDateLte ? h : periodoDateLte) : h;
+        }
+      }
+
+      if (periodoDateGte || periodoDateLte) {
+        expensaWhere.periodo = {};
+        if (periodoDateGte) expensaWhere.periodo.gte = periodoDateGte;
+        if (periodoDateLte) expensaWhere.periodo.lte = periodoDateLte;
+      }
+
+      // Construcción dinámica de filtros para Pagos
+      const pagoWhere: any = { idDepartamento };
+      if (periodoDateGte || periodoDateLte) {
+        pagoWhere.fechaPago = {};
+        if (periodoDateGte) pagoWhere.fechaPago.gte = periodoDateGte;
+        if (periodoDateLte) pagoWhere.fechaPago.lte = periodoDateLte;
+      }
+
       const [expensas, pagos, anticipos] = await Promise.all([
         prisma.expensa.findMany({
-          where: { idDepartamento },
+          where: expensaWhere,
           orderBy: { periodo: 'desc' },
           include: {
-            pagos: { where: { anulado: false } },
+            pagos: { where: { anulado: false }, include: { pagador: true } },
             aplicacionesAnticipos: { include: { pago: true } },
           },
         }),
-        // Devuelve TODOS los pagos (anulados y vigentes) para trazabilidad completa.
-        // El cálculo de totales excluye los anulados por filtro JS más abajo.
+        // Devuelve pagos según filtro con pagador para trazabilidad completa
         prisma.pago.findMany({
-          where: { idDepartamento },
+          where: pagoWhere,
           orderBy: { fechaPago: 'desc' },
-          include: { expensa: { select: { periodo: true } } },
+          include: {
+            expensa: { select: { periodo: true, estado: true } },
+            pagador: true,
+          },
         }),
         prisma.pago.findMany({
           where: { idDepartamento, esAnticipado: true, anulado: false },
-          include: { aplicacionesAnticipo: true },
+          include: { aplicacionesAnticipo: true, pagador: true },
           orderBy: { fechaPago: 'desc' },
         }),
       ]);
@@ -417,21 +491,99 @@ expensasRouter.get(
       const totalAnticipos = anticiposConSaldo.reduce((acc, a) => acc + Number(a.montoPagado), 0);
       const totalAnticiposDisponibles = anticiposDisponibles.reduce((acc, a) => acc + a.saldoDisponible, 0);
 
-      const totalObligaciones = expensas.reduce((acc, e) => acc + Number(e.monto), 0);
+      const totalObligaciones = expensasConCapital.reduce((acc, e) => acc + Number(e.monto), 0);
       // Solo pagos vigentes (no anulados) cuentan para el total pagado
       const totalPagado = pagos.filter((p) => !p.anulado).reduce((acc, p) => acc + Number(p.montoPagado), 0);
-      const saldoPendienteTotal = expensas.reduce((acc, e) => acc + Number(e.saldoPendiente), 0);
+      const saldoPendienteTotal = expensasConCapital.reduce((acc, e) => acc + Number(e.saldoPendiente), 0);
+
+      // Historial unificado cronológico (Línea de tiempo de movimientos financieros)
+      const movimientos = [
+        ...expensasConCapital.map((e) => ({
+          id: `EXP-${e.idExpensa}`,
+          idReferencia: e.idExpensa,
+          tipo: 'OBLIGACION' as const,
+          fecha: e.periodo,
+          periodo: e.periodo,
+          concepto: e.concepto,
+          monto: Number(e.monto),
+          debe: Number(e.monto),
+          haber: 0,
+          saldoPendiente: Number(e.saldoPendiente),
+          vencimiento: e.fechaVencimiento,
+          estado: e.estado,
+          montoMora: Number(e.montoMora || 0),
+          tasaInteresMora: Number(e.tasaInteresMora || 0),
+          capitalPendiente: e.capitalPendiente,
+        })),
+        ...pagos.map((p) => ({
+          id: `PAG-${p.idPago}`,
+          idReferencia: p.idPago,
+          tipo: p.esAnticipado ? ('ANTICIPO' as const) : ('PAGO' as const),
+          fecha: p.fechaPago,
+          periodo: p.expensa?.periodo || null,
+          concepto: p.esAnticipado
+            ? 'Pago Anticipado a Favor'
+            : p.anulado
+            ? `Pago Anulado: ${p.motivoAnulacion || 'Sin motivo'}`
+            : `Pago de Expensa (${p.metodoPago || 'Efectivo'})`,
+          monto: Number(p.montoPagado),
+          debe: 0,
+          haber: p.anulado ? 0 : Number(p.montoPagado),
+          saldoPendiente: 0,
+          metodo: p.metodoPago,
+          anulado: p.anulado,
+          fechaPago: p.fechaPago,
+          pagador: p.pagador ? `${p.pagador.nombres} ${p.pagador.apellidos || ''}`.trim() : null,
+          comprobanteUrl: p.comprobanteUrl,
+        })),
+      ].sort((a, b) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime());
+
+      const sinMovimientos = expensas.length === 0 && pagos.length === 0;
+
+      const departamentoCompleto = {
+        ...departamento,
+        ocupanteActual: ocupacionActiva
+          ? {
+              idOcupacion: ocupacionActiva.idOcupacion,
+              tipoOcupante: ocupacionActiva.tipoOcupante,
+              fechaInicio: ocupacionActiva.fechaInicio,
+              persona: ocupacionActiva.persona
+                ? {
+                    idPersona: ocupacionActiva.persona.idPersona,
+                    nombres: ocupacionActiva.persona.nombres,
+                    apellidos: ocupacionActiva.persona.apellidos,
+                    ciNit: ocupacionActiva.persona.ciNit,
+                    telefono: ocupacionActiva.persona.telefono,
+                    correo: ocupacionActiva.persona.correo,
+                  }
+                : null,
+            }
+          : null,
+      };
 
       res.json({
-        departamento,
+        departamento: departamentoCompleto,
+        filtrosAplicados: {
+          periodo: periodo || null,
+          desde: desde || null,
+          hasta: hasta || null,
+          estado: estado || null,
+        },
+        sinMovimientos,
         resumen: {
           totalObligaciones,
           totalPagado,
           saldoPendienteTotal,
           totalAnticipos,
           totalAnticiposDisponibles,
-          estadoGlobal: saldoPendienteTotal > 0 ? (expensas.some((e) => e.estado === 'Moroso') ? 'Moroso' : 'Deuda Pendiente') : 'Al Día',
+          estadoGlobal:
+            saldoPendienteTotal > 0
+              ? expensas.some((e) => e.estado === 'Moroso')
+                ? 'Moroso'
+                : 'Deuda Pendiente'
+              : 'Al Día',
         },
+        movimientos,
         expensas: expensasConCapital,
         pagos,
         anticipos: anticiposConSaldo,

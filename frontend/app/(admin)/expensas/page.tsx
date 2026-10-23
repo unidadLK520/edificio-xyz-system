@@ -27,24 +27,27 @@ import {
   ShieldCheck,
   AlertCircle
 } from 'lucide-react'
+import { apiFetch } from '@/lib/api'
+import { fechaSolo, fechaHoraBolivia } from '@/lib/fecha'
 
 export interface ExpensaItem {
   idExpensa: number
   idDepartamento: number
   periodo: string
   monto: number
+  montoBase?: number
+  montoAgua?: number
   saldoPendiente: number
   tasaInteresMora: number
   fechaVencimiento: string
   estado: string
-  alicuota?: number
   departamento?: {
     numero: string
     piso?: number
     tipologia?: string
     areaM2?: number
-    alicuota?: number
     inquilino?: { nombres: string; apellidos: string }
+    propietario?: { idPersona?: number; nombres?: string; apellidos?: string; ciNit?: string }
   }
   propietarioNombre?: string
   inquilinoNombre?: string
@@ -64,113 +67,8 @@ export const RUBROS_GASTOS_COMUNES = [
 ]
 export const TOTAL_GASTOS_COMUNES = 15500.0
 
-const EXPENSAS_MOCK_XYZ: ExpensaItem[] = [
-  {
-    idExpensa: 101,
-    idDepartamento: 1,
-    periodo: '2026-10-01',
-    monto: 581.25,
-    saldoPendiente: 0,
-    tasaInteresMora: 5,
-    fechaVencimiento: '2026-10-10',
-    estado: 'Pagado',
-    departamento: { numero: '101', piso: 1, tipologia: 'Tipo A (60 m²)', areaM2: 60, inquilino: { nombres: 'Pedro', apellidos: 'Ramírez' } },
-    propietarioNombre: 'Ana Valdivia Morales',
-    inquilinoNombre: 'Pedro Ramírez Soto',
-    pagadoPor: 'Pedro Ramírez Soto (Inquilino)',
-    pagos: [{ idPago: 1, montoPagado: 581.25, metodoPago: 'Transferencia BNB', fechaPago: '2026-10-05', esAnticipado: false }]
-  },
-  {
-    idExpensa: 102,
-    idDepartamento: 2,
-    periodo: '2026-10-01',
-    monto: 775.00,
-    saldoPendiente: 0,
-    tasaInteresMora: 5,
-    fechaVencimiento: '2026-10-10',
-    estado: 'Pagado',
-    departamento: { numero: '102', piso: 1, tipologia: 'Tipo B (80 m²)', areaM2: 80, inquilino: { nombres: 'María', apellidos: 'Fernández' } },
-    propietarioNombre: 'Carlos Mendoza Rojas',
-    inquilinoNombre: 'María Fernández Arce',
-    pagadoPor: 'Carlos Mendoza Rojas (Propietario)',
-    pagos: [{ idPago: 2, montoPagado: 775.00, metodoPago: 'Pago Móvil QR', fechaPago: '2026-10-08', esAnticipado: false }]
-  },
-  {
-    idExpensa: 103,
-    idDepartamento: 3,
-    periodo: '2026-10-01',
-    monto: 968.75,
-    saldoPendiente: 968.75,
-    tasaInteresMora: 5,
-    fechaVencimiento: '2026-10-10',
-    estado: 'Pendiente',
-    departamento: { numero: '103', piso: 1, tipologia: 'Tipo C (100 m²)', areaM2: 100 },
-    propietarioNombre: 'Laura Céspedes Villarroel',
-    inquilinoNombre: '— (Unidad Vacía)',
-    pagos: []
-  },
-  {
-    idExpensa: 104,
-    idDepartamento: 4,
-    periodo: '2026-10-01',
-    monto: 581.25,
-    saldoPendiente: 581.25,
-    tasaInteresMora: 5,
-    fechaVencimiento: '2026-10-10',
-    estado: 'Moroso',
-    departamento: { numero: '104', piso: 1, tipologia: 'Tipo A (60 m²)', areaM2: 60, inquilino: { nombres: 'Roberto', apellidos: 'Daza' } },
-    propietarioNombre: 'José Vargas Quiroga',
-    inquilinoNombre: 'Roberto Daza Méndez',
-    pagos: []
-  },
-  {
-    idExpensa: 105,
-    idDepartamento: 5,
-    periodo: '2026-10-01',
-    monto: 775.00,
-    saldoPendiente: 775.00,
-    tasaInteresMora: 5,
-    fechaVencimiento: '2026-10-10',
-    estado: 'Pendiente',
-    departamento: { numero: '105', piso: 1, tipologia: 'Tipo B (80 m²)', areaM2: 80 },
-    propietarioNombre: 'Sofía Romero Paz',
-    inquilinoNombre: '— (Unidad Vacía)',
-    pagos: []
-  },
-  {
-    idExpensa: 106,
-    idDepartamento: 9,
-    periodo: '2026-10-01',
-    monto: 775.00,
-    saldoPendiente: 0,
-    tasaInteresMora: 5,
-    fechaVencimiento: '2026-10-10',
-    estado: 'Pagado',
-    departamento: { numero: '204', piso: 2, tipologia: 'Tipo B (80 m²)', areaM2: 80 },
-    propietarioNombre: 'Alejandro Gómez Salces',
-    inquilinoNombre: 'Vive Propietario',
-    pagadoPor: 'Alejandro Gómez Salces (Propietario)',
-    pagos: [{ idPago: 3, montoPagado: 775.00, metodoPago: 'QR Simple BNB', fechaPago: '2026-10-04', esAnticipado: false }]
-  },
-  {
-    idExpensa: 107,
-    idDepartamento: 15,
-    periodo: '2026-10-01',
-    monto: 775.00,
-    saldoPendiente: 0,
-    tasaInteresMora: 5,
-    fechaVencimiento: '2026-10-10',
-    estado: 'Pagado',
-    departamento: { numero: '305', piso: 3, tipologia: 'Tipo B (80 m²)', areaM2: 80, inquilino: { nombres: 'María', apellidos: 'López' } },
-    propietarioNombre: 'Juan Pérez Montaño',
-    inquilinoNombre: 'María López Arteaga',
-    pagadoPor: 'María López Arteaga (Inquilina)',
-    pagos: [{ idPago: 4, montoPagado: 775.00, metodoPago: 'Transferencia BMSC', fechaPago: '2026-10-02', esAnticipado: false }]
-  }
-]
-
 export default function ExpensasPage() {
-  const [expensas, setExpensas] = useState<ExpensaItem[]>(EXPENSAS_MOCK_XYZ)
+  const [expensas, setExpensas] = useState<ExpensaItem[]>([])
   const [searchTerm, setSearchTerm] = useState('')
   const [filtroEstado, setFiltroEstado] = useState('Todos')
   const [activeTab, setActiveTab] = useState<'todas' | 'cuotas' | 'morosos'>('todas')
@@ -186,11 +84,24 @@ export default function ExpensasPage() {
   const [expensaAPagar, setExpensaAPagar] = useState<ExpensaItem | null>(null)
   const [estadoCuentaData, setEstadoCuentaData] = useState<any | null>(null)
   const [successToast, setSuccessToast] = useState<string | null>(null)
+  const [errorToast, setErrorToast] = useState<string | null>(null)
+  const [modalError, setModalError] = useState<string | null>(null)
+  const [apiError, setApiError] = useState<string | null>(null)
+  const [isLoading, setIsLoading] = useState<boolean>(false)
+  const [personasList, setPersonasList] = useState<Array<{ idPersona: number; nombres: string; apellidos: string; ciNit?: string }>>([])
+
+  // Filtros interactivos del Estado de Cuenta
+  const [selectedDeptoIdParaEstadoCuenta, setSelectedDeptoIdParaEstadoCuenta] = useState<number | null>(null)
+  const [filtroECPeriodo, setFiltroECPeriodo] = useState<string>('')
+  const [filtroECEstado, setFiltroECEstado] = useState<string>('Todos')
+  const [filtroECDesde, setFiltroECDesde] = useState<string>('')
+  const [filtroECHasta, setFiltroECHasta] = useState<string>('')
+  const [isLoadingEC, setIsLoadingEC] = useState<boolean>(false)
 
   // Formulario Pago
   const [montoPagoInput, setMontoPagoInput] = useState<number>(0)
   const [metodoPagoInput, setMetodoPagoInput] = useState<string>('Transferencia')
-  const [pagadoPorInput, setPagadoPorInput] = useState<string>('')
+  const [idPersonaPagadorInput, setIdPersonaPagadorInput] = useState<number | ''>('')
   const [esAnticipadoInput, setEsAnticipadoInput] = useState<boolean>(false)
   const [comprobanteUrlInput, setComprobanteUrlInput] = useState<string>('')
   const [isSubmittingPago, setIsSubmittingPago] = useState<boolean>(false)
@@ -198,55 +109,100 @@ export default function ExpensasPage() {
   // Formulario Emisión Masiva (Requisitos HU04)
   const [nuevoPeriodo, setNuevoPeriodo] = useState('2026-11-01')
   const [nuevaFechaVencimiento, setNuevaFechaVencimiento] = useState('2026-11-10')
-  const [modeloCalculo, setModeloCalculo] = useState<'alicuota' | 'fijo_tipo'>('alicuota')
-  const [tasaMoraInput, setTasaMoraInput] = useState(5)
   const [isSubmittingEmision, setIsSubmittingEmision] = useState(false)
+  const [emisionError, setEmisionError] = useState<string | null>(null)
   const [resultadoEmision, setResultadoEmision] = useState<{
     generadasCount: number
-    totalFacturado: number
-    observaciones: string[]
+    excepcionesCount: number
+    advertenciasCount: number
+    excepciones: Array<{ idDepartamento?: number; numero?: string; motivo: string }>
+    advertencias: Array<{ idDepartamento?: number; numero?: string; advertencia: string }>
+    message?: string
   } | null>(null)
+
+  // Reglas de Mora (HU04 / CA09)
+  const [reglaMoraActiva, setReglaMoraActiva] = useState<{ idReglaMora: number; tasaInteres: number; diasGracia: number; fechaCreacion: string; usuarioCreacion?: any } | null>(null)
+  const [historialReglasMora, setHistorialReglasMora] = useState<any[]>([])
+  const [isMoraModalOpen, setIsMoraModalOpen] = useState(false)
+  const [nuevaTasaMoraInput, setNuevaTasaMoraInput] = useState<number | ''>('')
+  const [isSubmittingMora, setIsSubmittingMora] = useState(false)
+  const [moraError, setMoraError] = useState<string | null>(null)
 
   const showToast = (msg: string) => {
     setSuccessToast(msg)
     setTimeout(() => setSuccessToast(null), 4000)
   }
 
-  // Fetch expensas desde la API con fallback
-  const fetchExpensas = useCallback(async () => {
+  const showErrorToast = (msg: string) => {
+    setErrorToast(msg)
+    setModalError(msg)
+    setTimeout(() => setErrorToast(null), 6000)
+  }
+
+  const fetchPersonas = useCallback(async () => {
     try {
-      const res = await fetch(`/api/v1/expensas?estado=${filtroEstado}`)
+      const res = await apiFetch('/api/v1/personas?limit=100')
       if (res.ok) {
         const json = await res.json()
-        if (json.data && Array.isArray(json.data) && json.data.length > 0) {
-          const mapped: ExpensaItem[] = json.data.map((item: any) => ({
-            idExpensa: item.idExpensa,
-            idDepartamento: item.idDepartamento,
-            periodo: new Date(item.periodo).toISOString().split('T')[0],
-            monto: Number(item.monto),
-            saldoPendiente: Number(item.saldoPendiente),
-            tasaInteresMora: Number(item.tasaInteresMora || 0),
-            fechaVencimiento: new Date(item.fechaVencimiento).toISOString().split('T')[0],
-            estado: item.estado,
-            departamento: item.departamento,
-            propietarioNombre: item.departamento?.propietario
-              ? `${item.departamento.propietario.nombres || ''} ${item.departamento.propietario.apellidos || ''}`.trim()
-              : item.propietarioNombre || 'Propietario Responsable',
-            inquilinoNombre: item.departamento?.inquilino
-              ? `${item.departamento.inquilino.nombres || ''} ${item.departamento.inquilino.apellidos || ''}`.trim()
-              : item.inquilinoNombre || '—',
-            pagadoPor: item.pagadoPor,
-            pagos: item.pagos || []
-          }))
-          setExpensas(mapped)
+        if (json.data && Array.isArray(json.data)) {
+          setPersonasList(json.data)
         }
       }
-    } catch {}
+    } catch (err) {
+      console.error('Error al cargar personas:', err)
+    }
+  }, [])
+
+  // Fetch expensas desde la API
+  const fetchExpensas = useCallback(async () => {
+    setIsLoading(true)
+    setApiError(null)
+    try {
+      const res = await apiFetch(`/api/v1/expensas?estado=${filtroEstado}`)
+      if (!res.ok) {
+        const errJson = await res.json().catch(() => ({}))
+        setApiError(errJson.message || 'Error al conectar con el servidor de expensas.')
+        setExpensas([])
+        return
+      }
+      const json = await res.json()
+      if (json.data && Array.isArray(json.data)) {
+        const mapped: ExpensaItem[] = json.data.map((item: any) => ({
+          idExpensa: item.idExpensa,
+          idDepartamento: item.idDepartamento,
+          periodo: fechaSolo(item.periodo),
+          monto: Number(item.monto),
+          montoBase: item.montoBase !== undefined && item.montoBase !== null ? Number(item.montoBase) : Number(item.monto) - Number(item.montoAgua || 0),
+          montoAgua: Number(item.montoAgua || 0),
+          saldoPendiente: Number(item.saldoPendiente),
+          tasaInteresMora: Number(item.tasaInteresMora || 0),
+          fechaVencimiento: fechaSolo(item.fechaVencimiento),
+          estado: item.estado,
+          departamento: item.departamento,
+          propietarioNombre: item.departamento?.propietario
+            ? `${item.departamento.propietario.nombres || ''} ${item.departamento.propietario.apellidos || ''}`.trim()
+            : item.propietarioNombre || 'Propietario Responsable',
+          inquilinoNombre: item.departamento?.inquilino
+            ? `${item.departamento.inquilino.nombres || ''} ${item.departamento.inquilino.apellidos || ''}`.trim()
+            : item.inquilinoNombre || '—',
+          pagadoPor: item.pagadoPor,
+          pagos: item.pagos || []
+        }))
+        setExpensas(mapped)
+      } else {
+        setExpensas([])
+      }
+    } catch (err: any) {
+      setApiError(err?.message || 'Error de red al conectar con el servidor de expensas.')
+      setExpensas([])
+    } finally {
+      setIsLoading(false)
+    }
   }, [filtroEstado])
 
   const fetchMorosos = useCallback(async () => {
     try {
-      const res = await fetch('/api/v1/expensas/morosos')
+      const res = await apiFetch('/api/v1/expensas/morosos')
       if (res.ok) {
         const json = await res.json()
         if (json.data && Array.isArray(json.data)) {
@@ -256,10 +212,28 @@ export default function ExpensasPage() {
     } catch {}
   }, [])
 
+  const fetchReglasMora = useCallback(async () => {
+    try {
+      const res = await apiFetch('/api/v1/expensas/reglas-mora')
+      if (res.ok) {
+        const json = await res.json()
+        setReglaMoraActiva(json.activa || null)
+        setHistorialReglasMora(json.historial || [])
+        if (json.activa) {
+          setNuevaTasaMoraInput(Number(json.activa.tasaInteres))
+        }
+      }
+    } catch (err) {
+      console.error('Error al cargar reglas de mora:', err)
+    }
+  }, [])
+
   useEffect(() => {
     fetchExpensas()
     fetchMorosos()
-  }, [fetchExpensas, fetchMorosos])
+    fetchPersonas()
+    fetchReglasMora()
+  }, [fetchExpensas, fetchMorosos, fetchPersonas, fetchReglasMora])
 
   // KPIs
   const totalFacturado = useMemo(() => expensas.reduce((acc, curr) => acc + curr.monto, 0), [expensas])
@@ -277,51 +251,40 @@ export default function ExpensasPage() {
 
     setIsSubmittingEmision(true)
     setResultadoEmision(null)
+    setEmisionError(null)
 
     try {
-      const res = await fetch('/api/v1/expensas/generar-masivo', {
+      const res = await apiFetch('/api/v1/expensas/generar-masivo', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           periodo: nuevoPeriodo,
-          fechaVencimiento: nuevaFechaVencimiento,
-          modeloCalculo,
-          tasaInteresMora: tasaMoraInput
+          fechaVencimiento: nuevaFechaVencimiento
         })
       })
 
+      const json = await res.json().catch(() => ({}))
+
       if (res.ok) {
-        const json = await res.json()
         setResultadoEmision({
-          generadasCount: json.generadasCount || 18,
-          totalFacturado: json.totalFacturado || 14725.0,
-          observaciones: json.observaciones || [
-            'Dpto 103 (Tipo C): Unidad vacía — Expensa emitida al titular Laura Céspedes.',
-            'Dpto 105 (Tipo B): Unidad vacía — Expensa emitida al titular Sofía Romero.'
-          ]
+          generadasCount: json.generadasCount ?? 0,
+          excepcionesCount: json.excepcionesCount ?? (json.excepciones?.length || 0),
+          advertenciasCount: json.advertenciasCount ?? (json.advertencias?.length || 0),
+          excepciones: json.excepciones || [],
+          advertencias: json.advertencias || [],
+          message: json.message
         })
         await fetchExpensas()
-        showToast('¡Lote de expensas emitido exitosamente!')
+        showToast(json.message || '¡Lote de expensas emitido exitosamente!')
       } else {
-        // Fallback simulado para la UI
-        setResultadoEmision({
-          generadasCount: 20,
-          totalFacturado: 15500.0,
-          observaciones: [
-            'Todas las 20 unidades del edificio han generado su obligación correspondiente.',
-            'Se registraron 15 departamentos con inquilinos y 5 desocupados/ocupados por propietario.'
-          ]
-        })
-        showToast('¡Emisión masiva completada!')
+        const errorMsg = json.message || json.error || 'Error en la emisión masiva de expensas'
+        setEmisionError(errorMsg)
+        showErrorToast(errorMsg)
       }
-    } catch {
-      setResultadoEmision({
-        generadasCount: 20,
-        totalFacturado: 15500.0,
-        observaciones: [
-          'Emisión generada en modo local (20 departamentos catastrados).'
-        ]
-      })
+    } catch (err: any) {
+      const errorMsg = err?.message || 'Error de conexión al emitir expensas'
+      setEmisionError(errorMsg)
+      showErrorToast(errorMsg)
     } finally {
       setIsSubmittingEmision(false)
     }
@@ -332,7 +295,7 @@ export default function ExpensasPage() {
     if (!confirm('¿Desea calcular y aplicar los recargos por mora a todas las expensas vencidas?')) return
 
     try {
-      const res = await fetch('/api/v1/expensas/calcular-mora', { method: 'POST' })
+      const res = await apiFetch('/api/v1/expensas/calcular-mora', { method: 'POST' })
       const json = await res.json()
       if (res.ok) {
         await fetchExpensas()
@@ -344,124 +307,134 @@ export default function ExpensasPage() {
     }
   }
 
+  // Guardar Regla de Mora
+  const handleGuardarReglaMora = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (nuevaTasaMoraInput === '' || isNaN(Number(nuevaTasaMoraInput)) || Number(nuevaTasaMoraInput) < 0 || Number(nuevaTasaMoraInput) > 100) {
+      showErrorToast('La tasa de mora debe ser un porcentaje entre 0 y 100.')
+      return
+    }
+
+    setIsSubmittingMora(true)
+    setMoraError(null)
+
+    try {
+      const res = await apiFetch('/api/v1/expensas/reglas-mora', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          tasaInteres: Number(nuevaTasaMoraInput),
+          diasGracia: 0
+        })
+      })
+
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        const msg = data.message || data.error || 'Error al configurar regla de mora'
+        setMoraError(msg)
+        showErrorToast(msg)
+        return
+      }
+
+      await fetchReglasMora()
+      setIsMoraModalOpen(false)
+      showToast('¡Regla de mora configurada exitosamente!')
+    } catch (err: any) {
+      const msg = err?.message || 'Error de conexión'
+      setMoraError(msg)
+      showErrorToast(msg)
+    } finally {
+      setIsSubmittingMora(false)
+    }
+  }
+
   // Registrar Pago
   const handleRegistrarPagoSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!expensaAPagar) return
+
+    if (!idPersonaPagadorInput) {
+      showErrorToast('Debe seleccionar la persona pagadora.')
+      return
+    }
+
+    if (montoPagoInput <= 0) {
+      showErrorToast('El monto pagado debe ser mayor a cero.')
+      return
+    }
+
     setIsSubmittingPago(true)
+    setModalError(null)
 
     try {
-      const res = await fetch(`/api/v1/expensas/${expensaAPagar.idExpensa}/pagos`, {
+      const res = await apiFetch(`/api/v1/expensas/${expensaAPagar.idExpensa}/pagos`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          montoPagado: montoPagoInput,
+          idPersonaPagador: Number(idPersonaPagadorInput),
+          montoPagado: Number(montoPagoInput),
           metodoPago: metodoPagoInput,
-          pagadoPor: pagadoPorInput || expensaAPagar.inquilinoNombre || expensaAPagar.propietarioNombre,
           esAnticipado: esAnticipadoInput,
-          comprobanteUrl: comprobanteUrlInput || undefined
+          comprobanteUrl: comprobanteUrlInput.trim() || undefined
         })
       })
 
-      // Actualizar estado local
-      setExpensas((prev) =>
-        prev.map((item) =>
-          item.idExpensa === expensaAPagar.idExpensa
-            ? {
-                ...item,
-                estado: 'Pagado',
-                saldoPendiente: Math.max(0, item.saldoPendiente - montoPagoInput),
-                pagadoPor: pagadoPorInput || item.inquilinoNombre || item.propietarioNombre
-              }
-            : item
-        )
-      )
+      const data = await res.json().catch(() => ({}))
 
+      if (!res.ok) {
+        const errorMsg = data.message || data.error || 'Error al registrar el pago'
+        showErrorToast(errorMsg)
+        return
+      }
+
+      await fetchExpensas()
       setIsPagarModalOpen(false)
       setExpensaAPagar(null)
-      showToast('¡Pago registrado y conciliado exitosamente!')
-    } catch {
-      alert('Error al registrar pago')
+      showToast(data.message || '¡Pago registrado y conciliado exitosamente!')
+    } catch (err: any) {
+      showErrorToast(err?.message || 'Error de conexión al registrar el pago')
     } finally {
       setIsSubmittingPago(false)
     }
   }
 
-  // Ver Estado de Cuenta
-  const handleVerEstadoCuenta = async (idDepartamento: number) => {
+  // Ver Estado de Cuenta con filtros opcionales
+  const handleVerEstadoCuenta = async (
+    idDepartamento: number,
+    filtrosOverrides?: { periodo?: string; estado?: string; desde?: string; hasta?: string }
+  ) => {
+    setSelectedDeptoIdParaEstadoCuenta(idDepartamento)
+    setIsLoadingEC(true)
+
+    const pPeriodo = filtrosOverrides?.periodo !== undefined ? filtrosOverrides.periodo : filtroECPeriodo
+    const pEstado = filtrosOverrides?.estado !== undefined ? filtrosOverrides.estado : filtroECEstado
+    const pDesde = filtrosOverrides?.desde !== undefined ? filtrosOverrides.desde : filtroECDesde
+    const pHasta = filtrosOverrides?.hasta !== undefined ? filtrosOverrides.hasta : filtroECHasta
+
+    const qParams = new URLSearchParams()
+    if (pPeriodo && pPeriodo.trim() !== '') qParams.append('periodo', pPeriodo.trim())
+    if (pEstado && pEstado !== 'Todos') qParams.append('estado', pEstado)
+    if (pDesde && pDesde.trim() !== '') qParams.append('desde', pDesde.trim())
+    if (pHasta && pHasta.trim() !== '') qParams.append('hasta', pHasta.trim())
+
+    const qStr = qParams.toString() ? `?${qParams.toString()}` : ''
+
     try {
-      const res = await fetch(`/api/v1/expensas/estado-cuenta/${idDepartamento}`)
+      const res = await apiFetch(`/api/v1/expensas/estado-cuenta/${idDepartamento}${qStr}`)
       if (res.ok) {
         const json = await res.json()
         setEstadoCuentaData(json)
         setIsEstadoCuentaModalOpen(true)
+        setIsLoadingEC(false)
         return
       }
-    } catch {}
-
-    const selected = expensas.find((e) => e.idDepartamento === idDepartamento)
-    const cuota = selected?.monto || 775.0
-    const alic = selected?.alicuota || (cuota === 581.25 ? 3.75 : cuota === 775 ? 5.0 : 6.25)
-    const deptoNum = selected?.departamento?.numero || String(idDepartamento)
-
-    const movimientosHistoricos = [
-      {
-        periodo: 'Octubre 2026',
-        concepto: 'Expensa Común Ordinaria',
-        monto: cuota,
-        vencimiento: '10/10/2026',
-        estado: selected?.estado || 'Pendiente',
-        saldo: selected?.saldoPendiente || 0,
-        metodo: selected?.pagos?.[0]?.metodoPago || (selected?.estado === 'Pagado' ? (selected?.pagadoPor?.includes('Inquilino') ? 'Transferencia Bancaria (Inquilino)' : 'Transferencia BNB (Propietario)') : 'Pendiente'),
-        fechaPago: selected?.pagos?.[0]?.fechaPago || (selected?.estado === 'Pagado' ? '04/10/2026' : '—')
-      },
-      {
-        periodo: 'Septiembre 2026',
-        concepto: 'Expensa Común Ordinaria',
-        monto: cuota,
-        vencimiento: '10/09/2026',
-        estado: 'Pagado',
-        saldo: 0,
-        metodo: 'Transferencia BNB',
-        fechaPago: '05/09/2026'
-      },
-      {
-        periodo: 'Agosto 2026',
-        concepto: 'Expensa Común Ordinaria',
-        monto: cuota,
-        vencimiento: '10/08/2026',
-        estado: 'Pagado',
-        saldo: 0,
-        metodo: 'QR Simple Interbancario',
-        fechaPago: '03/08/2026'
-      }
-    ]
-
-    const totalFacturado = cuota * 3
-    const totalPagado = (cuota * 2) + (selected?.estado === 'Pagado' ? cuota : 0)
-    const saldoPendiente = selected?.saldoPendiente || 0
-
-    setEstadoCuentaData({
-      departamento: {
-        numero: deptoNum,
-        piso: selected?.departamento?.piso || (parseInt(deptoNum[0]) || 1),
-        tipologia: selected?.departamento?.tipologia || (cuota === 581.25 ? 'Tipo A (60 m²)' : cuota === 775 ? 'Tipo B (80 m²)' : 'Tipo C (100 m²)'),
-        areaM2: selected?.departamento?.areaM2 || (cuota === 581.25 ? 60 : cuota === 775 ? 80 : 100),
-        alicuota: alic,
-        propietario: { nombres: selected?.propietarioNombre || 'Titular Responsable', apellidos: '' },
-        inquilino: selected?.inquilinoNombre && selected.inquilinoNombre !== '— (Vive el Propietario)' && selected.inquilinoNombre !== '— (Unidad Vacía)'
-          ? { nombres: selected.inquilinoNombre, apellidos: '' }
-          : null
-      },
-      resumen: {
-        totalObligaciones: totalFacturado,
-        totalPagado: totalPagado,
-        saldoPendienteTotal: saldoPendiente
-      },
-      movimientos: movimientosHistoricos,
-      pagos: selected?.pagos || []
-    })
-    setIsEstadoCuentaModalOpen(true)
+      const err = await res.json().catch(() => ({}))
+      showErrorToast(err.message || 'Error al obtener el estado de cuenta del servidor')
+    } catch {
+      showErrorToast('Error de conexión al cargar el estado de cuenta')
+    } finally {
+      setIsLoadingEC(false)
+    }
   }
 
   // Filtrado de expensas
@@ -486,6 +459,28 @@ export default function ExpensasPage() {
           <span className="text-xs sm:text-sm font-bold">{successToast}</span>
         </div>
       )}
+      {errorToast && (
+        <div className="p-4 bg-rose-100 dark:bg-rose-950/70 border border-rose-300 dark:border-rose-800 text-rose-900 dark:text-rose-200 rounded-2xl flex items-center gap-3 shadow-md animate-in fade-in slide-in-from-top-3 duration-300">
+          <AlertCircle className="w-5 h-5 text-rose-600 dark:text-rose-400 shrink-0" />
+          <span className="text-xs sm:text-sm font-bold">{errorToast}</span>
+        </div>
+      )}
+
+      {/* Error de conexión con botón de reintentar */}
+      {apiError && (
+        <div className="p-4 bg-red-100 dark:bg-red-950/70 border border-red-300 dark:border-red-800 text-red-900 dark:text-red-200 rounded-2xl flex items-center justify-between gap-3 shadow-md">
+          <div className="flex items-center gap-3">
+            <AlertCircle className="w-5 h-5 text-red-600 dark:text-red-400 shrink-0" />
+            <span className="text-xs sm:text-sm font-bold">{apiError}</span>
+          </div>
+          <button
+            onClick={() => fetchExpensas()}
+            className="px-3 py-1.5 bg-red-700 hover:bg-red-800 text-white text-xs font-bold rounded-xl transition-all cursor-pointer"
+          >
+            Reintentar
+          </button>
+        </div>
+      )}
 
       {/* HEADER */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-[#cec8bc] dark:border-slate-800">
@@ -506,10 +501,23 @@ export default function ExpensasPage() {
           <button
             onClick={() => setIsExtractoGeneralOpen(true)}
             className="inline-flex items-center justify-center gap-1.5 px-3.5 py-2.5 bg-[#dfd9ce] hover:bg-[#d5cfc2] dark:bg-slate-800 dark:hover:bg-slate-700 text-[#262422] dark:text-white border border-[#cec8bc] dark:border-slate-700 text-xs font-bold rounded-xl shadow-xs transition-all cursor-pointer"
-            title="Ver extracto general de gastos comunes y cálculo por alícuotas"
+            title="Ver extracto general de gastos comunes"
           >
             <FileText className="w-4 h-4 text-emerald-700 dark:text-emerald-400" />
-            Extracto de Gastos (Bs 15.500)
+            Extracto de Gastos Comunes
+          </button>
+
+          <button
+            onClick={() => {
+              setMoraError(null)
+              if (reglaMoraActiva) setNuevaTasaMoraInput(Number(reglaMoraActiva.tasaInteres))
+              setIsMoraModalOpen(true)
+            }}
+            className="inline-flex items-center justify-center gap-1.5 px-3.5 py-2.5 bg-indigo-700 hover:bg-indigo-800 text-white text-xs font-bold rounded-xl shadow-md transition-all cursor-pointer"
+            title="Ver y configurar regla de mora activa e historial"
+          >
+            <Percent className="w-4 h-4" />
+            Mora: {reglaMoraActiva ? `${reglaMoraActiva.tasaInteres}%` : '—'}
           </button>
 
           <button
@@ -538,7 +546,7 @@ export default function ExpensasPage() {
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
         <div className="p-4 rounded-2xl bg-[#ede9e1] dark:bg-slate-900 border border-[#cec8bc] dark:border-slate-800 shadow-sm">
           <div className="flex items-center justify-between text-xs font-semibold text-[#66615b] dark:text-slate-400 mb-1">
-            <span>Facturación Total (20 Dptos)</span>
+            <span>Facturación Total ({expensas.length} Dptos)</span>
             <DollarSign className="w-4 h-4 text-blue-700 dark:text-blue-400" />
           </div>
           <div className="text-2xl font-bold text-[#262422] dark:text-white">
@@ -600,7 +608,7 @@ export default function ExpensasPage() {
           }`}
         >
           <Receipt className="w-4 h-4" />
-          Expensas de las 20 Unidades
+          Expensas Emitidas ({expensas.length})
         </button>
         <button
           onClick={() => setActiveTab('cuotas')}
@@ -664,40 +672,42 @@ export default function ExpensasPage() {
               <table className="w-full text-left border-collapse text-xs sm:text-sm">
                 <thead>
                   <tr className="border-b border-[#cec8bc] dark:border-slate-800 bg-[#dfd9ce]/60 dark:bg-slate-950/60 text-[#7d776f] dark:text-slate-400 uppercase text-[11px] font-bold">
-                    <th className="py-3 px-4">Departamento</th>
-                    <th className="py-3 px-4">Propietario Responsable</th>
-                    <th className="py-3 px-4">Ocupante / Pagado Por</th>
-                    <th className="py-3 px-4">Período</th>
-                    <th className="py-3 px-4">Monto Expensa</th>
-                    <th className="py-3 px-4">Saldo Pendiente</th>
-                    <th className="py-3 px-4">Estado</th>
-                    <th className="py-3 px-4 text-right">Acciones</th>
+                    <th className="py-3 px-3">Departamento</th>
+                    <th className="py-3 px-3">Propietario Responsable</th>
+                    <th className="py-3 px-3">Ocupante / Pagado Por</th>
+                    <th className="py-3 px-3">Período</th>
+                    <th className="py-3 px-3 font-mono text-right">Base (Bs)</th>
+                    <th className="py-3 px-3 font-mono text-right">Agua (Bs)</th>
+                    <th className="py-3 px-3 font-mono text-right">Total (Bs)</th>
+                    <th className="py-3 px-3">Saldo</th>
+                    <th className="py-3 px-3">Estado</th>
+                    <th className="py-3 px-3 text-right">Acciones</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-[#cec8bc] dark:divide-slate-800">
                   {expensasFiltradas.length === 0 ? (
                     <tr>
-                      <td colSpan={8} className="py-8 text-center text-[#7d776f] dark:text-slate-500">
+                      <td colSpan={10} className="py-8 text-center text-[#7d776f] dark:text-slate-500">
                         No se encontraron expensas registradas con los filtros seleccionados.
                       </td>
                     </tr>
                   ) : (
                     expensasFiltradas.map((item) => (
                       <tr key={item.idExpensa} className="hover:bg-[#dfd9ce]/40 dark:hover:bg-slate-800/40">
-                        <td className="py-3.5 px-4">
+                        <td className="py-3.5 px-3">
                           <div className="font-extrabold text-[#262422] dark:text-white">
                             Dpto. {item.departamento?.numero || item.idDepartamento}
                           </div>
                           <div className="text-[11px] text-[#7d776f] dark:text-slate-400">
-                            {item.departamento?.tipologia || '80 m² (Alícuota 5%)'}
+                            {item.departamento?.tipologia || 'Departamento'}
                           </div>
                         </td>
 
-                        <td className="py-3.5 px-4 font-bold text-[#262422] dark:text-white">
+                        <td className="py-3.5 px-3 font-bold text-[#262422] dark:text-white">
                           {item.propietarioNombre || 'Propietario Titular'}
                         </td>
 
-                        <td className="py-3.5 px-4">
+                        <td className="py-3.5 px-3">
                           <div className="text-xs text-[#262422] dark:text-white">
                             {item.inquilinoNombre || '—'}
                           </div>
@@ -708,17 +718,20 @@ export default function ExpensasPage() {
                           )}
                         </td>
 
-                        <td className="py-3.5 px-4 font-mono text-xs">{item.periodo}</td>
+                        <td className="py-3.5 px-3 font-mono text-xs">{item.periodo}</td>
 
-                        <td className="py-3.5 px-4 font-mono">
-                          <div className="font-extrabold text-[#262422] dark:text-white">
+                        {/* Columnas separadas: montoBase, montoAgua, monto */}
+                        <td className="py-3.5 px-3 font-mono text-right font-bold text-[#262422] dark:text-white">
+                          Bs. {(item.montoBase !== undefined ? item.montoBase : (item.monto - (item.montoAgua || 0))).toFixed(2)}
+                        </td>
+
+                        <td className="py-3.5 px-3 font-mono text-right font-bold text-blue-700 dark:text-blue-400">
+                          Bs. {(item.montoAgua || 0).toFixed(2)}
+                        </td>
+
+                        <td className="py-3.5 px-3 font-mono text-right">
+                          <div className="font-extrabold text-emerald-800 dark:text-emerald-300 text-sm">
                             Bs. {item.monto.toFixed(2)}
-                          </div>
-                          <div className="text-[10px] text-blue-700 dark:text-blue-400 font-semibold">
-                            Alícuota {item.alicuota || (item.monto === 581.25 ? 3.75 : item.monto === 775 ? 5.0 : 6.25)}%
-                          </div>
-                          <div className="text-[9px] text-[#7d776f] dark:text-slate-400">
-                            Seg Bs {(5600 * (item.alicuota || (item.monto === 581.25 ? 3.75 : item.monto === 775 ? 5.0 : 6.25)) / 100).toFixed(0)} • Adm Bs {(3500 * (item.alicuota || (item.monto === 581.25 ? 3.75 : item.monto === 775 ? 5.0 : 6.25)) / 100).toFixed(0)} • Otros Bs {(6400 * (item.alicuota || (item.monto === 581.25 ? 3.75 : item.monto === 775 ? 5.0 : 6.25)) / 100).toFixed(0)}
                           </div>
                         </td>
 
@@ -764,7 +777,18 @@ export default function ExpensasPage() {
                                 onClick={() => {
                                   setExpensaAPagar(item)
                                   setMontoPagoInput(item.saldoPendiente)
-                                  setPagadoPorInput(item.inquilinoNombre !== '— (Unidad Vacía)' ? item.inquilinoNombre || '' : item.propietarioNombre || '')
+                                  const propId = item.departamento?.propietario?.idPersona
+                                  if (propId) {
+                                    setIdPersonaPagadorInput(propId)
+                                  } else if (personasList.length > 0) {
+                                    setIdPersonaPagadorInput(personasList[0].idPersona)
+                                  } else {
+                                    setIdPersonaPagadorInput('')
+                                  }
+                                  setMetodoPagoInput('Transferencia')
+                                  setComprobanteUrlInput('')
+                                  setEsAnticipadoInput(false)
+                                  setModalError(null)
                                   setIsPagarModalOpen(true)
                                 }}
                                 className="px-2.5 py-1 rounded-lg bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold cursor-pointer"
@@ -803,7 +827,7 @@ export default function ExpensasPage() {
                 </h3>
               </div>
               <p className="text-xs text-blue-800 dark:text-blue-300 mt-1">
-                Presupuesto mensual común del Edificio XYZ: <span className="font-extrabold font-mono">Bs. 15,500.00</span> distribuido con precisión matemática entre los 20 departamentos (1,600 m² construidos) según su alícuota inmobiliaria.
+                El monto base de expensas proviene del tipo asignado al departamento (Tipo A = 300 Bs, Tipo B = 350 Bs, Tipo C = 400 Bs), más el monto de consumo de agua registrado para el período.
               </p>
             </div>
             <div className="flex items-center gap-2">
@@ -825,19 +849,15 @@ export default function ExpensasPage() {
                 <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black bg-blue-100 text-blue-800 dark:bg-blue-950/60 dark:text-blue-300">
                   Tipo A (60 m²)
                 </span>
-                <span className="text-xs text-[#7d776f] font-mono font-bold">4 Unidades (240 m²)</span>
+                <span className="text-xs text-[#7d776f] font-mono font-bold">Base Estándar</span>
               </div>
               <div>
                 <div className="text-2xl font-black font-mono text-[#262422] dark:text-white">
-                  Bs. 581.25 <span className="text-xs text-[#7d776f] font-normal">/ mes</span>
+                  Bs. 300.00 <span className="text-xs text-[#7d776f] font-normal">/ mes base</span>
                 </div>
                 <div className="text-xs text-[#7d776f] dark:text-slate-400 mt-0.5">
-                  Alícuota: <span className="font-bold text-blue-700 dark:text-blue-400">3.75%</span> por unidad
+                  Superficie referencia: 60 m²
                 </div>
-              </div>
-              <div className="text-[11px] text-[#7d776f] dark:text-slate-400 border-t border-[#cec8bc] dark:border-slate-800 pt-2 flex justify-between">
-                <span>Dptos 101, 201, 301, 401:</span>
-                <span className="font-bold font-mono text-[#262422] dark:text-white">Bs. 2,325.00 total</span>
               </div>
             </div>
 
@@ -847,19 +867,15 @@ export default function ExpensasPage() {
                 <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black bg-purple-100 text-purple-800 dark:bg-purple-950/60 dark:text-purple-300">
                   Tipo B (80 m²)
                 </span>
-                <span className="text-xs text-[#7d776f] font-mono font-bold">10 Unidades (800 m²)</span>
+                <span className="text-xs text-[#7d776f] font-mono font-bold">Base Estándar</span>
               </div>
               <div>
                 <div className="text-2xl font-black font-mono text-[#262422] dark:text-white">
-                  Bs. 775.00 <span className="text-xs text-[#7d776f] font-normal">/ mes</span>
+                  Bs. 350.00 <span className="text-xs text-[#7d776f] font-normal">/ mes base</span>
                 </div>
                 <div className="text-xs text-[#7d776f] dark:text-slate-400 mt-0.5">
-                  Alícuota: <span className="font-bold text-purple-700 dark:text-purple-400">5.00%</span> por unidad
+                  Superficie referencia: 80 m²
                 </div>
-              </div>
-              <div className="text-[11px] text-[#7d776f] dark:text-slate-400 border-t border-[#cec8bc] dark:border-slate-800 pt-2 flex justify-between">
-                <span>Dptos 102-104, 202-204, 302-304, 405:</span>
-                <span className="font-bold font-mono text-[#262422] dark:text-white">Bs. 7,750.00 total</span>
               </div>
             </div>
 
@@ -869,36 +885,32 @@ export default function ExpensasPage() {
                 <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300">
                   Tipo C (100 m²)
                 </span>
-                <span className="text-xs text-[#7d776f] font-mono font-bold">6 Unidades (600 m²)</span>
+                <span className="text-xs text-[#7d776f] font-mono font-bold">Base Estándar</span>
               </div>
               <div>
                 <div className="text-2xl font-black font-mono text-[#262422] dark:text-white">
-                  Bs. 968.75 <span className="text-xs text-[#7d776f] font-normal">/ mes</span>
+                  Bs. 400.00 <span className="text-xs text-[#7d776f] font-normal">/ mes base</span>
                 </div>
                 <div className="text-xs text-[#7d776f] dark:text-slate-400 mt-0.5">
-                  Alícuota: <span className="font-bold text-emerald-700 dark:text-emerald-400">6.25%</span> por unidad
+                  Superficie referencia: 100 m²
                 </div>
-              </div>
-              <div className="text-[11px] text-[#7d776f] dark:text-slate-400 border-t border-[#cec8bc] dark:border-slate-800 pt-2 flex justify-between">
-                <span>Dptos 105, 205, 305, 402, 403, 404:</span>
-                <span className="font-bold font-mono text-[#262422] dark:text-white">Bs. 5,812.50 total</span>
               </div>
             </div>
           </div>
 
-          {/* Tabla Maestra Arancelaria: Cuánto se cobra a cada uno de los 20 departamentos */}
+          {/* Tabla Maestra Arancelaria */}
           <div className="rounded-2xl bg-[#ede9e1] dark:bg-slate-900 border border-[#cec8bc] dark:border-slate-800 overflow-hidden shadow-sm">
             <div className="p-4 border-b border-[#cec8bc] dark:border-slate-800 bg-[#dfd9ce]/40 dark:bg-slate-950/40 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
               <div>
                 <h4 className="font-black text-sm text-[#262422] dark:text-white">
-                  Detalle Nominal de Cobro por Unidad (20 Departamentos)
+                  Detalle Nominal de Cobro por Unidad ({expensas.length} Departamentos)
                 </h4>
                 <p className="text-xs text-[#7d776f] dark:text-slate-400">
-                  Desglose exacto de los rubros comunes que componen la cuota de cada departamento.
+                  Desglose de expensa base del tipo y monto de agua registrado.
                 </p>
               </div>
               <span className="text-xs font-bold text-blue-800 dark:text-blue-400 font-mono">
-                Recaudación Total: Bs 15,500.00 / mes
+                Total Facturado: Bs {totalFacturado.toFixed(2)}
               </span>
             </div>
 
@@ -907,37 +919,33 @@ export default function ExpensasPage() {
                 <thead>
                   <tr className="border-b border-[#cec8bc] dark:border-slate-800 bg-[#dfd9ce]/60 dark:bg-slate-950/60 text-[#7d776f] dark:text-slate-400 uppercase text-[10px] font-bold">
                     <th className="py-3 px-3">Unidad</th>
-                    <th className="py-3 px-3">Tipología & m²</th>
-                    <th className="py-3 px-3">Alícuota</th>
+                    <th className="py-3 px-3">Tipología</th>
+                    <th className="py-3 px-3">Superficie</th>
                     <th className="py-3 px-3">Propietario / Responsable</th>
-                    <th className="py-3 px-2 text-right">Seguridad (36.1%)</th>
-                    <th className="py-3 px-2 text-right">Admin (22.6%)</th>
-                    <th className="py-3 px-2 text-right">Limpieza (14.2%)</th>
-                    <th className="py-3 px-2 text-right">Mantenim. (9.7%)</th>
-                    <th className="py-3 px-2 text-right">Otros (17.4%)</th>
-                    <th className="py-3 px-3 text-right font-black text-[#262422] dark:text-white">Cuota Mensual</th>
+                    <th className="py-3 px-3 text-right">Monto Base (Bs)</th>
+                    <th className="py-3 px-3 text-right">Monto Agua (Bs)</th>
+                    <th className="py-3 px-3 text-right font-black text-[#262422] dark:text-white">Total Expensa</th>
                     <th className="py-3 px-3 text-right">Acción</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-[#cec8bc] dark:divide-slate-800">
-                  {expensas.map((item) => {
-                    const alic = item.alicuota || (item.monto === 581.25 ? 3.75 : item.monto === 775 ? 5.0 : 6.25)
-                    const seg = 5600 * (alic / 100)
-                    const adm = 3500 * (alic / 100)
-                    const limp = 2200 * (alic / 100)
-                    const mant = 1500 * (alic / 100)
-                    const otros = (900 + 800 + 700 + 300) * (alic / 100)
-
-                    return (
+                  {expensas.length === 0 ? (
+                    <tr>
+                      <td colSpan={8} className="py-6 text-center text-[#7d776f]">
+                        No hay expensas emitidas en este período.
+                      </td>
+                    </tr>
+                  ) : (
+                    expensas.map((item) => (
                       <tr key={item.idExpensa} className="hover:bg-[#dfd9ce]/40 dark:hover:bg-slate-800/40">
                         <td className="py-2.5 px-3 font-extrabold text-[#262422] dark:text-white">
                           Dpto. {item.departamento?.numero || item.idDepartamento}
                         </td>
                         <td className="py-2.5 px-3 text-[11px] text-[#7d776f] dark:text-slate-300">
-                          {item.departamento?.tipologia || (item.monto === 581.25 ? 'Tipo A (60 m²)' : item.monto === 775 ? 'Tipo B (80 m²)' : 'Tipo C (100 m²)')}
+                          {item.departamento?.tipologia || 'Estándar'}
                         </td>
-                        <td className="py-2.5 px-3 font-mono font-bold text-blue-700 dark:text-blue-400">
-                          {alic.toFixed(2)}%
+                        <td className="py-2.5 px-3 font-mono text-[#5c5750] dark:text-slate-400">
+                          {item.departamento?.areaM2 ? `${item.departamento.areaM2} m²` : '—'}
                         </td>
                         <td className="py-2.5 px-3">
                           <div className="font-bold text-[#262422] dark:text-white truncate max-w-[150px]">
@@ -949,20 +957,11 @@ export default function ExpensasPage() {
                             </div>
                           )}
                         </td>
-                        <td className="py-2.5 px-2 text-right font-mono text-[#5c5750] dark:text-slate-400">
-                          Bs. {seg.toFixed(2)}
+                        <td className="py-2.5 px-3 text-right font-mono text-[#5c5750] dark:text-slate-400">
+                          Bs. {(item.montoBase !== undefined && item.montoBase !== null ? item.montoBase : (item.monto - (item.montoAgua || 0))).toFixed(2)}
                         </td>
-                        <td className="py-2.5 px-2 text-right font-mono text-[#5c5750] dark:text-slate-400">
-                          Bs. {adm.toFixed(2)}
-                        </td>
-                        <td className="py-2.5 px-2 text-right font-mono text-[#5c5750] dark:text-slate-400">
-                          Bs. {limp.toFixed(2)}
-                        </td>
-                        <td className="py-2.5 px-2 text-right font-mono text-[#5c5750] dark:text-slate-400">
-                          Bs. {mant.toFixed(2)}
-                        </td>
-                        <td className="py-2.5 px-2 text-right font-mono text-[#5c5750] dark:text-slate-400">
-                          Bs. {otros.toFixed(2)}
+                        <td className="py-2.5 px-3 text-right font-mono text-blue-700 dark:text-blue-400 font-bold">
+                          Bs. {(item.montoAgua || 0).toFixed(2)}
                         </td>
                         <td className="py-2.5 px-3 text-right font-mono font-black text-sm text-[#262422] dark:text-white">
                           Bs. {item.monto.toFixed(2)}
@@ -977,27 +976,22 @@ export default function ExpensasPage() {
                           </button>
                         </td>
                       </tr>
-                    )
-                  })}
+                    ))
+                  )}
                 </tbody>
                 <tfoot>
                   <tr className="border-t-2 border-[#cec8bc] dark:border-slate-700 bg-[#dfd9ce]/80 dark:bg-slate-950/80 font-black text-xs text-[#262422] dark:text-white">
-                    <td colSpan={2} className="py-3 px-3 uppercase tracking-wider">
-                      TOTAL GENERAL (20 DPTOS / 1,600 m²)
+                    <td colSpan={4} className="py-3 px-3 uppercase tracking-wider">
+                      TOTAL GENERAL ({expensas.length} DPTOS)
                     </td>
-                    <td className="py-3 px-3 font-mono text-blue-800 dark:text-blue-400">
-                      100.00%
+                    <td className="py-3 px-3 text-right font-mono">
+                      Bs. {expensas.reduce((acc, curr) => acc + (curr.montoBase ?? (curr.monto - (curr.montoAgua || 0))), 0).toFixed(2)}
                     </td>
-                    <td className="py-3 px-3 text-[11px] text-[#7d776f]">
-                      20 Obligaciones
+                    <td className="py-3 px-3 text-right font-mono text-blue-700 dark:text-blue-400">
+                      Bs. {expensas.reduce((acc, curr) => acc + (curr.montoAgua || 0), 0).toFixed(2)}
                     </td>
-                    <td className="py-3 px-2 text-right font-mono">Bs. 5,600.00</td>
-                    <td className="py-3 px-2 text-right font-mono">Bs. 3,500.00</td>
-                    <td className="py-3 px-2 text-right font-mono">Bs. 2,200.00</td>
-                    <td className="py-3 px-2 text-right font-mono">Bs. 1,500.00</td>
-                    <td className="py-3 px-2 text-right font-mono">Bs. 2,700.00</td>
                     <td className="py-3 px-3 text-right font-mono text-base text-emerald-800 dark:text-emerald-400">
-                      Bs. 15,500.00
+                      Bs. {totalFacturado.toFixed(2)}
                     </td>
                     <td className="py-3 px-3"></td>
                   </tr>
@@ -1079,15 +1073,22 @@ export default function ExpensasPage() {
                   Generación Masiva de Expensas
                 </h3>
                 <p className="text-xs text-[#7d776f]">
-                  Emisión del lote mensual para los 20 departamentos catastrados.
+                  Emisión mensual por tipo de departamento y consumo de agua.
                 </p>
               </div>
-              <button onClick={() => setIsEmitirModalOpen(false)}>
+              <button onClick={() => { setIsEmitirModalOpen(false); setResultadoEmision(null); setEmisionError(null) }}>
                 <X className="w-5 h-5 text-[#7d776f] hover:text-[#262422]" />
               </button>
             </div>
 
             <form onSubmit={handleEmisionMasiva} className="space-y-4 text-xs">
+              {emisionError && (
+                <div className="p-3 bg-rose-100 dark:bg-rose-950/70 border border-rose-300 dark:border-rose-800 text-rose-900 dark:text-rose-200 rounded-xl flex items-center gap-2 text-xs">
+                  <AlertCircle className="w-4 h-4 shrink-0 text-rose-600 dark:text-rose-400" />
+                  <span>{emisionError}</span>
+                </div>
+              )}
+
               {/* Paso 1: Selección de Período con control antierror */}
               <div>
                 <label className="block font-bold text-[#262422] dark:text-white mb-1">
@@ -1120,62 +1121,58 @@ export default function ExpensasPage() {
                 />
               </div>
 
-              {/* Modelo de cálculo */}
-              <div>
-                <label className="block font-bold text-[#262422] dark:text-white mb-1">
-                  Regla de Cálculo de Expensa
-                </label>
-                <select
-                  value={modeloCalculo}
-                  onChange={(e) => setModeloCalculo(e.target.value as any)}
-                  className="w-full px-3 py-2 rounded-xl bg-[#dfd9ce] dark:bg-slate-800 border border-[#cec8bc] dark:border-slate-700 font-semibold"
-                >
-                  <option value="alicuota">Por Alícuotas de Superficie (Tipo A Bs 581.25 / B Bs 775 / C Bs 968.75)</option>
-                  <option value="fijo_tipo">Cuota Fija por Tipología (Tipo A Bs 300 / B Bs 350 / C Bs 400)</option>
-                </select>
-              </div>
-
-              {/* Resumen previo */}
-              <div className="p-3.5 rounded-2xl bg-[#dfd9ce]/60 dark:bg-slate-950/60 border border-[#cec8bc] dark:border-slate-800 space-y-1.5 font-mono">
-                <span className="font-sans font-bold text-xs block text-[#262422] dark:text-white">
-                  Resumen Previo de Emisión
-                </span>
-                <div className="flex justify-between text-[11px]">
-                  <span>Total Unidades del Edificio:</span>
-                  <span className="font-bold">20 Departamentos</span>
-                </div>
-                <div className="flex justify-between text-[11px]">
-                  <span>Superficie Total Catastrada:</span>
-                  <span className="font-bold">1,600.00 m²</span>
-                </div>
-                <div className="flex justify-between text-xs font-bold text-emerald-700 dark:text-emerald-400 pt-1 border-t">
-                  <span>Monto Total a Generar:</span>
-                  <span>{modeloCalculo === 'alicuota' ? 'Bs 15,500.00' : 'Bs 7,000.00'}</span>
-                </div>
+              <div className="p-3.5 rounded-2xl bg-[#dfd9ce]/60 dark:bg-slate-950/60 border border-[#cec8bc] dark:border-slate-800 space-y-1 text-[#5c5750] dark:text-slate-300 text-[11px]">
+                <p>
+                  ℹ️ El monto se calcula en base a la cuota del tipo asignado al departamento más el monto de agua registrado en el mes.
+                </p>
               </div>
 
               {/* Resultado de la operación y obligaciones */}
               {resultadoEmision && (
-                <div className="p-3.5 rounded-2xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-300 dark:border-emerald-800 space-y-2">
+                <div className="p-3.5 rounded-2xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-300 dark:border-emerald-800 space-y-3">
                   <div className="flex items-center gap-1.5 text-emerald-800 dark:text-emerald-300 font-bold text-xs">
-                    <CheckCircle2 className="w-4 h-4" />
-                    Resultado: {resultadoEmision.generadasCount} Expensas Generadas Correctamente
+                    <CheckCircle2 className="w-4 h-4 shrink-0" />
+                    <span>Resultado: {resultadoEmision.generadasCount} expensas generadas correctamente.</span>
                   </div>
-                  <div className="text-[11px] text-[#5c5750] dark:text-slate-300 space-y-1">
-                    {resultadoEmision.observaciones.map((obs, idx) => (
-                      <div key={idx} className="flex items-start gap-1">
-                        <AlertCircle className="w-3.5 h-3.5 text-amber-600 shrink-0 mt-0.5" />
-                        <span>{obs}</span>
-                      </div>
-                    ))}
-                  </div>
+
+                  {resultadoEmision.excepciones.length > 0 && (
+                    <div className="space-y-1 pt-2 border-t border-amber-200 dark:border-amber-900/50">
+                      <span className="font-bold text-[11px] text-amber-800 dark:text-amber-400 flex items-center gap-1">
+                        <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
+                        Excepciones ({resultadoEmision.excepciones.length}):
+                      </span>
+                      <ul className="text-[11px] text-[#5c5750] dark:text-slate-300 space-y-1 list-disc list-inside">
+                        {resultadoEmision.excepciones.map((exc, idx) => (
+                          <li key={idx}>
+                            <span className="font-semibold">Dpto {exc.numero || exc.idDepartamento}:</span> {exc.motivo}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+
+                  {resultadoEmision.advertencias.length > 0 && (
+                    <div className="space-y-1 pt-2 border-t border-sky-200 dark:border-sky-900/50">
+                      <span className="font-bold text-[11px] text-sky-800 dark:text-sky-400 flex items-center gap-1">
+                        <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                        Advertencias ({resultadoEmision.advertencias.length}):
+                      </span>
+                      <ul className="text-[11px] text-[#5c5750] dark:text-slate-300 space-y-1 list-disc list-inside">
+                        {resultadoEmision.advertencias.map((adv, idx) => (
+                          <li key={idx}>
+                            <span className="font-semibold">Dpto {adv.numero || adv.idDepartamento}:</span> {adv.advertencia}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
                 </div>
               )}
 
               <div className="flex justify-end gap-2 pt-3 border-t border-[#cec8bc] dark:border-slate-800">
                 <button
                   type="button"
-                  onClick={() => setIsEmitirModalOpen(false)}
+                  onClick={() => { setIsEmitirModalOpen(false); setResultadoEmision(null); setEmisionError(null) }}
                   className="px-4 py-2 rounded-xl text-xs font-bold text-[#7d776f]"
                 >
                   Cerrar
@@ -1190,6 +1187,117 @@ export default function ExpensasPage() {
                   }`}
                 >
                   {isSubmittingEmision ? 'Generando lote...' : '⚡ Ejecutar Generación'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL CONFIGURAR REGLA DE MORA (HU04 / CA09) */}
+      {isMoraModalOpen && (
+        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 backdrop-blur-xs">
+          <div className="w-full max-w-md bg-[#ede9e1] dark:bg-slate-900 rounded-3xl border border-[#cec8bc] dark:border-slate-800 p-6 space-y-4 shadow-2xl">
+            <div className="flex justify-between items-center border-b border-[#cec8bc] dark:border-slate-800 pb-3">
+              <div>
+                <h3 className="font-extrabold text-base text-[#262422] dark:text-white flex items-center gap-2">
+                  <Percent className="w-4 h-4 text-indigo-600" />
+                  Regla de Mora e Intereses
+                </h3>
+                <p className="text-xs text-[#7d776f]">
+                  Configuración oficial de la tasa de mora (solo porcentaje)
+                </p>
+              </div>
+              <button onClick={() => setIsMoraModalOpen(false)}>
+                <X className="w-5 h-5 text-[#7d776f] hover:text-[#262422]" />
+              </button>
+            </div>
+
+            {moraError && (
+              <div className="p-3 bg-rose-100 dark:bg-rose-950/70 border border-rose-300 dark:border-rose-800 text-rose-900 dark:text-rose-200 rounded-xl flex items-center gap-2 text-xs">
+                <AlertCircle className="w-4 h-4 shrink-0 text-rose-600 dark:text-rose-400" />
+                <span>{moraError}</span>
+              </div>
+            )}
+
+            <form onSubmit={handleGuardarReglaMora} className="space-y-4 text-xs">
+              <div className="p-3 rounded-2xl bg-indigo-50 dark:bg-indigo-950/40 border border-indigo-200 dark:border-indigo-800 text-[11px] text-indigo-900 dark:text-indigo-200">
+                <span className="font-bold block">Tasa Activa Actual:</span>
+                <span className="text-base font-black text-indigo-700 dark:text-indigo-300 font-mono">
+                  {reglaMoraActiva ? `${reglaMoraActiva.tasaInteres}%` : 'Sin regla activa'}
+                </span>
+                <span className="block text-[10px] text-[#7d776f] mt-0.5">
+                  Días de gracia: 0 (aplicación directa sobre expensas vencidas)
+                </span>
+              </div>
+
+              <div>
+                <label className="block font-bold text-[#262422] dark:text-white mb-1">
+                  Nueva Tasa de Interés Mensual (%) *
+                </label>
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  max="100"
+                  required
+                  value={nuevaTasaMoraInput}
+                  onChange={(e) => setNuevaTasaMoraInput(e.target.value === '' ? '' : Number(e.target.value))}
+                  placeholder="Ej. 5"
+                  className="w-full px-3 py-2 rounded-xl bg-[#dfd9ce] dark:bg-slate-800 border border-[#cec8bc] dark:border-slate-700 font-mono font-bold text-sm text-[#262422] dark:text-white"
+                />
+              </div>
+
+              {/* Historial */}
+              <div className="space-y-1.5 pt-2 border-t border-[#cec8bc] dark:border-slate-800">
+                <span className="font-bold text-xs text-[#262422] dark:text-white flex items-center gap-1.5">
+                  <History className="w-3.5 h-3.5 text-indigo-600" />
+                  Historial de Reglas de Mora
+                </span>
+                <div className="max-h-36 overflow-y-auto space-y-1.5 pr-1">
+                  {historialReglasMora.length === 0 ? (
+                    <p className="text-[11px] text-[#7d776f]">No hay historial registrado.</p>
+                  ) : (
+                    historialReglasMora.map((reg) => (
+                      <div
+                        key={reg.idReglaMora}
+                        className={`p-2 rounded-xl border text-[11px] flex justify-between items-center ${
+                          reg.activa
+                            ? 'bg-emerald-50 dark:bg-emerald-950/40 border-emerald-300 dark:border-emerald-800 text-emerald-900 dark:text-emerald-200'
+                            : 'bg-[#dfd9ce]/60 dark:bg-slate-800/60 border-[#cec8bc] dark:border-slate-700 text-[#5c5750] dark:text-slate-400'
+                        }`}
+                      >
+                        <div>
+                          <span className="font-bold font-mono text-xs">{reg.tasaInteres}%</span>
+                          <span className="text-[10px] block text-[#7d776f]">
+                            {fechaHoraBolivia(reg.fechaCreacion)} {reg.usuarioCreacion?.nombreUsuario ? `• ${reg.usuarioCreacion.nombreUsuario}` : ''}
+                          </span>
+                        </div>
+                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                          reg.activa ? 'bg-emerald-200 dark:bg-emerald-900 text-emerald-800 dark:text-emerald-200' : 'bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300'
+                        }`}>
+                          {reg.activa ? 'Activa' : 'Histórica'}
+                        </span>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+
+              <div className="flex justify-end gap-2 pt-3 border-t border-[#cec8bc] dark:border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => setIsMoraModalOpen(false)}
+                  className="px-4 py-2 rounded-xl text-xs font-bold text-[#7d776f]"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSubmittingMora || nuevaTasaMoraInput === ''}
+                  className="px-4 py-2 rounded-xl bg-indigo-700 hover:bg-indigo-800 text-white text-xs font-bold shadow-md cursor-pointer disabled:opacity-50"
+                >
+                  {isSubmittingMora ? 'Guardando...' : 'Guardar Nueva Regla'}
                 </button>
               </div>
             </form>
@@ -1216,6 +1324,13 @@ export default function ExpensasPage() {
             </div>
 
             <form onSubmit={handleRegistrarPagoSubmit} className="space-y-3.5 text-xs">
+              {modalError && (
+                <div className="p-3 bg-rose-100 dark:bg-rose-950/70 border border-rose-300 dark:border-rose-800 text-rose-900 dark:text-rose-200 rounded-xl flex items-center gap-2 text-xs">
+                  <AlertCircle className="w-4 h-4 shrink-0 text-rose-600 dark:text-rose-400" />
+                  <span>{modalError}</span>
+                </div>
+              )}
+
               <div>
                 <label className="block font-bold mb-1">Monto de la Expensa a Cancelar (Bs.) *</label>
                 <input
@@ -1230,30 +1345,35 @@ export default function ExpensasPage() {
 
               <div>
                 <label className="block font-bold mb-1">Persona que Realiza el Pago *</label>
-                <input
-                  type="text"
+                <select
                   required
-                  placeholder="Ej. María López (Inquilina) o Juan Pérez (Propietario)"
-                  value={pagadoPorInput}
-                  onChange={(e) => setPagadoPorInput(e.target.value)}
+                  value={idPersonaPagadorInput}
+                  onChange={(e) => setIdPersonaPagadorInput(Number(e.target.value))}
                   className="w-full px-3 py-2 rounded-xl bg-[#dfd9ce] dark:bg-slate-800 border text-xs"
-                />
+                >
+                  <option value="" disabled>Seleccione una persona...</option>
+                  {personasList.map((p) => (
+                    <option key={p.idPersona} value={p.idPersona}>
+                      {p.nombres} {p.apellidos} {p.ciNit ? `(CI: ${p.ciNit})` : ''}
+                    </option>
+                  ))}
+                </select>
                 <p className="text-[10px] text-[#7d776f] mt-1">
-                  El pago puede realizarlo el inquilino o propietario sin alterar la titularidad del departamento.
+                  Persona registrada en el sistema. Por defecto se selecciona el propietario del departamento.
                 </p>
               </div>
 
               <div>
-                <label className="block font-bold mb-1">Forma de Pago</label>
+                <label className="block font-bold mb-1">Forma de Pago *</label>
                 <select
                   value={metodoPagoInput}
                   onChange={(e) => setMetodoPagoInput(e.target.value)}
-                  className="w-full px-3 py-2 rounded-xl bg-[#dfd9ce] dark:bg-slate-800 border"
+                  className="w-full px-3 py-2 rounded-xl bg-[#dfd9ce] dark:bg-slate-800 border text-xs"
                 >
-                  <option value="Transferencia BNB">Transferencia Bancaria (BNB)</option>
-                  <option value="Transferencia BMSC">Transferencia Bancaria (BMSC)</option>
-                  <option value="QR Simple Interbancario">Pago Móvil QR Simple</option>
-                  <option value="Efectivo en Administración">Efectivo en Caja Administración</option>
+                  <option value="Transferencia">Transferencia Bancaria</option>
+                  <option value="QR">Pago QR</option>
+                  <option value="Efectivo">Efectivo en Caja</option>
+                  <option value="Cheque">Cheque</option>
                 </select>
               </div>
 
@@ -1490,7 +1610,7 @@ export default function ExpensasPage() {
                 <div className="border-t border-slate-200 dark:border-slate-800 pt-2 flex flex-wrap justify-between items-center text-[11px] gap-2">
                   <span><strong>Propietario:</strong> {selectedExtracto.propietarioNombre}</span>
                   <span><strong>Ocupante:</strong> {selectedExtracto.inquilinoNombre || '—'}</span>
-                  <span><strong>Alícuota:</strong> <span className="font-mono font-bold text-emerald-700 dark:text-emerald-400">{selectedExtracto.departamento?.areaM2 === 60 ? '3.75%' : selectedExtracto.departamento?.areaM2 === 100 ? '6.25%' : '5.00%'}</span></span>
+                  <span><strong>Superficie:</strong> <span className="font-mono font-bold text-emerald-700 dark:text-emerald-400">{selectedExtracto.departamento?.areaM2 ? `${selectedExtracto.departamento.areaM2} m²` : '—'}</span></span>
                   <span><strong>Expensa a Cobrar:</strong> <span className="font-mono font-bold text-emerald-700 dark:text-emerald-400 text-xs">Bs {selectedExtracto.monto.toFixed(2)}</span></span>
                 </div>
               )}
@@ -1505,7 +1625,7 @@ export default function ExpensasPage() {
                     <th className="py-2.5 px-3 text-right">Presupuesto Edificio</th>
                     <th className="py-2.5 px-3 text-right">% Ponderado</th>
                     <th className="py-2.5 px-3 text-right font-extrabold text-emerald-800 dark:text-emerald-400">
-                      {selectedExtracto ? `Cuota Dpto ${selectedExtracto.departamento?.numero}` : 'Cuota Tipo B (5%)'}
+                      {selectedExtracto ? `Cuota Dpto ${selectedExtracto.departamento?.numero}` : 'Cuota Base'}
                     </th>
                   </tr>
                 </thead>
@@ -1545,16 +1665,16 @@ export default function ExpensasPage() {
             {/* Comparativa por Tipología */}
             <div className="grid grid-cols-3 gap-2 text-center text-xs bg-[#dfd9ce]/40 dark:bg-slate-950/40 p-2.5 rounded-xl border border-[#cec8bc] dark:border-slate-800">
               <div>
-                <span className="text-[10px] text-[#7d776f] uppercase font-bold block">Tipo A (60 m² • 3.75%)</span>
-                <span className="font-mono font-bold text-emerald-800 dark:text-emerald-400">Bs. 581,25</span>
+                <span className="text-[10px] text-[#7d776f] uppercase font-bold block">Tipo A (60 m²)</span>
+                <span className="font-mono font-bold text-emerald-800 dark:text-emerald-400">Bs. 300,00 base</span>
               </div>
               <div>
-                <span className="text-[10px] text-[#7d776f] uppercase font-bold block">Tipo B (80 m² • 5.00%)</span>
-                <span className="font-mono font-bold text-emerald-800 dark:text-emerald-400">Bs. 775,00</span>
+                <span className="text-[10px] text-[#7d776f] uppercase font-bold block">Tipo B (80 m²)</span>
+                <span className="font-mono font-bold text-emerald-800 dark:text-emerald-400">Bs. 350,00 base</span>
               </div>
               <div>
-                <span className="text-[10px] text-[#7d776f] uppercase font-bold block">Tipo C (100 m² • 6.25%)</span>
-                <span className="font-mono font-bold text-emerald-800 dark:text-emerald-400">Bs. 968,75</span>
+                <span className="text-[10px] text-[#7d776f] uppercase font-bold block">Tipo C (100 m²)</span>
+                <span className="font-mono font-bold text-emerald-800 dark:text-emerald-400">Bs. 400,00 base</span>
               </div>
             </div>
 
@@ -1587,7 +1707,7 @@ export default function ExpensasPage() {
       {/* MODAL ESTADO DE CUENTA (UI ESTADO DE CUENTA DEPTO) */}
       {isEstadoCuentaModalOpen && estadoCuentaData && (
         <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 backdrop-blur-xs">
-          <div className="w-full max-w-3xl bg-[#ede9e1] dark:bg-slate-900 rounded-3xl border border-[#cec8bc] dark:border-slate-800 p-6 sm:p-7 space-y-4 max-h-[92vh] overflow-y-auto shadow-2xl animate-in fade-in zoom-in-95 duration-200">
+          <div className="w-full max-w-4xl bg-[#ede9e1] dark:bg-slate-900 rounded-3xl border border-[#cec8bc] dark:border-slate-800 p-6 sm:p-7 space-y-4 max-h-[92vh] overflow-y-auto shadow-2xl animate-in fade-in zoom-in-95 duration-200">
             {/* Header del Estado de Cuenta */}
             <div className="flex justify-between items-start border-b border-[#cec8bc] dark:border-slate-800 pb-4">
               <div className="flex items-center gap-3">
@@ -1615,46 +1735,148 @@ export default function ExpensasPage() {
               </button>
             </div>
 
-            {/* Ficha Catastral del Departamento */}
+            {/* Ficha Catastral del Departamento y Ocupante */}
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 p-3.5 bg-white/70 dark:bg-slate-950/60 rounded-2xl border border-[#cec8bc] dark:border-slate-800 text-xs">
               <div>
                 <span className="text-[#7d776f] text-[10px] uppercase font-bold block">Tipología & m²</span>
                 <span className="font-extrabold text-[#262422] dark:text-white">
-                  {estadoCuentaData.departamento?.tipologia || 'Tipo B (80 m²)'}
+                  {estadoCuentaData.departamento?.tipo?.nombre || estadoCuentaData.departamento?.tipologia || '—'}
                 </span>
               </div>
               <div>
-                <span className="text-[#7d776f] text-[10px] uppercase font-bold block">Alícuota Inmobiliaria</span>
+                <span className="text-[#7d776f] text-[10px] uppercase font-bold block">Superficie</span>
                 <span className="font-extrabold font-mono text-blue-700 dark:text-blue-400">
-                  {estadoCuentaData.departamento?.alicuota ? `${Number(estadoCuentaData.departamento.alicuota).toFixed(2)}%` : '5.00%'}
+                  {estadoCuentaData.departamento?.areaM2 ? `${estadoCuentaData.departamento.areaM2} m²` : '—'}
                 </span>
               </div>
               <div>
                 <span className="text-[#7d776f] text-[10px] uppercase font-bold block">Propietario Responsable</span>
                 <span className="font-extrabold text-[#262422] dark:text-white truncate block">
-                  {estadoCuentaData.departamento?.propietario?.nombres || 'Titular'}
+                  {estadoCuentaData.departamento?.propietario
+                    ? `${estadoCuentaData.departamento.propietario.nombres || ''} ${estadoCuentaData.departamento.propietario.apellidos || ''}`.trim()
+                    : 'Titular'}
                 </span>
               </div>
               <div>
-                <span className="text-[#7d776f] text-[10px] uppercase font-bold block">Ocupante / Inquilino</span>
+                <span className="text-[#7d776f] text-[10px] uppercase font-bold block">Ocupante Actual</span>
                 <span className="font-extrabold text-purple-700 dark:text-purple-400 truncate block">
-                  {estadoCuentaData.departamento?.inquilino?.nombres || 'Vive el Propietario'}
+                  {estadoCuentaData.departamento?.ocupanteActual?.persona
+                    ? `${estadoCuentaData.departamento.ocupanteActual.tipoOcupante}: ${estadoCuentaData.departamento.ocupanteActual.persona.nombres || ''} ${estadoCuentaData.departamento.ocupanteActual.persona.apellidos || ''}`.trim()
+                    : (estadoCuentaData.departamento?.inquilino?.nombres || 'Vive el Propietario')}
                 </span>
+              </div>
+            </div>
+
+            {/* BARRA DE FILTROS DEL ESTADO DE CUENTA */}
+            <div className="p-3 bg-[#dfd9ce]/60 dark:bg-slate-950/60 rounded-2xl border border-[#cec8bc] dark:border-slate-800 space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold text-[#262422] dark:text-white flex items-center gap-1.5">
+                  <Filter className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
+                  Filtros de Consulta Financiera
+                </span>
+                {isLoadingEC && (
+                  <span className="text-[11px] font-bold text-blue-600 dark:text-blue-400 animate-pulse">
+                    Actualizando...
+                  </span>
+                )}
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-4 gap-2 text-xs">
+                <div>
+                  <label className="text-[10px] font-bold text-[#7d776f] uppercase block mb-1">
+                    Estado
+                  </label>
+                  <select
+                    value={filtroECEstado}
+                    onChange={(e) => setFiltroECEstado(e.target.value)}
+                    className="w-full px-2.5 py-1.5 rounded-xl border border-[#cec8bc] dark:border-slate-700 bg-white dark:bg-slate-900 text-[#262422] dark:text-slate-100 font-semibold"
+                  >
+                    <option value="Todos">Todos los Estados</option>
+                    <option value="Pendiente">Pendiente</option>
+                    <option value="Moroso">Moroso</option>
+                    <option value="Pagado">Pagado</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="text-[10px] font-bold text-[#7d776f] uppercase block mb-1">
+                    Período (Mes)
+                  </label>
+                  <input
+                    type="month"
+                    value={filtroECPeriodo}
+                    onChange={(e) => setFiltroECPeriodo(e.target.value)}
+                    className="w-full px-2.5 py-1.5 rounded-xl border border-[#cec8bc] dark:border-slate-700 bg-white dark:bg-slate-900 text-[#262422] dark:text-slate-100 font-mono text-xs"
+                  />
+                </div>
+                <div>
+                  <label className="text-[10px] font-bold text-[#7d776f] uppercase block mb-1">
+                    Desde
+                  </label>
+                  <input
+                    type="date"
+                    value={filtroECDesde}
+                    onChange={(e) => setFiltroECDesde(e.target.value)}
+                    className="w-full px-2.5 py-1.5 rounded-xl border border-[#cec8bc] dark:border-slate-700 bg-white dark:bg-slate-900 text-[#262422] dark:text-slate-100 font-mono text-xs"
+                  />
+                </div>
+                <div>
+                  <label className="text-[10px] font-bold text-[#7d776f] uppercase block mb-1">
+                    Hasta
+                  </label>
+                  <input
+                    type="date"
+                    value={filtroECHasta}
+                    onChange={(e) => setFiltroECHasta(e.target.value)}
+                    className="w-full px-2.5 py-1.5 rounded-xl border border-[#cec8bc] dark:border-slate-700 bg-white dark:bg-slate-900 text-[#262422] dark:text-slate-100 font-mono text-xs"
+                  />
+                </div>
+              </div>
+              <div className="flex justify-end gap-2 pt-1">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setFiltroECPeriodo('')
+                    setFiltroECEstado('Todos')
+                    setFiltroECDesde('')
+                    setFiltroECHasta('')
+                    if (selectedDeptoIdParaEstadoCuenta) {
+                      handleVerEstadoCuenta(selectedDeptoIdParaEstadoCuenta, {
+                        periodo: '',
+                        estado: 'Todos',
+                        desde: '',
+                        hasta: ''
+                      })
+                    }
+                  }}
+                  className="px-3 py-1 rounded-lg text-xs font-bold text-[#5c5750] dark:text-slate-400 hover:bg-[#ded8cc] dark:hover:bg-slate-800"
+                >
+                  Limpiar Filtros
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (selectedDeptoIdParaEstadoCuenta) {
+                      handleVerEstadoCuenta(selectedDeptoIdParaEstadoCuenta)
+                    }
+                  }}
+                  className="px-3 py-1 bg-blue-700 hover:bg-blue-800 text-white rounded-lg text-xs font-bold shadow-xs cursor-pointer"
+                >
+                  Aplicar Filtro
+                </button>
               </div>
             </div>
 
             {/* Tarjetas KPI de Saldos */}
             <div className="grid grid-cols-3 gap-3">
               <div className="p-3.5 rounded-2xl bg-[#dfd9ce]/60 dark:bg-slate-950/60 border border-[#cec8bc] dark:border-slate-800 text-center">
-                <span className="text-[10px] uppercase font-bold text-[#7d776f] block">Total Facturado</span>
+                <span className="text-[10px] uppercase font-bold text-[#7d776f] block">Total Obligaciones</span>
                 <span className="text-base sm:text-lg font-black font-mono text-[#262422] dark:text-white">
-                  Bs. {estadoCuentaData.resumen?.totalObligaciones?.toFixed(2) || '0.00'}
+                  Bs. {Number(estadoCuentaData.resumen?.totalObligaciones || 0).toFixed(2)}
                 </span>
               </div>
               <div className="p-3.5 rounded-2xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-900/60 text-center">
                 <span className="text-[10px] uppercase font-bold text-emerald-800 dark:text-emerald-400 block">Total Pagado</span>
                 <span className="text-base sm:text-lg font-black font-mono text-emerald-700 dark:text-emerald-300">
-                  Bs. {estadoCuentaData.resumen?.totalPagado?.toFixed(2) || '0.00'}
+                  Bs. {Number(estadoCuentaData.resumen?.totalPagado || 0).toFixed(2)}
                 </span>
               </div>
               <div className={`p-3.5 rounded-2xl text-center border ${
@@ -1662,67 +1884,130 @@ export default function ExpensasPage() {
                   ? 'bg-red-50 dark:bg-red-950/40 border-red-200 dark:border-red-900/60 text-red-700 dark:text-red-300'
                   : 'bg-emerald-50 dark:bg-emerald-950/40 border-emerald-200 dark:border-emerald-900/60 text-emerald-700 dark:text-emerald-300'
               }`}>
-                <span className="text-[10px] uppercase font-bold block">Saldo Pendiente</span>
+                <span className="text-[10px] uppercase font-bold block">
+                  Saldo Pendiente {estadoCuentaData.resumen?.estadoGlobal && `(${estadoCuentaData.resumen.estadoGlobal})`}
+                </span>
                 <span className="text-base sm:text-lg font-black font-mono">
-                  Bs. {estadoCuentaData.resumen?.saldoPendienteTotal?.toFixed(2) || '0.00'}
+                  Bs. {Number(estadoCuentaData.resumen?.saldoPendienteTotal || 0).toFixed(2)}
                 </span>
               </div>
             </div>
 
-            {/* Tabla de Obligaciones y Pagos Históricos */}
+            {/* Indicador de Anticipos si los tiene */}
+            {(estadoCuentaData.resumen?.totalAnticiposDisponibles || 0) > 0 && (
+              <div className="p-3 rounded-2xl bg-indigo-50 dark:bg-indigo-950/40 border border-indigo-200 dark:border-indigo-900/60 flex items-center justify-between text-xs">
+                <div className="flex items-center gap-2">
+                  <CreditCard className="w-4 h-4 text-indigo-700 dark:text-indigo-400" />
+                  <span className="font-bold text-indigo-900 dark:text-indigo-200">
+                    Anticipos y Saldo a Favor Disponible:
+                  </span>
+                </div>
+                <span className="font-mono font-black text-indigo-700 dark:text-indigo-300 text-sm">
+                  Bs. {Number(estadoCuentaData.resumen.totalAnticiposDisponibles).toFixed(2)}
+                </span>
+              </div>
+            )}
+
+            {/* Tabla de Historial Cronológico y Línea de Tiempo de Movimientos */}
             <div className="rounded-2xl bg-white/80 dark:bg-slate-950/80 border border-[#cec8bc] dark:border-slate-800 overflow-hidden shadow-xs">
               <div className="p-3 border-b border-[#cec8bc] dark:border-slate-800 bg-[#dfd9ce]/40 dark:bg-slate-950/40 flex justify-between items-center text-xs">
                 <span className="font-extrabold text-[#262422] dark:text-white">
-                  Historial de Períodos y Obligaciones de Expensas
+                  Línea de Tiempo y Movimientos Financieros
                 </span>
-                <span className="text-[11px] text-[#7d776f]">Registro Oficial</span>
+                <span className="text-[11px] text-[#7d776f]">Registro Consolidado</span>
               </div>
-              <div className="overflow-x-auto">
-                <table className="w-full text-left border-collapse text-xs">
-                  <thead>
-                    <tr className="border-b border-[#cec8bc] dark:border-slate-800 bg-[#dfd9ce]/60 dark:bg-slate-950/60 text-[#7d776f] uppercase text-[10px] font-bold">
-                      <th className="py-2.5 px-3">Período</th>
-                      <th className="py-2.5 px-3">Concepto</th>
-                      <th className="py-2.5 px-3 font-mono">Cuota (Bs)</th>
-                      <th className="py-2.5 px-3">Vencimiento</th>
-                      <th className="py-2.5 px-3">Estado</th>
-                      <th className="py-2.5 px-3">Medio / Fecha de Pago</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-[#cec8bc] dark:divide-slate-800">
-                    {(estadoCuentaData.movimientos || []).map((mov: any, idx: number) => (
-                      <tr key={idx} className="hover:bg-[#dfd9ce]/30 dark:hover:bg-slate-800/30">
-                        <td className="py-2.5 px-3 font-bold font-mono text-[#262422] dark:text-white">
-                          {mov.periodo}
-                        </td>
-                        <td className="py-2.5 px-3 text-[#5c5750] dark:text-slate-300">
-                          {mov.concepto}
-                        </td>
-                        <td className="py-2.5 px-3 font-bold font-mono text-[#262422] dark:text-white">
-                          Bs. {Number(mov.monto).toFixed(2)}
-                        </td>
-                        <td className="py-2.5 px-3 font-mono text-[#7d776f]">
-                          {mov.vencimiento}
-                        </td>
-                        <td className="py-2.5 px-3">
-                          <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-extrabold ${
-                            mov.estado === 'Pagado'
-                              ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-400'
-                              : mov.estado === 'Pendiente'
-                                ? 'bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-400'
-                                : 'bg-red-100 text-red-800 dark:bg-red-950/60 dark:text-red-400'
-                          }`}>
-                            {mov.estado}
-                          </span>
-                        </td>
-                        <td className="py-2.5 px-3 text-[11px] text-[#5c5750] dark:text-slate-400">
-                          {mov.metodo} {mov.fechaPago !== '—' && `(${mov.fechaPago})`}
-                        </td>
+
+              {estadoCuentaData.sinMovimientos || (!estadoCuentaData.movimientos || estadoCuentaData.movimientos.length === 0) ? (
+                <div className="p-8 text-center space-y-2">
+                  <FileText className="w-8 h-8 text-[#7d776f] mx-auto opacity-50" />
+                  <p className="text-xs font-bold text-[#262422] dark:text-slate-300">
+                    Sin movimientos registrados
+                  </p>
+                  <p className="text-[11px] text-[#7d776f] dark:text-slate-400 max-w-sm mx-auto">
+                    No se encontraron obligaciones ni pagos para los filtros de búsqueda seleccionados.
+                  </p>
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left border-collapse text-xs">
+                    <thead>
+                      <tr className="border-b border-[#cec8bc] dark:border-slate-800 bg-[#dfd9ce]/60 dark:bg-slate-950/60 text-[#7d776f] uppercase text-[10px] font-bold">
+                        <th className="py-2.5 px-3">Fecha / Período</th>
+                        <th className="py-2.5 px-3">Tipo</th>
+                        <th className="py-2.5 px-3">Concepto & Detalle</th>
+                        <th className="py-2.5 px-3 text-right font-mono">Debe (Bs)</th>
+                        <th className="py-2.5 px-3 text-right font-mono">Haber (Bs)</th>
+                        <th className="py-2.5 px-3 text-right font-mono">Saldo</th>
+                        <th className="py-2.5 px-3 text-center">Estado</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+                    </thead>
+                    <tbody className="divide-y divide-[#cec8bc] dark:divide-slate-800">
+                      {estadoCuentaData.movimientos.map((mov: any, idx: number) => {
+                        const esObligacion = mov.tipo === 'OBLIGACION'
+                        const esPago = mov.tipo === 'PAGO'
+                        const esAnticipo = mov.tipo === 'ANTICIPO'
+                        return (
+                          <tr key={mov.id || idx} className="hover:bg-[#dfd9ce]/30 dark:hover:bg-slate-800/30">
+                            <td className="py-2.5 px-3 font-bold font-mono text-[#262422] dark:text-white whitespace-nowrap">
+                              {fechaSolo(mov.fecha || mov.periodo)}
+                            </td>
+                            <td className="py-2.5 px-3">
+                              <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[9px] font-extrabold ${
+                                esObligacion
+                                  ? 'bg-blue-100 text-blue-800 dark:bg-blue-950/60 dark:text-blue-400'
+                                  : esAnticipo
+                                  ? 'bg-purple-100 text-purple-800 dark:bg-purple-950/60 dark:text-purple-300'
+                                  : 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-400'
+                              }`}>
+                                {mov.tipo || (mov.concepto?.includes('Pago') ? 'PAGO' : 'OBLIGACION')}
+                              </span>
+                            </td>
+                            <td className="py-2.5 px-3 text-[#5c5750] dark:text-slate-300">
+                              <div className="font-semibold">{mov.concepto}</div>
+                              {mov.pagador && (
+                                <div className="text-[10px] text-[#7d776f]">Pagado por: {mov.pagador}</div>
+                              )}
+                              {mov.vencimiento && (
+                                <div className="text-[10px] text-[#7d776f]">Vence: {mov.vencimiento}</div>
+                              )}
+                            </td>
+                            <td className="py-2.5 px-3 text-right font-bold font-mono text-[#262422] dark:text-white">
+                              {Number(mov.debe || (esObligacion ? mov.monto : 0)) > 0
+                                ? `Bs. ${Number(mov.debe || mov.monto).toFixed(2)}`
+                                : '—'}
+                            </td>
+                            <td className="py-2.5 px-3 text-right font-bold font-mono text-emerald-700 dark:text-emerald-400">
+                              {Number(mov.haber || (esPago || esAnticipo ? mov.monto : 0)) > 0
+                                ? `Bs. ${Number(mov.haber || mov.monto).toFixed(2)}`
+                                : '—'}
+                            </td>
+                            <td className="py-2.5 px-3 text-right font-mono text-[#7d776f] dark:text-slate-400">
+                              {mov.saldoPendiente !== undefined
+                                ? `Bs. ${Number(mov.saldoPendiente).toFixed(2)}`
+                                : (mov.saldo !== undefined ? `Bs. ${Number(mov.saldo).toFixed(2)}` : '—')}
+                            </td>
+                            <td className="py-2.5 px-3 text-center whitespace-nowrap">
+                              <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-extrabold ${
+                                mov.estado === 'Pagado'
+                                  ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-400'
+                                  : mov.estado === 'Pendiente'
+                                  ? 'bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-400'
+                                  : mov.estado === 'Moroso'
+                                  ? 'bg-red-100 text-red-800 dark:bg-red-950/60 dark:text-red-400'
+                                  : mov.anulado
+                                  ? 'bg-slate-200 text-slate-700 dark:bg-slate-800 dark:text-slate-400'
+                                  : 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-400'
+                              }`}>
+                                {mov.anulado ? 'Anulado' : (mov.estado || 'Efectuado')}
+                              </span>
+                            </td>
+                          </tr>
+                        )
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
             </div>
 
             {/* Nota Informativa */}

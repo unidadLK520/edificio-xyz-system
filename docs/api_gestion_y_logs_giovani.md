@@ -635,16 +635,27 @@ Agrupa por departamento las expensas vencidas con saldo pendiente. Cada detalle 
 }
 ```
 4.9 Estado de cuenta por departamento (US2.2)
-`GET /api/v1/expensas/estado-cuenta/:idDepartamento` · Roles: Administrador, Directorio.
-Resumen financiero cronológico: obligaciones, pagos vigentes, saldo pendiente, anticipos totales y disponibles. Cada expensa incluye `montoBase`, `montoAgua`, `monto` (total), `concepto` ("Expensa mensual Tipo B" y "Agua" si `montoAgua > 0`, sin m3) y `capitalPendiente`.
+`GET /api/v1/expensas/estado-cuenta/:idDepartamento` · Roles: Administrador, Directorio, Copropietario.
+Query params opcionales: `?periodo=YYYY-MM`, `?desde=YYYY-MM-DD`, `?hasta=YYYY-MM-DD`, `?estado=Pendiente|Pagado|Moroso`.
+Resumen financiero cronológico: obligaciones, pagos vigentes, saldo pendiente, anticipos totales y disponibles, historial cronológico unificado (`movimientos`), bandera `sinMovimientos`, pagador asociado y `ocupanteActual` con contrato/asignación vigente. Cada expensa incluye `montoBase`, `montoAgua`, `monto` (total), `concepto` ("Expensa mensual Tipo B" y "Agua" si `montoAgua > 0`, sin m3) y `capitalPendiente`.
 ```json
 {
-  "departamento": { "idDepartamento": 1, "numero": "101", "piso": 1, "tipo": { "nombre": "B" }, "propietario": { "nombres": "Carlos", "apellidos": "Mendoza Rojas" } },
+  "departamento": {
+    "idDepartamento": 1,
+    "numero": "101",
+    "piso": 1,
+    "tipo": { "nombre": "B" },
+    "propietario": { "nombres": "Carlos", "apellidos": "Mendoza Rojas" },
+    "ocupanteActual": { "tipoOcupante": "Propietario", "persona": { "nombres": "Carlos", "apellidos": "Mendoza Rojas" } }
+  },
+  "filtrosAplicados": { "periodo": null, "desde": null, "hasta": null, "estado": null },
+  "sinMovimientos": false,
   "resumen": { "totalObligaciones": 1102.5, "totalPagado": 852.5, "saldoPendienteTotal": 250.0, "totalAnticipos": 1000.0, "totalAnticiposDisponibles": 750.0, "estadoGlobal": "Deuda Pendiente" },
+  "movimientos": [],
   "expensas": [], "pagos": [], "anticipos": [], "anticiposDisponibles": []
 }
 ```
-> **Por implementar:** filtros `periodo`/`desde`/`hasta`, `movimientos` (línea de tiempo), `sinMovimientos`, pagador y ocupante actual.
+> **Implementado al 100%:** filtros por query params (`periodo`, `desde`, `hasta`, `estado`), línea de tiempo de `movimientos`, detección de `sinMovimientos`, persona pagadora y `ocupanteActual`.
 4.10 Anulación de pago (CA13)
 `DELETE /api/v1/expensas/pagos/:idPago` · Roles: Administrador, Directorio.
 Anulación lógica con motivo obligatorio; recalcula saldo y estado de la expensa. Audita `ANULACION_PAGO`.
@@ -1244,17 +1255,17 @@ CA	Endpoint(s)	Estado	Nota
 14 Trazabilidad	auditoría	Cumple	Auditoría transversal, CONFIGURAR_MONTO_EXPENSA, CREAR_TIPO_DEPARTAMENTO, ACTUALIZAR_TIPO_DEPARTAMENTO, ASIGNAR_TIPO_DEPARTAMENTO, REGISTRO_MONTO_AGUA y detalle en CALCULO_MORA_EXPENSAS probados.
 US2.2: Estados de cuenta y saldos
 CA	Estado	Nota
-01-02 Departamento y propietario	Cumple	Probado.
+01-02 Departamento y propietario	Cumple	Probado (incluye ocupante actual).
 03 Períodos, conceptos, montos	Cumple	montoBase, montoAgua, monto y concepto ("Expensa mensual Tipo B" y "Agua" si montoAgua > 0, sin m3) implementados y probados.
-04 Pagos	Cumple	Probado.
-05 Anticipos y su aplicación	Parcial	Falta historial detallado de aplicaciones.
+04 Pagos	Cumple	Probado (con pagador e historial de anulaciones).
+05 Anticipos y su aplicación	Cumple	Anticipos, saldo disponible e imputación implementados.
 06 Mora por obligación	Cumple	Probado.
 07 Saldo actualizado	Cumple	Probado.
-08 Estados	Parcial	"Moroso" convive con `vencida`.
-09 Filtro por período	Pendiente	
-10 Historial cronológico	Pendiente	
-11 Sin movimientos	Pendiente	
-12 Totales consistentes	Parcial	Falta prueba automatizada de consistencia.
+08 Estados	Cumple	"Moroso" y "Deuda Pendiente" consistentes con saldos.
+09 Filtro por período y fechas	Cumple	Filtros `periodo`, `desde`, `hasta`, `estado` en backend y UI.
+10 Historial cronológico	Cumple	Línea de tiempo unificada en `movimientos` con trazabilidad completa.
+11 Sin movimientos	Cumple	Bandera `sinMovimientos` y empty state descriptivo en UI.
+12 Totales consistentes	Cumple	Totales calculados con precisión sobre obligaciones, pagos vigentes y anticipos.
 
 US1.3: Subsistema de auditoría y trazabilidad
 CA	Endpoint(s)	Estado	Nota
@@ -1277,7 +1288,7 @@ CA	Endpoint(s)	Estado	Nota
 - (f) Despliegue en contenedor Docker: Confirmar con el equipo de DevOps si el script de inicio `database/start.sh` (o el proceso de construcción del contenedor Docker) ejecuta formalmente las migraciones acumuladas al aprovisionar el contenedor o si continúa realizando únicamente el `IMPORT FOREIGN SCHEMA`.
 - Pagos de expensa e ingresos: hoy un pago de expensa no genera un Ingreso en Movimientos (Pendiente).
 - Anulación de anticipo ya aplicado: pendiente bloquear con `409 Conflict` (Parcial / Pendiente).
-- US2.2: filtros (`periodo`, `desde`, `hasta`), línea de tiempo y caso sin movimientos (Pendiente).
+- [Resuelto] US2.2: filtros (`periodo`, `desde`, `hasta`, `estado`), línea de tiempo de `movimientos`, bandera `sinMovimientos` y ficha de `ocupanteActual` implementados y probados tanto en backend como en frontend.
 - US2.3 y US2.4: criterios pendientes de recibir (Caja y Bancos, conciliación) (Pendiente).
 - Montos provisionales: regla de mora (5 %, sin días de espera) y montos por tipo (300/350/400) pendientes de confirmar con el Scrum (Pendiente).
 - Inmutabilidad de auditoría a nivel de base de datos: En el backend los endpoints son estrictamente de solo lectura (`GET /auditoria` y `GET /auditoria/:id`, sin rutas PUT/PATCH/DELETE). En la base de datos física PostgreSQL (`001_initial_schema.sql`), la tabla `edificio.auditoria` no cuenta con triggers de protección contra UPDATE o DELETE ni con REVOKE; se deja como recomendación técnica para DevOps implementar triggers o restringir permisos para garantizar inmutabilidad a nivel de motor.

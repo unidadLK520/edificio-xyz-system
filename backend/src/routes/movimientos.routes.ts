@@ -11,9 +11,13 @@
 import { Router, Response, NextFunction, IRouter } from 'express';
 import { prisma } from '@edificio-xyz/database';
 import { z } from 'zod';
+import fs from 'fs';
+import path from 'path';
+import crypto from 'crypto';
 import { authMiddleware, AuthRequest } from '../middlewares/auth.middleware';
 import { authorizeRoles } from '../middlewares/role.middleware';
 import { auditoriaService } from '../modules/auditoria';
+import { config } from '../config';
 
 export const movimientosRouter: IRouter = Router();
 movimientosRouter.use(authMiddleware);
@@ -782,3 +786,95 @@ movimientosRouter.delete(
     }
   }
 );
+
+// -- POST /movimientos/upload-comprobante --------------------------------------
+// Almacena y procesa comprobantes de ingresos y egresos (US2.3-T35)
+const uploadComprobanteHandler = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    const { archivoBase64, nombreArchivo, url } = req.body as {
+      archivoBase64?: string;
+      nombreArchivo?: string;
+      url?: string;
+    };
+
+    // Si ya es una URL externa válida (ej. Supabase Storage, S3 o CDN)
+    if (url && typeof url === 'string' && (url.startsWith('http://') || url.startsWith('https://'))) {
+      res.json({
+        success: true,
+        comprobanteUrl: url,
+        referencia: url,
+        tipo: 'URL_EXTERNA',
+      });
+      return;
+    }
+
+    if (!archivoBase64 || typeof archivoBase64 !== 'string') {
+      res.status(400).json({
+        error: 'Bad Request',
+        message: 'Se requiere archivoBase64 o una url válida para almacenar el comprobante',
+      });
+      return;
+    }
+
+    // Extraer prefijo Data URI si existe
+    let mimeType = 'application/octet-stream';
+    let base64Data = archivoBase64;
+    const matches = archivoBase64.match(/^data:([A-Za-z-+\/]+);base64,(.+)$/);
+    if (matches && matches.length === 3) {
+      mimeType = matches[1];
+      base64Data = matches[2];
+    }
+
+    const buffer = Buffer.from(base64Data, 'base64');
+    const pesoMb = buffer.length / (1024 * 1024);
+
+    if (pesoMb > config.storageMaxFileSizeMb) {
+      res.status(413).json({
+        error: 'Payload Too Large',
+        message: `El archivo supera el tamaño máximo permitido de ${config.storageMaxFileSizeMb} MB (Tamaño: ${pesoMb.toFixed(2)} MB)`,
+      });
+      return;
+    }
+
+    // Determinar extensión según MIME
+    let extension = '.bin';
+    if (mimeType.includes('pdf')) extension = '.pdf';
+    else if (mimeType.includes('png')) extension = '.png';
+    else if (mimeType.includes('jpeg') || mimeType.includes('jpg')) extension = '.jpg';
+    else if (mimeType.includes('webp')) extension = '.webp';
+    else if (nombreArchivo && nombreArchivo.includes('.')) {
+      extension = path.extname(nombreArchivo);
+    }
+
+    // Directorio de destino para comprobantes
+    const comprobantesDir = path.resolve(process.cwd(), config.storageUploadDir, 'comprobantes');
+    if (!fs.existsSync(comprobantesDir)) {
+      fs.mkdirSync(comprobantesDir, { recursive: true });
+    }
+
+    const randomSuffix = crypto.randomBytes(8).toString('hex');
+    const timestamp = Date.now();
+    const finalFilename = `comp_${timestamp}_${randomSuffix}${extension}`;
+    const filePath = path.join(comprobantesDir, finalFilename);
+
+    // Escribir archivo en almacenamiento persistente
+    fs.writeFileSync(filePath, buffer);
+
+    const publicUrl = `${config.storagePublicUrl}/comprobantes/${finalFilename}`;
+
+    res.status(201).json({
+      success: true,
+      message: 'Comprobante almacenado exitosamente',
+      comprobanteUrl: publicUrl,
+      nombreArchivo: finalFilename,
+      mimeType,
+      pesoBytes: buffer.length,
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+movimientosRouter.post('/upload-comprobante', authorizeRoles('Administrador', 'Directorio'), uploadComprobanteHandler);
+movimientosRouter.post('/comprobantes/upload', authorizeRoles('Administrador', 'Directorio'), uploadComprobanteHandler);
+
