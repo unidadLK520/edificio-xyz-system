@@ -2,7 +2,7 @@
 // Módulo de Conciliación Bancaria y Cotejo de Extractos (Edificio XYZ)
 'use client'
 
-import React, { useState, useMemo } from 'react'
+import React, { useState, useEffect, useMemo, useCallback } from 'react'
 import {
   Landmark,
   CheckCircle2,
@@ -11,19 +11,20 @@ import {
   ArrowRightLeft,
   Upload,
   Download,
-  Printer,
   Search,
   Filter,
   DollarSign,
   Scale,
   RefreshCw,
-  FileSpreadsheet,
   Link2,
-  ShieldCheck,
   Building2,
   X,
-  FileCheck
+  FileCheck,
+  RotateCcw,
+  AlertCircle,
+  Loader2
 } from 'lucide-react'
+import { apiFetch } from '@/lib/api'
 
 export interface ItemExtractoBancario {
   id: string
@@ -33,8 +34,8 @@ export interface ItemExtractoBancario {
   tipo: 'Abono' | 'Cargo' // Abono = Ingreso, Cargo = Egreso
   monto: number
   estado: 'Conciliado' | 'Pendiente' | 'Discrepancia'
-  movimientoVinculadoId?: string
-  deptoSugerido?: string
+  movimientoVinculadoId?: string | null
+  deptoSugerido?: string | null
 }
 
 export interface ItemLibroSistema {
@@ -46,726 +47,480 @@ export interface ItemLibroSistema {
   tipo: 'Ingreso' | 'Egreso'
   monto: number
   estado: 'Conciliado' | 'Pendiente' | 'Discrepancia'
-  referenciaBancaria?: string
+  referenciaBancaria?: string | null
 }
 
-// Datos de ejemplo realistas para el Edificio XYZ
-const EXTRACTO_BANCARIO_SEED: ItemExtractoBancario[] = [
-  {
-    id: 'BAN-001',
-    fecha: '02/10/2026',
-    referencia: 'TRF-982104',
-    glosa: 'DEP CUENTA EXPENSA DPTO 101 ANA VALDIVIA',
-    tipo: 'Abono',
-    monto: 325.0,
-    estado: 'Conciliado',
-    movimientoVinculadoId: 'SIS-001',
-    deptoSugerido: '101'
-  },
-  {
-    id: 'BAN-002',
-    fecha: '04/10/2026',
-    referencia: 'TRF-119283',
-    glosa: 'TRANSFERENCIA DPTO 102 MENDOZA CARLOS',
-    tipo: 'Abono',
-    monto: 362.0,
-    estado: 'Conciliado',
-    movimientoVinculadoId: 'SIS-002',
-    deptoSugerido: '102'
-  },
-  {
-    id: 'BAN-003',
-    fecha: '05/10/2026',
-    referencia: 'CHQ-004812',
-    glosa: 'COBRO CHEQUE OTIS ASCENSORES SERV MANTTO',
-    tipo: 'Cargo',
-    monto: 1450.0,
-    estado: 'Conciliado',
-    movimientoVinculadoId: 'SIS-003'
-  },
-  {
-    id: 'BAN-004',
-    fecha: '08/10/2026',
-    referencia: 'QR-559102',
-    glosa: 'PAGO QR BANCO UNION RESIDENTE 201',
-    tipo: 'Abono',
-    monto: 310.0,
-    estado: 'Conciliado',
-    movimientoVinculadoId: 'SIS-004',
-    deptoSugerido: '201'
-  },
-  {
-    id: 'BAN-005',
-    fecha: '11/10/2026',
-    referencia: 'TRF-774910',
-    glosa: 'TRANSFERENCIA SIN GLOSA DE TERCERO',
-    tipo: 'Abono',
-    monto: 350.0,
-    estado: 'Pendiente',
-    deptoSugerido: '105'
-  },
-  {
-    id: 'BAN-006',
-    fecha: '12/10/2026',
-    referencia: 'DEB-AUTO-01',
-    glosa: 'DEBITO AUTOMATICO ELFEC ENERGIA ELECTRICA',
-    tipo: 'Cargo',
-    monto: 1820.5,
-    estado: 'Conciliado',
-    movimientoVinculadoId: 'SIS-005'
-  },
-  {
-    id: 'BAN-007',
-    fecha: '14/10/2026',
-    referencia: 'COM-MAN-OCT',
-    glosa: 'COMISION POR MANTENIMIENTO DE CUENTA BANCARIA',
-    tipo: 'Cargo',
-    monto: 35.0,
-    estado: 'Pendiente'
-  },
-  {
-    id: 'BAN-008',
-    fecha: '15/10/2026',
-    referencia: 'TRF-882914',
-    glosa: 'PAGO EXPENSA DPTO 301 ROBERTO DAZA',
-    tipo: 'Abono',
-    monto: 360.0,
-    estado: 'Discrepancia',
-    deptoSugerido: '301',
-    movimientoVinculadoId: 'SIS-006'
-  }
-]
-
-const LIBRO_SISTEMA_SEED: ItemLibroSistema[] = [
-  {
-    id: 'SIS-001',
-    fecha: '02/10/2026',
-    codigo: 'REC-2026-101',
-    concepto: 'Cobro de Expensa Mes Octubre',
-    departamento: '101',
-    tipo: 'Ingreso',
-    monto: 325.0,
-    estado: 'Conciliado',
-    referenciaBancaria: 'TRF-982104'
-  },
-  {
-    id: 'SIS-002',
-    fecha: '04/10/2026',
-    codigo: 'REC-2026-102',
-    concepto: 'Cobro de Expensa + Consumo de Agua',
-    departamento: '102',
-    tipo: 'Ingreso',
-    monto: 362.0,
-    estado: 'Conciliado',
-    referenciaBancaria: 'TRF-119283'
-  },
-  {
-    id: 'SIS-003',
-    fecha: '05/10/2026',
-    codigo: 'EGR-2026-041',
-    concepto: 'Mantenimiento Preventivo de Ascensores Otis',
-    tipo: 'Egreso',
-    monto: 1450.0,
-    estado: 'Conciliado',
-    referenciaBancaria: 'CHQ-004812'
-  },
-  {
-    id: 'SIS-004',
-    fecha: '08/10/2026',
-    codigo: 'REC-2026-201',
-    concepto: 'Expensa Ordinaria Octubre',
-    departamento: '201',
-    tipo: 'Ingreso',
-    monto: 310.0,
-    estado: 'Conciliado',
-    referenciaBancaria: 'QR-559102'
-  },
-  {
-    id: 'SIS-005',
-    fecha: '12/10/2026',
-    codigo: 'EGR-2026-042',
-    concepto: 'Servicio de Energía Eléctrica Áreas Comunes ELFEC',
-    tipo: 'Egreso',
-    monto: 1820.5,
-    estado: 'Conciliado',
-    referenciaBancaria: 'DEB-AUTO-01'
-  },
-  {
-    id: 'SIS-006',
-    fecha: '15/10/2026',
-    codigo: 'REC-2026-301',
-    concepto: 'Expensa Octubre con Mora Aplicada',
-    departamento: '301',
-    tipo: 'Ingreso',
-    monto: 341.0, // En sistema 341, en banco 360 (diferencia de 19 Bs por regla fija vs porcentual)
-    estado: 'Discrepancia',
-    referenciaBancaria: 'TRF-882914'
-  },
-  {
-    id: 'SIS-007',
-    fecha: '15/10/2026',
-    codigo: 'REC-2026-402',
-    concepto: 'Expensa Octubre Dpto 402 Claudia Daza',
-    departamento: '402',
-    tipo: 'Ingreso',
-    monto: 400.0,
-    estado: 'Pendiente'
-  }
-]
-
 export default function ConciliacionBancariaPage() {
-  const [bancoData, setBancoData] = useState<ItemExtractoBancario[]>(EXTRACTO_BANCARIO_SEED)
-  const [sistemaData, setSistemaData] = useState<ItemLibroSistema[]>(LIBRO_SISTEMA_SEED)
-  const [cuentaSeleccionada, setCuentaSeleccionada] = useState('bms-principal')
-  const [periodo, setPeriodo] = useState('Octubre 2026')
+  const [extractoBancario, setExtractoBancario] = useState<ItemExtractoBancario[]>([])
+  const [libroSistema, setLibroSistema] = useState<ItemLibroSistema[]>([])
+  const [loading, setLoading] = useState<boolean>(true)
+  const [apiError, setApiError] = useState<string | null>(null)
+  const [feedbackMsg, setFeedbackMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
+
+  // Filtros
   const [filtroEstado, setFiltroEstado] = useState<'Todos' | 'Conciliado' | 'Pendiente' | 'Discrepancia'>('Todos')
   const [searchTerm, setSearchTerm] = useState('')
-  const [isUploadModalOpen, setIsUploadModalOpen] = useState(false)
-  const [isManualLinkModalOpen, setIsManualLinkModalOpen] = useState(false)
-  const [itemParaVincular, setItemParaVincular] = useState<ItemExtractoBancario | null>(null)
-  const [toastMessage, setToastMessage] = useState<string | null>(null)
 
-  const showToast = (msg: string) => {
-    setToastMessage(msg)
-    setTimeout(() => setToastMessage(null), 4000)
+  // Modal para vincular manualmente
+  const [itemParaVincular, setItemParaVincular] = useState<ItemExtractoBancario | null>(null)
+  const [movimientoSistemaSeleccionado, setMovimientoSistemaSeleccionado] = useState<string>('')
+
+  const showNotification = (type: 'success' | 'error', text: string) => {
+    setFeedbackMsg({ type, text })
+    setTimeout(() => setFeedbackMsg(null), 4500)
   }
 
-  // Cálculos de saldo de conciliación
-  const saldoInicialBanco = 34710.0
-  const abonosBanco = bancoData.filter((b) => b.tipo === 'Abono').reduce((a, b) => a + b.monto, 0)
-  const cargosBanco = bancoData.filter((b) => b.tipo === 'Cargo').reduce((a, b) => a + b.monto, 0)
-  const saldoFinalBanco = saldoInicialBanco + abonosBanco - cargosBanco
+  // Cargar datos sin semillas fijas
+  const fetchConciliacionData = useCallback(async () => {
+    setLoading(true)
+    setApiError(null)
+    try {
+      // Consultar endpoint de conciliación y movimientos internos
+      const [resConciliacion, resMovimientos] = await Promise.allSettled([
+        apiFetch('/api/v1/conciliacion'),
+        apiFetch('/api/v1/movimientos?limit=100')
+      ])
 
-  const saldoInicialSistema = 34710.0
-  const ingresosSistema = sistemaData.filter((s) => s.tipo === 'Ingreso').reduce((a, b) => a + b.monto, 0)
-  const egresosSistema = sistemaData.filter((s) => s.tipo === 'Egreso').reduce((a, b) => a + b.monto, 0)
-  const saldoFinalSistema = saldoInicialSistema + ingresosSistema - egresosSistema
+      let errorMsg: string | null = null
 
-  const diferencia = saldoFinalBanco - saldoFinalSistema
-  const estaCuadrado = Math.abs(diferencia) < 0.01
+      if (resConciliacion.status === 'fulfilled' && resConciliacion.value.ok) {
+        const json = await resConciliacion.value.json()
+        setExtractoBancario(json.extractos || [])
+      } else {
+        errorMsg = 'El endpoint de Conciliación Bancaria aún está en desarrollo o no se encuentra disponible.'
+      }
 
-  // Porcentaje de conciliación
-  const totalPartidas = bancoData.length
-  const totalConciliadas = bancoData.filter((b) => b.estado === 'Conciliado').length
-  const porcentajeConciliado = totalPartidas > 0 ? Math.round((totalConciliadas / totalPartidas) * 100) : 0
+      if (resMovimientos.status === 'fulfilled' && resMovimientos.value.ok) {
+        const json = await resMovimientos.value.json()
+        const raw = Array.isArray(json.data) ? json.data : []
+        const mapped: ItemLibroSistema[] = raw.map((m: any) => ({
+          id: String(m.idMovimiento || m.id),
+          fecha: m.fecha ? m.fecha.slice(0, 10) : '',
+          codigo: m.codigo || `MOV-${m.idMovimiento || m.id}`,
+          concepto: m.descripcion || 'Movimiento',
+          tipo: m.tipo === 'Ingreso' ? 'Ingreso' : 'Egreso',
+          monto: Number(m.monto || 0),
+          estado: 'Pendiente',
+          referenciaBancaria: m.nroFactura || null
+        }))
+        setLibroSistema(mapped)
+      }
 
-  // Filtrado de partidas
-  const bancoFiltrado = useMemo(() => {
-    return bancoData.filter((item) => {
+      if (errorMsg && extractoBancario.length === 0) {
+        setApiError(errorMsg)
+      }
+    } catch (err: any) {
+      console.error('Error cargando conciliación bancaria:', err)
+      setApiError(err?.message || 'Error de conexión con el servicio de conciliación.')
+    } finally {
+      setLoading(false)
+    }
+  }, [extractoBancario.length])
+
+  useEffect(() => {
+    fetchConciliacionData()
+  }, [fetchConciliacionData])
+
+  // Métricas calculadas
+  const metricas = useMemo(() => {
+    const totalExtractos = extractoBancario.length
+    const conciliados = extractoBancario.filter((i) => i.estado === 'Conciliado').length
+    const pendientes = extractoBancario.filter((i) => i.estado === 'Pendiente').length
+    const discrepancias = extractoBancario.filter((i) => i.estado === 'Discrepancia').length
+
+    const porcentaje = totalExtractos > 0 ? Math.round((conciliados / totalExtractos) * 100) : 0
+
+    return { totalExtractos, conciliados, pendientes, discrepancias, porcentaje }
+  }, [extractoBancario])
+
+  // Filtrado de extracto bancario
+  const extractoFiltrado = useMemo(() => {
+    return extractoBancario.filter((item) => {
       const matchEstado = filtroEstado === 'Todos' || item.estado === filtroEstado
       const matchSearch =
         item.glosa.toLowerCase().includes(searchTerm.toLowerCase()) ||
         item.referencia.toLowerCase().includes(searchTerm.toLowerCase())
       return matchEstado && matchSearch
     })
-  }, [bancoData, filtroEstado, searchTerm])
+  }, [extractoBancario, filtroEstado, searchTerm])
 
-  const sistemaFiltrado = useMemo(() => {
-    return sistemaData.filter((item) => {
-      const matchEstado = filtroEstado === 'Todos' || item.estado === filtroEstado
-      const matchSearch =
-        item.concepto.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        item.codigo.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        (item.departamento && item.departamento.includes(searchTerm))
-      return matchEstado && matchSearch
-    })
-  }, [sistemaData, filtroEstado, searchTerm])
+  // Vincular movimiento interno con extracto bancario
+  const handleVincularMovimiento = async () => {
+    if (!itemParaVincular || !movimientoSistemaSeleccionado) {
+      showNotification('error', 'Seleccione un movimiento interno para vincular.')
+      return
+    }
 
-  // Ejecutar auto-conciliación inteligente
-  const handleAutoConciliacion = () => {
-    let matchesCount = 0
+    try {
+      const res = await apiFetch('/api/v1/conciliacion/vincular', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          idExtracto: itemParaVincular.id,
+          idMovimiento: movimientoSistemaSeleccionado
+        })
+      })
 
-    // Clonar listas
-    const newBanco = bancoData.map((b) => ({ ...b }))
-    const newSistema = sistemaData.map((s) => ({ ...s }))
-
-    newBanco.forEach((b) => {
-      if (b.estado === 'Pendiente') {
-        const match = newSistema.find(
-          (s) => s.estado === 'Pendiente' && Math.abs(s.monto - b.monto) < 0.01 && s.tipo === (b.tipo === 'Abono' ? 'Ingreso' : 'Egreso')
-        )
-        if (match) {
-          b.estado = 'Conciliado'
-          b.movimientoVinculadoId = match.id
-          match.estado = 'Conciliado'
-          match.referenciaBancaria = b.referencia
-          matchesCount++
-        }
+      if (res.ok) {
+        showNotification('success', 'Movimientos vinculados y conciliados exitosamente.')
+        await fetchConciliacionData()
+      } else {
+        const errJson = await res.json().catch(() => ({}))
+        showNotification('error', errJson.message || 'Error al vincular movimientos.')
       }
-    })
-
-    setBancoData(newBanco)
-    setSistemaData(newSistema)
-    showToast(`¡Auto-conciliación completada! Se cuadraron ${matchesCount} partidas automáticamente.`)
-  }
-
-  // Vincular manualmente un ítem
-  const handleVincularManual = (sisId: string) => {
-    if (!itemParaVincular) return
-
-    setBancoData((prev) =>
-      prev.map((b) =>
-        b.id === itemParaVincular.id
-          ? { ...b, estado: 'Conciliado', movimientoVinculadoId: sisId }
-          : b
+    } catch {
+      // Fallback local
+      setExtractoBancario((prev) =>
+        prev.map((item) =>
+          item.id === itemParaVincular.id
+            ? { ...item, estado: 'Conciliado', movimientoVinculadoId: movimientoSistemaSeleccionado }
+            : item
+        )
       )
-    )
-
-    setSistemaData((prev) =>
-      prev.map((s) =>
-        s.id === sisId
-          ? { ...s, estado: 'Conciliado', referenciaBancaria: itemParaVincular.referencia }
-          : s
+      setLibroSistema((prev) =>
+        prev.map((mov) =>
+          mov.id === movimientoSistemaSeleccionado
+            ? { ...mov, estado: 'Conciliado', referenciaBancaria: itemParaVincular.referencia }
+            : mov
+        )
       )
-    )
-
-    setIsManualLinkModalOpen(false)
-    setItemParaVincular(null)
-    showToast('¡Partida conciliada manualmente con éxito!')
+      showNotification('success', 'Movimientos vinculados localmente.')
+    } finally {
+      setItemParaVincular(null)
+      setMovimientoSistemaSeleccionado('')
+    }
   }
 
   return (
-    <div className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto space-y-6">
-      
-      {/* Toast de confirmación */}
-      {toastMessage && (
-        <div className="p-4 bg-emerald-100 dark:bg-emerald-950/70 border border-emerald-300 dark:border-emerald-800 text-emerald-900 dark:text-emerald-200 rounded-2xl flex items-center gap-3 shadow-md animate-in fade-in slide-in-from-top-3 duration-300">
-          <CheckCircle2 className="w-5 h-5 text-emerald-600 dark:text-emerald-400 shrink-0" />
-          <span className="text-xs sm:text-sm font-bold">{toastMessage}</span>
+    <div className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto space-y-6 animate-in fade-in duration-300">
+      {/* NOTIFICACIÓN TOAST */}
+      {feedbackMsg && (
+        <div
+          className={`p-4 rounded-2xl flex items-center justify-between gap-3 shadow-lg border animate-in slide-in-from-top-2 duration-300 ${
+            feedbackMsg.type === 'success'
+              ? 'bg-emerald-100 border-emerald-300 text-emerald-900 dark:bg-emerald-950/80 dark:border-emerald-800 dark:text-emerald-200'
+              : 'bg-rose-100 border-rose-300 text-rose-900 dark:bg-rose-950/80 dark:border-rose-800 dark:text-rose-200'
+          }`}
+        >
+          <div className="flex items-center gap-2.5 text-xs sm:text-sm font-semibold">
+            {feedbackMsg.type === 'success' ? (
+              <CheckCircle2 className="w-5 h-5 text-emerald-600 dark:text-emerald-400 shrink-0" />
+            ) : (
+              <AlertCircle className="w-5 h-5 text-rose-600 dark:text-rose-400 shrink-0" />
+            )}
+            <span>{feedbackMsg.text}</span>
+          </div>
+          <button
+            onClick={() => setFeedbackMsg(null)}
+            className="text-xs p-1 opacity-70 hover:opacity-100 cursor-pointer"
+          >
+            <X className="w-4 h-4" />
+          </button>
         </div>
       )}
 
-      {/* HEADER DE PÁGINA */}
+      {/* HEADER */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-[#cec8bc] dark:border-slate-800">
         <div>
-          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-purple-500/10 border border-purple-500/20 text-purple-800 dark:text-purple-400 text-xs font-semibold mb-2">
-            <Landmark className="w-3.5 h-3.5" />
-            Cotejo Contable & Conciliación de Cuentas
+          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-blue-500/10 border border-blue-500/20 text-blue-800 dark:text-blue-400 text-xs font-semibold mb-2">
+            <Scale className="w-3.5 h-3.5" />
+            Auditoría y Conciliación Bancaria &bull; US2.4
           </div>
           <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-[#262422] dark:text-white">
             Conciliación Bancaria
           </h1>
           <p className="text-xs sm:text-sm text-[#66615b] dark:text-slate-400 mt-1">
-            Cotejo de extractos bancarios oficiales contra registros de expensas e ingresos/egresos del Edificio XYZ.
+            Cotejo sistemático entre el extracto bancario oficial y los movimientos registrados en el sistema.
           </p>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2">
-          {/* Selector de Cuenta */}
-          <div className="flex items-center gap-1.5 bg-[#dfd9ce] dark:bg-slate-900 px-3 py-2 rounded-xl border border-[#cec8bc] dark:border-slate-700 text-xs">
-            <Building2 className="w-3.5 h-3.5 text-[#7d776f]" />
-            <select
-              value={cuentaSeleccionada}
-              onChange={(e) => setCuentaSeleccionada(e.target.value)}
-              className="bg-transparent text-[#262422] dark:text-white font-bold focus:outline-none cursor-pointer"
-            >
-              <option value="bms-principal">BMSC Cta. Cte. N° 4010-829104-Bs (Expensas)</option>
-              <option value="bnb-reserva">BNB Cta. Ahorros N° 2000-19283-Bs (Reserva)</option>
-            </select>
-          </div>
-
-          <button
-            type="button"
-            onClick={handleAutoConciliacion}
-            className="inline-flex items-center gap-2 px-4 py-2 bg-purple-700 hover:bg-purple-600 active:bg-purple-800 text-white text-xs font-bold rounded-xl shadow-md transition-all cursor-pointer"
-          >
-            <RefreshCw className="w-3.5 h-3.5" />
-            <span>Auto-Conciliar</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setIsUploadModalOpen(true)}
-            className="inline-flex items-center gap-2 px-3.5 py-2 bg-[#dfd9ce] dark:bg-slate-800 border border-[#cec8bc] dark:border-slate-700 text-[#262422] dark:text-white text-xs font-bold rounded-xl hover:bg-[#ded8cc] transition-all cursor-pointer"
-          >
-            <Upload className="w-3.5 h-3.5" />
-            <span>Subir Extracto</span>
-          </button>
-        </div>
+        <button
+          type="button"
+          onClick={fetchConciliacionData}
+          className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl bg-[#dfd9ce] hover:bg-[#d5cfc2] dark:bg-slate-800 dark:hover:bg-slate-700 text-xs font-bold transition-all cursor-pointer border border-[#cec8bc] dark:border-slate-700 self-start"
+        >
+          <RefreshCw className="w-4 h-4 text-blue-600" />
+          <span>Sincronizar</span>
+        </button>
       </div>
 
-      {/* TARJETAS DE ESTADO DE CONCILIACIÓN */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
-        {/* Saldo Banco */}
-        <div className="p-4 sm:p-5 rounded-2xl bg-[#ede9e1] dark:bg-slate-900 border border-[#cec8bc] dark:border-slate-800 shadow-xs">
-          <div className="text-xs font-bold text-[#7d776f] dark:text-slate-400">
-            Saldo Según Extracto Bancario
+      {/* ERROR CON BOTÓN REINTENTAR */}
+      {apiError && !loading && extractoBancario.length === 0 ? (
+        <div className="p-8 sm:p-12 text-center rounded-2xl bg-amber-500/5 dark:bg-amber-950/20 border border-amber-500/20 max-w-xl mx-auto space-y-4 shadow-sm">
+          <div className="w-12 h-12 rounded-full bg-amber-500/10 text-amber-600 dark:text-amber-400 flex items-center justify-center mx-auto">
+            <AlertTriangle className="w-6 h-6" />
           </div>
-          <div className="text-xl sm:text-2xl font-extrabold text-[#262422] dark:text-white mt-1 font-mono">
-            Bs. {saldoFinalBanco.toLocaleString('es-BO', { minimumFractionDigits: 2 })}
-          </div>
-          <div className="text-[11px] text-[#7d776f] mt-0.5">
-            Corte al 16 de Octubre de 2026
-          </div>
-        </div>
-
-        {/* Saldo Sistema */}
-        <div className="p-4 sm:p-5 rounded-2xl bg-[#ede9e1] dark:bg-slate-900 border border-[#cec8bc] dark:border-slate-800 shadow-xs">
-          <div className="text-xs font-bold text-[#7d776f] dark:text-slate-400">
-            Saldo Según Libros del Sistema
-          </div>
-          <div className="text-xl sm:text-2xl font-extrabold text-[#262422] dark:text-white mt-1 font-mono">
-            Bs. {saldoFinalSistema.toLocaleString('es-BO', { minimumFractionDigits: 2 })}
-          </div>
-          <div className="text-[11px] text-[#7d776f] mt-0.5">
-            Total recaudaciones y egresos
-          </div>
-        </div>
-
-        {/* Diferencia */}
-        <div className="p-4 sm:p-5 rounded-2xl bg-[#ede9e1] dark:bg-slate-900 border border-[#cec8bc] dark:border-slate-800 shadow-xs">
-          <div className="text-xs font-bold text-[#7d776f] dark:text-slate-400">
-            Diferencia a Justificar
-          </div>
-          <div
-            className={`text-xl sm:text-2xl font-extrabold mt-1 font-mono ${
-              estaCuadrado ? 'text-emerald-700 dark:text-emerald-400' : 'text-amber-600 dark:text-amber-400'
-            }`}
-          >
-            Bs. {Math.abs(diferencia).toLocaleString('es-BO', { minimumFractionDigits: 2 })}
-          </div>
-          <div className="text-[11px] font-bold mt-0.5 flex items-center gap-1">
-            {estaCuadrado ? (
-              <span className="text-emerald-700 dark:text-emerald-400 flex items-center gap-1">
-                <CheckCircle2 className="w-3.5 h-3.5" /> Conciliación Cuadrada (0.00)
-              </span>
-            ) : (
-              <span className="text-amber-700 dark:text-amber-400 flex items-center gap-1">
-                <AlertTriangle className="w-3.5 h-3.5" /> Partidas pendientes de cotejo
-              </span>
-            )}
-          </div>
-        </div>
-
-        {/* Progreso */}
-        <div className="p-4 sm:p-5 rounded-2xl bg-[#ede9e1] dark:bg-slate-900 border border-[#cec8bc] dark:border-slate-800 shadow-xs">
-          <div className="text-xs font-bold text-[#7d776f] dark:text-slate-400">
-            Avance de Conciliación
-          </div>
-          <div className="text-xl sm:text-2xl font-extrabold text-purple-700 dark:text-purple-400 mt-1">
-            {porcentajeConciliado}%
-          </div>
-          <div className="text-[11px] text-[#7d776f] mt-0.5">
-            {totalConciliadas} de {totalPartidas} movimientos cotejados
-          </div>
-        </div>
-      </div>
-
-      {/* FILTROS Y ESTADOS */}
-      <div className="p-3.5 rounded-2xl bg-[#ede9e1] dark:bg-slate-900 border border-[#cec8bc] dark:border-slate-800 flex flex-col sm:flex-row gap-3 items-stretch sm:items-center justify-between shadow-xs">
-        <div className="relative flex-1">
-          <Search className="w-4 h-4 text-[#7d776f] absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
-          <input
-            type="text"
-            placeholder="Buscar por referencia, glosa, código o departamento..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full pl-10 pr-4 py-2 bg-[#dfd9ce] dark:bg-slate-950 border border-[#cec8bc] dark:border-slate-700 rounded-xl text-xs sm:text-sm text-[#1c1917] dark:text-white placeholder-[#857f76] focus:outline-none focus:ring-2 focus:ring-purple-600"
-          />
-        </div>
-
-        <div className="flex items-center gap-2">
-          <div className="flex items-center gap-1.5 bg-[#dfd9ce] dark:bg-slate-950 px-3 py-2 rounded-xl border border-[#cec8bc] dark:border-slate-700 text-xs">
-            <Filter className="w-3.5 h-3.5 text-[#7d776f]" />
-            <select
-              value={filtroEstado}
-              onChange={(e) => setFiltroEstado(e.target.value as any)}
-              className="bg-transparent text-[#262422] dark:text-white font-bold focus:outline-none cursor-pointer"
-            >
-              <option value="Todos">Estado: Todos</option>
-              <option value="Conciliado">Solo Conciliados</option>
-              <option value="Pendiente">Pendientes</option>
-              <option value="Discrepancia">Discrepancias</option>
-            </select>
-          </div>
-        </div>
-      </div>
-
-      {/* VISTA COMPARATIVA EN DOS COLUMNAS (SIDE-BY-SIDE) */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        
-        {/* COLUMNA 1: EXTRACTO BANCARIO OFICIAL */}
-        <div className="rounded-3xl bg-[#ede9e1] dark:bg-slate-900 border border-[#cec8bc] dark:border-slate-800 overflow-hidden shadow-sm flex flex-col justify-between">
           <div>
-            <div className="p-4 bg-[#dfd9ce]/70 dark:bg-slate-950/70 border-b border-[#cec8bc] dark:border-slate-800 flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <Landmark className="w-4 h-4 text-purple-700 dark:text-purple-400" />
-                <h3 className="font-extrabold text-sm text-[#262422] dark:text-white">
-                  1. Extracto del Banco ({bancoFiltrado.length})
-                </h3>
-              </div>
-              <span className="text-[11px] font-bold text-[#7d776f]">
-                {cuentaSeleccionada === 'bms-principal' ? 'BMSC Cta. Cte.' : 'BNB Ahorros'}
-              </span>
-            </div>
-
-            <div className="divide-y divide-[#cec8bc] dark:divide-slate-800 max-h-[500px] overflow-y-auto">
-              {bancoFiltrado.length === 0 ? (
-                <div className="p-8 text-center text-xs text-[#7d776f]">
-                  No hay movimientos bancarios con el filtro seleccionado.
-                </div>
-              ) : (
-                bancoFiltrado.map((item) => {
-                  const isAbono = item.tipo === 'Abono'
-                  return (
-                    <div
-                      key={item.id}
-                      className="p-3.5 hover:bg-[#dfd9ce]/40 dark:hover:bg-slate-800/40 transition-colors flex items-start justify-between gap-3 text-xs"
-                    >
-                      <div className="space-y-1 flex-1">
-                        <div className="flex items-center gap-2">
-                          <span className="font-mono font-bold text-[10px] text-[#7d776f]">
-                            {item.fecha}
-                          </span>
-                          <span className="font-mono font-bold text-[10px] px-1.5 py-0.5 rounded bg-[#cec8bc] dark:bg-slate-800 text-[#262422] dark:text-white">
-                            {item.referencia}
-                          </span>
-                          <span
-                            className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                              item.estado === 'Conciliado'
-                                ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-400'
-                                : item.estado === 'Discrepancia'
-                                ? 'bg-red-100 text-red-800 dark:bg-red-950/60 dark:text-red-400'
-                                : 'bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-400'
-                            }`}
-                          >
-                            {item.estado}
-                          </span>
-                        </div>
-                        <p className="font-semibold text-[#262422] dark:text-white text-xs line-clamp-1">
-                          {item.glosa}
-                        </p>
-                        {item.deptoSugerido && (
-                          <span className="text-[10px] text-blue-700 dark:text-blue-400 font-bold block">
-                            Dpto. Identificado: {item.deptoSugerido}
-                          </span>
-                        )}
-                      </div>
-
-                      <div className="text-right space-y-1">
-                        <span
-                          className={`font-mono font-extrabold text-sm block ${
-                            isAbono ? 'text-emerald-700 dark:text-emerald-400' : 'text-rose-700 dark:text-rose-400'
-                          }`}
-                        >
-                          {isAbono ? '+' : '-'}Bs. {item.monto.toFixed(2)}
-                        </span>
-                        {item.estado === 'Pendiente' && (
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setItemParaVincular(item)
-                              setIsManualLinkModalOpen(true)
-                            }}
-                            className="text-[10px] text-purple-700 dark:text-purple-400 hover:underline font-bold cursor-pointer"
-                          >
-                            Vincular
-                          </button>
-                        )}
-                      </div>
-                    </div>
-                  )
-                })
-              )}
-            </div>
+            <h3 className="text-base font-bold text-slate-900 dark:text-white">
+              Servicio de Conciliación Bancaria no disponible
+            </h3>
+            <p className="text-sm text-slate-600 dark:text-slate-400 mt-1">
+              {apiError}
+            </p>
           </div>
-
-          <div className="p-3 bg-[#dfd9ce]/40 dark:bg-slate-950/40 border-t border-[#cec8bc] dark:border-slate-800 text-xs flex justify-between font-bold">
-            <span>Total Movimientos Banco</span>
-            <span className="font-mono text-purple-700 dark:text-purple-400">
-              Bs. {saldoFinalBanco.toLocaleString('es-BO', { minimumFractionDigits: 2 })}
-            </span>
-          </div>
+          <button
+            onClick={fetchConciliacionData}
+            className="inline-flex items-center gap-2 px-4 py-2 bg-amber-600 hover:bg-amber-500 text-white rounded-xl text-sm font-semibold transition-colors cursor-pointer shadow-md shadow-amber-600/20"
+          >
+            <RotateCcw className="w-4 h-4" />
+            <span>Reintentar</span>
+          </button>
         </div>
-
-        {/* COLUMNA 2: REGISTROS EN LIBRO DEL SISTEMA */}
-        <div className="rounded-3xl bg-[#ede9e1] dark:bg-slate-900 border border-[#cec8bc] dark:border-slate-800 overflow-hidden shadow-sm flex flex-col justify-between">
-          <div>
-            <div className="p-4 bg-[#dfd9ce]/70 dark:bg-slate-950/70 border-b border-[#cec8bc] dark:border-slate-800 flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <FileCheck className="w-4 h-4 text-blue-700 dark:text-blue-400" />
-                <h3 className="font-extrabold text-sm text-[#262422] dark:text-white">
-                  2. Registros del Sistema ({sistemaFiltrado.length})
-                </h3>
+      ) : (
+        <>
+          {/* CARDS DE RESUMEN DE CONCILIACIÓN */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4">
+            <div className="p-4 rounded-2xl bg-white/70 dark:bg-slate-900/70 border border-[#cec8bc] dark:border-slate-800 shadow-sm space-y-1">
+              <span className="text-xs text-[#7d776f] font-semibold">Tasa de Conciliación</span>
+              <div className="text-2xl font-black text-blue-700 dark:text-blue-400 font-mono">
+                {metricas.porcentaje}%
               </div>
-              <span className="text-[11px] font-bold text-[#7d776f]">
-                Expensas & Movimientos
-              </span>
+              <span className="text-[10px] text-[#7d776f]">Efectividad del período</span>
             </div>
 
-            <div className="divide-y divide-[#cec8bc] dark:divide-slate-800 max-h-[500px] overflow-y-auto">
-              {sistemaFiltrado.length === 0 ? (
-                <div className="p-8 text-center text-xs text-[#7d776f]">
-                  No hay registros contables con el filtro seleccionado.
-                </div>
-              ) : (
-                sistemaFiltrado.map((item) => {
-                  const isIngreso = item.tipo === 'Ingreso'
-                  return (
-                    <div
-                      key={item.id}
-                      className="p-3.5 hover:bg-[#dfd9ce]/40 dark:hover:bg-slate-800/40 transition-colors flex items-start justify-between gap-3 text-xs"
-                    >
-                      <div className="space-y-1 flex-1">
-                        <div className="flex items-center gap-2">
-                          <span className="font-mono font-bold text-[10px] text-[#7d776f]">
-                            {item.fecha}
-                          </span>
-                          <span className="font-mono font-bold text-[10px] px-1.5 py-0.5 rounded bg-[#cec8bc] dark:bg-slate-800 text-[#262422] dark:text-white">
-                            {item.codigo}
-                          </span>
-                          <span
-                            className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                              item.estado === 'Conciliado'
-                                ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-400'
-                                : item.estado === 'Discrepancia'
-                                ? 'bg-red-100 text-red-800 dark:bg-red-950/60 dark:text-red-400'
-                                : 'bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-400'
-                            }`}
-                          >
-                            {item.estado}
-                          </span>
-                        </div>
-                        <p className="font-semibold text-[#262422] dark:text-white text-xs line-clamp-1">
-                          {item.concepto}
-                        </p>
-                        {item.departamento && (
-                          <span className="text-[10px] text-purple-700 dark:text-purple-400 font-bold block">
-                            Dpto. {item.departamento}
-                          </span>
-                        )}
-                      </div>
+            <div className="p-4 rounded-2xl bg-white/70 dark:bg-slate-900/70 border border-[#cec8bc] dark:border-slate-800 shadow-sm space-y-1">
+              <span className="text-xs text-[#7d776f] font-semibold">Conciliados</span>
+              <div className="text-2xl font-black text-emerald-700 dark:text-emerald-400 font-mono">
+                {metricas.conciliados}
+              </div>
+              <span className="text-[10px] text-emerald-600 font-medium">&check; Cuadrados</span>
+            </div>
 
-                      <div className="text-right space-y-1">
-                        <span
-                          className={`font-mono font-extrabold text-sm block ${
-                            isIngreso ? 'text-emerald-700 dark:text-emerald-400' : 'text-rose-700 dark:text-rose-400'
-                          }`}
-                        >
-                          {isIngreso ? '+' : '-'}Bs. {item.monto.toFixed(2)}
-                        </span>
-                        {item.referenciaBancaria && (
-                          <span className="text-[10px] font-mono text-[#7d776f] block">
-                            Ref: {item.referenciaBancaria}
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                  )
-                })
-              )}
+            <div className="p-4 rounded-2xl bg-white/70 dark:bg-slate-900/70 border border-[#cec8bc] dark:border-slate-800 shadow-sm space-y-1">
+              <span className="text-xs text-[#7d776f] font-semibold">Pendientes de Cotejo</span>
+              <div className="text-2xl font-black text-amber-700 dark:text-amber-400 font-mono">
+                {metricas.pendientes}
+              </div>
+              <span className="text-[10px] text-amber-600 font-medium">&bull; Por vincular</span>
+            </div>
+
+            <div className="p-4 rounded-2xl bg-white/70 dark:bg-slate-900/70 border border-[#cec8bc] dark:border-slate-800 shadow-sm space-y-1">
+              <span className="text-xs text-[#7d776f] font-semibold">Discrepancias</span>
+              <div className="text-2xl font-black text-rose-700 dark:text-rose-400 font-mono">
+                {metricas.discrepancias}
+              </div>
+              <span className="text-[10px] text-rose-600 font-medium">Requiere revisión</span>
             </div>
           </div>
 
-          <div className="p-3 bg-[#dfd9ce]/40 dark:bg-slate-950/40 border-t border-[#cec8bc] dark:border-slate-800 text-xs flex justify-between font-bold">
-            <span>Total Registros Libros</span>
-            <span className="font-mono text-blue-700 dark:text-blue-400">
-              Bs. {saldoFinalSistema.toLocaleString('es-BO', { minimumFractionDigits: 2 })}
-            </span>
-          </div>
-        </div>
-      </div>
+          {/* FILTROS */}
+          <div className="p-4 rounded-2xl bg-white/70 dark:bg-slate-900/70 border border-[#cec8bc] dark:border-slate-800 shadow-sm flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
+            <div className="flex items-center gap-1.5 p-1 rounded-xl bg-[#dfd9ce] dark:bg-slate-950 border border-[#cec8bc] dark:border-slate-800">
+              {(['Todos', 'Conciliado', 'Pendiente', 'Discrepancia'] as const).map((est) => (
+                <button
+                  key={est}
+                  type="button"
+                  onClick={() => setFiltroEstado(est)}
+                  className={`px-3 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                    filtroEstado === est
+                      ? 'bg-blue-700 text-white'
+                      : 'text-[#5c5750] dark:text-slate-400'
+                  }`}
+                >
+                  {est}
+                </button>
+              ))}
+            </div>
 
-      {/* MODAL VINCULACIÓN MANUAL */}
-      {isManualLinkModalOpen && itemParaVincular && (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="w-full max-w-lg bg-[#ede9e1] dark:bg-slate-900 rounded-3xl border border-[#cec8bc] dark:border-slate-800 p-6 space-y-4 shadow-2xl animate-in fade-in zoom-in-95 duration-200">
-            <div className="flex items-center justify-between border-b border-[#cec8bc] dark:border-slate-800 pb-3">
-              <h3 className="font-extrabold text-base text-[#262422] dark:text-white flex items-center gap-2">
-                <Link2 className="w-4 h-4 text-purple-700" />
-                Vincular Partida Bancaria Manualmente
+            <div className="relative sm:w-72">
+              <Search className="w-4 h-4 text-[#7d776f] absolute left-3 top-1/2 -translate-y-1/2" />
+              <input
+                type="text"
+                placeholder="Buscar por glosa o referencia..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="w-full pl-9 pr-3 py-1.5 rounded-xl bg-[#dfd9ce] dark:bg-slate-950 border border-[#cec8bc] dark:border-slate-800 text-xs"
+              />
+            </div>
+          </div>
+
+          {/* TABLA DE COMPARACIÓN */}
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+            {/* COLUMNA 1: EXTRACTO BANCARIO */}
+            <div className="lg:col-span-7 space-y-3">
+              <h3 className="font-extrabold text-sm text-[#262422] dark:text-white flex items-center gap-2">
+                <Landmark className="w-4 h-4 text-blue-600" />
+                Extracto Bancario Institucional ({extractoFiltrado.length})
               </h3>
-              <button onClick={() => setIsManualLinkModalOpen(false)} className="text-[#7d776f] hover:text-[#262422]">
-                <X className="w-5 h-5" />
-              </button>
-            </div>
 
-            <div className="p-3 rounded-2xl bg-[#dfd9ce]/60 dark:bg-slate-950/60 border border-[#cec8bc] dark:border-slate-800 text-xs space-y-1">
-              <span className="font-bold text-[#7d776f] uppercase block text-[10px]">Movimiento en Extracto:</span>
-              <p className="font-bold text-[#262422] dark:text-white">{itemParaVincular.glosa}</p>
-              <div className="flex justify-between font-mono font-bold pt-1">
-                <span>Ref: {itemParaVincular.referencia}</span>
-                <span className="text-emerald-700 dark:text-emerald-400">Bs. {itemParaVincular.monto.toFixed(2)}</span>
+              <div className="rounded-2xl border border-[#cec8bc] dark:border-slate-800 bg-white/70 dark:bg-slate-900/70 overflow-hidden shadow-sm">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left border-collapse text-xs">
+                    <thead>
+                      <tr className="border-b border-[#cec8bc] dark:border-slate-800 bg-[#e3ded4] dark:bg-slate-950/60 font-bold uppercase text-[10px] text-[#5c5750]">
+                        <th className="py-2.5 px-3">Fecha / Ref</th>
+                        <th className="py-2.5 px-3">Glosa Bancaria</th>
+                        <th className="py-2.5 px-3">Monto (Bs.)</th>
+                        <th className="py-2.5 px-3">Estado</th>
+                        <th className="py-2.5 px-3 text-right">Acción</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-[#cec8bc]/50">
+                      {loading ? (
+                        <tr>
+                          <td colSpan={5} className="py-8 text-center text-[#7d776f]">
+                            <Loader2 className="w-5 h-5 animate-spin mx-auto text-blue-700" />
+                          </td>
+                        </tr>
+                      ) : extractoFiltrado.length === 0 ? (
+                        <tr>
+                          <td colSpan={5} className="py-8 text-center text-[#7d776f]">
+                            No hay registros bancarios para mostrar.
+                          </td>
+                        </tr>
+                      ) : (
+                        extractoFiltrado.map((item) => (
+                          <tr key={item.id} className="hover:bg-[#e6e1d6]/50">
+                            <td className="py-2.5 px-3">
+                              <div className="font-mono font-bold text-[11px]">{item.referencia}</div>
+                              <div className="text-[10px] text-[#7d776f]">{item.fecha}</div>
+                            </td>
+                            <td className="py-2.5 px-3 max-w-[180px] truncate font-medium" title={item.glosa}>
+                              {item.glosa}
+                            </td>
+                            <td
+                              className={`py-2.5 px-3 font-mono font-bold ${
+                                item.tipo === 'Abono' ? 'text-emerald-700' : 'text-rose-700'
+                              }`}
+                            >
+                              {item.tipo === 'Abono' ? '+' : '-'} Bs. {item.monto.toFixed(2)}
+                            </td>
+                            <td className="py-2.5 px-3">
+                              <span
+                                className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                                  item.estado === 'Conciliado'
+                                    ? 'bg-emerald-100 text-emerald-900'
+                                    : item.estado === 'Pendiente'
+                                    ? 'bg-amber-100 text-amber-900'
+                                    : 'bg-rose-100 text-rose-900'
+                                }`}
+                              >
+                                {item.estado}
+                              </span>
+                            </td>
+                            <td className="py-2.5 px-3 text-right">
+                              {item.estado !== 'Conciliado' && (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setItemParaVincular(item)
+                                    setMovimientoSistemaSeleccionado('')
+                                  }}
+                                  className="px-2.5 py-1 rounded-lg bg-blue-700 hover:bg-blue-600 text-white text-[10px] font-bold cursor-pointer"
+                                >
+                                  Vincular
+                                </button>
+                              )}
+                            </td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
               </div>
             </div>
 
-            <div className="space-y-2">
-              <span className="font-bold text-xs text-[#262422] dark:text-white block">
-                Seleccione el registro del sistema a cotejar:
-              </span>
-              <div className="space-y-1.5 max-h-48 overflow-y-auto">
-                {sistemaData
-                  .filter((s) => s.estado === 'Pendiente')
-                  .map((s) => (
-                    <div
-                      key={s.id}
-                      onClick={() => handleVincularManual(s.id)}
-                      className="p-3 rounded-xl border border-[#cec8bc] dark:border-slate-700 bg-[#dfd9ce]/40 dark:bg-slate-800/40 hover:bg-purple-100 dark:hover:bg-purple-950/40 transition-colors cursor-pointer flex items-center justify-between text-xs"
-                    >
-                      <div>
-                        <span className="font-bold text-[#262422] dark:text-white block">{s.concepto}</span>
-                        <span className="text-[11px] text-[#7d776f] font-mono">{s.codigo} {s.departamento ? `• Dpto ${s.departamento}` : ''}</span>
-                      </div>
-                      <span className="font-mono font-extrabold text-sm text-purple-700 dark:text-purple-400">
-                        Bs. {s.monto.toFixed(2)}
-                      </span>
+            {/* COLUMNA 2: MOVIMIENTOS INTERNOS DEL SISTEMA */}
+            <div className="lg:col-span-5 space-y-3">
+              <h3 className="font-extrabold text-sm text-[#262422] dark:text-white flex items-center gap-2">
+                <FileCheck className="w-4 h-4 text-emerald-600" />
+                Movimientos del Sistema ({libroSistema.length})
+              </h3>
+
+              <div className="rounded-2xl border border-[#cec8bc] dark:border-slate-800 bg-white/70 dark:bg-slate-900/70 overflow-hidden shadow-sm max-h-[500px] overflow-y-auto">
+                <div className="divide-y divide-[#cec8bc]/50 text-xs">
+                  {libroSistema.length === 0 ? (
+                    <div className="p-8 text-center text-[#7d776f]">
+                      No hay movimientos registrados en el sistema.
                     </div>
-                  ))}
+                  ) : (
+                    libroSistema.map((mov) => (
+                      <div key={mov.id} className="p-3 hover:bg-[#e6e1d6]/50 transition-colors space-y-1">
+                        <div className="flex items-center justify-between">
+                          <span className="font-mono font-bold text-xs">{mov.codigo}</span>
+                          <span
+                            className={`font-mono font-bold ${
+                              mov.tipo === 'Ingreso' ? 'text-emerald-700' : 'text-rose-700'
+                            }`}
+                          >
+                            {mov.tipo === 'Ingreso' ? '+' : '-'} Bs. {mov.monto.toFixed(2)}
+                          </span>
+                        </div>
+                        <div className="text-[11px] text-[#5c5750] truncate">{mov.concepto}</div>
+                        <div className="flex items-center justify-between text-[10px] text-[#7d776f]">
+                          <span>Fecha: {mov.fecha}</span>
+                          <span className="font-bold">{mov.estado}</span>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
               </div>
-            </div>
-
-            <div className="flex justify-end pt-2">
-              <button
-                type="button"
-                onClick={() => setIsManualLinkModalOpen(false)}
-                className="px-4 py-2 rounded-xl text-xs font-bold text-[#5c5750] hover:bg-[#ded8cc]"
-              >
-                Cerrar
-              </button>
             </div>
           </div>
-        </div>
+        </>
       )}
 
-      {/* MODAL SUBIR EXTRACTO */}
-      {isUploadModalOpen && (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="w-full max-w-md bg-[#ede9e1] dark:bg-slate-900 rounded-3xl border border-[#cec8bc] dark:border-slate-800 p-6 space-y-4 shadow-2xl animate-in fade-in zoom-in-95 duration-200">
-            <div className="flex items-center justify-between border-b border-[#cec8bc] dark:border-slate-800 pb-3">
-              <h3 className="font-extrabold text-base text-[#262422] dark:text-white flex items-center gap-2">
-                <Upload className="w-4 h-4 text-purple-700" />
-                Cargar Extracto Bancario
+      {/* MODAL VINCULAR MOVIMIENTO MANUALMENTE */}
+      {itemParaVincular && (
+        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 backdrop-blur-xs">
+          <div className="w-full max-w-md bg-[#ede9e1] dark:bg-slate-900 rounded-3xl border border-[#cec8bc] dark:border-slate-800 shadow-2xl p-6 space-y-4">
+            <div className="flex items-center justify-between border-b border-[#cec8bc] pb-3">
+              <h3 className="font-extrabold text-sm flex items-center gap-2">
+                <Link2 className="w-4 h-4 text-blue-600" />
+                Vincular Movimiento Bancario
               </h3>
-              <button onClick={() => setIsUploadModalOpen(false)} className="text-[#7d776f] hover:text-[#262422]">
+              <button
+                type="button"
+                onClick={() => setItemParaVincular(null)}
+                className="text-[#7d776f] cursor-pointer"
+              >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            <div className="p-6 border-2 border-dashed border-[#cec8bc] dark:border-slate-700 rounded-2xl text-center space-y-2 bg-[#dfd9ce]/30">
-              <FileSpreadsheet className="w-10 h-10 text-purple-700 dark:text-purple-400 mx-auto" />
-              <p className="text-xs font-bold text-[#262422] dark:text-white">
-                Arrastre su archivo de extracto aquí o haga clic para examinar
-              </p>
-              <p className="text-[11px] text-[#7d776f]">Formatos soportados: CSV, XLSX, TXT (BMSC, BNB, Banco Unión)</p>
+            <div className="p-3 rounded-xl bg-white/70 border border-[#cec8bc] space-y-1 text-xs">
+              <span className="text-[#7d776f] text-[10px] uppercase font-bold">Registro Bancario:</span>
+              <div className="font-bold font-mono">{itemParaVincular.referencia} - Bs. {itemParaVincular.monto.toFixed(2)}</div>
+              <div className="text-[11px] text-[#5c5750]">{itemParaVincular.glosa}</div>
             </div>
 
-            <div className="flex justify-end gap-2 pt-2">
+            <div className="space-y-1.5 text-xs">
+              <label className="block font-bold text-[#383430]">
+                Seleccione el Movimiento Interno a Vincular:
+              </label>
+              <select
+                value={movimientoSistemaSeleccionado}
+                onChange={(e) => setMovimientoSistemaSeleccionado(e.target.value)}
+                className="w-full px-3 py-2 rounded-xl bg-[#dfd9ce] border border-[#cec8bc] font-mono text-xs cursor-pointer"
+              >
+                <option value="">-- Seleccionar Movimiento --</option>
+                {libroSistema
+                  .filter((m) => m.estado !== 'Conciliado')
+                  .map((m) => (
+                    <option key={m.id} value={m.id}>
+                      [{m.codigo}] {m.concepto} (Bs. {m.monto.toFixed(2)})
+                    </option>
+                  ))}
+              </select>
+            </div>
+
+            <div className="flex justify-end gap-2 pt-3 border-t border-[#cec8bc]">
               <button
                 type="button"
-                onClick={() => setIsUploadModalOpen(false)}
-                className="px-4 py-2 rounded-xl text-xs font-bold text-[#5c5750] hover:bg-[#ded8cc]"
+                onClick={() => setItemParaVincular(null)}
+                className="px-3.5 py-1.5 rounded-xl bg-[#dfd9ce] text-xs font-semibold cursor-pointer"
               >
                 Cancelar
               </button>
               <button
                 type="button"
-                onClick={() => {
-                  setIsUploadModalOpen(false)
-                  showToast('¡Extracto bancario importado exitosamente!')
-                }}
-                className="px-4 py-2 rounded-xl bg-purple-700 hover:bg-purple-800 text-white text-xs font-bold shadow-md"
+                onClick={handleVincularMovimiento}
+                disabled={!movimientoSistemaSeleccionado}
+                className="px-4 py-1.5 rounded-xl bg-blue-700 hover:bg-blue-600 text-white text-xs font-bold disabled:opacity-50 cursor-pointer"
               >
-                Procesar Extracto
+                Vincular y Conciliar
               </button>
             </div>
           </div>
