@@ -84,6 +84,13 @@ export default function FinanzasPage() {
     if (typeof window !== 'undefined') {
       const storedRole = localStorage.getItem('user_role') || 'ADMINISTRADOR'
       setUserRole(storedRole.toUpperCase())
+
+      // Detectar parámetro ?tipo=Ingreso o ?tipo=Egreso desde URL
+      const urlParams = new URLSearchParams(window.location.search)
+      const tipoParam = urlParams.get('tipo')
+      if (tipoParam === 'Ingreso' || tipoParam === 'Egreso') {
+        setTabTipo(tipoParam)
+      }
     }
   }, [])
 
@@ -113,6 +120,18 @@ export default function FinanzasPage() {
   const [editModalError, setEditModalError] = useState<string | null>(null)
   const [catModalError, setCatModalError] = useState<string | null>(null)
   const [catModalSuccess, setCatModalSuccess] = useState<string | null>(null)
+  const [deleteModalError, setDeleteModalError] = useState<string | null>(null)
+  const [motivoEliminarInput, setMotivoEliminarInput] = useState<string>('')
+  const [isDeleting, setIsDeleting] = useState<boolean>(false)
+
+  // Resumen financiero oficial desde GET /api/v1/movimientos/resumen
+  const [resumenData, setResumenData] = useState<{
+    totalIngresos: number
+    totalEgresos: number
+    balance: number
+    cantidadIngresos: number
+    cantidadEgresos: number
+  } | null>(null)
 
   // Formulario de Registro / Edición
   const [formTipo, setFormTipo] = useState<'Ingreso' | 'Egreso'>('Egreso')
@@ -154,6 +173,30 @@ export default function FinanzasPage() {
     }
   }, [])
 
+  // Cargar resumen financiero oficial (GET /api/v1/movimientos/resumen)
+  const fetchResumen = useCallback(async () => {
+    try {
+      const params = new URLSearchParams()
+      if (filtroCategoria !== 'Todos') params.append('idCategoria', filtroCategoria)
+      if (fechaDesde) params.append('fechaDesde', fechaDesde)
+      if (fechaHasta) params.append('fechaHasta', fechaHasta)
+
+      const res = await apiFetch(`/api/v1/movimientos/resumen?${params.toString()}`)
+      if (res.ok) {
+        const json = await res.json()
+        setResumenData({
+          totalIngresos: Number(json.totalIngresos || 0),
+          totalEgresos: Number(json.totalEgresos || 0),
+          balance: Number(json.balance || 0),
+          cantidadIngresos: Number(json.cantidadIngresos || 0),
+          cantidadEgresos: Number(json.cantidadEgresos || 0)
+        })
+      }
+    } catch {
+      // Si falla, se calculará automáticamente en el cliente
+    }
+  }, [filtroCategoria, fechaDesde, fechaHasta])
+
   // Cargar movimientos desde backend API
   const fetchMovimientos = useCallback(async () => {
     setLoading(true)
@@ -164,6 +207,7 @@ export default function FinanzasPage() {
       if (filtroCategoria !== 'Todos') params.append('idCategoria', filtroCategoria)
       if (fechaDesde) params.append('fechaDesde', fechaDesde)
       if (fechaHasta) params.append('fechaHasta', fechaHasta)
+      if (searchTerm.trim()) params.append('q', searchTerm.trim())
 
       const url = `/api/v1/movimientos?${params.toString()}`
       const res = await apiFetch(url)
@@ -220,7 +264,7 @@ export default function FinanzasPage() {
     } finally {
       setLoading(false)
     }
-  }, [tabTipo, filtroCategoria, fechaDesde, fechaHasta])
+  }, [tabTipo, filtroCategoria, fechaDesde, fechaHasta, searchTerm])
 
   useEffect(() => {
     fetchCategorias()
@@ -228,7 +272,8 @@ export default function FinanzasPage() {
 
   useEffect(() => {
     fetchMovimientos()
-  }, [fetchMovimientos])
+    fetchResumen()
+  }, [fetchMovimientos, fetchResumen])
 
   // Manejar selector de archivo para comprobantes (CA5)
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -280,33 +325,43 @@ export default function FinanzasPage() {
     })
   }, [movimientos, tabTipo, filtroCategoria, searchTerm, fechaDesde, fechaHasta])
 
-  // Cálculos dinámicos de totales y resumen consistente (CA10)
+  // Cálculos dinámicos de totales y resumen consistente (CA10) con datos oficiales del backend
   const totalIngresos = useMemo(
     () =>
-      movimientosFiltrados
-        .filter((m) => m.tipo === 'Ingreso')
-        .reduce((acc, curr) => acc + curr.monto, 0),
-    [movimientosFiltrados]
+      resumenData !== null && !searchTerm.trim()
+        ? Number(resumenData.totalIngresos || 0)
+        : movimientosFiltrados
+            .filter((m) => m.tipo === 'Ingreso')
+            .reduce((acc, curr) => acc + curr.monto, 0),
+    [resumenData, searchTerm, movimientosFiltrados]
   )
 
   const totalEgresos = useMemo(
     () =>
-      movimientosFiltrados
-        .filter((m) => m.tipo === 'Egreso')
-        .reduce((acc, curr) => acc + curr.monto, 0),
-    [movimientosFiltrados]
+      resumenData !== null && !searchTerm.trim()
+        ? Number(resumenData.totalEgresos || 0)
+        : movimientosFiltrados
+            .filter((m) => m.tipo === 'Egreso')
+            .reduce((acc, curr) => acc + curr.monto, 0),
+    [resumenData, searchTerm, movimientosFiltrados]
   )
 
   const balanceNeto = useMemo(() => totalIngresos - totalEgresos, [totalIngresos, totalEgresos])
 
   const cantidadIngresos = useMemo(
-    () => movimientosFiltrados.filter((m) => m.tipo === 'Ingreso').length,
-    [movimientosFiltrados]
+    () =>
+      resumenData !== null && !searchTerm.trim()
+        ? Number(resumenData.cantidadIngresos || 0)
+        : movimientosFiltrados.filter((m) => m.tipo === 'Ingreso').length,
+    [resumenData, searchTerm, movimientosFiltrados]
   )
 
   const cantidadEgresos = useMemo(
-    () => movimientosFiltrados.filter((m) => m.tipo === 'Egreso').length,
-    [movimientosFiltrados]
+    () =>
+      resumenData !== null && !searchTerm.trim()
+        ? Number(resumenData.cantidadEgresos || 0)
+        : movimientosFiltrados.filter((m) => m.tipo === 'Egreso').length,
+    [resumenData, searchTerm, movimientosFiltrados]
   )
 
   // Categorías filtradas para el modal según el tipo seleccionado
@@ -445,6 +500,7 @@ export default function FinanzasPage() {
         showNotification('success', `¡${formTipo} registrado correctamente!`)
         setIsCreateModalOpen(false)
         await fetchMovimientos()
+        await fetchResumen()
       } else {
         const errorJson = await res.json().catch(() => ({}))
         let errorMsg = errorJson.message || errorJson.error || 'Error al procesar el registro.'
@@ -555,31 +611,50 @@ export default function FinanzasPage() {
     }
   }
 
-  // Eliminar movimiento
-  const handleConfirmarEliminacion = async () => {
+  // Eliminar / anular movimiento con motivo obligatorio (DELETE /api/v1/movimientos/:id)
+  const handleConfirmarEliminacion = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault()
     if (!movimientoParaEliminar) return
     if (!hasFinancialPermission) {
-      showNotification('error', 'Acceso denegado: No posee permisos para anular movimientos.')
+      setDeleteModalError('Acceso denegado: No posee permisos para anular movimientos.')
       return
     }
+
+    if (!motivoEliminarInput.trim()) {
+      setDeleteModalError('El motivo de la anulación es obligatorio.')
+      return
+    }
+
+    setIsDeleting(true)
+    setDeleteModalError(null)
 
     try {
       const res = await apiFetch(`/api/v1/movimientos/${movimientoParaEliminar.id}`, {
         method: 'DELETE',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ motivo: 'Anulación solicitada por el administrador' })
+        body: JSON.stringify({ motivo: motivoEliminarInput.trim() })
       })
-      if (res.ok || res.status === 404) {
-        showNotification('success', 'Movimiento anulado correctamente.')
+
+      const data = await res.json().catch(() => ({}))
+
+      if (res.ok) {
+        showNotification('success', data.message || 'Movimiento anulado correctamente.')
+        setMovimientoParaEliminar(null)
+        setMotivoEliminarInput('')
         await fetchMovimientos()
+        await fetchResumen()
       } else {
-        const errJson = await res.json().catch(() => ({}))
-        showNotification('error', errJson.message || 'Error al anular movimiento.')
+        const errMsg = data.message || data.error || 'Error al anular movimiento.'
+        setDeleteModalError(errMsg)
+        showNotification('error', errMsg)
       }
-      setMovimientoParaEliminar(null)
     } catch (err: any) {
       console.error('Error eliminando movimiento:', err)
-      showNotification('error', err?.message || 'No se pudo eliminar el registro.')
+      const errMsg = err?.message || 'No se pudo eliminar el registro.'
+      setDeleteModalError(errMsg)
+      showNotification('error', errMsg)
+    } finally {
+      setIsDeleting(false)
     }
   }
 
@@ -1838,37 +1913,79 @@ export default function FinanzasPage() {
         </div>
       )}
 
-      {/* MODAL CONFIRMAR ANULACIÓN */}
+      {/* MODAL CONFIRMAR ANULACIÓN CON MOTIVO */}
       {movimientoParaEliminar && (
         <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 backdrop-blur-xs">
-          <div className="w-full max-w-sm bg-[#ede9e1] dark:bg-slate-900 rounded-3xl border border-[#cec8bc] dark:border-slate-800 shadow-2xl p-6 space-y-4">
-            <div className="flex items-center gap-2.5 text-rose-700 dark:text-rose-400">
-              <AlertCircle className="w-6 h-6 shrink-0" />
-              <h3 className="font-extrabold text-base text-[#262422] dark:text-white">
-                Anular Movimiento
-              </h3>
+          <div className="w-full max-w-md bg-[#ede9e1] dark:bg-slate-900 rounded-3xl border border-[#cec8bc] dark:border-slate-800 shadow-2xl p-6 space-y-4 animate-in fade-in zoom-in-95 duration-200">
+            <div className="flex justify-between items-center border-b border-[#cec8bc] dark:border-slate-800 pb-3">
+              <div className="flex items-center gap-2.5 text-rose-700 dark:text-rose-400">
+                <AlertCircle className="w-5 h-5 shrink-0" />
+                <h3 className="font-extrabold text-base text-[#262422] dark:text-white">
+                  Anular Movimiento Financiero
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setMovimientoParaEliminar(null)
+                  setDeleteModalError(null)
+                  setMotivoEliminarInput('')
+                }}
+                className="text-[#7d776f] hover:text-[#262422] p-1 rounded-lg"
+              >
+                <X className="w-5 h-5" />
+              </button>
             </div>
+
+            {deleteModalError && (
+              <div className="p-3 bg-rose-100 dark:bg-rose-950/70 border border-rose-300 dark:border-rose-800 text-rose-900 dark:text-rose-200 rounded-xl flex items-center gap-2 text-xs">
+                <AlertCircle className="w-4 h-4 shrink-0 text-rose-600 dark:text-rose-400" />
+                <span>{deleteModalError}</span>
+              </div>
+            )}
+
             <p className="text-xs text-[#5c5750] dark:text-slate-300">
               ¿Está seguro de que desea anular el movimiento{' '}
-              <strong>{movimientoParaEliminar.codigo}</strong> por Bs.{' '}
-              {movimientoParaEliminar.monto.toFixed(2)}? Esta acción se registrará con auditoría formal.
+              <strong className="text-[#262422] dark:text-white font-mono">{movimientoParaEliminar.codigo}</strong> por Bs.{' '}
+              {movimientoParaEliminar.monto.toFixed(2)}? Esta acción se registrará con auditoría formal en la base de datos.
             </p>
-            <div className="flex justify-end gap-2 pt-2 border-t border-[#cec8bc] dark:border-slate-800">
-              <button
-                type="button"
-                onClick={() => setMovimientoParaEliminar(null)}
-                className="px-3.5 py-2 rounded-xl bg-[#dfd9ce] dark:bg-slate-800 text-xs font-bold text-[#262422] dark:text-white cursor-pointer"
-              >
-                Cancelar
-              </button>
-              <button
-                type="button"
-                onClick={handleConfirmarEliminacion}
-                className="px-3.5 py-2 rounded-xl bg-rose-700 hover:bg-rose-600 text-white text-xs font-bold cursor-pointer shadow-md"
-              >
-                Sí, Anular
-              </button>
-            </div>
+
+            <form onSubmit={handleConfirmarEliminacion} className="space-y-3">
+              <div>
+                <label className="block text-xs font-bold text-[#262422] dark:text-white mb-1">
+                  Motivo de la Anulación *
+                </label>
+                <textarea
+                  required
+                  rows={2}
+                  value={motivoEliminarInput}
+                  onChange={(e) => setMotivoEliminarInput(e.target.value)}
+                  placeholder="Especifique el motivo obligatorio (ej. Error en monto, duplicado, cancelado)..."
+                  className="w-full px-3 py-2 rounded-xl bg-[#dfd9ce] dark:bg-slate-950 border border-[#cec8bc] dark:border-slate-800 text-xs text-[#1c1917] dark:text-white focus:outline-none focus:ring-2 focus:ring-rose-600 resize-none"
+                />
+              </div>
+
+              <div className="flex justify-end gap-2 pt-2 border-t border-[#cec8bc] dark:border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMovimientoParaEliminar(null)
+                    setDeleteModalError(null)
+                    setMotivoEliminarInput('')
+                  }}
+                  className="px-3.5 py-2 rounded-xl bg-[#dfd9ce] dark:bg-slate-800 text-xs font-bold text-[#262422] dark:text-white cursor-pointer hover:bg-[#cec8bc] dark:hover:bg-slate-700"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={isDeleting || !motivoEliminarInput.trim()}
+                  className="px-4 py-2 rounded-xl bg-rose-700 hover:bg-rose-600 text-white text-xs font-bold cursor-pointer shadow-md disabled:opacity-50"
+                >
+                  {isDeleting ? 'Anulando...' : 'Confirmar Anulación'}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}
