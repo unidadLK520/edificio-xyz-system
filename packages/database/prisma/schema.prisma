@@ -37,7 +37,10 @@ model Usuario {
   rol             Rol          @relation(fields: [idRol], references: [idRol])
   persona         Persona?     @relation(fields: [idPersona], references: [idPersona])
   
-  cajaRegistros       Caja[]
+  cajaRegistros       Caja[]       @relation("CajaUsuarioRegistro")
+  cajaAnulaciones     Caja[]       @relation("CajaUsuarioAnulacion")
+  movBancariosRegistrados MovimientoBancario[] @relation("MovBancarioUsuarioRegistro")
+  movBancariosConciliados MovimientoBancario[] @relation("MovBancarioUsuarioConciliacion")
   pagosRegistrados    Pago[]
   movimientos         Movimiento[]
   comunicadosCreados  Comunicado[]
@@ -268,9 +271,10 @@ model Sesion {
 model CuentaBancaria {
   idCuenta     Int                   @id @default(autoincrement()) @map("id_cuenta")
   banco        String                @db.VarChar(80)
-  numeroCuenta String                @map("numero_cuenta") @db.VarChar(50)
+  numeroCuenta String                @unique @map("numero_cuenta") @db.VarChar(50)
   tipoCuenta   String?               @map("tipo_cuenta") @db.VarChar(30)
   saldoActual  Decimal               @default(0) @map("saldo_actual") @db.Decimal(12, 2)
+  saldoInicial Decimal               @default(0) @map("saldo_inicial") @db.Decimal(12, 2)
   
   pagos        Pago[]
   movimientos  MovimientoBancario[]
@@ -286,8 +290,13 @@ model Caja {
   concepto            String?   @db.Text
   fecha               DateTime  @default(now()) @db.Timestamp(6)
   idUsuarioRegistro   Int?      @map("id_usuario_registro")
+  anulado             Boolean   @default(false)
+  fechaAnulacion      DateTime? @map("fecha_anulacion") @db.Timestamp(6)
+  idUsuarioAnulacion  Int?      @map("id_usuario_anulacion")
+  motivoAnulacion     String?   @map("motivo_anulacion") @db.Text
   
-  usuarioRegistro     Usuario?  @relation(fields: [idUsuarioRegistro], references: [idUsuario])
+  usuarioRegistro     Usuario?  @relation("CajaUsuarioRegistro", fields: [idUsuarioRegistro], references: [idUsuario])
+  usuarioAnulacion    Usuario?  @relation("CajaUsuarioAnulacion", fields: [idUsuarioAnulacion], references: [idUsuario])
   pagos               Pago[]
 
   @@map("caja")
@@ -392,16 +401,25 @@ model Movimiento {
 }
 
 model MovimientoBancario {
-  idMovBancario Int             @id @default(autoincrement()) @map("id_mov_bancario")
-  idCuenta      Int             @map("id_cuenta")
-  idMovimiento  Int?            @map("id_movimiento")
-  monto         Decimal         @db.Decimal(10, 2)
-  tipo          String          @db.VarChar(10) // Deposito, Retiro
-  fecha         DateTime        @default(now()) @db.Timestamp(6)
-  conciliado    Boolean         @default(false)
+  idMovBancario        Int             @id @default(autoincrement()) @map("id_mov_bancario")
+  idCuenta             Int             @map("id_cuenta")
+  idMovimiento         Int?            @map("id_movimiento")
+  monto                Decimal         @db.Decimal(10, 2)
+  tipo                 String          @db.VarChar(10) // Deposito, Retiro
+  fecha                DateTime        @default(now()) @db.Timestamp(6)
+  conciliado           Boolean         @default(false)
+  concepto             String?         @db.Text
+  referencia           String?         @db.VarChar(100)
+  idUsuarioRegistro    Int?            @map("id_usuario_registro")
+  estadoConciliacion   String          @default("Pendiente") @map("estado_conciliacion") @db.VarChar(20)
+  diferencia           Decimal?        @db.Decimal(12, 2)
+  fechaConciliacion    DateTime?       @map("fecha_conciliacion") @db.Timestamp(6)
+  idUsuarioConciliacion Int?           @map("id_usuario_conciliacion")
   
-  cuenta        CuentaBancaria  @relation(fields: [idCuenta], references: [idCuenta])
-  movimiento    Movimiento?     @relation(fields: [idMovimiento], references: [idMovimiento])
+  cuenta               CuentaBancaria  @relation(fields: [idCuenta], references: [idCuenta])
+  movimiento           Movimiento?     @relation(fields: [idMovimiento], references: [idMovimiento])
+  usuarioRegistro      Usuario?        @relation("MovBancarioUsuarioRegistro", fields: [idUsuarioRegistro], references: [idUsuario])
+  usuarioConciliacion  Usuario?        @relation("MovBancarioUsuarioConciliacion", fields: [idUsuarioConciliacion], references: [idUsuario])
 
   @@map("movimientos_bancarios")
   @@schema("edificio")

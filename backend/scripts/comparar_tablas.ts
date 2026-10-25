@@ -93,9 +93,9 @@ async function main() {
     console.log('===============================================================');
     const noTest = await contarFilasNoTest();
     console.log(`Departamentos NO TST-: ANTES: 20 | DESPUÉS: ${noTest.departamentos} | ${noTest.departamentos === 20 ? '✅ INALTERADO' : '❌ ALTERADO'}`);
-    console.log(`Personas NO TST-:      ANTES: 15 | DESPUÉS: ${noTest.personas} | ${noTest.personas === 15 ? '✅ INALTERADO' : '❌ ALTERADO'}`);
-    console.log(`Expensas NO TST-:      ANTES: 53 | DESPUÉS: ${noTest.expensas} | ${noTest.expensas === 53 ? '✅ INALTERADO' : '❌ ALTERADO'}`);
-    console.log(`Pagos NO TST-:         ANTES: 27 | DESPUÉS: ${noTest.pagos} | ${noTest.pagos === 27 ? '✅ INALTERADO' : '❌ ALTERADO'}`);
+    console.log(`Personas NO TST-:      ANTES: 16 | DESPUÉS: ${noTest.personas} | ${noTest.personas === 16 ? '✅ INALTERADO' : '❌ ALTERADO'}`);
+    console.log(`Expensas NO TST-:      ANTES: 113 | DESPUÉS: ${noTest.expensas} | ${noTest.expensas === 113 ? '✅ INALTERADO' : '❌ ALTERADO'}`);
+    console.log(`Pagos NO TST-:         ANTES: 28 | DESPUÉS: ${noTest.pagos} | ${noTest.pagos === 28 ? '✅ INALTERADO' : '❌ ALTERADO'}`);
 
     // Checksums financieros NO TST-
     const expensasChecksumRes = await prisma.$queryRawUnsafe<any[]>(`
@@ -273,6 +273,30 @@ async function main() {
     console.log(`Tipos departamento TST- remanentes: ${tstTiposCount} (${tstTiposCount === 0 ? '✅ 0' : '❌ NO ES 0'})`);
     console.log(`Sesiones TST- remanentes:           ${tstSesionesCount} (${tstSesionesCount === 0 ? '✅ 0' : '❌ NO ES 0'})`);
     console.log(`Usuarios TST- remanentes:           ${tstUsuariosCount} (${tstUsuariosCount === 0 ? '✅ 0' : '❌ NO ES 0'})`);
+
+    const tstCajaCount = await prisma.caja.count({
+      where: { concepto: { contains: 'TST-' } },
+    });
+    const tstCuentasCount = await prisma.cuentaBancaria.count({
+      where: {
+        OR: [
+          { banco: { contains: 'TST-' } },
+          { numeroCuenta: { startsWith: 'TST-' } },
+        ],
+      },
+    });
+    const tstMovBancariosCount = await prisma.movimientoBancario.count({
+      where: {
+        OR: [
+          { concepto: { contains: 'TST-' } },
+          { referencia: { contains: 'TST-' } },
+        ],
+      },
+    });
+
+    console.log(`Caja TST- remanentes:               ${tstCajaCount} (${tstCajaCount === 0 ? '✅ 0' : '❌ NO ES 0'})`);
+    console.log(`Cuentas bancarias TST- remanentes:  ${tstCuentasCount} (${tstCuentasCount === 0 ? '✅ 0' : '❌ NO ES 0'})`);
+    console.log(`Movimientos bancarios TST- reman.:  ${tstMovBancariosCount} (${tstMovBancariosCount === 0 ? '✅ 0' : '❌ NO ES 0'})`);
 
     // 4. Auditoría (solo informativo)
     console.log('\n===============================================================');
