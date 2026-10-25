@@ -264,6 +264,14 @@ export interface MovimientoBancarioItem {
   fechaConciliacion?: string | null
   cuenta?: { idCuenta: number; banco: string; numeroCuenta: string }
   movimientoInterno?: any
+  sugerencia?: {
+    idMovimiento: number
+    tipo: 'Ingreso' | 'Egreso'
+    monto: number
+    descripcion: string
+    fecha: string
+    diferenciaDias: number
+  } | null
 }
 
 export const movimientosBancariosService = {
