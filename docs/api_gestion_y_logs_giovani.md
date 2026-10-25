@@ -1021,6 +1021,162 @@ Almacena comprobantes de respaldo para ingresos y egresos.
 Servido de forma estática en Express bajo `/uploads`.
 
 ---
+## 5.9 Módulo de Caja Chica / Efectivo (US1.4)
+Ubicación: `backend/src/routes/caja.routes.ts` · Tabla: `edificio.caja`
+Prefijo de ruta: `/api/v1/caja`
+
+### 5.9.1 Registrar Movimiento de Caja
+- **Método y Ruta:** `POST /api/v1/caja`
+- **Rol requerido:** Administrador (Directorio, Consulta y Copropietario reciben 403 Forbidden).
+- **Body:**
+```json
+{
+  "tipo": "Ingreso",
+  "monto": 350.50,
+  "concepto": "Cobro alquiler parrillero",
+  "fecha": "2026-10-23T10:00:00.000Z"
+}
+```
+- **Respuesta 201 Created:** Retorna el movimiento creado con `anulado: false`, datos de auditoría y usuario de registro.
+- **Validaciones:** `400 Bad Request` con mapa `details` por campo si faltan valores o son inválidos.
+- **Auditoría:** Registra evento `REGISTRO_MOVIMIENTO_CAJA` en tabla `caja`.
+
+### 5.9.2 Consultar Saldo Recalculado de Caja
+- **Método y Ruta:** `GET /api/v1/caja/saldo`
+- **Rol requerido:** Administrador, Directorio (Consulta y Copropietario reciben 403 Forbidden).
+- **Query Params:** `?desde=YYYY-MM-DD&hasta=YYYY-MM-DD` (opcionales).
+- **Regla de negocio:**
+  - Los saldos (`saldoInicial`, `totalIngresos`, `totalEgresos`, `saldoFinal` y `saldoDisponibleActual`) son calculados **siempre de forma dinámica y acumulativa** sobre movimientos NO anulados (`anulado = false`).
+  - Base inicial de apertura obtenida de la clave `saldo_inicial_caja` en `edificio.configuracion_global`.
+- **Respuesta 200 OK:**
+```json
+{
+  "success": true,
+  "data": {
+    "saldoInicial": 0.00,
+    "totalIngresos": 770.50,
+    "totalEgresos": 445.50,
+    "saldoFinal": 325.00,
+    "saldoDisponibleActual": 1215.50,
+    "periodo": { "desde": "2026-10-01T00:00:00.000Z", "hasta": "2026-10-31T23:59:59.999Z" }
+  }
+}
+```
+
+### 5.9.3 Listar Movimientos de Caja
+- **Método y Ruta:** `GET /api/v1/caja`
+- **Rol requerido:** Administrador, Directorio.
+- **Query Params:** `desde`, `hasta`, `tipo` (`Ingreso` | `Egreso`), `anulado` (`true` | `false`), `page`, `limit`.
+- **Respuesta 200 OK:** Lista paginada con metadatos `{ total, page, limit, totalPages }`.
+
+### 5.9.4 Detalle y Anulación Lógica de Movimiento de Caja
+- **Método y Ruta:** `GET /api/v1/caja/:id` (Lectura)
+- **Método y Ruta:** `DELETE /api/v1/caja/:id` (Anulación con motivo obligatorio)
+- **Rol requerido:** Administrador para anular; Directorio solo lectura.
+- **Regla de negocio:**
+  - Sigue el mismo patrón estricto de `DELETE /api/v1/movimientos/:id`: la fila no se elimina físicamente de la base de datos.
+  - Se registra `anulado: true`, `fecha_anulacion = now()`, `id_usuario_anulacion`, `motivo_anulacion`.
+  - Requiere obligatoriamente `{ "motivo": "string no vacío" }` en el body; responde `400 Bad Request` si falta el motivo.
+  - Si el movimiento ya está anulado, responde `409 Conflict` (`ANULACION_YA_REALIZADA`).
+- **Auditoría:** Registra evento `ANULACION_MOVIMIENTO_CAJA` con snapshot de `datosAnteriores` y `datosNuevos`.
+
+---
+## 5.10 Módulo de Cuentas y Movimientos Bancarios (US1.4)
+Ubicación: `backend/src/routes/cuentas-bancarias.routes.ts` y `backend/src/routes/movimientos-bancarios.routes.ts`
+Tablas: `edificio.cuentas_bancarias`, `edificio.movimientos_bancarios`
+Prefijos de ruta: `/api/v1/cuentas-bancarias`, `/api/v1/movimientos-bancarios`
+
+### 5.10.1 Cuentas Bancarias
+- **Listar Cuentas:** `GET /api/v1/cuentas-bancarias` (Administrador, Directorio). Devuelve todas las cuentas bancarias con su **saldo recalculado dinámicamente**:
+  $$\text{Saldo} = \text{saldo\_inicial} + \text{depósitos} - \text{retiros}$$
+  (No se utiliza `saldo_actual` estático para evitar desfasajes con movimientos registrados).
+- **Crear Cuenta:** `POST /api/v1/cuentas-bancarias` (Administrador).
+  - Body: `{ "banco": "Banco Mercantil Santa Cruz", "numeroCuenta": "401-2093849-01", "tipoCuenta": "Cuenta Corriente", "saldoInicial": 29518.00 }`.
+  - Unicidad: `numero_cuenta` es único en base de datos. Responde `409 Conflict` si ya existe.
+  - Auditoría: Registra `CONFIGURAR_CUENTA_BANCARIA`.
+- **Detalle de Cuenta:** `GET /api/v1/cuentas-bancarias/:id` con desglose de `totalDepositos`, `totalRetiros` y `saldoCalculado`.
+- **Modificar Cuenta:** `PUT /api/v1/cuentas-bancarias/:id` (Administrador). Permite actualizar banco, tipo o saldo inicial; valida unicidad si se cambia `numeroCuenta` (409). Auditoría `CONFIGURAR_CUENTA_BANCARIA`.
+- **Saldo del Período:** `GET /api/v1/cuentas-bancarias/:id/saldo?desde&hasta`. Retorna `saldoInicial` del período, `totalDepositos`, `totalRetiros`, `saldoFinal` del período y `saldoDisponibleActual`.
+
+### 5.10.2 Movimientos Bancarios
+- **Registrar Movimiento Bancario:** `POST /api/v1/movimientos-bancarios` (Administrador).
+  - Body:
+  ```json
+  {
+    "idCuenta": 2,
+    "tipo": "Deposito",
+    "monto": 1962.00,
+    "concepto": "Depósito en cuenta expensas septiembre",
+    "referencia": "TRF-982104",
+    "fecha": "2026-09-10T09:05:00.000Z"
+  }
+  ```
+  - Estado inicial: Se registra con `estadoConciliacion: "Pendiente"`, `conciliado: false`.
+  - Auditoría: Registra `REGISTRO_MOVIMIENTO_BANCARIO`.
+- **Listar Movimientos Bancarios:** `GET /api/v1/movimientos-bancarios` (Administrador, Directorio).
+  - Filtros: `idCuenta`, `desde`, `hasta`, `tipo` (`Deposito` | `Retiro`), `estado` (`Pendiente` | `Conciliado` | `Discrepancia`).
+  - Interpretación retrocompatible: El backend interpreta cualquier registro con `conciliado = true` como estado `'Conciliado'`.
+- **Detalle:** `GET /api/v1/movimientos-bancarios/:id`.
+- **Modificar Movimiento Bancario:** `PUT /api/v1/movimientos-bancarios/:id` (Administrador).
+  - Regla de negocio: **Solo se puede modificar si NO está conciliado**. Si el movimiento ya está conciliado, responde `409 Conflict` (`"No se puede modificar un movimiento bancario que ya ha sido conciliado"`).
+  - Auditoría: Registra `MODIFICACION_MOVIMIENTO_BANCARIO`.
+
+---
+## 5.11 Módulo de Conciliación Bancaria y Cotejo (US1.4)
+Ubicación: `backend/src/routes/conciliacion.routes.ts`
+Prefijo de ruta: `/api/v1/conciliacion`
+
+### 5.11.1 Cotejo y Sugerencias Automáticas
+- **Método y Ruta:** `GET /api/v1/conciliacion/cotejo`
+- **Rol requerido:** Administrador, Directorio.
+- **Query Params:** `idCuenta` (obligatorio), `desde`, `hasta` (opcionales).
+- **Respuesta:** Devuelve en una sola llamada los movimientos bancarios de la cuenta y los movimientos internos del sistema (`edificio.movimientos`) NO anulados.
+- **Algoritmo de Sugerencias Automáticas:**
+  Para cada movimiento bancario en estado `'Pendiente'`, busca coincidencias contra movimientos internos no vinculados que satisfagan:
+  1. **Misma naturaleza:** `Deposito` bancario solo con `Ingreso` interno; `Retiro` bancario solo con `Egreso` interno.
+  2. **Mismo monto exacto:** $\text{monto}_{\text{banco}} = \text{monto}_{\text{interno}}$.
+  3. **Fecha próxima:** Dentro de una ventana de $\pm 3$ días ($\Delta \text{días} \le 3$).
+  Si coincide, adjunta el objeto `sugerencia: { idMovimiento, tipo, monto, descripcion, fecha, diferenciaDias }`.
+
+### 5.11.2 Vincular Movimiento Bancario con Movimiento Interno
+- **Método y Ruta:** `POST /api/v1/conciliacion/vincular`
+- **Rol requerido:** Administrador.
+- **Body:** `{ "idMovBancario": 9001, "idMovimiento": 9001 }`.
+- **Reglas y Validaciones:**
+  1. **Naturaleza compatible:** `Deposito` exclusivamente con `Ingreso`, y `Retiro` exclusivamente con `Egreso`. Si no coincide, responde `422 Unprocessable Entity`.
+  2. **Movimiento interno no anulado:** Si `movimiento.anulado = true`, responde `422 Unprocessable Entity`.
+  3. **No conciliado previamente:** Si el movimiento bancario ya está conciliado, responde `409 Conflict`.
+  4. **Movimiento interno no duplicado:** Si el movimiento interno ya está vinculado a otro extracto bancario, responde `409 Conflict`.
+  5. **Cálculo de estados y diferencias:**
+     - Si $\text{monto}_{\text{bancario}} = \text{monto}_{\text{interno}}$: Se establece `estadoConciliacion: 'Conciliado'`, `conciliado: true`, `diferencia: 0.00`.
+     - Si $\text{monto}_{\text{bancario}} \ne \text{monto}_{\text{interno}}$: Se establece `estadoConciliacion: 'Discrepancia'`, `conciliado: false`, `diferencia = monto_bancario - monto_interno`.
+- **Auditoría:** Registra evento `CONCILIACION_VINCULAR` en `movimientos_bancarios`.
+
+### 5.11.3 Desvincular Movimiento Bancario
+- **Método y Ruta:** `DELETE /api/v1/conciliacion/desvincular/:idMovBancario`
+- **Rol requerido:** Administrador.
+- **Efecto:** Desvincula el movimiento (`id_movimiento = null`), revierte el estado a `'Pendiente'`, `conciliado = false`, `diferencia = null` y limpia los datos de conciliación.
+- **Auditoría:** Registra evento `CONCILIACION_DESVINCULAR`.
+
+### 5.11.4 Resumen de Estado de Conciliación
+- **Método y Ruta:** `GET /api/v1/conciliacion/estado`
+- **Rol requerido:** Administrador, Directorio.
+- **Query Params:** `idCuenta` (opcional).
+- **Respuesta 200 OK:**
+```json
+{
+  "success": true,
+  "data": {
+    "idCuenta": 2,
+    "totalMovimientos": 4,
+    "conciliados": { "cantidad": 3, "totalMonto": 5392.00 },
+    "pendientes": { "cantidad": 1, "totalMonto": 400.00 },
+    "discrepancias": { "cantidad": 0, "totalMonto": 0.00, "totalDiferencia": 0.00 }
+  }
+}
+```
+
+---
 ## 6. Subsistema de Logs y Auditoría (US1.3)
 Trazabilidad de todas las operaciones que modifican el estado del sistema.
 Ubicación: `backend/src/modules/auditoria/` · Tabla: `edificio.auditoria`
@@ -1073,6 +1229,13 @@ Evento	Tabla	Origen	Descripción / Datos Capturados
 `ANULACION_MOVIMIENTO`	movimientos	`DELETE /movimientos/:id`	Anulación de movimiento con motivo.
 `CREAR_CATEGORIA`	categorias_movimiento	`POST /movimientos/categorias`	Creación de categoría de ingreso/egreso con nombre único por tipo.
 `MODIFICAR_CATEGORIA`	categorias_movimiento	`PUT /movimientos/categorias/:id`	Modificación de categoría (nombre único, valida movimientos asociados ante cambio de tipo).
+`REGISTRO_MOVIMIENTO_CAJA`	caja	`POST /caja`	Registro de ingreso o egreso en efectivo en caja chica.
+`ANULACION_MOVIMIENTO_CAJA`	caja	`DELETE /caja/:id`	Anulación lógica de movimiento de caja con motivo obligatorio (datosAnteriores y datosNuevos).
+`CONFIGURAR_CUENTA_BANCARIA`	cuentas_bancarias	`POST`, `PUT /cuentas-bancarias`	Creación o actualización de cuenta bancaria y saldo inicial.
+`REGISTRO_MOVIMIENTO_BANCARIO`	movimientos_bancarios	`POST /movimientos-bancarios`	Registro de depósito o retiro en extracto bancario con estado inicial Pendiente.
+`MODIFICACION_MOVIMIENTO_BANCARIO`	movimientos_bancarios	`PUT /movimientos-bancarios/:id`	Modificación de movimiento bancario no conciliado.
+`CONCILIACION_VINCULAR`	movimientos_bancarios	`POST /conciliacion/vincular`	Vinculación entre extracto bancario y movimiento interno (Conciliado o Discrepancia con cálculo de diferencia).
+`CONCILIACION_DESVINCULAR`	movimientos_bancarios	`DELETE /conciliacion/desvincular/:id`	Desvinculación y reversión de extracto bancario a estado Pendiente.
 6.3 Ejemplos
 Bloqueo de cuenta:
 ```json
@@ -1255,6 +1418,24 @@ Movimientos	/movimientos/:id	PUT	✅	❌	❌
 Movimientos	/movimientos/:id	DELETE	✅	❌	❌
 Movimientos	/movimientos/upload-comprobante	POST	✅	✅	❌
 Movimientos	/movimientos/comprobantes/upload	POST	✅	✅	❌
+Caja	/caja	GET	✅	✅	❌
+Caja	/caja/saldo	GET	✅	✅	❌
+Caja	/caja/:id	GET	✅	✅	❌
+Caja	/caja	POST	✅	❌	❌
+Caja	/caja/:id	DELETE	✅	❌	❌
+Cuentas Bancarias	/cuentas-bancarias	GET	✅	✅	❌
+Cuentas Bancarias	/cuentas-bancarias/:id	GET	✅	✅	❌
+Cuentas Bancarias	/cuentas-bancarias/:id/saldo	GET	✅	✅	❌
+Cuentas Bancarias	/cuentas-bancarias	POST	✅	❌	❌
+Cuentas Bancarias	/cuentas-bancarias/:id	PUT	✅	❌	❌
+Movimientos Bancarios	/movimientos-bancarios	GET	✅	✅	❌
+Movimientos Bancarios	/movimientos-bancarios/:id	GET	✅	✅	❌
+Movimientos Bancarios	/movimientos-bancarios	POST	✅	❌	❌
+Movimientos Bancarios	/movimientos-bancarios/:id	PUT	✅	❌	❌
+Conciliación	/conciliacion/cotejo	GET	✅	✅	❌
+Conciliación	/conciliacion/estado	GET	✅	✅	❌
+Conciliación	/conciliacion/vincular	POST	✅	❌	❌
+Conciliación	/conciliacion/desvincular/:id	DELETE	✅	❌	❌
 Auditoria	/auditoria	GET	✅	✅	❌
 Auditoria	/auditoria/:id	GET	✅	✅	❌
 Health/Failover	/health/db	GET	✅	❌	❌
@@ -1298,6 +1479,29 @@ CA	Endpoint(s)	Estado	Nota
 03 Detalle individual	`GET /auditoria/:id`	Cumple	Detalle con datosAnteriores y datosNuevos, 404 si no existe (probado).
 04 Seguridad y enmascarado	`GET /auditoria`, `GET /auditoria/:id`	Cumple	Enmascara credenciales/tokens; RBAC Administrador y Directorio (403 Consulta, 401 sin token) (probado).
 05 Inmutabilidad	API solo lectura	Cumple	Sin endpoints mutadores en la API (probado); pendiente trigger/REVOKE en base de datos.
+
+US1.4: Caja, Bancos y Conciliación Bancaria
+Criterio	Endpoint(s)	Test	Estado	Nota
+CA01 registrar movimiento de caja (formulario y datos obligatorios).	`POST /api/v1/caja`	`backend/tests/caja.test.ts`	Cumple	Formulario y registro con validación obligatoria de tipo, monto, concepto y fecha (400 con details si faltan datos o son inválidos) (probado).
+CA02 identificar el movimiento de caja como ingreso o egreso.	`POST /api/v1/caja`, `GET /api/v1/caja`	`backend/tests/caja.test.ts`	Cumple	Identificación y clasificación estricta de cada movimiento como 'Ingreso' o 'Egreso', validado en persistencia y lectura (probado).
+CA03 recalcular el saldo disponible al registrar un movimiento.	`POST /api/v1/caja`, `GET /api/v1/caja/saldo`	`backend/tests/caja.test.ts`	Cumple	Recálculo dinámico e inmediato del saldo disponible acumulado en base a ingresos y egresos registrados no anulados (probado).
+CA04 consultar caja: ingresos, egresos y saldo del período.	`GET /api/v1/caja/saldo`, `GET /api/v1/caja`	`backend/tests/caja.test.ts`	Cumple	Consulta y arqueo de caja con desglose de saldoInicial, totalIngresos, totalEgresos y saldoFinal del período filtrado por fechas (probado).
+CA05 movimiento bancario con fecha, tipo, monto, concepto y cuenta.	`POST /api/v1/movimientos-bancarios`	`backend/tests/bancos.test.ts`	Cumple	Registro de extracto bancario con idCuenta, fecha, tipo, monto > 0 y concepto obligatorio (probado).
+CA06 identificar el movimiento bancario como ingreso o egreso.	`POST /api/v1/movimientos-bancarios`, `GET /api/v1/movimientos-bancarios`	`backend/tests/bancos.test.ts`	Cumple	Clasificación y validación de naturaleza bancaria como 'Deposito' (ingreso) o 'Retiro' (egreso) (probado).
+CA07 consultar los movimientos de la cuenta bancaria.	`GET /api/v1/movimientos-bancarios`	`backend/tests/bancos.test.ts`	Cumple	Listado y consulta con filtros por cuenta (idCuenta), tipo (Deposito/Retiro), estado y rango de fechas (desde, hasta) (probado).
+CA08 saldo bancario calculado desde los movimientos.	`GET /api/v1/cuentas-bancarias`, `GET /api/v1/cuentas-bancarias/:id`, `GET /api/v1/cuentas-bancarias/:id/saldo`	`backend/tests/bancos.test.ts`	Cumple	Cálculo dinámico saldo = saldo_inicial + depósitos - retiros sin usar saldo_actual estático; desglose por fechas (probado).
+CA09 comparar movimientos internos con bancarios.	`GET /api/v1/conciliacion/cotejo`	`backend/tests/conciliacion.test.ts`	Cumple	Vista unificada comparativa de movimientos bancarios e internos del período con motor de sugerencias automáticas (±3 días, mismo monto y naturaleza) (probado).
+CA10 confirmar la coincidencia y marcar ambos como conciliados.	`POST /api/v1/conciliacion/vincular`	`backend/tests/conciliacion.test.ts`	Cumple	Coincidencia exacta de montos vincula ambos registros y asigna estado 'Conciliado' (conciliado: true, diferencia: 0.00) (probado).
+CA11 identificar el movimiento o importe con diferencia.	`POST /api/v1/conciliacion/vincular`	`backend/tests/conciliacion.test.ts`	Cumple	Detección de diferencias ante montos distintos, asignando estado 'Discrepancia' (conciliado: false) y calculando diferencia = banco - interno (probado).
+CA12 distinguir conciliados de no conciliados.	`GET /api/v1/conciliacion/estado`, `GET /api/v1/movimientos-bancarios`	`backend/tests/conciliacion.test.ts`, `backend/tests/bancos.test.ts`	Cumple	Filtro por estado y reporte cuantitativo y monetario discriminando movimientos Conciliados, Pendientes y con Discrepancia (probado).
+CA13 correspondencia de importes y datos entre el movimiento interno y el bancario.	`POST /api/v1/conciliacion/vincular`, `DELETE /api/v1/conciliacion/desvincular/:id`	`backend/tests/conciliacion.test.ts`	Cumple	Validación estricta de correspondencia (422 Deposito solo con Ingreso / Retiro con Egreso; 422 si interno anulado; 409 si ya vinculado); desvinculación a Pendiente (probado).
+CA14 usuario, fecha, hora y tipo de operación al registrar, modificar o conciliar.	Módulo finanzas (`/caja`, `/cuentas-bancarias`, `/movimientos-bancarios`, `/conciliacion`)	`backend/tests/caja.test.ts`, `backend/tests/bancos.test.ts`, `backend/tests/conciliacion.test.ts`	Cumple	Registro completo de auditoría y trazabilidad (idUsuario, fechaHora, acción semántica, tabla, snapshot anterior y nuevo) para 7 eventos de finanzas (probado).
+
+#### Controles adicionales (no son criterios de la HU)
+- **Anulación de movimientos de caja:** Endpoint `DELETE /api/v1/caja/:id` con motivo obligatorio (`motivo`), soft-delete inmutable (`anulado = true`), control contra re-anulación (`409 Conflict`) y evento de auditoría `ANULACION_MOVIMIENTO_CAJA` (probado en `backend/tests/caja.test.ts`).
+- **Bloqueo de edición de movimientos conciliados:** Endpoint `PUT /api/v1/movimientos-bancarios/:id` permite modificar movimientos en estado `Pendiente`, pero bloquea con `409 Conflict` (`"No se puede modificar un movimiento bancario que ya ha sido conciliado"`) cualquier intento de editar extractos ya conciliados (probado en `backend/tests/bancos.test.ts`).
+- **Permisos y control de acceso por rol (RBAC transversal):** Middleware centralizado (`backend/src/middlewares/finanzas-permissions.middleware.ts`) aplicado a todas las rutas de Caja, Cuentas Bancarias, Movimientos Bancarios y Conciliación: `Administrador` escribe; `Administrador` y `Directorio` leen; `Consulta` y `Copropietario` reciben `403 Forbidden` (probado en `backend/tests/caja.test.ts`, `backend/tests/bancos.test.ts` y `backend/tests/conciliacion.test.ts`).
+- **Configuración de cuentas bancarias y unicidad:** Endpoints `POST` y `PUT /api/v1/cuentas-bancarias` con validación de número de cuenta único (`409 Conflict` ante duplicados en `numero_cuenta`) y evento de auditoría `CONFIGURAR_CUENTA_BANCARIA` (probado en `backend/tests/bancos.test.ts`).
 
 ---
 ## 9. Pendientes conocidos

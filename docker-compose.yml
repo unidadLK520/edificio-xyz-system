@@ -19,6 +19,7 @@ services:
       - ./database/migrations/003_expensas_agua_sesiones_pagos.sql:/docker-entrypoint-initdb.d/003_expensas_agua_sesiones_pagos.sql
       - ./database/migrations/004_montos_agua_manuales.sql:/docker-entrypoint-initdb.d/004_montos_agua_manuales.sql
       - ./database/migrations/005_movimientos_ingresos_egresos.sql:/docker-entrypoint-initdb.d/005_movimientos_ingresos_egresos.sql
+      - ./database/migrations/006_caja_bancos_conciliacion.sql:/docker-entrypoint-initdb.d/006_caja_bancos_conciliacion.sql
 
 volumes:
   postgres_data:
