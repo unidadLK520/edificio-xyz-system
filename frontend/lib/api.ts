@@ -5,17 +5,9 @@ export async function apiFetch(
   input: RequestInfo | URL,
   init?: RequestInit
 ): Promise<Response> {
-  const headers = new Headers(init?.headers)
-  if (!headers.has('Authorization') && typeof window !== 'undefined') {
-    const token = localStorage.getItem('auth_token')
-    if (token) {
-      headers.set('Authorization', `Bearer ${token}`)
-    }
-  }
-
   let res: Response
   try {
-    res = await fetch(input, { ...init, headers })
+    res = await fetch(input, init)
   } catch (err: any) {
     throw new Error(
       err?.message || 'Error de conexión al conectar con el servidor.'
