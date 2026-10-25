@@ -5,9 +5,17 @@ export async function apiFetch(
   input: RequestInfo | URL,
   init?: RequestInit
 ): Promise<Response> {
+  const headers = new Headers(init?.headers)
+  if (!headers.has('Authorization') && typeof window !== 'undefined') {
+    const token = localStorage.getItem('auth_token')
+    if (token) {
+      headers.set('Authorization', `Bearer ${token}`)
+    }
+  }
+
   let res: Response
   try {
-    res = await fetch(input, init)
+    res = await fetch(input, { ...init, headers })
   } catch (err: any) {
     throw new Error(
       err?.message || 'Error de conexión al conectar con el servidor.'
@@ -36,14 +44,14 @@ export async function apiFetch(
       const cloned = res.clone()
       const json = await cloned.json()
       if (json && (json.message || json.error)) {
-        errorMsg = json.message || json.error
+        errorMsg = `Error (${res.status}): ${json.message || json.error}`
       }
     } catch {
       try {
         const cloned = res.clone()
         const text = await cloned.text()
         if (text && text.length < 200) {
-          errorMsg = text
+          errorMsg = `Error (${res.status}): ${text}`
         }
       } catch {}
     }
