@@ -168,12 +168,14 @@ export default function ExpensasPage() {
     }
   }, [])
 
-  // Fetch expensas desde la API
-  const fetchExpensas = useCallback(async () => {
+  // Fetch expensas desde la API con limit=500 para evitar truncamiento por paginacion
+  const fetchExpensas = useCallback(async (overrideEstado?: string) => {
     setIsLoading(true)
     setApiError(null)
     try {
-      const res = await apiFetch(`/api/v1/expensas?estado=${filtroEstado}`)
+      const estadoActual = overrideEstado !== undefined ? overrideEstado : filtroEstado
+      const estadoParam = estadoActual && estadoActual !== 'Todos' ? `&estado=${estadoActual}` : ''
+      const res = await apiFetch(`/api/v1/expensas?limit=500${estadoParam}`)
       if (!res.ok) {
         const errJson = await res.json().catch(() => ({}))
         setApiError(errJson.message || 'Error al conectar con el servidor de expensas.')
@@ -289,7 +291,11 @@ export default function ExpensasPage() {
           advertencias: json.advertencias || [],
           message: json.message
         })
-        await fetchExpensas()
+        setFiltroEstado('Todos')
+        setSearchTerm('')
+        setActiveTab('todas')
+        await fetchExpensas('Todos')
+        await fetchMorosos()
         showToast(json.message || '¡Lote de expensas emitido exitosamente!')
       } else {
         const errorMsg = json.message || json.error || 'Error en la emisión masiva de expensas'
