@@ -587,6 +587,7 @@ export default function FinanzasPage() {
         setIsEditModalOpen(false)
         setMovimientoParaEditar(null)
         await fetchMovimientos()
+        await fetchResumen()
       } else {
         const errorJson = await res.json().catch(() => ({}))
         let errorMsg = errorJson.message || errorJson.error || 'Error al actualizar el registro financiero.'
