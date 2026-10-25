@@ -6,6 +6,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react'
 import { Droplets, Calendar, Save, RotateCcw, AlertTriangle, AlertCircle, CheckCircle2, DollarSign, Building2, Search } from 'lucide-react'
 import { UnidadItem } from './types'
+import { apiFetch } from '@/lib/api'
 
 interface AguaDepartamentosTabProps {
   unidades: UnidadItem[]
@@ -49,7 +50,7 @@ export default function AguaDepartamentosTab({
     setLoading(true)
     setErrorBanner(null)
     try {
-      const res = await fetch(`/api/v1/agua/montos?periodo=${periodoStr}`)
+      const res = await apiFetch(`/api/v1/agua/montos?periodo=${periodoStr}`)
       if (res.ok) {
         const json = await res.json()
         const mapApi = new Map<number, { idMonto: number; montoAgua: number }>()
@@ -121,7 +122,7 @@ export default function AguaDepartamentosTab({
         }))
       }
 
-      const res = await fetch('/api/v1/agua/montos', {
+      const res = await apiFetch('/api/v1/agua/montos', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
