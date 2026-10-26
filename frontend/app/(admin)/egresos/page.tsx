@@ -50,6 +50,8 @@ export interface MovimientoItem {
   monto: number
   metodoPago?: string | null
   registradoPor?: string
+  anulado?: boolean
+  motivoAnulacion?: string | null
 }
 
 export interface CategoriaItem {
@@ -208,6 +210,7 @@ export default function FinanzasPage() {
       if (fechaDesde) params.append('fechaDesde', fechaDesde)
       if (fechaHasta) params.append('fechaHasta', fechaHasta)
       if (searchTerm.trim()) params.append('q', searchTerm.trim())
+      params.append('limit', '500')
 
       const url = `/api/v1/movimientos?${params.toString()}`
       const res = await apiFetch(url)
@@ -248,7 +251,9 @@ export default function FinanzasPage() {
             comprobanteUrl: item.comprobanteUrl || null,
             monto: Number(item.monto || 0),
             metodoPago: item.metodoPago ?? item.metodo_pago ?? '',
-            registradoPor: item.usuarioRegistro?.nombreUsuario || 'admin'
+            registradoPor: item.usuarioRegistro?.nombreUsuario || 'admin',
+            anulado: Boolean(item.anulado),
+            motivoAnulacion: item.motivoAnulacion || null
           }
         })
         setMovimientos(mapped)
@@ -326,43 +331,43 @@ export default function FinanzasPage() {
   }, [movimientos, tabTipo, filtroCategoria, searchTerm, fechaDesde, fechaHasta])
 
   // Cálculos dinámicos de totales y resumen consistente (CA10) con datos oficiales del backend
-  const totalIngresos = useMemo(
-    () =>
-      resumenData !== null && !searchTerm.trim()
-        ? Number(resumenData.totalIngresos || 0)
-        : movimientosFiltrados
-            .filter((m) => m.tipo === 'Ingreso')
-            .reduce((acc, curr) => acc + curr.monto, 0),
-    [resumenData, searchTerm, movimientosFiltrados]
-  )
+  const totalIngresos = useMemo(() => {
+    if (tabTipo === 'Egreso') return 0
+    if (resumenData !== null && !searchTerm.trim()) {
+      return Number(resumenData.totalIngresos || 0)
+    }
+    return movimientosFiltrados
+      .filter((m) => m.tipo === 'Ingreso' && !m.anulado)
+      .reduce((acc, curr) => acc + curr.monto, 0)
+  }, [resumenData, searchTerm, tabTipo, movimientosFiltrados])
 
-  const totalEgresos = useMemo(
-    () =>
-      resumenData !== null && !searchTerm.trim()
-        ? Number(resumenData.totalEgresos || 0)
-        : movimientosFiltrados
-            .filter((m) => m.tipo === 'Egreso')
-            .reduce((acc, curr) => acc + curr.monto, 0),
-    [resumenData, searchTerm, movimientosFiltrados]
-  )
+  const totalEgresos = useMemo(() => {
+    if (tabTipo === 'Ingreso') return 0
+    if (resumenData !== null && !searchTerm.trim()) {
+      return Number(resumenData.totalEgresos || 0)
+    }
+    return movimientosFiltrados
+      .filter((m) => m.tipo === 'Egreso' && !m.anulado)
+      .reduce((acc, curr) => acc + curr.monto, 0)
+  }, [resumenData, searchTerm, tabTipo, movimientosFiltrados])
 
   const balanceNeto = useMemo(() => totalIngresos - totalEgresos, [totalIngresos, totalEgresos])
 
-  const cantidadIngresos = useMemo(
-    () =>
-      resumenData !== null && !searchTerm.trim()
-        ? Number(resumenData.cantidadIngresos || 0)
-        : movimientosFiltrados.filter((m) => m.tipo === 'Ingreso').length,
-    [resumenData, searchTerm, movimientosFiltrados]
-  )
+  const cantidadIngresos = useMemo(() => {
+    if (tabTipo === 'Egreso') return 0
+    if (resumenData !== null && !searchTerm.trim()) {
+      return Number(resumenData.cantidadIngresos || 0)
+    }
+    return movimientosFiltrados.filter((m) => m.tipo === 'Ingreso' && !m.anulado).length
+  }, [resumenData, searchTerm, tabTipo, movimientosFiltrados])
 
-  const cantidadEgresos = useMemo(
-    () =>
-      resumenData !== null && !searchTerm.trim()
-        ? Number(resumenData.cantidadEgresos || 0)
-        : movimientosFiltrados.filter((m) => m.tipo === 'Egreso').length,
-    [resumenData, searchTerm, movimientosFiltrados]
-  )
+  const cantidadEgresos = useMemo(() => {
+    if (tabTipo === 'Ingreso') return 0
+    if (resumenData !== null && !searchTerm.trim()) {
+      return Number(resumenData.cantidadEgresos || 0)
+    }
+    return movimientosFiltrados.filter((m) => m.tipo === 'Egreso' && !m.anulado).length
+  }, [resumenData, searchTerm, tabTipo, movimientosFiltrados])
 
   // Categorías filtradas para el modal según el tipo seleccionado
   const categoriasParaModal = useMemo(() => {
@@ -1027,13 +1032,19 @@ export default function FinanzasPage() {
                       return (
                         <tr
                           key={mov.id}
-                          className="hover:bg-[#e6e1d6]/50 dark:hover:bg-slate-800/40 transition-colors"
+                          className={`transition-colors ${
+                            mov.anulado
+                              ? 'bg-rose-50/20 dark:bg-rose-950/10 opacity-75 hover:opacity-100'
+                              : 'hover:bg-[#e6e1d6]/50 dark:hover:bg-slate-800/40'
+                          }`}
                         >
                           {/* Tipo */}
                           <td className="py-3 px-4">
                             <span
                               className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold ${
-                                esIngreso
+                                mov.anulado
+                                  ? 'bg-slate-200 text-slate-700 dark:bg-slate-800 dark:text-slate-300'
+                                  : esIngreso
                                   ? 'bg-emerald-100 text-emerald-900 dark:bg-emerald-500/20 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-500/30'
                                   : 'bg-rose-100 text-rose-900 dark:bg-rose-500/20 dark:text-rose-300 border border-rose-300 dark:border-rose-500/30'
                               }`}
@@ -1049,8 +1060,15 @@ export default function FinanzasPage() {
 
                           {/* Código / Fecha */}
                           <td className="py-3 px-4">
-                            <div className="font-bold text-[#262422] dark:text-white font-mono text-xs">
-                              {mov.codigo}
+                            <div className="flex items-center gap-1.5">
+                              <span className="font-bold text-[#262422] dark:text-white font-mono text-xs">
+                                {mov.codigo}
+                              </span>
+                              {mov.anulado && (
+                                <span className="px-1.5 py-0.2 rounded text-[9px] font-bold uppercase bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300 border border-rose-300">
+                                  Anulado
+                                </span>
+                              )}
                             </div>
                             <div className="text-[11px] text-[#7d776f] dark:text-slate-400">
                               {mov.fecha}
@@ -1085,7 +1103,9 @@ export default function FinanzasPage() {
                           {/* Monto */}
                           <td
                             className={`py-3 px-4 font-black text-sm font-mono ${
-                              esIngreso
+                              mov.anulado
+                                ? 'text-[#7d776f] line-through'
+                                : esIngreso
                                 ? 'text-emerald-700 dark:text-emerald-400'
                                 : 'text-rose-700 dark:text-rose-400'
                             }`}
@@ -1121,23 +1141,31 @@ export default function FinanzasPage() {
 
                               {hasFinancialPermission && (
                                 <>
-                                  <button
-                                    type="button"
-                                    onClick={() => handleOpenEditModal(mov)}
-                                    className="p-1.5 rounded-lg text-blue-700 hover:text-blue-900 hover:bg-blue-100/60 dark:text-blue-400 dark:hover:text-blue-300 dark:hover:bg-slate-800 transition-colors cursor-pointer"
-                                    title="Editar Movimiento"
-                                  >
-                                    <Edit2 className="w-4 h-4" />
-                                  </button>
+                                  {!mov.anulado ? (
+                                    <>
+                                      <button
+                                        type="button"
+                                        onClick={() => handleOpenEditModal(mov)}
+                                        className="p-1.5 rounded-lg text-blue-700 hover:text-blue-900 hover:bg-blue-100/60 dark:text-blue-400 dark:hover:text-blue-300 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+                                        title="Editar Movimiento"
+                                      >
+                                        <Edit2 className="w-4 h-4" />
+                                      </button>
 
-                                  <button
-                                    type="button"
-                                    onClick={() => setMovimientoParaEliminar(mov)}
-                                    className="p-1.5 rounded-lg text-rose-700 hover:text-rose-900 hover:bg-rose-100/60 dark:text-rose-400 dark:hover:text-rose-300 dark:hover:bg-slate-800 transition-colors cursor-pointer"
-                                    title="Anular Movimiento"
-                                  >
-                                    <Trash2 className="w-4 h-4" />
-                                  </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => setMovimientoParaEliminar(mov)}
+                                        className="p-1.5 rounded-lg text-rose-700 hover:text-rose-900 hover:bg-rose-100/60 dark:text-rose-400 dark:hover:text-rose-300 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+                                        title="Anular Movimiento"
+                                      >
+                                        <Trash2 className="w-4 h-4" />
+                                      </button>
+                                    </>
+                                  ) : (
+                                    <span className="text-[10px] text-rose-600 dark:text-rose-400 font-semibold px-1 italic">
+                                      Anulado
+                                    </span>
+                                  )}
                                 </>
                               )}
                             </div>
