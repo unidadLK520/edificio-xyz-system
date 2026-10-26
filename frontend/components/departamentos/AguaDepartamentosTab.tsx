@@ -146,17 +146,17 @@ export default function AguaDepartamentosTab({
             .join(' | ')
         }
 
-        let mensajeError = json.message || json.error || `Error al registrar montos de agua`
-        if (detalleMsg) mensajeError += ` (${detalleMsg})`
+        const mensajeBackend = json.message || json.error || 'Error en la solicitud'
+        const mensajeCompleto = detalleMsg ? `${mensajeBackend} (${detalleMsg})` : mensajeBackend
 
         if (res.status === 409) {
-          setErrorBanner(
-            `Conflicto (409): ${mensajeError || 'Ya existe una expensa emitida para uno o más departamentos en este período. No se puede modificar el monto de agua.'}`
-          )
+          const mensaje409 = json.message || 'Ya existe una expensa emitida para uno o más departamentos en este período. No se puede modificar el monto de agua porque la facturación del período ya fue cerrada.'
+          setErrorBanner(`Conflicto (409): ${mensaje409}`)
+          showToast(`Conflicto (409): ${mensaje409}`)
         } else {
-          setErrorBanner(`Error (${res.status}): ${mensajeError}`)
+          setErrorBanner(`Error (${res.status}): ${mensajeCompleto}`)
+          showToast(`Error (${res.status}): ${mensajeCompleto}`)
         }
-        showToast(`Error (${res.status}): ${mensajeError}`)
         return
       }
 
