@@ -52,7 +52,10 @@ export default function ConciliacionBancariaPage() {
 
   const [loading, setLoading] = useState<boolean>(true)
   const [apiError, setApiError] = useState<string | null>(null)
-  const [feedbackMsg, setFeedbackMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
+  const [feedbackMsg, setFeedbackMsg] = useState<{
+    type: 'success' | 'error'
+    text: string
+  } | null>(null)
 
   // Rol del usuario actual
   const [rolUsuario, setRolUsuario] = useState<string>('Administrador')
@@ -63,15 +66,22 @@ export default function ConciliacionBancariaPage() {
     }
   }, [])
 
-  const puedeEscribir = useMemo(() => puedeEscribirFinanzas('conciliacion', rolUsuario), [rolUsuario])
+  const puedeEscribir = useMemo(
+    () => puedeEscribirFinanzas('conciliacion', rolUsuario),
+    [rolUsuario]
+  )
 
   // Filtros de tabla
-  const [filtroEstado, setFiltroEstado] = useState<'Todos' | 'Conciliado' | 'Pendiente' | 'Discrepancia'>('Todos')
+  const [filtroEstado, setFiltroEstado] = useState<
+    'Todos' | 'Conciliado' | 'Pendiente' | 'Discrepancia'
+  >('Todos')
   const [searchTerm, setSearchTerm] = useState('')
 
   // Modal para vincular manualmente
   const [itemParaVincular, setItemParaVincular] = useState<MovimientoBancarioItem | null>(null)
-  const [movimientoSistemaSeleccionado, setMovimientoSistemaSeleccionado] = useState<number | ''>('')
+  const [movimientoSistemaSeleccionado, setMovimientoSistemaSeleccionado] = useState<number | ''>(
+    ''
+  )
   const [vinculando, setVinculando] = useState(false)
   const [modalVincularError, setModalVincularError] = useState<string | null>(null)
 
@@ -138,7 +148,9 @@ export default function ConciliacionBancariaPage() {
         setApiError(errores.join(' | '))
       }
     } catch (err: unknown) {
-      setApiError(extractErrorMessage(err, 'Error de conexión con el servicio de conciliación bancaria.'))
+      setApiError(
+        extractErrorMessage(err, 'Error de conexión con el servicio de conciliación bancaria.')
+      )
     } finally {
       setLoading(false)
     }
@@ -152,10 +164,11 @@ export default function ConciliacionBancariaPage() {
   const extractoFiltrado = useMemo(() => {
     return movimientosBancarios.filter((item) => {
       const matchEstado = filtroEstado === 'Todos' || item.estadoConciliacion === filtroEstado
-      const query = searchTerm.toLowerCase()
-      const matchSearch =
-        item.concepto.toLowerCase().includes(query) ||
-        (item.referencia && item.referencia.toLowerCase().includes(query))
+      const query = (searchTerm || '').toLowerCase().trim()
+      if (!query) return matchEstado
+      const conceptoStr = (item.concepto || (item as any).descripcion || '').toLowerCase()
+      const refStr = (item.referencia || '').toLowerCase()
+      const matchSearch = conceptoStr.includes(query) || refStr.includes(query)
       return matchEstado && matchSearch
     })
   }, [movimientosBancarios, filtroEstado, searchTerm])
@@ -165,7 +178,8 @@ export default function ConciliacionBancariaPage() {
     if (!searchTerm.trim()) return movimientosInternos
     const query = searchTerm.toLowerCase()
     return movimientosInternos.filter((m) => {
-      const matchId = `mov-${m.idMovimiento}`.includes(query) || String(m.idMovimiento).includes(query)
+      const matchId =
+        `mov-${m.idMovimiento}`.includes(query) || String(m.idMovimiento).includes(query)
       const matchDesc = m.descripcion?.toLowerCase().includes(query)
       const matchCat = m.categoria?.nombre?.toLowerCase().includes(query)
       return matchId || matchDesc || matchCat
@@ -195,17 +209,24 @@ export default function ConciliacionBancariaPage() {
       fechaSolo(mb.fecha),
       mb.tipo,
       `"${mb.referencia || 'S/R'}"`,
-      `"${mb.concepto.replace(/"/g, '""')}"`,
+      `"${(mb.concepto || (mb as any).descripcion || 'Sin concepto').replace(/"/g, '""')}"`,
       Number(mb.monto).toFixed(2),
       mb.estadoConciliacion,
-      mb.diferencia !== undefined && mb.diferencia !== null ? Number(mb.diferencia).toFixed(2) : '0.00',
+      mb.diferencia !== undefined && mb.diferencia !== null
+        ? Number(mb.diferencia).toFixed(2)
+        : '0.00',
       mb.sugerencia ? `"Sugerido: MOV-${mb.sugerencia.idMovimiento}"` : '""'
     ])
-    const csvContent = 'data:text/csv;charset=utf-8,\uFEFF' + [headers.join(','), ...rows.map((e) => e.join(','))].join('\n')
+    const csvContent =
+      'data:text/csv;charset=utf-8,\uFEFF' +
+      [headers.join(','), ...rows.map((e) => e.join(','))].join('\n')
     const encodedUri = encodeURI(csvContent)
     const link = document.createElement('a')
     link.setAttribute('href', encodedUri)
-    link.setAttribute('download', `conciliacion_${cuentaActual?.banco || 'cuenta'}_${new Date().toISOString().slice(0, 10)}.csv`)
+    link.setAttribute(
+      'download',
+      `conciliacion_${cuentaActual?.banco || 'cuenta'}_${new Date().toISOString().slice(0, 10)}.csv`
+    )
     document.body.appendChild(link)
     link.click()
     document.body.removeChild(link)
@@ -219,7 +240,10 @@ export default function ConciliacionBancariaPage() {
 
     try {
       await conciliacionService.vincular(item.idMovBancario, item.sugerencia.idMovimiento)
-      showNotification('success', 'Movimiento vinculado y conciliado exitosamente con la sugerencia.')
+      showNotification(
+        'success',
+        'Movimiento vinculado y conciliado exitosamente con la sugerencia.'
+      )
       await fetchConciliacionData()
     } catch (err: unknown) {
       showNotification('error', extractErrorMessage(err, 'Error al vincular con la sugerencia.'))
@@ -239,7 +263,10 @@ export default function ConciliacionBancariaPage() {
     setModalVincularError(null)
 
     try {
-      await conciliacionService.vincular(itemParaVincular.idMovBancario, Number(movimientoSistemaSeleccionado))
+      await conciliacionService.vincular(
+        itemParaVincular.idMovBancario,
+        Number(movimientoSistemaSeleccionado)
+      )
       showNotification('success', 'Movimiento bancario e interno vinculados exitosamente.')
       setItemParaVincular(null)
       setMovimientoSistemaSeleccionado('')
@@ -276,8 +303,12 @@ export default function ConciliacionBancariaPage() {
     return movimientosInternos.filter((m) => !m.anulado && !m.vinculado && m.tipo === tipoRequerido)
   }, [itemParaVincular, movimientosInternos])
 
-  const totalMovs = (resumenEstado?.cantConciliados || 0) + (resumenEstado?.cantPendientes || 0) + (resumenEstado?.cantDiscrepancias || 0)
-  const porcentaje = totalMovs > 0 ? Math.round(((resumenEstado?.cantConciliados || 0) / totalMovs) * 100) : 0
+  const totalMovs =
+    (resumenEstado?.cantConciliados || 0) +
+    (resumenEstado?.cantPendientes || 0) +
+    (resumenEstado?.cantDiscrepancias || 0)
+  const porcentaje =
+    totalMovs > 0 ? Math.round(((resumenEstado?.cantConciliados || 0) / totalMovs) * 100) : 0
 
   return (
     <div className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto space-y-6 animate-in fade-in duration-300">
@@ -318,7 +349,8 @@ export default function ConciliacionBancariaPage() {
             Conciliación Bancaria
           </h1>
           <p className="text-xs sm:text-sm text-[#66615b] dark:text-slate-400 mt-1">
-            Cotejo sistemático entre el extracto bancario oficial y los movimientos registrados en el sistema.
+            Cotejo sistemático entre el extracto bancario oficial y los movimientos registrados en
+            el sistema.
           </p>
         </div>
 
@@ -374,9 +406,7 @@ export default function ConciliacionBancariaPage() {
             <h3 className="text-base font-bold text-slate-900 dark:text-white">
               Servicio de Conciliación Bancaria no disponible
             </h3>
-            <p className="text-sm text-slate-600 dark:text-slate-400 mt-1">
-              {apiError}
-            </p>
+            <p className="text-sm text-slate-600 dark:text-slate-400 mt-1">{apiError}</p>
           </div>
           <button
             onClick={fetchConciliacionData}
@@ -489,7 +519,9 @@ export default function ConciliacionBancariaPage() {
                   Extracto Bancario ({extractoFiltrado.length})
                 </span>
                 <span className="text-xs font-normal text-[#7d776f]">
-                  Cuenta: {cuentasBancarias.find((c) => c.idCuenta === cuentaSeleccionadaId)?.numeroCuenta || '-'}
+                  Cuenta:{' '}
+                  {cuentasBancarias.find((c) => c.idCuenta === cuentaSeleccionadaId)
+                    ?.numeroCuenta || '-'}
                 </span>
               </h3>
 
@@ -508,34 +540,52 @@ export default function ConciliacionBancariaPage() {
                     <tbody className="divide-y divide-[#cec8bc]/50">
                       {loading ? (
                         <tr>
-                          <td colSpan={puedeEscribir ? 5 : 4} className="py-8 text-center text-[#7d776f]">
+                          <td
+                            colSpan={puedeEscribir ? 5 : 4}
+                            className="py-8 text-center text-[#7d776f]"
+                          >
                             <Loader2 className="w-5 h-5 animate-spin mx-auto text-blue-700" />
                           </td>
                         </tr>
                       ) : extractoFiltrado.length === 0 ? (
                         <tr>
-                          <td colSpan={puedeEscribir ? 5 : 4} className="py-8 text-center text-[#7d776f]">
-                            No hay movimientos bancarios para esta cuenta con los filtros seleccionados.
+                          <td
+                            colSpan={puedeEscribir ? 5 : 4}
+                            className="py-8 text-center text-[#7d776f]"
+                          >
+                            No hay movimientos bancarios para esta cuenta con los filtros
+                            seleccionados.
                           </td>
                         </tr>
                       ) : (
                         extractoFiltrado.map((item) => {
                           const esDeposito = item.tipo === 'Deposito'
-                          const tieneSugerencia = item.estadoConciliacion === 'Pendiente' && item.sugerencia
+                          const tieneSugerencia =
+                            item.estadoConciliacion === 'Pendiente' && item.sugerencia
                           const esConciliado = item.estadoConciliacion === 'Conciliado'
                           const enAccion = accionEnProgresoId === item.idMovBancario
 
                           return (
-                            <tr key={item.idMovBancario} className="hover:bg-[#e6e1d6]/50 transition-colors">
+                            <tr
+                              key={item.idMovBancario}
+                              className="hover:bg-[#e6e1d6]/50 transition-colors"
+                            >
                               <td className="py-2.5 px-3">
                                 <div className="font-mono font-bold text-[11px] text-blue-900 dark:text-blue-300">
                                   {item.referencia || 'S/R'}
                                 </div>
-                                <div className="text-[10px] text-[#7d776f] font-mono">{fechaSolo(item.fecha)}</div>
+                                <div className="text-[10px] text-[#7d776f] font-mono">
+                                  {fechaSolo(item.fecha)}
+                                </div>
                               </td>
 
-                              <td className="py-2.5 px-3 max-w-[200px]" title={item.concepto}>
-                                <div className="font-medium truncate">{item.concepto}</div>
+                              <td
+                                className="py-2.5 px-3 max-w-[200px]"
+                                title={item.concepto || (item as any).descripcion || ''}
+                              >
+                                <div className="font-medium truncate">
+                                  {item.concepto || (item as any).descripcion || 'Sin concepto'}
+                                </div>
 
                                 {/* SUGERENCIA AUTOMÁTICA DEL SISTEMA */}
                                 {tieneSugerencia && item.sugerencia && (
@@ -545,7 +595,9 @@ export default function ConciliacionBancariaPage() {
                                       <span>Sugerencia: MOV-{item.sugerencia.idMovimiento}</span>
                                     </div>
                                     <p className="text-[10px] text-slate-600 dark:text-slate-400 truncate">
-                                      {item.sugerencia.descripcion} (Bs. {Number(item.sugerencia.monto).toFixed(2)}) &bull; Dif: {item.sugerencia.diferenciaDias}d
+                                      {item.sugerencia.descripcion} (Bs.{' '}
+                                      {Number(item.sugerencia.monto).toFixed(2)}) &bull; Dif:{' '}
+                                      {item.sugerencia.diferenciaDias}d
                                     </p>
                                     {puedeEscribir && (
                                       <button
@@ -562,16 +614,19 @@ export default function ConciliacionBancariaPage() {
                                 )}
 
                                 {/* DISCREPANCIA INFO */}
-                                {item.estadoConciliacion === 'Discrepancia' && item.diferencia !== null && (
-                                  <div className="mt-1 text-[10px] text-rose-600 font-semibold">
-                                    Diferencia con libro: Bs. {Number(item.diferencia).toFixed(2)}
-                                  </div>
-                                )}
+                                {item.estadoConciliacion === 'Discrepancia' &&
+                                  item.diferencia !== null && (
+                                    <div className="mt-1 text-[10px] text-rose-600 font-semibold">
+                                      Diferencia con libro: Bs. {Number(item.diferencia).toFixed(2)}
+                                    </div>
+                                  )}
                               </td>
 
                               <td
                                 className={`py-2.5 px-3 font-mono font-bold ${
-                                  esDeposito ? 'text-emerald-700 dark:text-emerald-400' : 'text-rose-700 dark:text-rose-400'
+                                  esDeposito
+                                    ? 'text-emerald-700 dark:text-emerald-400'
+                                    : 'text-rose-700 dark:text-rose-400'
                                 }`}
                               >
                                 {esDeposito ? '+' : '-'} Bs. {Number(item.monto).toFixed(2)}
@@ -583,8 +638,8 @@ export default function ConciliacionBancariaPage() {
                                     item.estadoConciliacion === 'Conciliado'
                                       ? 'bg-emerald-100 text-emerald-900 border border-emerald-300'
                                       : item.estadoConciliacion === 'Pendiente'
-                                      ? 'bg-amber-100 text-amber-900 border border-amber-300'
-                                      : 'bg-rose-100 text-rose-900 border border-rose-300'
+                                        ? 'bg-amber-100 text-amber-900 border border-amber-300'
+                                        : 'bg-rose-100 text-rose-900 border border-rose-300'
                                   }`}
                                 >
                                   {item.estadoConciliacion}
@@ -637,35 +692,42 @@ export default function ConciliacionBancariaPage() {
                   <FileCheck className="w-4 h-4 text-emerald-600" />
                   Libro del Sistema ({movimientosInternosFiltrados.length})
                 </span>
-                <span className="text-xs font-normal text-[#7d776f]">
-                  Período actual
-                </span>
+                <span className="text-xs font-normal text-[#7d776f]">Período actual</span>
               </h3>
 
               <div className="rounded-2xl border border-[#cec8bc] dark:border-slate-800 bg-white/70 dark:bg-slate-900/70 overflow-hidden shadow-sm max-h-[580px] overflow-y-auto">
                 <div className="divide-y divide-[#cec8bc]/50 text-xs">
                   {movimientosInternosFiltrados.length === 0 ? (
                     <div className="p-8 text-center text-[#7d776f]">
-                      No hay movimientos internos registrados para el período consultado{searchTerm.trim() ? ' que coincidan con la búsqueda' : ''}.
+                      No hay movimientos internos registrados para el período consultado
+                      {searchTerm.trim() ? ' que coincidan con la búsqueda' : ''}.
                     </div>
                   ) : (
                     movimientosInternosFiltrados.map((mov) => {
                       const esIngreso = mov.tipo === 'Ingreso'
                       return (
-                        <div key={mov.idMovimiento} className="p-3 hover:bg-[#e6e1d6]/50 transition-colors space-y-1">
+                        <div
+                          key={mov.idMovimiento}
+                          className="p-3 hover:bg-[#e6e1d6]/50 transition-colors space-y-1"
+                        >
                           <div className="flex items-center justify-between">
                             <span className="font-mono font-bold text-xs text-slate-800 dark:text-slate-200">
                               MOV-{mov.idMovimiento}
                             </span>
                             <span
                               className={`font-mono font-bold ${
-                                esIngreso ? 'text-emerald-700 dark:text-emerald-400' : 'text-rose-700 dark:text-rose-400'
+                                esIngreso
+                                  ? 'text-emerald-700 dark:text-emerald-400'
+                                  : 'text-rose-700 dark:text-rose-400'
                               }`}
                             >
                               {esIngreso ? '+' : '-'} Bs. {Number(mov.monto).toFixed(2)}
                             </span>
                           </div>
-                          <div className="text-[11px] text-[#5c5750] dark:text-slate-300 truncate" title={mov.descripcion}>
+                          <div
+                            className="text-[11px] text-[#5c5750] dark:text-slate-300 truncate"
+                            title={mov.descripcion}
+                          >
                             {mov.descripcion}
                           </div>
                           <div className="flex items-center justify-between text-[10px] text-[#7d776f] pt-0.5">
@@ -717,11 +779,18 @@ export default function ConciliacionBancariaPage() {
             )}
 
             <div className="p-3 rounded-xl bg-white/70 dark:bg-slate-950 border border-[#cec8bc] dark:border-slate-800 space-y-1 text-xs">
-              <span className="text-[#7d776f] text-[10px] uppercase font-bold">Registro Bancario Seleccionado:</span>
+              <span className="text-[#7d776f] text-[10px] uppercase font-bold">
+                Registro Bancario Seleccionado:
+              </span>
               <div className="font-bold font-mono text-sm text-[#262422] dark:text-white">
-                {itemParaVincular.referencia || 'S/R'} &bull; Bs. {Number(itemParaVincular.monto).toFixed(2)} ({itemParaVincular.tipo})
+                {itemParaVincular.referencia || 'S/R'} &bull; Bs.{' '}
+                {Number(itemParaVincular.monto).toFixed(2)} ({itemParaVincular.tipo})
               </div>
-              <div className="text-[11px] text-[#5c5750] dark:text-slate-400">{itemParaVincular.concepto}</div>
+              <div className="text-[11px] text-[#5c5750] dark:text-slate-400">
+                {itemParaVincular.concepto ||
+                  (itemParaVincular as any).descripcion ||
+                  'Sin concepto'}
+              </div>
             </div>
 
             <div className="space-y-1.5 text-xs">
@@ -730,19 +799,25 @@ export default function ConciliacionBancariaPage() {
               </label>
               <select
                 value={movimientoSistemaSeleccionado}
-                onChange={(e) => setMovimientoSistemaSeleccionado(e.target.value === '' ? '' : Number(e.target.value))}
+                onChange={(e) =>
+                  setMovimientoSistemaSeleccionado(
+                    e.target.value === '' ? '' : Number(e.target.value)
+                  )
+                }
                 className="w-full px-3 py-2 rounded-xl bg-[#dfd9ce] dark:bg-slate-950 border border-[#cec8bc] dark:border-slate-800 font-mono text-xs cursor-pointer"
               >
                 <option value="">-- Seleccionar Movimiento Compatible --</option>
                 {movimientosInternosDisponibles.map((m) => (
                   <option key={m.idMovimiento} value={m.idMovimiento}>
-                    [MOV-{m.idMovimiento}] {m.descripcion} - Bs. {Number(m.monto).toFixed(2)} ({fechaSolo(m.fecha)})
+                    [MOV-{m.idMovimiento}] {m.descripcion} - Bs. {Number(m.monto).toFixed(2)} (
+                    {fechaSolo(m.fecha)})
                   </option>
                 ))}
               </select>
               {movimientosInternosDisponibles.length === 0 && (
                 <p className="text-[11px] text-amber-700 dark:text-amber-400">
-                  No hay movimientos internos disponibles del tipo compatible ({itemParaVincular.tipo === 'Deposito' ? 'Ingreso' : 'Egreso'}) sin vincular.
+                  No hay movimientos internos disponibles del tipo compatible (
+                  {itemParaVincular.tipo === 'Deposito' ? 'Ingreso' : 'Egreso'}) sin vincular.
                 </p>
               )}
             </div>

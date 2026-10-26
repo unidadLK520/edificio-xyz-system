@@ -46,7 +46,10 @@ export default function CajaYBancosPage() {
   const [tabActiva, setTabActiva] = useState<'caja' | 'bancos'>('caja')
   const [loading, setLoading] = useState<boolean>(true)
   const [apiError, setApiError] = useState<string | null>(null)
-  const [feedbackMsg, setFeedbackMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
+  const [feedbackMsg, setFeedbackMsg] = useState<{
+    type: 'success' | 'error'
+    text: string
+  } | null>(null)
 
   // Rol del usuario actual para MAPA_PERMISOS_FINANZAS
   const [rolUsuario, setRolUsuario] = useState<string>('Administrador')
@@ -58,8 +61,14 @@ export default function CajaYBancosPage() {
   }, [])
 
   const puedeEscribirCaja = useMemo(() => puedeEscribirFinanzas('caja', rolUsuario), [rolUsuario])
-  const puedeEscribirCuentas = useMemo(() => puedeEscribirFinanzas('cuentas_bancarias', rolUsuario), [rolUsuario])
-  const puedeEscribirMovimientos = useMemo(() => puedeEscribirFinanzas('movimientos_bancarios', rolUsuario), [rolUsuario])
+  const puedeEscribirCuentas = useMemo(
+    () => puedeEscribirFinanzas('cuentas_bancarias', rolUsuario),
+    [rolUsuario]
+  )
+  const puedeEscribirMovimientos = useMemo(
+    () => puedeEscribirFinanzas('movimientos_bancarios', rolUsuario),
+    [rolUsuario]
+  )
 
   // ----------------------------------------------------
   // ESTADO DE CAJA CHICA
@@ -67,7 +76,9 @@ export default function CajaYBancosPage() {
   const [movimientosCaja, setMovimientosCaja] = useState<MovimientoCajaItem[]>([])
   const [saldoCajaResumen, setSaldoCajaResumen] = useState<CajaSaldoResumen | null>(null)
   const [filtroTipoCaja, setFiltroTipoCaja] = useState<'Todos' | 'Ingreso' | 'Egreso'>('Todos')
-  const [filtroPeriodoCaja, setFiltroPeriodoCaja] = useState<'todos' | 'mes_actual' | 'mes_anterior'>('mes_actual')
+  const [filtroPeriodoCaja, setFiltroPeriodoCaja] = useState<
+    'todos' | 'mes_actual' | 'mes_anterior'
+  >('mes_actual')
   const [searchCaja, setSearchCaja] = useState('')
 
   // Formulario nuevo movimiento de caja
@@ -105,7 +116,9 @@ export default function CajaYBancosPage() {
 
   const [movimientosBanco, setMovimientosBanco] = useState<MovimientoBancarioItem[]>([])
   const [filtroTipoBanco, setFiltroTipoBanco] = useState<'Todos' | 'Deposito' | 'Retiro'>('Todos')
-  const [filtroEstadoBanco, setFiltroEstadoBanco] = useState<'Todos' | 'Pendiente' | 'Conciliado' | 'Discrepancia'>('Todos')
+  const [filtroEstadoBanco, setFiltroEstadoBanco] = useState<
+    'Todos' | 'Pendiente' | 'Conciliado' | 'Discrepancia'
+  >('Todos')
   const [searchBanco, setSearchBanco] = useState('')
   const [loadingMovBancos, setLoadingMovBancos] = useState(false)
 
@@ -175,7 +188,11 @@ export default function CajaYBancosPage() {
         errores.push(`Cuentas bancarias: ${extractErrorMessage(resCuentas.reason)}`)
       }
 
-      if (errores.length > 0 && resMovimientos.status === 'rejected' && resCuentas.status === 'rejected') {
+      if (
+        errores.length > 0 &&
+        resMovimientos.status === 'rejected' &&
+        resCuentas.status === 'rejected'
+      ) {
         setApiError(errores.join(' | '))
       }
     } catch (err: unknown) {
@@ -212,7 +229,10 @@ export default function CajaYBancosPage() {
       if (resMovs.status === 'fulfilled') {
         setMovimientosBanco(resMovs.value.items)
       } else {
-        showNotification('error', `Error al cargar movimientos bancarios: ${extractErrorMessage(resMovs.reason)}`)
+        showNotification(
+          'error',
+          `Error al cargar movimientos bancarios: ${extractErrorMessage(resMovs.reason)}`
+        )
       }
 
       if (resSaldo.status === 'fulfilled') {
@@ -233,7 +253,10 @@ export default function CajaYBancosPage() {
       const detalle = await movimientosBancariosService.getDetalle(idMov)
       setMovBancoDetalle(detalle)
     } catch (err: unknown) {
-      showNotification('error', extractErrorMessage(err, 'Error al consultar detalle del movimiento'))
+      showNotification(
+        'error',
+        extractErrorMessage(err, 'Error al consultar detalle del movimiento')
+      )
       setIsModalDetalleMovOpen(false)
     } finally {
       setLoadingDetalleMov(false)
@@ -252,7 +275,7 @@ export default function CajaYBancosPage() {
       const matchTipo = filtroTipoCaja === 'Todos' || m.tipo === filtroTipoCaja
       const usuarioReg = m.usuarioRegistro?.nombreUsuario || ''
       const matchSearch =
-        m.concepto.toLowerCase().includes(searchCaja.toLowerCase()) ||
+        (m.concepto || '').toLowerCase().includes(searchCaja.toLowerCase()) ||
         usuarioReg.toLowerCase().includes(searchCaja.toLowerCase())
 
       let matchPeriodo = true
@@ -261,13 +284,11 @@ export default function CajaYBancosPage() {
 
       if (filtroPeriodoCaja === 'mes_actual') {
         matchPeriodo =
-          fechaMov.getFullYear() === hoy.getFullYear() &&
-          fechaMov.getMonth() === hoy.getMonth()
+          fechaMov.getFullYear() === hoy.getFullYear() && fechaMov.getMonth() === hoy.getMonth()
       } else if (filtroPeriodoCaja === 'mes_anterior') {
         const mesAnt = hoy.getMonth() === 0 ? 11 : hoy.getMonth() - 1
         const anioAnt = hoy.getMonth() === 0 ? hoy.getFullYear() - 1 : hoy.getFullYear()
-        matchPeriodo =
-          fechaMov.getFullYear() === anioAnt && fechaMov.getMonth() === mesAnt
+        matchPeriodo = fechaMov.getFullYear() === anioAnt && fechaMov.getMonth() === mesAnt
       }
 
       return matchTipo && matchSearch && matchPeriodo
@@ -280,7 +301,7 @@ export default function CajaYBancosPage() {
     const query = searchBanco.toLowerCase()
     return movimientosBanco.filter(
       (m) =>
-        m.concepto.toLowerCase().includes(query) ||
+        (m.concepto || (m as any).descripcion || '').toLowerCase().includes(query) ||
         (m.referencia && m.referencia.toLowerCase().includes(query))
     )
   }, [movimientosBanco, searchBanco])
@@ -305,11 +326,16 @@ export default function CajaYBancosPage() {
       Number(m.monto).toFixed(2),
       m.anulado ? 'Anulado' : 'Vigente'
     ])
-    const csvContent = 'data:text/csv;charset=utf-8,\uFEFF' + [headers.join(','), ...rows.map((e) => e.join(','))].join('\n')
+    const csvContent =
+      'data:text/csv;charset=utf-8,\uFEFF' +
+      [headers.join(','), ...rows.map((e) => e.join(','))].join('\n')
     const encodedUri = encodeURI(csvContent)
     const link = document.createElement('a')
     link.setAttribute('href', encodedUri)
-    link.setAttribute('download', `caja_chica_${filtroPeriodoCaja}_${new Date().toISOString().slice(0, 10)}.csv`)
+    link.setAttribute(
+      'download',
+      `caja_chica_${filtroPeriodoCaja}_${new Date().toISOString().slice(0, 10)}.csv`
+    )
     document.body.appendChild(link)
     link.click()
     document.body.removeChild(link)
@@ -323,7 +349,16 @@ export default function CajaYBancosPage() {
       return
     }
     const cuentaActual = cuentasBancarias.find((c) => c.idCuenta === cuentaSeleccionadaId)
-    const headers = ['Banco', 'Cuenta', 'Tipo', 'Fecha', 'Referencia', 'Concepto', 'Monto (Bs.)', 'Estado Conciliacion']
+    const headers = [
+      'Banco',
+      'Cuenta',
+      'Tipo',
+      'Fecha',
+      'Referencia',
+      'Concepto',
+      'Monto (Bs.)',
+      'Estado Conciliacion'
+    ]
     const rows = movimientosBancoFiltrados.map((mb) => [
       `"${cuentaActual?.banco || ''}"`,
       `"${cuentaActual?.numeroCuenta || ''}"`,
@@ -334,11 +369,16 @@ export default function CajaYBancosPage() {
       Number(mb.monto).toFixed(2),
       mb.estadoConciliacion
     ])
-    const csvContent = 'data:text/csv;charset=utf-8,\uFEFF' + [headers.join(','), ...rows.map((e) => e.join(','))].join('\n')
+    const csvContent =
+      'data:text/csv;charset=utf-8,\uFEFF' +
+      [headers.join(','), ...rows.map((e) => e.join(','))].join('\n')
     const encodedUri = encodeURI(csvContent)
     const link = document.createElement('a')
     link.setAttribute('href', encodedUri)
-    link.setAttribute('download', `extracto_${cuentaActual?.banco || 'bancario'}_${new Date().toISOString().slice(0, 10)}.csv`)
+    link.setAttribute(
+      'download',
+      `extracto_${cuentaActual?.banco || 'bancario'}_${new Date().toISOString().slice(0, 10)}.csv`
+    )
     document.body.appendChild(link)
     link.click()
     document.body.removeChild(link)
@@ -559,7 +599,8 @@ export default function CajaYBancosPage() {
             Flujo de Caja y Bancos
           </h1>
           <p className="text-xs sm:text-sm text-[#66615b] dark:text-slate-400 mt-1">
-            Gestión de disponibilidad líquida, arqueos de caja chica física y movimientos de cuentas bancarias.
+            Gestión de disponibilidad líquida, arqueos de caja chica física y movimientos de cuentas
+            bancarias.
           </p>
         </div>
 
@@ -603,9 +644,7 @@ export default function CajaYBancosPage() {
             <h3 className="text-base font-bold text-slate-900 dark:text-white">
               Servicio de Caja y Bancos no disponible
             </h3>
-            <p className="text-sm text-slate-600 dark:text-slate-400 mt-1">
-              {apiError}
-            </p>
+            <p className="text-sm text-slate-600 dark:text-slate-400 mt-1">{apiError}</p>
           </div>
           <button
             onClick={fetchData}
@@ -707,7 +746,11 @@ export default function CajaYBancosPage() {
                             : 'text-[#7d776f]'
                         }`}
                       >
-                        {p === 'todos' ? 'Histórico' : p === 'mes_actual' ? 'Mes Actual' : 'Mes Anterior'}
+                        {p === 'todos'
+                          ? 'Histórico'
+                          : p === 'mes_actual'
+                            ? 'Mes Actual'
+                            : 'Mes Anterior'}
                       </button>
                     ))}
                   </div>
@@ -769,13 +812,19 @@ export default function CajaYBancosPage() {
                     <tbody className="divide-y divide-[#cec8bc]/60 dark:divide-slate-800">
                       {loading ? (
                         <tr>
-                          <td colSpan={puedeEscribirCaja ? 7 : 6} className="py-8 text-center text-[#7d776f]">
+                          <td
+                            colSpan={puedeEscribirCaja ? 7 : 6}
+                            className="py-8 text-center text-[#7d776f]"
+                          >
                             <Loader2 className="w-5 h-5 animate-spin mx-auto text-blue-700" />
                           </td>
                         </tr>
                       ) : movimientosCajaFiltrados.length === 0 ? (
                         <tr>
-                          <td colSpan={puedeEscribirCaja ? 7 : 6} className="py-8 text-center text-[#7d776f]">
+                          <td
+                            colSpan={puedeEscribirCaja ? 7 : 6}
+                            className="py-8 text-center text-[#7d776f]"
+                          >
                             No hay movimientos de caja registrados para este período.
                           </td>
                         </tr>
@@ -797,7 +846,11 @@ export default function CajaYBancosPage() {
                                       : 'bg-rose-100 text-rose-900 dark:bg-rose-950 dark:text-rose-300'
                                   }`}
                                 >
-                                  {esIngreso ? <ArrowDownLeft className="w-3 h-3" /> : <ArrowUpRight className="w-3 h-3" />}
+                                  {esIngreso ? (
+                                    <ArrowDownLeft className="w-3 h-3" />
+                                  ) : (
+                                    <ArrowUpRight className="w-3 h-3" />
+                                  )}
                                   {m.tipo}
                                 </span>
                               </td>
@@ -815,7 +868,9 @@ export default function CajaYBancosPage() {
                               </td>
                               <td
                                 className={`py-3 px-4 font-mono font-bold ${
-                                  esIngreso ? 'text-emerald-700 dark:text-emerald-400' : 'text-rose-700 dark:text-rose-400'
+                                  esIngreso
+                                    ? 'text-emerald-700 dark:text-emerald-400'
+                                    : 'text-rose-700 dark:text-rose-400'
                                 }`}
                               >
                                 {esIngreso ? '+' : '-'} Bs. {Number(m.monto).toFixed(2)}
@@ -866,7 +921,9 @@ export default function CajaYBancosPage() {
               {/* SALDO BANCARIO TOTAL Y BOTONES */}
               <div className="p-5 rounded-2xl bg-white/70 dark:bg-slate-900/70 border border-[#cec8bc] dark:border-slate-800 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                 <div>
-                  <div className="text-xs font-semibold text-[#7d776f]">Saldo Bancario Consolidado</div>
+                  <div className="text-xs font-semibold text-[#7d776f]">
+                    Saldo Bancario Consolidado
+                  </div>
                   <div className="text-2xl sm:text-3xl font-black text-blue-700 dark:text-blue-400 font-mono mt-1">
                     Bs. {saldoBancosTotal.toFixed(2)}
                   </div>
@@ -967,27 +1024,36 @@ export default function CajaYBancosPage() {
                   {saldoCuentaSeleccionada && (
                     <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 p-4 rounded-2xl bg-white/70 dark:bg-slate-900/70 border border-[#cec8bc] dark:border-slate-800 text-xs shadow-sm">
                       <div>
-                        <span className="text-[#7d776f] font-semibold text-[11px] block">Saldo Inicial Período</span>
+                        <span className="text-[#7d776f] font-semibold text-[11px] block">
+                          Saldo Inicial Período
+                        </span>
                         <div className="text-base sm:text-lg font-black font-mono text-slate-800 dark:text-slate-200 mt-0.5">
                           Bs. {Number(saldoCuentaSeleccionada.saldoInicial || 0).toFixed(2)}
                         </div>
                       </div>
                       <div>
-                        <span className="text-emerald-700 dark:text-emerald-400 font-semibold text-[11px] block">Depósitos (Abonos)</span>
+                        <span className="text-emerald-700 dark:text-emerald-400 font-semibold text-[11px] block">
+                          Depósitos (Abonos)
+                        </span>
                         <div className="text-base sm:text-lg font-black font-mono text-emerald-700 dark:text-emerald-400 mt-0.5">
                           + Bs. {Number(saldoCuentaSeleccionada.totalDepositos || 0).toFixed(2)}
                         </div>
                       </div>
                       <div>
-                        <span className="text-rose-700 dark:text-rose-400 font-semibold text-[11px] block">Retiros (Cargos)</span>
+                        <span className="text-rose-700 dark:text-rose-400 font-semibold text-[11px] block">
+                          Retiros (Cargos)
+                        </span>
                         <div className="text-base sm:text-lg font-black font-mono text-rose-700 dark:text-rose-400 mt-0.5">
                           - Bs. {Number(saldoCuentaSeleccionada.totalRetiros || 0).toFixed(2)}
                         </div>
                       </div>
                       <div>
-                        <span className="text-blue-700 dark:text-blue-400 font-semibold text-[11px] block">Disponible Cuenta</span>
+                        <span className="text-blue-700 dark:text-blue-400 font-semibold text-[11px] block">
+                          Disponible Cuenta
+                        </span>
                         <div className="text-base sm:text-lg font-black font-mono text-blue-700 dark:text-blue-400 mt-0.5">
-                          Bs. {Number(saldoCuentaSeleccionada.saldoDisponibleActual || 0).toFixed(2)}
+                          Bs.{' '}
+                          {Number(saldoCuentaSeleccionada.saldoDisponibleActual || 0).toFixed(2)}
                         </div>
                       </div>
                     </div>
@@ -1000,7 +1066,12 @@ export default function CajaYBancosPage() {
                         Movimientos del Extracto Bancario
                       </h3>
                       <p className="text-xs text-[#7d776f]">
-                        Cuenta: {cuentasBancarias.find((c) => c.idCuenta === cuentaSeleccionadaId)?.banco} - {cuentasBancarias.find((c) => c.idCuenta === cuentaSeleccionadaId)?.numeroCuenta}
+                        Cuenta:{' '}
+                        {cuentasBancarias.find((c) => c.idCuenta === cuentaSeleccionadaId)?.banco} -{' '}
+                        {
+                          cuentasBancarias.find((c) => c.idCuenta === cuentaSeleccionadaId)
+                            ?.numeroCuenta
+                        }
                       </p>
                     </div>
 
@@ -1023,18 +1094,22 @@ export default function CajaYBancosPage() {
 
                       {/* Filtro estado */}
                       <div className="flex items-center gap-1 p-1 rounded-xl bg-[#dfd9ce] dark:bg-slate-950 border border-[#cec8bc] dark:border-slate-800 text-xs">
-                        {(['Todos', 'Pendiente', 'Conciliado', 'Discrepancia'] as const).map((st) => (
-                          <button
-                            key={st}
-                            type="button"
-                            onClick={() => setFiltroEstadoBanco(st)}
-                            className={`px-2.5 py-1 rounded-lg font-bold cursor-pointer ${
-                              filtroEstadoBanco === st ? 'bg-blue-700 text-white' : 'text-[#5c5750]'
-                            }`}
-                          >
-                            {st}
-                          </button>
-                        ))}
+                        {(['Todos', 'Pendiente', 'Conciliado', 'Discrepancia'] as const).map(
+                          (st) => (
+                            <button
+                              key={st}
+                              type="button"
+                              onClick={() => setFiltroEstadoBanco(st)}
+                              className={`px-2.5 py-1 rounded-lg font-bold cursor-pointer ${
+                                filtroEstadoBanco === st
+                                  ? 'bg-blue-700 text-white'
+                                  : 'text-[#5c5750]'
+                              }`}
+                            >
+                              {st}
+                            </button>
+                          )
+                        )}
                       </div>
 
                       <button
@@ -1103,7 +1178,10 @@ export default function CajaYBancosPage() {
                               const esDeposito = mb.tipo === 'Deposito'
                               const yaConciliado = mb.estadoConciliacion === 'Conciliado'
                               return (
-                                <tr key={mb.idMovBancario} className="hover:bg-[#e6e1d6]/50 transition-colors">
+                                <tr
+                                  key={mb.idMovBancario}
+                                  className="hover:bg-[#e6e1d6]/50 transition-colors"
+                                >
                                   <td className="py-3 px-4">
                                     <span
                                       className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full font-bold text-[10px] ${
@@ -1112,18 +1190,29 @@ export default function CajaYBancosPage() {
                                           : 'bg-rose-100 text-rose-900 dark:bg-rose-950 dark:text-rose-300'
                                       }`}
                                     >
-                                      {esDeposito ? <ArrowDownLeft className="w-3 h-3" /> : <ArrowUpRight className="w-3 h-3" />}
+                                      {esDeposito ? (
+                                        <ArrowDownLeft className="w-3 h-3" />
+                                      ) : (
+                                        <ArrowUpRight className="w-3 h-3" />
+                                      )}
                                       {mb.tipo}
                                     </span>
                                   </td>
                                   <td className="py-3 px-4 font-mono">{fechaSolo(mb.fecha)}</td>
-                                  <td className="py-3 px-4 font-mono text-[#5c5750]">{mb.referencia || 'S/R'}</td>
-                                  <td className="py-3 px-4 font-medium max-w-xs truncate" title={mb.concepto}>
+                                  <td className="py-3 px-4 font-mono text-[#5c5750]">
+                                    {mb.referencia || 'S/R'}
+                                  </td>
+                                  <td
+                                    className="py-3 px-4 font-medium max-w-xs truncate"
+                                    title={mb.concepto}
+                                  >
                                     {mb.concepto}
                                   </td>
                                   <td
                                     className={`py-3 px-4 font-mono font-bold ${
-                                      esDeposito ? 'text-emerald-700 dark:text-emerald-400' : 'text-rose-700 dark:text-rose-400'
+                                      esDeposito
+                                        ? 'text-emerald-700 dark:text-emerald-400'
+                                        : 'text-rose-700 dark:text-rose-400'
                                     }`}
                                   >
                                     {esDeposito ? '+' : '-'} Bs. {Number(mb.monto).toFixed(2)}
@@ -1134,8 +1223,8 @@ export default function CajaYBancosPage() {
                                         mb.estadoConciliacion === 'Conciliado'
                                           ? 'bg-emerald-100 text-emerald-900 border border-emerald-300'
                                           : mb.estadoConciliacion === 'Discrepancia'
-                                          ? 'bg-amber-100 text-amber-900 border border-amber-300'
-                                          : 'bg-slate-100 text-slate-800 border border-slate-300'
+                                            ? 'bg-amber-100 text-amber-900 border border-amber-300'
+                                            : 'bg-slate-100 text-slate-800 border border-slate-300'
                                       }`}
                                     >
                                       {mb.estadoConciliacion}
@@ -1154,8 +1243,8 @@ export default function CajaYBancosPage() {
                                       </button>
 
                                       {/* PUT /api/v1/movimientos-bancarios/:id (solo si no está conciliado) */}
-                                      {puedeEscribirMovimientos && (
-                                        !yaConciliado ? (
+                                      {puedeEscribirMovimientos &&
+                                        (!yaConciliado ? (
                                           <button
                                             type="button"
                                             onClick={() => {
@@ -1175,9 +1264,10 @@ export default function CajaYBancosPage() {
                                             <Edit2 className="w-3.5 h-3.5" />
                                           </button>
                                         ) : (
-                                          <span className="text-[10px] text-slate-400 italic">Conciliado</span>
-                                        )
-                                      )}
+                                          <span className="text-[10px] text-slate-400 italic">
+                                            Conciliado
+                                          </span>
+                                        ))}
                                     </div>
                                   </td>
                                 </tr>
@@ -1262,7 +1352,9 @@ export default function CajaYBancosPage() {
                   required
                   placeholder="0.00"
                   value={formCajaMonto}
-                  onChange={(e) => setFormCajaMonto(e.target.value === '' ? '' : Number(e.target.value))}
+                  onChange={(e) =>
+                    setFormCajaMonto(e.target.value === '' ? '' : Number(e.target.value))
+                  }
                   className="w-full px-3 py-2 rounded-xl bg-[#dfd9ce] dark:bg-slate-950 border border-[#cec8bc] dark:border-slate-800 font-mono font-bold text-sm"
                 />
               </div>
@@ -1445,7 +1537,9 @@ export default function CajaYBancosPage() {
                   step="0.01"
                   placeholder="0.00"
                   value={formCuentaSaldoInicial}
-                  onChange={(e) => setFormCuentaSaldoInicial(e.target.value === '' ? '' : Number(e.target.value))}
+                  onChange={(e) =>
+                    setFormCuentaSaldoInicial(e.target.value === '' ? '' : Number(e.target.value))
+                  }
                   className="w-full px-3 py-2 rounded-xl bg-[#dfd9ce] dark:bg-slate-950 border border-[#cec8bc] font-mono font-bold"
                 />
               </div>
@@ -1560,7 +1654,9 @@ export default function CajaYBancosPage() {
                   required
                   placeholder="0.00"
                   value={formMovBancoMonto}
-                  onChange={(e) => setFormMovBancoMonto(e.target.value === '' ? '' : Number(e.target.value))}
+                  onChange={(e) =>
+                    setFormMovBancoMonto(e.target.value === '' ? '' : Number(e.target.value))
+                  }
                   className="w-full px-3 py-2 rounded-xl bg-[#dfd9ce] dark:bg-slate-950 border border-[#cec8bc] font-mono font-bold text-sm"
                 />
               </div>
@@ -1654,7 +1750,9 @@ export default function CajaYBancosPage() {
                 <div className="grid grid-cols-2 gap-2 p-3 rounded-2xl bg-white/70 dark:bg-slate-950 border border-[#cec8bc] dark:border-slate-800">
                   <div>
                     <span className="text-[10px] text-[#7d776f] uppercase font-bold">Tipo:</span>
-                    <p className="font-bold text-sm text-[#262422] dark:text-white">{movBancoDetalle.tipo}</p>
+                    <p className="font-bold text-sm text-[#262422] dark:text-white">
+                      {movBancoDetalle.tipo}
+                    </p>
                   </div>
                   <div>
                     <span className="text-[10px] text-[#7d776f] uppercase font-bold">Monto:</span>
@@ -1666,8 +1764,12 @@ export default function CajaYBancosPage() {
 
                 <div className="p-3.5 rounded-2xl bg-white/70 dark:bg-slate-950 border border-[#cec8bc] dark:border-slate-800 space-y-2.5">
                   <div>
-                    <span className="text-[10px] text-[#7d776f] uppercase font-bold">Concepto:</span>
-                    <p className="font-medium text-[#262422] dark:text-white mt-0.5">{movBancoDetalle.concepto}</p>
+                    <span className="text-[10px] text-[#7d776f] uppercase font-bold">
+                      Concepto:
+                    </span>
+                    <p className="font-medium text-[#262422] dark:text-white mt-0.5">
+                      {movBancoDetalle.concepto}
+                    </p>
                   </div>
                   <div className="grid grid-cols-2 gap-2 pt-2 border-t border-[#cec8bc]/40 dark:border-slate-800">
                     <div>
@@ -1675,18 +1777,26 @@ export default function CajaYBancosPage() {
                       <p className="font-mono">{fechaSolo(movBancoDetalle.fecha)}</p>
                     </div>
                     <div>
-                      <span className="text-[10px] text-[#7d776f] uppercase font-bold">Referencia:</span>
+                      <span className="text-[10px] text-[#7d776f] uppercase font-bold">
+                        Referencia:
+                      </span>
                       <p className="font-mono">{movBancoDetalle.referencia || 'Sin referencia'}</p>
                     </div>
                   </div>
                   <div className="pt-2 border-t border-[#cec8bc]/40 dark:border-slate-800">
-                    <span className="text-[10px] text-[#7d776f] uppercase font-bold">Estado de Conciliación:</span>
-                    <p className="font-bold mt-0.5 text-blue-800 dark:text-blue-300">{movBancoDetalle.estadoConciliacion}</p>
-                    {movBancoDetalle.diferencia !== null && movBancoDetalle.diferencia !== undefined && (
-                      <p className="text-rose-600 font-semibold text-[11px] mt-0.5">
-                        Diferencia con libro interno: Bs. {Number(movBancoDetalle.diferencia).toFixed(2)}
-                      </p>
-                    )}
+                    <span className="text-[10px] text-[#7d776f] uppercase font-bold">
+                      Estado de Conciliación:
+                    </span>
+                    <p className="font-bold mt-0.5 text-blue-800 dark:text-blue-300">
+                      {movBancoDetalle.estadoConciliacion}
+                    </p>
+                    {movBancoDetalle.diferencia !== null &&
+                      movBancoDetalle.diferencia !== undefined && (
+                        <p className="text-rose-600 font-semibold text-[11px] mt-0.5">
+                          Diferencia con libro interno: Bs.{' '}
+                          {Number(movBancoDetalle.diferencia).toFixed(2)}
+                        </p>
+                      )}
                   </div>
                 </div>
 
