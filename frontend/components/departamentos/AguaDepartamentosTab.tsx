@@ -4,7 +4,18 @@
 'use client'
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react'
-import { Droplets, Calendar, Save, RotateCcw, AlertTriangle, AlertCircle, CheckCircle2, DollarSign, Building2, Search } from 'lucide-react'
+import {
+  Droplets,
+  Calendar,
+  Save,
+  RotateCcw,
+  AlertTriangle,
+  AlertCircle,
+  CheckCircle2,
+  DollarSign,
+  Building2,
+  Search
+} from 'lucide-react'
 import { UnidadItem } from './types'
 import { apiFetch } from '@/lib/api'
 
@@ -21,10 +32,7 @@ interface MontoAguaItem {
   idMonto?: number
 }
 
-export default function AguaDepartamentosTab({
-  unidades,
-  showToast
-}: AguaDepartamentosTabProps) {
+export default function AguaDepartamentosTab({ unidades, showToast }: AguaDepartamentosTabProps) {
   // Periodo por defecto YYYY-MM
   const periodoActualDefault = useMemo(() => {
     const now = new Date()
@@ -46,45 +54,48 @@ export default function AguaDepartamentosTab({
   }, [unidades])
 
   // Cargar montos de agua para el período
-  const fetchMontosAgua = useCallback(async (periodoStr: string) => {
-    setLoading(true)
-    setErrorBanner(null)
-    try {
-      const res = await apiFetch(`/api/v1/agua/montos?periodo=${periodoStr}`)
-      if (res.ok) {
-        const json = await res.json()
-        const mapApi = new Map<number, { idMonto: number; montoAgua: number }>()
-        if (json.data && Array.isArray(json.data)) {
-          json.data.forEach((m: any) => {
-            mapApi.set(Number(m.idDepartamento), {
-              idMonto: m.idMonto,
-              montoAgua: Number(m.montoAgua)
+  const fetchMontosAgua = useCallback(
+    async (periodoStr: string) => {
+      setLoading(true)
+      setErrorBanner(null)
+      try {
+        const res = await apiFetch(`/api/v1/agua/montos?periodo=${periodoStr}`)
+        if (res.ok) {
+          const json = await res.json()
+          const mapApi = new Map<number, { idMonto: number; montoAgua: number }>()
+          if (json.data && Array.isArray(json.data)) {
+            json.data.forEach((m: any) => {
+              mapApi.set(Number(m.idDepartamento), {
+                idMonto: m.idMonto,
+                montoAgua: Number(m.montoAgua)
+              })
             })
-          })
-        }
-
-        const items: MontoAguaItem[] = deptosList.map((d) => {
-          const apiItem = mapApi.get(d.id)
-          return {
-            idDepartamento: d.id,
-            numero: d.numero,
-            propietario: d.propietario?.nombre || 'Propietario',
-            montoAgua: apiItem !== undefined ? apiItem.montoAgua : 0,
-            idMonto: apiItem?.idMonto
           }
-        })
-        setMontosAgua(items)
-      } else {
-        const errJson = await res.json().catch(() => ({}))
-        const errorMsg = errJson.message || errJson.error || `Error al cargar montos de agua`
-        setErrorBanner(`Error (${res.status}): ${errorMsg}`)
+
+          const items: MontoAguaItem[] = deptosList.map((d) => {
+            const apiItem = mapApi.get(d.id)
+            return {
+              idDepartamento: d.id,
+              numero: d.numero,
+              propietario: d.propietario?.nombre || 'Propietario',
+              montoAgua: apiItem !== undefined ? apiItem.montoAgua : 0,
+              idMonto: apiItem?.idMonto
+            }
+          })
+          setMontosAgua(items)
+        } else {
+          const errJson = await res.json().catch(() => ({}))
+          const errorMsg = errJson.message || errJson.error || `Error al cargar montos de agua`
+          setErrorBanner(`Error (${res.status}): ${errorMsg}`)
+        }
+      } catch (err: any) {
+        setErrorBanner(err?.message || 'Error de conexión al cargar montos de agua')
+      } finally {
+        setLoading(false)
       }
-    } catch (err: any) {
-      setErrorBanner(err?.message || 'Error de conexión al cargar montos de agua')
-    } finally {
-      setLoading(false)
-    }
-  }, [deptosList])
+    },
+    [deptosList]
+  )
 
   useEffect(() => {
     fetchMontosAgua(periodoSeleccionado)
@@ -94,9 +105,7 @@ export default function AguaDepartamentosTab({
     const valNum = valorStr === '' ? 0 : Number(valorStr)
     setMontosAgua((prev) =>
       prev.map((item) =>
-        item.idDepartamento === idDepto
-          ? { ...item, montoAgua: isNaN(valNum) ? 0 : valNum }
-          : item
+        item.idDepartamento === idDepto ? { ...item, montoAgua: isNaN(valNum) ? 0 : valNum } : item
       )
     )
   }
@@ -104,6 +113,12 @@ export default function AguaDepartamentosTab({
   const handleGuardarTodos = async () => {
     setErrorBanner(null)
     setGuardando(true)
+
+    if (!periodoSeleccionado) {
+      setErrorBanner('Debe seleccionar un período válido para registrar los montos.')
+      setGuardando(false)
+      return
+    }
 
     // Validar que existan departamentos
     if (montosAgua.length === 0) {
@@ -122,12 +137,22 @@ export default function AguaDepartamentosTab({
     }
 
     try {
-      const payload = {
-        periodo: periodoSeleccionado,
-        montos: montosAgua.map((m) => ({
-          idDepartamento: m.idDepartamento,
-          montoAgua: Number(m.montoAgua)
+      const itemsNormalizados = montosAgua
+        .filter((m) => m.idDepartamento && !isNaN(Number(m.idDepartamento)))
+        .map((m) => ({
+          idDepartamento: Number(m.idDepartamento),
+          montoAgua: Math.max(0, Math.round((Number(m.montoAgua) || 0) * 100) / 100)
         }))
+
+      if (itemsNormalizados.length === 0) {
+        setErrorBanner('No se encontraron departamentos válidos para guardar.')
+        setGuardando(false)
+        return
+      }
+
+      const payload = {
+        periodo: periodoSeleccionado.trim(),
+        montos: itemsNormalizados
       }
 
       const res = await apiFetch('/api/v1/agua/montos', {
@@ -150,7 +175,9 @@ export default function AguaDepartamentosTab({
         const mensajeCompleto = detalleMsg ? `${mensajeBackend} (${detalleMsg})` : mensajeBackend
 
         if (res.status === 409) {
-          const mensaje409 = json.message || 'Ya existe una expensa emitida para uno o más departamentos en este período. No se puede modificar el monto de agua porque la facturación del período ya fue cerrada.'
+          const mensaje409 =
+            json.message ||
+            'Ya existe una expensa emitida para uno o más departamentos en este período. No se puede modificar el monto de agua porque la facturación del período ya fue cerrada.'
           setErrorBanner(`Conflicto (409): ${mensaje409}`)
           showToast(`Conflicto (409): ${mensaje409}`)
         } else {
@@ -198,7 +225,8 @@ export default function AguaDepartamentosTab({
             Registro de Montos de Agua
           </h2>
           <p className="text-xs sm:text-sm text-[#66615b] dark:text-slate-400 mt-1">
-            Monto directo en bolivianos (Bs) por departamento y mes. Se integran automáticamente en la emisión de expensas.
+            Monto directo en bolivianos (Bs) por departamento y mes. Se integran automáticamente en
+            la emisión de expensas.
           </p>
         </div>
 
@@ -242,23 +270,33 @@ export default function AguaDepartamentosTab({
       {/* METRICAS DEL PERÍODO */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <div className="p-4 rounded-2xl bg-[#ede9e1] dark:bg-slate-900 border border-[#cec8bc] dark:border-slate-800 shadow-xs">
-          <div className="text-xs font-bold text-[#7d776f] dark:text-slate-400">Total Departamentos</div>
+          <div className="text-xs font-bold text-[#7d776f] dark:text-slate-400">
+            Total Departamentos
+          </div>
           <div className="text-2xl font-extrabold text-[#262422] dark:text-white mt-1 font-mono">
             {deptosList.length}
           </div>
-          <div className="text-[11px] text-[#7d776f] mt-0.5">Unidades habitacionales del edificio</div>
+          <div className="text-[11px] text-[#7d776f] mt-0.5">
+            Unidades habitacionales del edificio
+          </div>
         </div>
 
         <div className="p-4 rounded-2xl bg-[#ede9e1] dark:bg-slate-900 border border-[#cec8bc] dark:border-slate-800 shadow-xs">
-          <div className="text-xs font-bold text-[#7d776f] dark:text-slate-400">Total Agua Período</div>
+          <div className="text-xs font-bold text-[#7d776f] dark:text-slate-400">
+            Total Agua Período
+          </div>
           <div className="text-2xl font-extrabold text-blue-700 dark:text-blue-400 mt-1 font-mono">
             Bs. {totalAguaPeriodo.toFixed(2)}
           </div>
-          <div className="text-[11px] text-[#7d776f] mt-0.5">Suma total a prorratear / cobrar en el mes</div>
+          <div className="text-[11px] text-[#7d776f] mt-0.5">
+            Suma total a prorratear / cobrar en el mes
+          </div>
         </div>
 
         <div className="p-4 rounded-2xl bg-[#ede9e1] dark:bg-slate-900 border border-[#cec8bc] dark:border-slate-800 shadow-xs">
-          <div className="text-xs font-bold text-[#7d776f] dark:text-slate-400">Promedio por Dpto.</div>
+          <div className="text-xs font-bold text-[#7d776f] dark:text-slate-400">
+            Promedio por Dpto.
+          </div>
           <div className="text-2xl font-extrabold text-emerald-700 dark:text-emerald-400 mt-1 font-mono">
             Bs. {deptosList.length > 0 ? (totalAguaPeriodo / deptosList.length).toFixed(2) : '0.00'}
           </div>
@@ -314,7 +352,10 @@ export default function AguaDepartamentosTab({
                 </tr>
               ) : (
                 montosFiltrados.map((m) => (
-                  <tr key={m.idDepartamento} className="hover:bg-[#dfd9ce]/40 dark:hover:bg-slate-800/40">
+                  <tr
+                    key={m.idDepartamento}
+                    className="hover:bg-[#dfd9ce]/40 dark:hover:bg-slate-800/40"
+                  >
                     <td className="py-3 px-4 font-extrabold text-[#262422] dark:text-white">
                       Dpto. {m.numero}
                     </td>
