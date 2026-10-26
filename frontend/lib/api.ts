@@ -36,14 +36,14 @@ export async function apiFetch(
       const cloned = res.clone()
       const json = await cloned.json()
       if (json && (json.message || json.error)) {
-        errorMsg = json.message || json.error
+        errorMsg = `Error (${res.status}): ${json.message || json.error}`
       }
     } catch {
       try {
         const cloned = res.clone()
         const text = await cloned.text()
         if (text && text.length < 200) {
-          errorMsg = text
+          errorMsg = `Error (${res.status}): ${text}`
         }
       } catch {}
     }
