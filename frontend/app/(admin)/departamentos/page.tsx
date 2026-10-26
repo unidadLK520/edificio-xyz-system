@@ -42,7 +42,9 @@ import { apiFetch } from '@/lib/api'
 
 export default function DepartamentosPage() {
   const [unidades, setUnidades] = useState<UnidadItem[]>([])
-  const [activeTab, setActiveTab] = useState<'catastro' | 'tipos' | 'parametros' | 'agua'>('catastro')
+  const [activeTab, setActiveTab] = useState<'catastro' | 'tipos' | 'parametros' | 'agua'>(
+    'catastro'
+  )
   const [tiposDepto, setTiposDepto] = useState<TipoDepartamentoItem[]>([])
   const [searchTerm, setSearchTerm] = useState('')
   const [filtroTipo, setFiltroTipo] = useState<string>('Todos')
@@ -90,9 +92,13 @@ export default function DepartamentosPage() {
   }, [fetchTiposDepto])
 
   // Manejadores para Tipos de Departamentos conectados a la API
-  const handleSaveTipoDepto = async (tipoGuardado: TipoDepartamentoItem, cascada: boolean): Promise<string | null> => {
+  const handleSaveTipoDepto = async (
+    tipoGuardado: TipoDepartamentoItem,
+    cascada: boolean
+  ): Promise<string | null> => {
     try {
-      const idNumerico = tipoGuardado.idTipo || (!isNaN(Number(tipoGuardado.id)) ? Number(tipoGuardado.id) : null)
+      const idNumerico =
+        tipoGuardado.idTipo || (!isNaN(Number(tipoGuardado.id)) ? Number(tipoGuardado.id) : null)
       const isEdit = !!idNumerico
 
       const url = isEdit ? `/api/v1/tipos-departamento/${idNumerico}` : '/api/v1/tipos-departamento'
@@ -113,7 +119,11 @@ export default function DepartamentosPage() {
       const json = await res.json().catch(() => ({}))
 
       if (!res.ok) {
-        const errorMsg = json.message || (res.status === 409 ? 'Conflicto: Ya existe un tipo con ese nombre o no se puede desactivar con unidades asignadas.' : 'Error al guardar el tipo de departamento')
+        const errorMsg =
+          json.message ||
+          (res.status === 409
+            ? 'Conflicto: Ya existe un tipo con ese nombre o no se puede desactivar con unidades asignadas.'
+            : 'Error al guardar el tipo de departamento')
         showToast(errorMsg)
         return errorMsg
       }
@@ -202,13 +212,18 @@ export default function DepartamentosPage() {
       const json = await res.json().catch(() => ({}))
 
       if (!res.ok) {
-        showToast(json.message || `Error al sincronizar departamentos con "${tipo.nombre}" (Código ${res.status})`)
+        showToast(
+          json.message ||
+            `Error al sincronizar departamentos con "${tipo.nombre}" (Código ${res.status})`
+        )
         return
       }
 
       await fetchUnidades()
       await fetchTiposDepto()
-      showToast(`¡${asignaciones.length} departamentos sincronizados y asignados a "${tipo.nombre}"!`)
+      showToast(
+        `¡${asignaciones.length} departamentos sincronizados y asignados a "${tipo.nombre}"!`
+      )
     } catch {
       showToast('Error de conexión al sincronizar tipologías')
     }
@@ -618,7 +633,7 @@ export default function DepartamentosPage() {
                   ) : (
                     unidadesFiltradas.map((unidad) => (
                       <tr
-                        key={unidad.id}
+                        key={`${unidad.tipoUnidad || 'unidad'}-${unidad.id}`}
                         className="hover:bg-[#dfd9ce]/40 dark:hover:bg-slate-800/40 transition-colors"
                       >
                         <td className="py-3 px-4">
@@ -754,10 +769,7 @@ export default function DepartamentosPage() {
           showToast={showToast}
         />
       ) : activeTab === 'agua' ? (
-        <AguaDepartamentosTab
-          unidades={unidades}
-          showToast={showToast}
-        />
+        <AguaDepartamentosTab unidades={unidades} showToast={showToast} />
       ) : (
         <ParametrosDepartamentosTab
           unidades={unidades}

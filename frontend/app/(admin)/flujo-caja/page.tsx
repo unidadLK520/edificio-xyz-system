@@ -833,7 +833,7 @@ export default function CajaYBancosPage() {
                           const esIngreso = m.tipo === 'Ingreso'
                           return (
                             <tr
-                              key={m.idMovimientoCaja}
+                              key={`caja-${m.idMovimientoCaja}`}
                               className={`hover:bg-[#e6e1d6]/50 dark:hover:bg-slate-800/40 transition-colors ${
                                 m.anulado ? 'opacity-50 line-through' : ''
                               }`}
@@ -965,7 +965,7 @@ export default function CajaYBancosPage() {
                     const isSelected = cuenta.idCuenta === cuentaSeleccionadaId
                     return (
                       <div
-                        key={cuenta.idCuenta}
+                        key={`cuenta-${cuenta.idCuenta}`}
                         onClick={() => setCuentaSeleccionadaId(cuenta.idCuenta)}
                         className={`p-5 rounded-2xl border transition-all cursor-pointer space-y-2 ${
                           isSelected
@@ -1179,7 +1179,7 @@ export default function CajaYBancosPage() {
                               const yaConciliado = mb.estadoConciliacion === 'Conciliado'
                               return (
                                 <tr
-                                  key={mb.idMovBancario}
+                                  key={`mov-banco-${mb.idMovBancario}`}
                                   className="hover:bg-[#e6e1d6]/50 transition-colors"
                                 >
                                   <td className="py-3 px-4">

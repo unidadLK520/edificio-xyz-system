@@ -353,7 +353,7 @@ export default function AguaDepartamentosTab({ unidades, showToast }: AguaDepart
               ) : (
                 montosFiltrados.map((m) => (
                   <tr
-                    key={m.idDepartamento}
+                    key={`agua-depto-${m.idDepartamento}-${m.numero}`}
                     className="hover:bg-[#dfd9ce]/40 dark:hover:bg-slate-800/40"
                   >
                     <td className="py-3 px-4 font-extrabold text-[#262422] dark:text-white">
