@@ -23,6 +23,7 @@ import {
   Trash2,
   Edit2,
   Eye,
+  Download,
   Building,
   CreditCard,
   Layers,
@@ -288,6 +289,61 @@ export default function CajaYBancosPage() {
   const saldoBancosTotal = useMemo(() => {
     return cuentasBancarias.reduce((acc, c) => acc + (Number(c.saldoActual) || 0), 0)
   }, [cuentasBancarias])
+
+  // Exportar reporte de Caja Chica a CSV
+  const handleExportCSVCaja = () => {
+    if (movimientosCajaFiltrados.length === 0) {
+      showNotification('error', 'No hay movimientos de caja para exportar.')
+      return
+    }
+    const headers = ['Tipo', 'Fecha', 'Concepto', 'Registrado Por', 'Monto (Bs.)', 'Estado']
+    const rows = movimientosCajaFiltrados.map((m) => [
+      m.tipo,
+      fechaSolo(m.fecha),
+      `"${m.concepto.replace(/"/g, '""')}"`,
+      `"${m.usuarioRegistro?.nombreUsuario || 'Sistema'}"`,
+      Number(m.monto).toFixed(2),
+      m.anulado ? 'Anulado' : 'Vigente'
+    ])
+    const csvContent = 'data:text/csv;charset=utf-8,\uFEFF' + [headers.join(','), ...rows.map((e) => e.join(','))].join('\n')
+    const encodedUri = encodeURI(csvContent)
+    const link = document.createElement('a')
+    link.setAttribute('href', encodedUri)
+    link.setAttribute('download', `caja_chica_${filtroPeriodoCaja}_${new Date().toISOString().slice(0, 10)}.csv`)
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    showNotification('success', 'Reporte CSV de Caja Chica descargado correctamente.')
+  }
+
+  // Exportar extracto bancario de la cuenta seleccionada a CSV
+  const handleExportCSVBancos = () => {
+    if (movimientosBancoFiltrados.length === 0) {
+      showNotification('error', 'No hay movimientos bancarios para exportar.')
+      return
+    }
+    const cuentaActual = cuentasBancarias.find((c) => c.idCuenta === cuentaSeleccionadaId)
+    const headers = ['Banco', 'Cuenta', 'Tipo', 'Fecha', 'Referencia', 'Concepto', 'Monto (Bs.)', 'Estado Conciliacion']
+    const rows = movimientosBancoFiltrados.map((mb) => [
+      `"${cuentaActual?.banco || ''}"`,
+      `"${cuentaActual?.numeroCuenta || ''}"`,
+      mb.tipo,
+      fechaSolo(mb.fecha),
+      `"${mb.referencia || 'S/R'}"`,
+      `"${mb.concepto.replace(/"/g, '""')}"`,
+      Number(mb.monto).toFixed(2),
+      mb.estadoConciliacion
+    ])
+    const csvContent = 'data:text/csv;charset=utf-8,\uFEFF' + [headers.join(','), ...rows.map((e) => e.join(','))].join('\n')
+    const encodedUri = encodeURI(csvContent)
+    const link = document.createElement('a')
+    link.setAttribute('href', encodedUri)
+    link.setAttribute('download', `extracto_${cuentaActual?.banco || 'bancario'}_${new Date().toISOString().slice(0, 10)}.csv`)
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    showNotification('success', 'Extracto bancario exportado a CSV exitosamente.')
+  }
 
   // Registrar movimiento de caja chica
   const handleGuardarCaja = async (e: React.FormEvent) => {
@@ -669,6 +725,16 @@ export default function CajaYBancosPage() {
                     />
                   </div>
 
+                  <button
+                    type="button"
+                    onClick={handleExportCSVCaja}
+                    className="px-3 py-2 bg-[#dfd9ce] hover:bg-[#d5cfc2] dark:bg-slate-800 dark:hover:bg-slate-700 text-[#262422] dark:text-white rounded-xl text-xs font-bold flex items-center gap-1.5 border border-[#cec8bc] dark:border-slate-700 shadow-xs cursor-pointer shrink-0"
+                    title="Exportar a archivo CSV"
+                  >
+                    <Download className="w-3.5 h-3.5 text-blue-700 dark:text-blue-400" />
+                    <span>Descargar CSV</span>
+                  </button>
+
                   {puedeEscribirCaja && (
                     <button
                       type="button"
@@ -970,6 +1036,16 @@ export default function CajaYBancosPage() {
                           </button>
                         ))}
                       </div>
+
+                      <button
+                        type="button"
+                        onClick={handleExportCSVBancos}
+                        className="px-3 py-1.5 bg-[#dfd9ce] hover:bg-[#d5cfc2] dark:bg-slate-800 dark:hover:bg-slate-700 text-[#262422] dark:text-white rounded-xl text-xs font-bold flex items-center gap-1.5 border border-[#cec8bc] dark:border-slate-700 shadow-xs cursor-pointer"
+                        title="Exportar extracto a archivo CSV"
+                      >
+                        <Download className="w-3.5 h-3.5 text-blue-700 dark:text-blue-400" />
+                        <span>Descargar CSV</span>
+                      </button>
 
                       {puedeEscribirMovimientos && (
                         <button

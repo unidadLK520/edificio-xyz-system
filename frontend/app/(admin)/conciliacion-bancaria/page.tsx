@@ -25,7 +25,8 @@ import {
   Loader2,
   Calendar,
   ArrowDownLeft,
-  ArrowUpRight
+  ArrowUpRight,
+  Download
 } from 'lucide-react'
 import { fechaSolo } from '@/lib/fecha'
 import {
@@ -159,6 +160,58 @@ export default function ConciliacionBancariaPage() {
     })
   }, [movimientosBancarios, filtroEstado, searchTerm])
 
+  // Filtrado de movimientos internos del sistema
+  const movimientosInternosFiltrados = useMemo(() => {
+    if (!searchTerm.trim()) return movimientosInternos
+    const query = searchTerm.toLowerCase()
+    return movimientosInternos.filter((m) => {
+      const matchId = `mov-${m.idMovimiento}`.includes(query) || String(m.idMovimiento).includes(query)
+      const matchDesc = m.descripcion?.toLowerCase().includes(query)
+      const matchCat = m.categoria?.nombre?.toLowerCase().includes(query)
+      return matchId || matchDesc || matchCat
+    })
+  }, [movimientosInternos, searchTerm])
+
+  // Exportar reporte de conciliación a CSV
+  const handleExportCSVConciliacion = () => {
+    if (movimientosBancarios.length === 0) {
+      showNotification('error', 'No hay datos de conciliación para exportar.')
+      return
+    }
+    const cuentaActual = cuentasBancarias.find((c) => c.idCuenta === cuentaSeleccionadaId)
+    const headers = [
+      'Cuenta Bancaria',
+      'Fecha',
+      'Tipo',
+      'Referencia',
+      'Concepto',
+      'Monto (Bs.)',
+      'Estado Conciliacion',
+      'Diferencia',
+      'Movimiento Vinculado'
+    ]
+    const rows = extractoFiltrado.map((mb) => [
+      `"${cuentaActual?.banco || ''} - ${cuentaActual?.numeroCuenta || ''}"`,
+      fechaSolo(mb.fecha),
+      mb.tipo,
+      `"${mb.referencia || 'S/R'}"`,
+      `"${mb.concepto.replace(/"/g, '""')}"`,
+      Number(mb.monto).toFixed(2),
+      mb.estadoConciliacion,
+      mb.diferencia !== undefined && mb.diferencia !== null ? Number(mb.diferencia).toFixed(2) : '0.00',
+      mb.sugerencia ? `"Sugerido: MOV-${mb.sugerencia.idMovimiento}"` : '""'
+    ])
+    const csvContent = 'data:text/csv;charset=utf-8,\uFEFF' + [headers.join(','), ...rows.map((e) => e.join(','))].join('\n')
+    const encodedUri = encodeURI(csvContent)
+    const link = document.createElement('a')
+    link.setAttribute('href', encodedUri)
+    link.setAttribute('download', `conciliacion_${cuentaActual?.banco || 'cuenta'}_${new Date().toISOString().slice(0, 10)}.csv`)
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    showNotification('success', 'Reporte de conciliación exportado a CSV exitosamente.')
+  }
+
   // Vincular con sugerencia automática
   const handleAceptarSugerencia = async (item: MovimientoBancarioItem) => {
     if (!item.sugerencia) return
@@ -289,6 +342,16 @@ export default function ConciliacionBancariaPage() {
               )}
             </select>
           </div>
+
+          <button
+            type="button"
+            onClick={handleExportCSVConciliacion}
+            className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-[#dfd9ce] hover:bg-[#d5cfc2] dark:bg-slate-800 dark:hover:bg-slate-700 text-xs font-bold transition-all cursor-pointer border border-[#cec8bc] dark:border-slate-700"
+            title="Exportar reporte de conciliación a CSV"
+          >
+            <Download className="w-3.5 h-3.5 text-blue-700 dark:text-blue-400" />
+            <span>Descargar CSV</span>
+          </button>
 
           <button
             type="button"
@@ -572,7 +635,7 @@ export default function ConciliacionBancariaPage() {
               <h3 className="font-extrabold text-sm text-[#262422] dark:text-white flex items-center justify-between">
                 <span className="flex items-center gap-2">
                   <FileCheck className="w-4 h-4 text-emerald-600" />
-                  Libro del Sistema ({movimientosInternos.length})
+                  Libro del Sistema ({movimientosInternosFiltrados.length})
                 </span>
                 <span className="text-xs font-normal text-[#7d776f]">
                   Período actual
@@ -581,12 +644,12 @@ export default function ConciliacionBancariaPage() {
 
               <div className="rounded-2xl border border-[#cec8bc] dark:border-slate-800 bg-white/70 dark:bg-slate-900/70 overflow-hidden shadow-sm max-h-[580px] overflow-y-auto">
                 <div className="divide-y divide-[#cec8bc]/50 text-xs">
-                  {movimientosInternos.length === 0 ? (
+                  {movimientosInternosFiltrados.length === 0 ? (
                     <div className="p-8 text-center text-[#7d776f]">
-                      No hay movimientos internos registrados para el período consultado.
+                      No hay movimientos internos registrados para el período consultado{searchTerm.trim() ? ' que coincidan con la búsqueda' : ''}.
                     </div>
                   ) : (
-                    movimientosInternos.map((mov) => {
+                    movimientosInternosFiltrados.map((mov) => {
                       const esIngreso = mov.tipo === 'Ingreso'
                       return (
                         <div key={mov.idMovimiento} className="p-3 hover:bg-[#e6e1d6]/50 transition-colors space-y-1">
