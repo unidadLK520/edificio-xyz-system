@@ -76,10 +76,11 @@ export default function AguaDepartamentosTab({
         setMontosAgua(items)
       } else {
         const errJson = await res.json().catch(() => ({}))
-        setErrorBanner(errJson.message || 'Error al cargar montos de agua')
+        const errorMsg = errJson.message || errJson.error || `Error al cargar montos de agua`
+        setErrorBanner(`Error (${res.status}): ${errorMsg}`)
       }
-    } catch {
-      setErrorBanner('Error de conexión al cargar montos de agua')
+    } catch (err: any) {
+      setErrorBanner(err?.message || 'Error de conexión al cargar montos de agua')
     } finally {
       setLoading(false)
     }
@@ -103,6 +104,13 @@ export default function AguaDepartamentosTab({
   const handleGuardarTodos = async () => {
     setErrorBanner(null)
     setGuardando(true)
+
+    // Validar que existan departamentos
+    if (montosAgua.length === 0) {
+      setErrorBanner('No hay departamentos disponibles para registrar montos de agua.')
+      setGuardando(false)
+      return
+    }
 
     // Validar que no haya montos negativos
     for (const item of montosAgua) {
@@ -131,22 +139,33 @@ export default function AguaDepartamentosTab({
       const json = await res.json().catch(() => ({}))
 
       if (!res.ok) {
-        if (res.status === 409) {
-          setErrorBanner(
-            json.message ||
-              'Conflicto (409): Ya existe una expensa emitida para uno o más departamentos en este período. No se puede modificar el monto de agua.'
-          )
-        } else {
-          setErrorBanner(json.message || `Error al registrar montos de agua (${res.status})`)
+        let detalleMsg = ''
+        if (json.details && typeof json.details === 'object') {
+          detalleMsg = Object.entries(json.details)
+            .map(([k, v]) => `${k}: ${Array.isArray(v) ? v.join(', ') : v}`)
+            .join(' | ')
         }
-        showToast(json.message || 'Error al guardar montos de agua')
+
+        const mensajeBackend = json.message || json.error || 'Error en la solicitud'
+        const mensajeCompleto = detalleMsg ? `${mensajeBackend} (${detalleMsg})` : mensajeBackend
+
+        if (res.status === 409) {
+          const mensaje409 = json.message || 'Ya existe una expensa emitida para uno o más departamentos en este período. No se puede modificar el monto de agua porque la facturación del período ya fue cerrada.'
+          setErrorBanner(`Conflicto (409): ${mensaje409}`)
+          showToast(`Conflicto (409): ${mensaje409}`)
+        } else {
+          setErrorBanner(`Error (${res.status}): ${mensajeCompleto}`)
+          showToast(`Error (${res.status}): ${mensajeCompleto}`)
+        }
         return
       }
 
       await fetchMontosAgua(periodoSeleccionado)
       showToast(`¡Montos de agua del período ${periodoSeleccionado} guardados exitosamente!`)
-    } catch {
-      setErrorBanner('Error de conexión al guardar los montos de agua')
+    } catch (err: any) {
+      const msgReal = err?.message || 'Error de conexión al guardar los montos de agua'
+      setErrorBanner(msgReal)
+      showToast(msgReal)
     } finally {
       setGuardando(false)
     }
