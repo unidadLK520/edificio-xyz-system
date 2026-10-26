@@ -5,7 +5,10 @@
 import { apiFetch } from '@/lib/api'
 
 // Helper uniforme para extraer mensaje y status real de respuestas de error (distintas de 2xx)
-export async function formatApiError(res: Response, fallbackMsg = 'Operación fallida'): Promise<string> {
+export async function formatApiError(
+  res: Response,
+  fallbackMsg = 'Operación fallida'
+): Promise<string> {
   try {
     const json = await res.json().catch(() => null)
     if (json) {
@@ -16,7 +19,9 @@ export async function formatApiError(res: Response, fallbackMsg = 'Operación fa
           .join(' | ')
       }
       const baseMsg = json.message || json.error || fallbackMsg
-      return detailStr ? `Error (${res.status}): ${baseMsg} (${detailStr})` : `Error (${res.status}): ${baseMsg}`
+      return detailStr
+        ? `Error (${res.status}): ${baseMsg} (${detailStr})`
+        : `Error (${res.status}): ${baseMsg}`
     }
   } catch {
     // Si no es JSON legible
@@ -24,7 +29,10 @@ export async function formatApiError(res: Response, fallbackMsg = 'Operación fa
   return `Error (${res.status}): ${fallbackMsg}`
 }
 
-export function extractErrorMessage(err: unknown, fallback = 'Ha ocurrido un error inesperado'): string {
+export function extractErrorMessage(
+  err: unknown,
+  fallback = 'Ha ocurrido un error inesperado'
+): string {
   if (err instanceof Error) return err.message
   if (typeof err === 'string') return err
   if (err && typeof err === 'object' && 'message' in err) return String((err as any).message)
@@ -341,6 +349,8 @@ export const movimientosBancariosService = {
       ...m,
       idMovBancario: Number(m.idMovBancario || m.id),
       idCuenta: Number(m.idCuenta),
+      concepto: m.concepto || m.descripcion || '',
+      referencia: m.referencia || '',
       monto: Number(m.monto || 0),
       diferencia: m.diferencia !== null && m.diferencia !== undefined ? Number(m.diferencia) : null
     }))
@@ -397,7 +407,8 @@ export const movimientosBancariosService = {
         monto: payload.monto !== undefined ? Number(payload.monto) : undefined,
         concepto: payload.concepto?.trim(),
         fecha: payload.fecha ? new Date(payload.fecha).toISOString() : undefined,
-        referencia: payload.referencia !== undefined ? payload.referencia?.trim() || null : undefined
+        referencia:
+          payload.referencia !== undefined ? payload.referencia?.trim() || null : undefined
       })
     })
 
@@ -412,7 +423,9 @@ export const movimientosBancariosService = {
   async getDetalle(idMovBancario: number): Promise<MovimientoBancarioItem> {
     const res = await apiFetch(`/api/v1/movimientos-bancarios/${idMovBancario}`)
     if (!res.ok) {
-      throw new Error(await formatApiError(res, 'Error al consultar detalle del movimiento bancario'))
+      throw new Error(
+        await formatApiError(res, 'Error al consultar detalle del movimiento bancario')
+      )
     }
     const json = await res.json()
     return json.data
@@ -453,7 +466,11 @@ export interface ResumenConciliacionData {
 
 export const conciliacionService = {
   // GET /api/v1/conciliacion/cotejo?idCuenta=X
-  async getCotejo(params: { idCuenta: number; desde?: string; hasta?: string }): Promise<CotejoData> {
+  async getCotejo(params: {
+    idCuenta: number
+    desde?: string
+    hasta?: string
+  }): Promise<CotejoData> {
     const q = new URLSearchParams()
     q.append('idCuenta', String(params.idCuenta))
     if (params.desde) q.append('desde', params.desde)
@@ -470,8 +487,11 @@ export const conciliacionService = {
       ...mb,
       idMovBancario: Number(mb.idMovBancario),
       idCuenta: Number(mb.idCuenta),
+      concepto: mb.concepto || mb.descripcion || '',
+      referencia: mb.referencia || '',
       monto: Number(mb.monto || 0),
-      diferencia: mb.diferencia !== null && mb.diferencia !== undefined ? Number(mb.diferencia) : null
+      diferencia:
+        mb.diferencia !== null && mb.diferencia !== undefined ? Number(mb.diferencia) : null
     }))
 
     const internos: MovimientoInternoItem[] = (d.movimientosInternos || []).map((mi: any) => ({
@@ -539,7 +559,8 @@ export const conciliacionService = {
 // 5. HELPER DE PERMISOS SEGÚN MAPA_PERMISOS_FINANZAS
 // ============================================================================
 
-export type ModuloFinanzas = 'caja' | 'bancos' | 'cuentas_bancarias' | 'movimientos_bancarios' | 'conciliacion'
+export type ModuloFinanzas =
+  'caja' | 'bancos' | 'cuentas_bancarias' | 'movimientos_bancarios' | 'conciliacion'
 
 export function puedeEscribirFinanzas(modulo: ModuloFinanzas, rol?: string | null): boolean {
   if (!rol) return false

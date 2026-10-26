@@ -1,17 +1,26 @@
 // frontend/lib/api.ts
 // Cliente fetch centralizado con manejo de autenticación y errores del servidor
 
-export async function apiFetch(
-  input: RequestInfo | URL,
-  init?: RequestInit
-): Promise<Response> {
+export async function apiFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
   let res: Response
   try {
-    res = await fetch(input, init)
+    let finalInit = init || {}
+    if (typeof window !== 'undefined') {
+      const token = localStorage.getItem('auth_token')
+      if (token) {
+        const existingHeaders = new Headers(finalInit.headers || {})
+        if (!existingHeaders.has('Authorization')) {
+          existingHeaders.set('Authorization', `Bearer ${token}`)
+        }
+        finalInit = {
+          ...finalInit,
+          headers: existingHeaders
+        }
+      }
+    }
+    res = await fetch(input, finalInit)
   } catch (err: any) {
-    throw new Error(
-      err?.message || 'Error de conexión al conectar con el servidor.'
-    )
+    throw new Error(err?.message || 'Error de conexión al conectar con el servidor.')
   }
 
   // Manejo de 401 No Autorizado / Sesión Expirada
@@ -21,8 +30,7 @@ export async function apiFetch(
         localStorage.removeItem('auth_token')
         localStorage.removeItem('user_role')
         localStorage.removeItem('user_profile')
-        document.cookie =
-          'auth_token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT'
+        document.cookie = 'auth_token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT'
       } catch {}
       window.location.href = '/login'
     }
