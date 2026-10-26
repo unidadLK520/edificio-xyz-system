@@ -3,7 +3,11 @@
 
 import { NextResponse, type NextRequest } from 'next/server'
 
-const BACKEND_URL = process.env.BACKEND_URL || 'http://localhost:4000/api/v1'
+const BACKEND_URL =
+  process.env.BACKEND_URL ||
+  (process.env.NEXT_PUBLIC_API_URL
+    ? `${process.env.NEXT_PUBLIC_API_URL.replace(/\/api\/v1\/?$/, '')}/api/v1`
+    : 'http://localhost:4000/api/v1')
 
 async function proxyRequest(
   request: NextRequest,
@@ -69,14 +73,14 @@ async function proxyRequest(
 
     return NextResponse.json(jsonOrText, { status: backendRes.status })
   } catch (err: any) {
-    console.error('[Proxy API v1] Backend no disponible:', err?.message);
+    console.error('[Proxy API v1] Backend no disponible:', err?.message)
     return NextResponse.json(
       {
         error: 'Bad Gateway',
         message: `El backend no se encuentra disponible: ${err?.message || 'Error de conexión'}`
       },
       { status: 502 }
-    );
+    )
   }
 }
 
