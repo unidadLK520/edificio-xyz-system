@@ -243,6 +243,43 @@ export const cuentasBancariasService = {
     }
     const json = await res.json()
     return json.data
+  },
+
+  // GET /api/v1/cuentas-bancarias/:id/saldo
+  async getSaldo(
+    idCuenta: number,
+    params?: { desde?: string; hasta?: string }
+  ): Promise<{
+    idCuenta: number
+    banco: string
+    numeroCuenta: string
+    saldoInicial: number
+    totalDepositos: number
+    totalRetiros: number
+    saldoFinal: number
+    saldoDisponibleActual: number
+    periodo: { desde: string | null; hasta: string | null }
+  }> {
+    const q = new URLSearchParams()
+    if (params?.desde) q.append('desde', params.desde)
+    if (params?.hasta) q.append('hasta', params.hasta)
+    const url = `/api/v1/cuentas-bancarias/${idCuenta}/saldo${q.toString() ? `?${q.toString()}` : ''}`
+    const res = await apiFetch(url)
+    if (!res.ok) {
+      throw new Error(await formatApiError(res, 'Error al consultar saldo recalculado de cuenta'))
+    }
+    const json = await res.json()
+    return json.data
+  },
+
+  // GET /api/v1/cuentas-bancarias/:id
+  async getDetalle(idCuenta: number): Promise<CuentaBancariaItem> {
+    const res = await apiFetch(`/api/v1/cuentas-bancarias/${idCuenta}`)
+    if (!res.ok) {
+      throw new Error(await formatApiError(res, 'Error al obtener detalle de cuenta bancaria'))
+    }
+    const json = await res.json()
+    return json.data
   }
 }
 
@@ -366,6 +403,16 @@ export const movimientosBancariosService = {
 
     if (!res.ok) {
       throw new Error(await formatApiError(res, 'Error al modificar movimiento bancario'))
+    }
+    const json = await res.json()
+    return json.data
+  },
+
+  // GET /api/v1/movimientos-bancarios/:id
+  async getDetalle(idMovBancario: number): Promise<MovimientoBancarioItem> {
+    const res = await apiFetch(`/api/v1/movimientos-bancarios/${idMovBancario}`)
+    if (!res.ok) {
+      throw new Error(await formatApiError(res, 'Error al consultar detalle del movimiento bancario'))
     }
     const json = await res.json()
     return json.data

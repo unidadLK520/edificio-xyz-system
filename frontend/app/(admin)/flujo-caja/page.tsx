@@ -22,6 +22,7 @@ import {
   Loader2,
   Trash2,
   Edit2,
+  Eye,
   Building,
   CreditCard,
   Layers,
@@ -56,7 +57,8 @@ export default function CajaYBancosPage() {
   }, [])
 
   const puedeEscribirCaja = useMemo(() => puedeEscribirFinanzas('caja', rolUsuario), [rolUsuario])
-  const puedeEscribirBancos = useMemo(() => puedeEscribirFinanzas('bancos', rolUsuario), [rolUsuario])
+  const puedeEscribirCuentas = useMemo(() => puedeEscribirFinanzas('cuentas_bancarias', rolUsuario), [rolUsuario])
+  const puedeEscribirMovimientos = useMemo(() => puedeEscribirFinanzas('movimientos_bancarios', rolUsuario), [rolUsuario])
 
   // ----------------------------------------------------
   // ESTADO DE CAJA CHICA
@@ -87,11 +89,29 @@ export default function CajaYBancosPage() {
   // ----------------------------------------------------
   const [cuentasBancarias, setCuentasBancarias] = useState<CuentaBancariaItem[]>([])
   const [cuentaSeleccionadaId, setCuentaSeleccionadaId] = useState<number | null>(null)
+  const [saldoCuentaSeleccionada, setSaldoCuentaSeleccionada] = useState<{
+    idCuenta: number
+    banco: string
+    numeroCuenta: string
+    saldoInicial: number
+    totalDepositos: number
+    totalRetiros: number
+    saldoFinal: number
+    saldoDisponibleActual: number
+    periodo: { desde: string | null; hasta: string | null }
+  } | null>(null)
+  const [loadingSaldoCuenta, setLoadingSaldoCuenta] = useState(false)
+
   const [movimientosBanco, setMovimientosBanco] = useState<MovimientoBancarioItem[]>([])
   const [filtroTipoBanco, setFiltroTipoBanco] = useState<'Todos' | 'Deposito' | 'Retiro'>('Todos')
   const [filtroEstadoBanco, setFiltroEstadoBanco] = useState<'Todos' | 'Pendiente' | 'Conciliado' | 'Discrepancia'>('Todos')
   const [searchBanco, setSearchBanco] = useState('')
   const [loadingMovBancos, setLoadingMovBancos] = useState(false)
+
+  // Modal Detalle Movimiento Bancario (GET /api/v1/movimientos-bancarios/:id)
+  const [isModalDetalleMovOpen, setIsModalDetalleMovOpen] = useState(false)
+  const [movBancoDetalle, setMovBancoDetalle] = useState<MovimientoBancarioItem | null>(null)
+  const [loadingDetalleMov, setLoadingDetalleMov] = useState(false)
 
   // Modal Cuenta Bancaria (Crear / Editar)
   const [isModalCuentaOpen, setIsModalCuentaOpen] = useState(false)
@@ -168,27 +188,56 @@ export default function CajaYBancosPage() {
     fetchData()
   }, [fetchData])
 
-  // Cargar movimientos bancarios cuando cambia la cuenta seleccionada o filtros
+  // Cargar movimientos bancarios y saldo recalculado cuando cambia la cuenta seleccionada o filtros
   const fetchMovimientosBancarios = useCallback(async () => {
     if (!cuentaSeleccionadaId) {
       setMovimientosBanco([])
+      setSaldoCuentaSeleccionada(null)
       return
     }
     setLoadingMovBancos(true)
+    setLoadingSaldoCuenta(true)
     try {
-      const data = await movimientosBancariosService.getMovimientos({
-        idCuenta: cuentaSeleccionadaId,
-        tipo: filtroTipoBanco === 'Todos' ? undefined : filtroTipoBanco,
-        estado: filtroEstadoBanco === 'Todos' ? undefined : filtroEstadoBanco,
-        limit: 100
-      })
-      setMovimientosBanco(data.items)
+      const [resMovs, resSaldo] = await Promise.allSettled([
+        movimientosBancariosService.getMovimientos({
+          idCuenta: cuentaSeleccionadaId,
+          tipo: filtroTipoBanco === 'Todos' ? undefined : filtroTipoBanco,
+          estado: filtroEstadoBanco === 'Todos' ? undefined : filtroEstadoBanco,
+          limit: 100
+        }),
+        cuentasBancariasService.getSaldo(cuentaSeleccionadaId)
+      ])
+
+      if (resMovs.status === 'fulfilled') {
+        setMovimientosBanco(resMovs.value.items)
+      } else {
+        showNotification('error', `Error al cargar movimientos bancarios: ${extractErrorMessage(resMovs.reason)}`)
+      }
+
+      if (resSaldo.status === 'fulfilled') {
+        setSaldoCuentaSeleccionada(resSaldo.value)
+      }
     } catch (err: unknown) {
-      showNotification('error', `Error al cargar movimientos bancarios: ${extractErrorMessage(err)}`)
+      showNotification('error', `Error en la cuenta bancaria: ${extractErrorMessage(err)}`)
     } finally {
       setLoadingMovBancos(false)
+      setLoadingSaldoCuenta(false)
     }
   }, [cuentaSeleccionadaId, filtroTipoBanco, filtroEstadoBanco])
+
+  const handleVerDetalleMovBanco = async (idMov: number) => {
+    setLoadingDetalleMov(true)
+    setIsModalDetalleMovOpen(true)
+    try {
+      const detalle = await movimientosBancariosService.getDetalle(idMov)
+      setMovBancoDetalle(detalle)
+    } catch (err: unknown) {
+      showNotification('error', extractErrorMessage(err, 'Error al consultar detalle del movimiento'))
+      setIsModalDetalleMovOpen(false)
+    } finally {
+      setLoadingDetalleMov(false)
+    }
+  }
 
   useEffect(() => {
     if (tabActiva === 'bancos') {
@@ -760,7 +809,7 @@ export default function CajaYBancosPage() {
                   </div>
                 </div>
 
-                {puedeEscribirBancos && (
+                {puedeEscribirCuentas && (
                   <div className="flex gap-2">
                     <button
                       type="button"
@@ -819,7 +868,7 @@ export default function CajaYBancosPage() {
                             Bs. {Number(cuenta.saldoActual || 0).toFixed(2)}
                           </span>
                         </div>
-                        {puedeEscribirBancos && (
+                        {puedeEscribirCuentas && (
                           <div className="flex justify-end pt-1">
                             <button
                               type="button"
@@ -848,6 +897,36 @@ export default function CajaYBancosPage() {
               {/* SECCIÓN MOVIMIENTOS BANCARIOS DE LA CUENTA SELECCIONADA */}
               {cuentaSeleccionadaId && (
                 <div className="space-y-4 pt-4 border-t border-[#cec8bc] dark:border-slate-800">
+                  {/* PANEL SALDO RECALCULADO OFICIAL (GET /api/v1/cuentas-bancarias/:id/saldo) */}
+                  {saldoCuentaSeleccionada && (
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 p-4 rounded-2xl bg-white/70 dark:bg-slate-900/70 border border-[#cec8bc] dark:border-slate-800 text-xs shadow-sm">
+                      <div>
+                        <span className="text-[#7d776f] font-semibold text-[11px] block">Saldo Inicial Período</span>
+                        <div className="text-base sm:text-lg font-black font-mono text-slate-800 dark:text-slate-200 mt-0.5">
+                          Bs. {Number(saldoCuentaSeleccionada.saldoInicial || 0).toFixed(2)}
+                        </div>
+                      </div>
+                      <div>
+                        <span className="text-emerald-700 dark:text-emerald-400 font-semibold text-[11px] block">Depósitos (Abonos)</span>
+                        <div className="text-base sm:text-lg font-black font-mono text-emerald-700 dark:text-emerald-400 mt-0.5">
+                          + Bs. {Number(saldoCuentaSeleccionada.totalDepositos || 0).toFixed(2)}
+                        </div>
+                      </div>
+                      <div>
+                        <span className="text-rose-700 dark:text-rose-400 font-semibold text-[11px] block">Retiros (Cargos)</span>
+                        <div className="text-base sm:text-lg font-black font-mono text-rose-700 dark:text-rose-400 mt-0.5">
+                          - Bs. {Number(saldoCuentaSeleccionada.totalRetiros || 0).toFixed(2)}
+                        </div>
+                      </div>
+                      <div>
+                        <span className="text-blue-700 dark:text-blue-400 font-semibold text-[11px] block">Disponible Cuenta</span>
+                        <div className="text-base sm:text-lg font-black font-mono text-blue-700 dark:text-blue-400 mt-0.5">
+                          Bs. {Number(saldoCuentaSeleccionada.saldoDisponibleActual || 0).toFixed(2)}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
                   <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3">
                     <div>
                       <h3 className="text-base font-extrabold text-[#262422] dark:text-white flex items-center gap-2">
@@ -855,7 +934,7 @@ export default function CajaYBancosPage() {
                         Movimientos del Extracto Bancario
                       </h3>
                       <p className="text-xs text-[#7d776f]">
-                        Cuenta seleccionada: {cuentasBancarias.find((c) => c.idCuenta === cuentaSeleccionadaId)?.banco} - {cuentasBancarias.find((c) => c.idCuenta === cuentaSeleccionadaId)?.numeroCuenta}
+                        Cuenta: {cuentasBancarias.find((c) => c.idCuenta === cuentaSeleccionadaId)?.banco} - {cuentasBancarias.find((c) => c.idCuenta === cuentaSeleccionadaId)?.numeroCuenta}
                       </p>
                     </div>
 
@@ -892,7 +971,7 @@ export default function CajaYBancosPage() {
                         ))}
                       </div>
 
-                      {puedeEscribirBancos && (
+                      {puedeEscribirMovimientos && (
                         <button
                           type="button"
                           onClick={() => {
@@ -927,19 +1006,19 @@ export default function CajaYBancosPage() {
                             <th className="py-3 px-4">Concepto</th>
                             <th className="py-3 px-4">Monto (Bs.)</th>
                             <th className="py-3 px-4">Estado</th>
-                            {puedeEscribirBancos && <th className="py-3 px-4 text-right">Acciones</th>}
+                            <th className="py-3 px-4 text-right">Acciones</th>
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-[#cec8bc]/60 dark:divide-slate-800">
                           {loadingMovBancos ? (
                             <tr>
-                              <td colSpan={puedeEscribirBancos ? 7 : 6} className="py-8 text-center text-[#7d776f]">
+                              <td colSpan={7} className="py-8 text-center text-[#7d776f]">
                                 <Loader2 className="w-5 h-5 animate-spin mx-auto text-blue-700" />
                               </td>
                             </tr>
                           ) : movimientosBancoFiltrados.length === 0 ? (
                             <tr>
-                              <td colSpan={puedeEscribirBancos ? 7 : 6} className="py-8 text-center text-[#7d776f]">
+                              <td colSpan={7} className="py-8 text-center text-[#7d776f]">
                                 No hay movimientos bancarios registrados para esta cuenta y filtros.
                               </td>
                             </tr>
@@ -986,32 +1065,45 @@ export default function CajaYBancosPage() {
                                       {mb.estadoConciliacion}
                                     </span>
                                   </td>
-                                  {puedeEscribirBancos && (
-                                    <td className="py-3 px-4 text-right">
-                                      {!yaConciliado ? (
-                                        <button
-                                          type="button"
-                                          onClick={() => {
-                                            setMovBancoEnEdicion(mb)
-                                            setFormMovBancoCuentaId(mb.idCuenta)
-                                            setFormMovBancoTipo(mb.tipo)
-                                            setFormMovBancoMonto(mb.monto)
-                                            setFormMovBancoConcepto(mb.concepto)
-                                            setFormMovBancoReferencia(mb.referencia || '')
-                                            setFormMovBancoFecha(fechaSolo(mb.fecha))
-                                            setFormMovBancoError(null)
-                                            setIsModalMovBancoOpen(true)
-                                          }}
-                                          className="p-1 rounded text-blue-700 hover:bg-blue-100 transition-colors"
-                                          title="Editar movimiento"
-                                        >
-                                          <Edit2 className="w-3.5 h-3.5" />
-                                        </button>
-                                      ) : (
-                                        <span className="text-[10px] text-slate-400 italic">Conciliado</span>
+                                  <td className="py-3 px-4 text-right">
+                                    <div className="inline-flex items-center gap-1">
+                                      {/* GET /api/v1/movimientos-bancarios/:id */}
+                                      <button
+                                        type="button"
+                                        onClick={() => handleVerDetalleMovBanco(mb.idMovBancario)}
+                                        className="p-1.5 rounded-lg text-slate-600 hover:bg-slate-200 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+                                        title="Ver detalle del movimiento"
+                                      >
+                                        <Eye className="w-3.5 h-3.5" />
+                                      </button>
+
+                                      {/* PUT /api/v1/movimientos-bancarios/:id (solo si no está conciliado) */}
+                                      {puedeEscribirMovimientos && (
+                                        !yaConciliado ? (
+                                          <button
+                                            type="button"
+                                            onClick={() => {
+                                              setMovBancoEnEdicion(mb)
+                                              setFormMovBancoCuentaId(mb.idCuenta)
+                                              setFormMovBancoTipo(mb.tipo)
+                                              setFormMovBancoMonto(mb.monto)
+                                              setFormMovBancoConcepto(mb.concepto)
+                                              setFormMovBancoReferencia(mb.referencia || '')
+                                              setFormMovBancoFecha(fechaSolo(mb.fecha))
+                                              setFormMovBancoError(null)
+                                              setIsModalMovBancoOpen(true)
+                                            }}
+                                            className="p-1.5 rounded-lg text-blue-700 hover:bg-blue-100 transition-colors cursor-pointer"
+                                            title="Editar movimiento"
+                                          >
+                                            <Edit2 className="w-3.5 h-3.5" />
+                                          </button>
+                                        ) : (
+                                          <span className="text-[10px] text-slate-400 italic">Conciliado</span>
+                                        )
                                       )}
-                                    </td>
-                                  )}
+                                    </div>
+                                  </td>
                                 </tr>
                               )
                             })
@@ -1454,6 +1546,85 @@ export default function CajaYBancosPage() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL DETALLE DE MOVIMIENTO BANCARIO (GET /api/v1/movimientos-bancarios/:id) */}
+      {isModalDetalleMovOpen && (
+        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 backdrop-blur-xs">
+          <div className="w-full max-w-md bg-[#ede9e1] dark:bg-slate-900 rounded-3xl border border-[#cec8bc] dark:border-slate-800 shadow-2xl p-6 space-y-4">
+            <div className="flex items-center justify-between border-b border-[#cec8bc] dark:border-slate-800 pb-3">
+              <h3 className="font-extrabold text-base text-[#262422] dark:text-white flex items-center gap-2">
+                <Eye className="w-4 h-4 text-blue-600" />
+                Detalle del Movimiento Bancario
+              </h3>
+              <button
+                type="button"
+                onClick={() => setIsModalDetalleMovOpen(false)}
+                className="text-[#7d776f] hover:text-[#262422] cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {loadingDetalleMov ? (
+              <div className="py-8 text-center text-[#7d776f]">
+                <Loader2 className="w-6 h-6 animate-spin mx-auto text-blue-700" />
+                <p className="text-xs mt-2">Consultando endpoint oficial...</p>
+              </div>
+            ) : movBancoDetalle ? (
+              <div className="space-y-3 text-xs">
+                <div className="grid grid-cols-2 gap-2 p-3 rounded-2xl bg-white/70 dark:bg-slate-950 border border-[#cec8bc] dark:border-slate-800">
+                  <div>
+                    <span className="text-[10px] text-[#7d776f] uppercase font-bold">Tipo:</span>
+                    <p className="font-bold text-sm text-[#262422] dark:text-white">{movBancoDetalle.tipo}</p>
+                  </div>
+                  <div>
+                    <span className="text-[10px] text-[#7d776f] uppercase font-bold">Monto:</span>
+                    <p className="font-bold text-sm font-mono text-blue-700 dark:text-blue-400">
+                      Bs. {Number(movBancoDetalle.monto).toFixed(2)}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="p-3.5 rounded-2xl bg-white/70 dark:bg-slate-950 border border-[#cec8bc] dark:border-slate-800 space-y-2.5">
+                  <div>
+                    <span className="text-[10px] text-[#7d776f] uppercase font-bold">Concepto:</span>
+                    <p className="font-medium text-[#262422] dark:text-white mt-0.5">{movBancoDetalle.concepto}</p>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2 pt-2 border-t border-[#cec8bc]/40 dark:border-slate-800">
+                    <div>
+                      <span className="text-[10px] text-[#7d776f] uppercase font-bold">Fecha:</span>
+                      <p className="font-mono">{fechaSolo(movBancoDetalle.fecha)}</p>
+                    </div>
+                    <div>
+                      <span className="text-[10px] text-[#7d776f] uppercase font-bold">Referencia:</span>
+                      <p className="font-mono">{movBancoDetalle.referencia || 'Sin referencia'}</p>
+                    </div>
+                  </div>
+                  <div className="pt-2 border-t border-[#cec8bc]/40 dark:border-slate-800">
+                    <span className="text-[10px] text-[#7d776f] uppercase font-bold">Estado de Conciliación:</span>
+                    <p className="font-bold mt-0.5 text-blue-800 dark:text-blue-300">{movBancoDetalle.estadoConciliacion}</p>
+                    {movBancoDetalle.diferencia !== null && movBancoDetalle.diferencia !== undefined && (
+                      <p className="text-rose-600 font-semibold text-[11px] mt-0.5">
+                        Diferencia con libro interno: Bs. {Number(movBancoDetalle.diferencia).toFixed(2)}
+                      </p>
+                    )}
+                  </div>
+                </div>
+
+                <div className="flex justify-end pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setIsModalDetalleMovOpen(false)}
+                    className="px-4 py-2 rounded-xl bg-blue-700 hover:bg-blue-600 text-white text-xs font-bold cursor-pointer"
+                  >
+                    Cerrar
+                  </button>
+                </div>
+              </div>
+            ) : null}
           </div>
         </div>
       )}
