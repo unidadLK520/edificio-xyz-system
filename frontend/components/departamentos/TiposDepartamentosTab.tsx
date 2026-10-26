@@ -27,8 +27,8 @@ import ModalEditarTipoDepto from './ModalEditarTipoDepto'
 interface TiposDepartamentosTabProps {
   tipos: TipoDepartamentoItem[]
   unidades: UnidadItem[]
-  onSaveTipo: (tipo: TipoDepartamentoItem, cascada: boolean) => void
-  onDeleteTipo: (id: string) => void
+  onSaveTipo: (tipo: TipoDepartamentoItem, cascada: boolean) => Promise<string | null | void> | void
+  onDeleteTipo: (id: string) => Promise<string | null | void> | void
   onResetDefaults: () => void
   onSincronizarUnidadesTipo: (tipo: TipoDepartamentoItem) => void
   showToast: (msg: string) => void
@@ -61,7 +61,7 @@ export default function TiposDepartamentosTab({
           (t) =>
             (u.tipologia &&
               (u.tipologia.toLowerCase().includes(t.nombre.toLowerCase()) ||
-                u.tipologia.includes(t.codigo))) ||
+                (t.codigo && u.tipologia.includes(t.codigo)))) ||
             (u.areaM2 && Math.abs(u.areaM2 - t.areaM2) < 0.1)
         )
         if (matchingTipo) {
@@ -80,7 +80,7 @@ export default function TiposDepartamentosTab({
       const q = searchTerm.toLowerCase()
       return (
         t.nombre.toLowerCase().includes(q) ||
-        t.codigo.toLowerCase().includes(q) ||
+        (t.codigo && t.codigo.toLowerCase().includes(q)) ||
         (t.descripcion && t.descripcion.toLowerCase().includes(q))
       )
     })
@@ -109,21 +109,15 @@ export default function TiposDepartamentosTab({
     setIsModalOpen(true)
   }
 
-  const handleConfirmDelete = () => {
+  const handleConfirmDelete = async () => {
     if (!tipoToDelete) return
-    const asignados = departamentosPorTipo.get(tipoToDelete.id)?.length || 0
-    if (asignados > 0) {
-      if (
-        !confirm(
-          `Hay ${asignados} departamentos que utilizan este tipo. ¿Está seguro de eliminarlo?`
-        )
-      ) {
-        return
-      }
+    const err = await onDeleteTipo(tipoToDelete.id)
+    if (err) {
+      alert(err)
+    } else {
+      setTipoToDelete(null)
+      showToast(`Tipo de departamento desactivado correctamente.`)
     }
-    onDeleteTipo(tipoToDelete.id)
-    setTipoToDelete(null)
-    showToast(`Tipo de departamento eliminado correctamente.`)
   }
 
   return (
@@ -248,9 +242,10 @@ export default function TiposDepartamentosTab({
                       <h3 className="font-extrabold text-base text-[#262422] dark:text-white">
                         {tipo.nombre}
                       </h3>
-                      <span className="text-[11px] text-[#7d776f] dark:text-slate-400">
-                        Alícuota ref.:{' '}
-                        {tipo.alicuotaEstimada || ((tipo.areaM2 / 1600) * 100).toFixed(2)}%
+                      <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                        tipo.activo !== false ? 'bg-emerald-100 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300' : 'bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-400'
+                      }`}>
+                        {tipo.activo !== false ? 'Activo' : 'Inactivo'}
                       </span>
                     </div>
                   </div>
@@ -290,23 +285,11 @@ export default function TiposDepartamentosTab({
                   <div className="text-right">
                     <div className="text-[11px] font-bold text-[#7d776f] flex items-center justify-end gap-1">
                       <DollarSign className="w-3.5 h-3.5 text-emerald-600" />
-                      Expensa Base
+                      Monto Expensa
                     </div>
                     <div className="text-lg font-extrabold text-rose-700 dark:text-rose-400 font-mono">
                       Bs. {tipo.expensaBase.toFixed(2)}
                     </div>
-                  </div>
-                </div>
-
-                {/* ESPECIFICACIONES DE AMBIENTES */}
-                <div className="flex items-center gap-4 text-xs text-[#5c5750] dark:text-slate-300 px-1">
-                  <div className="flex items-center gap-1.5">
-                    <Bed className="w-4 h-4 text-[#7d776f]" />
-                    <span>{tipo.habitaciones} Dormitorios</span>
-                  </div>
-                  <div className="flex items-center gap-1.5">
-                    <Bath className="w-4 h-4 text-[#7d776f]" />
-                    <span>{tipo.banos} Baños</span>
                   </div>
                 </div>
 

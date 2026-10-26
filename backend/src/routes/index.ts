@@ -16,6 +16,11 @@ import { aguaRouter } from './agua.routes';
 import { usuariosRouter } from '../modules/usuarios/usuarios.routes';
 import { personasRouter } from '../modules/personas';
 
+import { cajaRouter } from './caja.routes';
+import { cuentasBancariasRouter } from './cuentas-bancarias.routes';
+import { movimientosBancariosRouter } from './movimientos-bancarios.routes';
+import { conciliacionRouter } from './conciliacion.routes';
+
 export const router: IRouter = Router();
 
 // Rutas públicas
@@ -31,9 +36,14 @@ router.use('/tipos-departamento', tiposDepartamentoRouter);
 router.use('/unidades', unidadesRouter);
 router.use('/expensas', expensasRouter);
 router.use('/movimientos', movimientosRouter);
+router.use('/caja', cajaRouter);
+router.use('/cuentas-bancarias', cuentasBancariasRouter);
+router.use('/movimientos-bancarios', movimientosBancariosRouter);
+router.use('/conciliacion', conciliacionRouter);
 router.use('/comunicados', comunicadosRouter);
 router.use('/personal', personalRouter);
 router.use('/auditoria', auditoriaRouter);
 router.use('/agua', aguaRouter);
+
 
 

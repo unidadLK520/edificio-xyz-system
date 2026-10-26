@@ -42,34 +42,14 @@ export default function EditarParametrosModal({
           ? config.expensaBaseTipoB
           : config.expensaBaseTipoC)
   )
-  const [codigoMedidor, setCodigoMedidor] = useState<string>(
-    depto.codigoMedidor || `MED-${depto.numero}`
-  )
-  const [lecturaAnteriorAgua, setLecturaAnteriorAgua] = useState<number>(
-    depto.lecturaAnteriorAgua ?? 940
-  )
-  const [lecturaActualAgua, setLecturaActualAgua] = useState<number>(depto.lecturaActualAgua ?? 945)
-  const [tarifaAguaM3, setTarifaAguaM3] = useState<number>(
-    depto.tarifaAguaM3 ?? config.tarifaAguaM3
-  )
+  const [montoAguaManual, setMontoAguaManual] = useState<number>(depto.montoAgua ?? 0)
   const [otrosExtras, setOtrosExtras] = useState<number>(depto.otrosExtras ?? 0)
-  const [fechaLecturaAnterior, setFechaLecturaAnterior] = useState<string>(
-    depto.fechaLecturaAnterior || '30/Sep/2026'
-  )
-  const [fechaLecturaActual, setFechaLecturaActual] = useState<string>(
-    depto.fechaLecturaActual || '31/Oct/2026'
-  )
 
   // Cálculos en tiempo real según reglas de cobro
-  const consumoCubos = Math.max(0, lecturaActualAgua - lecturaAnteriorAgua)
-  const totalAgua = consumoCubos * tarifaAguaM3
-  const subtotalBaseAgua = expensaBase + totalAgua + otrosExtras
+  const subtotalBaseAgua = expensaBase + montoAguaManual + otrosExtras
 
-  // Mora según configuración (< 10 -> 0; >= 10 -> mora)
-  const moraProyectada =
-    config.tipoMora === 'porcentaje'
-      ? subtotalBaseAgua * (config.valorMoraPorcentaje / 100)
-      : config.valorMoraFijo
+  // Mora según regla de mora porcentual
+  const moraProyectada = subtotalBaseAgua * ((config.valorMoraPorcentaje || 0) / 100)
   const totalConMora = subtotalBaseAgua + moraProyectada
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -77,15 +57,8 @@ export default function EditarParametrosModal({
     const updated: UnidadItem = {
       ...depto,
       expensaBase: Number(expensaBase),
-      codigoMedidor,
-      lecturaAnteriorAgua: Number(lecturaAnteriorAgua),
-      lecturaActualAgua: Number(lecturaActualAgua),
-      tarifaAguaM3: Number(tarifaAguaM3),
-      consumoAguaM3: consumoCubos,
-      montoAgua: totalAgua,
-      otrosExtras: Number(otrosExtras),
-      fechaLecturaAnterior,
-      fechaLecturaActual
+      montoAgua: Number(montoAguaManual),
+      otrosExtras: Number(otrosExtras)
     }
     onSave(updated)
     onClose()
@@ -161,82 +134,31 @@ export default function EditarParametrosModal({
             </div>
           </div>
 
-          {/* SECCIÓN 2: MEDIDOR DE AGUA INDIVIDUAL */}
+          {/* SECCIÓN 2: MONTO DE AGUA MANUAL */}
           <div className="p-4 rounded-2xl bg-blue-50/60 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-900/50 space-y-3">
             <div className="flex items-center justify-between">
               <span className="font-extrabold text-blue-950 dark:text-blue-200 text-xs flex items-center gap-1.5">
                 <Droplets className="w-4 h-4 text-blue-600" />
-                2. Medidor de Agua Individual (Lecturas y Consumo en Cubos)
-              </span>
-              <span className="px-2 py-0.5 rounded-full bg-blue-200 dark:bg-blue-900/80 text-blue-900 dark:text-blue-300 font-mono font-bold text-[10px]">
-                Tarifa: Bs. {tarifaAguaM3.toFixed(2)} / m³
+                2. Monto de Agua Mensual (Bs.)
               </span>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-              <div>
-                <label className="block font-bold mb-1 text-[#5c5750] dark:text-slate-300">
-                  Código de Medidor *
-                </label>
-                <input
-                  type="text"
-                  required
-                  value={codigoMedidor}
-                  onChange={(e) => setCodigoMedidor(e.target.value)}
-                  className="w-full px-3 py-2 rounded-xl bg-white dark:bg-slate-900 border border-blue-200 dark:border-blue-800 font-mono text-xs text-[#262422] dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-600"
-                  placeholder="Código del medidor"
-                />
-              </div>
-              <div>
-                <label className="block font-bold mb-1 text-[#5c5750] dark:text-slate-300">
-                  Lectura Anterior (m³)
-                </label>
-                <input
-                  type="number"
-                  step="0.01"
-                  required
-                  value={lecturaAnteriorAgua}
-                  onChange={(e) => setLecturaAnteriorAgua(Number(e.target.value))}
-                  className="w-full px-3 py-2 rounded-xl bg-white dark:bg-slate-900 border border-blue-200 dark:border-blue-800 font-mono font-bold text-xs text-[#262422] dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-600"
-                  placeholder="0.00"
-                />
-                <span className="text-[10px] text-[#7d776f] mt-0.5 block font-mono">
-                  Toma: {fechaLecturaAnterior}
-                </span>
-              </div>
-              <div>
-                <label className="block font-bold mb-1 text-[#5c5750] dark:text-slate-300">
-                  Lectura Actual (m³)
-                </label>
-                <input
-                  type="number"
-                  step="0.01"
-                  required
-                  value={lecturaActualAgua}
-                  onChange={(e) => setLecturaActualAgua(Number(e.target.value))}
-                  className="w-full px-3 py-2 rounded-xl bg-white dark:bg-slate-900 border border-blue-200 dark:border-blue-800 font-mono font-bold text-xs text-[#262422] dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-600"
-                  placeholder="0.00"
-                />
-                <span className="text-[10px] text-[#7d776f] mt-0.5 block font-mono">
-                  Toma: {fechaLecturaActual}
-                </span>
-              </div>
-            </div>
-
-            {/* Resultado del Consumo de Agua */}
-            <div className="p-3 rounded-xl bg-white/80 dark:bg-slate-900/80 border border-blue-200 dark:border-blue-800 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 font-mono text-xs">
-              <div className="flex items-center gap-2">
-                <span className="text-[#5c5750] dark:text-slate-400">Consumo Calculado:</span>
-                <span className="px-2 py-0.5 rounded-lg bg-blue-100 dark:bg-blue-950 text-blue-800 dark:text-blue-300 font-black">
-                  {consumoCubos.toFixed(1)} m³
-                </span>
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="text-[#5c5750] dark:text-slate-400">Total Agua:</span>
-                <span className="font-extrabold text-blue-900 dark:text-blue-300 text-sm">
-                  Bs. {totalAgua.toFixed(2)}
-                </span>
-              </div>
+            <div>
+              <label className="block font-bold mb-1 text-[#5c5750] dark:text-slate-300">
+                Monto de Agua (Bs.)
+              </label>
+              <input
+                type="number"
+                step="0.01"
+                min="0"
+                value={montoAguaManual}
+                onChange={(e) => setMontoAguaManual(Number(e.target.value))}
+                className="w-full px-3 py-2 rounded-xl bg-white dark:bg-slate-900 border border-blue-200 dark:border-blue-800 font-mono font-bold text-xs text-blue-700 dark:text-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-600"
+                placeholder="0.00"
+              />
+              <p className="text-[10px] text-[#7d776f] mt-1">
+                Monto fijado para el consumo de agua del departamento en el mes.
+              </p>
             </div>
           </div>
 
@@ -253,7 +175,7 @@ export default function EditarParametrosModal({
               <div className="p-2.5 bg-white/60 dark:bg-slate-900/60 rounded-xl border border-[#cec8bc] dark:border-slate-800">
                 <span className="text-[10px] text-[#7d776f] block uppercase">Agua / Extras</span>
                 <span className="font-bold text-blue-700 dark:text-blue-400">
-                  Bs. {(totalAgua + otrosExtras).toFixed(2)}
+                  Bs. {(montoAguaManual + otrosExtras).toFixed(2)}
                 </span>
               </div>
               <div className="p-2.5 bg-emerald-50 dark:bg-emerald-950/40 rounded-xl border border-emerald-200 dark:border-emerald-800">
@@ -266,11 +188,7 @@ export default function EditarParametrosModal({
               </div>
               <div className="p-2.5 bg-red-50 dark:bg-red-950/40 rounded-xl border border-red-200 dark:border-red-800">
                 <span className="text-[10px] text-red-800 dark:text-red-300 block uppercase font-bold">
-                  &ge; Día 10 (
-                  {config.tipoMora === 'porcentaje'
-                    ? `${config.valorMoraPorcentaje}%`
-                    : `+Bs ${config.valorMoraFijo}`}
-                  )
+                  Con Mora (+{config.valorMoraPorcentaje || 0}%)
                 </span>
                 <span className="font-black text-sm text-red-700 dark:text-red-300">
                   Bs. {totalConMora.toFixed(2)}

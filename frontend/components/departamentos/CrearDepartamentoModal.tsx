@@ -27,7 +27,6 @@ export default function CrearDepartamentoModal({
     numero: '',
     piso: 1,
     areaM2: 100,
-    alicuota: 3.75,
     parqueo: 'Sin parqueo',
     baulera: 'Sin baulera',
     propietarioNombre: '',
@@ -42,22 +41,12 @@ export default function CrearDepartamentoModal({
 
   const tipo = formData.tipoUnidad || 'Departamento'
 
-  const alicuotaEstimada = Number(
-    (
-      (Number(formData.areaM2) / (totalAreaConstruida + Number(formData.areaM2 || 1))) *
-      100
-    ).toFixed(2)
-  )
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!formData.numero.trim()) return
     setIsSubmitting(true)
     try {
-      await onSubmit({
-        ...formData,
-        alicuota: alicuotaEstimada || formData.alicuota
-      })
+      await onSubmit(formData)
     } finally {
       setIsSubmitting(false)
     }
@@ -222,10 +211,6 @@ export default function CrearDepartamentoModal({
                     onChange={(e) => setFormData({ ...formData, areaM2: Number(e.target.value) })}
                     className="w-full px-3 py-2 rounded-xl bg-[#ded8cc] dark:bg-slate-800 border border-[#cec8bc] dark:border-slate-700 text-xs text-[#262422] dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-600 font-mono font-bold"
                   />
-                  <span className="text-[10px] text-blue-700 dark:text-indigo-400 font-semibold flex items-center gap-1 mt-1">
-                    <Percent className="w-3 h-3" />
-                    Alícuota estimada: {alicuotaEstimada}%
-                  </span>
                 </div>
               </div>
             </>

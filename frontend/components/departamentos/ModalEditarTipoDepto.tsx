@@ -22,7 +22,7 @@ interface ModalEditarTipoDeptoProps {
   isOpen: boolean
   onClose: () => void
   tipoToEdit: TipoDepartamentoItem | null
-  onSave: (tipo: TipoDepartamentoItem, cascadaAUnidades: boolean) => void
+  onSave: (tipo: TipoDepartamentoItem, cascadaAUnidades: boolean) => Promise<string | null | void> | void
   totalMetrosEdificio?: number
 }
 
@@ -74,9 +74,6 @@ export default function ModalEditarTipoDepto({
     codigo: '',
     areaM2: 60,
     expensaBase: 300,
-    alicuotaEstimada: 3.75,
-    habitaciones: 2,
-    banos: 1,
     descripcion: '',
     colorBadge: 'blue',
     activo: true
@@ -95,9 +92,6 @@ export default function ModalEditarTipoDepto({
         codigo: '',
         areaM2: 70,
         expensaBase: 320,
-        alicuotaEstimada: Number(((70 / totalMetrosEdificio) * 100).toFixed(2)),
-        habitaciones: 2,
-        banos: 1,
         descripcion: '',
         colorBadge: 'indigo',
         activo: true
@@ -107,9 +101,6 @@ export default function ModalEditarTipoDepto({
   }, [tipoToEdit, isOpen, totalMetrosEdificio])
 
   if (!isOpen) return null
-
-  // Calcular alícuota estimada dinámica
-  const alicuotaCalculada = Number(((formData.areaM2 / totalMetrosEdificio) * 100).toFixed(2))
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
@@ -126,15 +117,31 @@ export default function ModalEditarTipoDepto({
       return
     }
 
+    const codigoFinal = (formData.codigo || '').trim() || formData.nombre.slice(0, 3).toUpperCase()
     const itemToSave: TipoDepartamentoItem = {
       ...formData,
       id: formData.id || `tipo-${formData.nombre.toLowerCase().replace(/\s+/g, '-')}`,
-      codigo: formData.codigo.trim() || formData.nombre.slice(0, 3).toUpperCase(),
-      alicuotaEstimada: alicuotaCalculada
+      codigo: codigoFinal
     }
 
-    onSave(itemToSave, cascadaAUnidades)
-    onClose()
+    try {
+      const res = onSave(itemToSave, cascadaAUnidades) as any
+      if (res && typeof res.then === 'function') {
+        res.then((err?: string | null) => {
+          if (err) {
+            setErrorMsg(err)
+          } else {
+            onClose()
+          }
+        }).catch((e: any) => {
+          setErrorMsg(e?.message || 'Error al guardar tipo de departamento')
+        })
+      } else {
+        onClose()
+      }
+    } catch (e: any) {
+      setErrorMsg(e?.message || 'Error al guardar tipo de departamento')
+    }
   }
 
   return (
@@ -228,17 +235,14 @@ export default function ModalEditarTipoDepto({
                 </span>
               </div>
               <p className="text-[10px] text-[#7d776f] mt-1">
-                Alícuota est:{' '}
-                <span className="font-bold text-rose-700 dark:text-rose-400">
-                  {alicuotaCalculada}%
-                </span>
+                Superficie arquitectónica real de la unidad
               </p>
             </div>
 
             <div>
               <label className="block text-xs font-bold text-[#5c5750] dark:text-slate-300 mb-1 flex items-center gap-1">
                 <DollarSign className="w-3.5 h-3.5 text-emerald-600" />
-                Expensa Base (Bs.) *
+                Monto de Expensa (Bs.) *
               </label>
               <div className="relative">
                 <input
@@ -256,40 +260,23 @@ export default function ModalEditarTipoDepto({
                   Bs
                 </span>
               </div>
-              <p className="text-[10px] text-[#7d776f] mt-1">Regla base de cobro mensual</p>
+              <p className="text-[10px] text-[#7d776f] mt-1">Cuota base de expensa del departamento</p>
             </div>
           </div>
 
-          {/* Dormitorios, Baños y Color */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-            <div>
-              <label className="block text-xs font-bold text-[#5c5750] dark:text-slate-300 mb-1 flex items-center gap-1">
-                <Bed className="w-3.5 h-3.5 text-[#7d776f]" />
-                Dormitorios
-              </label>
+          {/* Estado Activo y Color Visual */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 p-3 rounded-2xl bg-[#dfd9ce]/40 dark:bg-slate-950/40 border border-[#cec8bc] dark:border-slate-800 items-center">
+            <div className="flex items-center gap-2">
               <input
-                type="number"
-                min="0"
-                max="10"
-                value={formData.habitaciones}
-                onChange={(e) => setFormData({ ...formData, habitaciones: Number(e.target.value) })}
-                className="w-full px-3 py-2 bg-[#dfd9ce] dark:bg-slate-950 border border-[#cec8bc] dark:border-slate-700 rounded-xl text-xs font-bold text-[#262422] dark:text-white focus:outline-none focus:ring-2 focus:ring-rose-600"
+                type="checkbox"
+                id="tipoActivoCheckbox"
+                checked={formData.activo}
+                onChange={(e) => setFormData({ ...formData, activo: e.target.checked })}
+                className="w-4 h-4 rounded text-blue-600 focus:ring-blue-500 cursor-pointer"
               />
-            </div>
-
-            <div>
-              <label className="block text-xs font-bold text-[#5c5750] dark:text-slate-300 mb-1 flex items-center gap-1">
-                <Bath className="w-3.5 h-3.5 text-[#7d776f]" />
-                Baños
+              <label htmlFor="tipoActivoCheckbox" className="text-xs font-bold text-[#262422] dark:text-white cursor-pointer">
+                Tipo Activo (Disponible para departamentos)
               </label>
-              <input
-                type="number"
-                min="0"
-                max="10"
-                value={formData.banos}
-                onChange={(e) => setFormData({ ...formData, banos: Number(e.target.value) })}
-                className="w-full px-3 py-2 bg-[#dfd9ce] dark:bg-slate-950 border border-[#cec8bc] dark:border-slate-700 rounded-xl text-xs font-bold text-[#262422] dark:text-white focus:outline-none focus:ring-2 focus:ring-rose-600"
-              />
             </div>
 
             <div>
@@ -314,11 +301,11 @@ export default function ModalEditarTipoDepto({
           {/* Descripción */}
           <div>
             <label className="block text-xs font-bold text-[#5c5750] dark:text-slate-300 mb-1">
-              Descripción / Notas Arquitectónicas
+              Descripción / Notas
             </label>
             <textarea
               rows={2}
-              placeholder="Detalles sobre ambientes, orientación, acabados, balcón, etc."
+              placeholder="Detalles sobre características, orientación, etc."
               value={formData.descripcion}
               onChange={(e) => setFormData({ ...formData, descripcion: e.target.value })}
               className="w-full px-3 py-2 bg-[#dfd9ce] dark:bg-slate-950 border border-[#cec8bc] dark:border-slate-700 rounded-xl text-xs text-[#262422] dark:text-white placeholder-[#857f76] focus:outline-none focus:ring-2 focus:ring-rose-600"
@@ -340,7 +327,7 @@ export default function ModalEditarTipoDepto({
                   {formData.codigo || 'COD'}
                 </span>
                 <p className="text-xs text-[#66615b] dark:text-slate-400 mt-0.5">
-                  {formData.areaM2} m² • {formData.habitaciones} Dorm. • {formData.banos} Baños
+                  {formData.areaM2} m² • {formData.activo ? 'Activo' : 'Inactivo'}
                 </p>
               </div>
               <div className="text-right">

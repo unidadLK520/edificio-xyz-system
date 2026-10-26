@@ -19,6 +19,11 @@ export interface LimpiarIdsOptions {
   lecturasAgua?: number[];
   montosAgua?: number[];
   sesiones?: string[];
+  movimientos?: number[];
+  categoriasMovimiento?: number[];
+  caja?: number[];
+  movimientosBancarios?: number[];
+  cuentasBancarias?: number[];
 }
 
 let counter = 0;
@@ -116,8 +121,9 @@ export async function crearPersonaTest(
  * Las filas de auditoria generadas por triggers NO se tocan.
  */
 export async function limpiar(ids: LimpiarIdsOptions): Promise<void> {
-  // Orden estricto respetando claves foráneas
-  if (ids.aplicacionesAnticipos && ids.aplicacionesAnticipos.length > 0) {
+  try {
+    // Orden estricto respetando claves foráneas
+    if (ids.aplicacionesAnticipos && ids.aplicacionesAnticipos.length > 0) {
     const valid = ids.aplicacionesAnticipos.filter(Boolean);
     if (valid.length > 0) {
       await prisma.aplicacionAnticipo.deleteMany({
@@ -220,6 +226,73 @@ export async function limpiar(ids: LimpiarIdsOptions): Promise<void> {
     }
   }
 
+  if (ids.movimientosBancarios && ids.movimientosBancarios.length > 0) {
+    const valid = ids.movimientosBancarios.filter(Boolean);
+    if (valid.length > 0) {
+      await prisma.movimientoBancario.deleteMany({
+        where: {
+          idMovBancario: { in: valid },
+          OR: [
+            { concepto: { contains: 'TST-' } },
+            { referencia: { contains: 'TST-' } },
+          ],
+        },
+      });
+    }
+  }
+
+  if (ids.caja && ids.caja.length > 0) {
+    const valid = ids.caja.filter(Boolean);
+    if (valid.length > 0) {
+      await prisma.caja.deleteMany({
+        where: {
+          idMovimientoCaja: { in: valid },
+          concepto: { contains: 'TST-' },
+        },
+      });
+    }
+  }
+
+  if (ids.cuentasBancarias && ids.cuentasBancarias.length > 0) {
+    const valid = ids.cuentasBancarias.filter(Boolean);
+    if (valid.length > 0) {
+      // Eliminar posibles movimientos asociados
+      await prisma.movimientoBancario.deleteMany({
+        where: {
+          idCuenta: { in: valid },
+          OR: [
+            { concepto: { contains: 'TST-' } },
+            { referencia: { contains: 'TST-' } },
+          ],
+        },
+      });
+      await prisma.cuentaBancaria.deleteMany({
+        where: {
+          idCuenta: { in: valid },
+          numeroCuenta: { startsWith: 'TST-' },
+        },
+      });
+    }
+  }
+
+  if (ids.movimientos && ids.movimientos.length > 0) {
+    const valid = ids.movimientos.filter(Boolean);
+    if (valid.length > 0) {
+      await prisma.movimiento.deleteMany({
+        where: { idMovimiento: { in: valid } },
+      });
+    }
+  }
+
+  if (ids.categoriasMovimiento && ids.categoriasMovimiento.length > 0) {
+    const valid = ids.categoriasMovimiento.filter(Boolean);
+    if (valid.length > 0) {
+      await prisma.categoriaMovimiento.deleteMany({
+        where: { idCategoria: { in: valid } },
+      });
+    }
+  }
+
   if (ids.sesiones && ids.sesiones.length > 0) {
     const valid = ids.sesiones.filter(Boolean);
     if (valid.length > 0) {
@@ -232,6 +305,13 @@ export async function limpiar(ids: LimpiarIdsOptions): Promise<void> {
   if (ids.usuarios && ids.usuarios.length > 0) {
     const valid = ids.usuarios.filter(Boolean);
     if (valid.length > 0) {
+      await prisma.sesion.deleteMany({
+        where: { idUsuario: { in: valid } },
+      });
+      await prisma.auditoria.updateMany({
+        where: { idUsuario: { in: valid } },
+        data: { idUsuario: null },
+      });
       await prisma.usuario.deleteMany({
         where: { idUsuario: { in: valid } },
       });
@@ -263,6 +343,10 @@ export async function limpiar(ids: LimpiarIdsOptions): Promise<void> {
         where: { idTipo: { in: valid } },
       });
     }
+  }
+  } catch (err: any) {
+    console.error('❌ [limpiar] Error crítico al limpiar datos de prueba:', err.message, { idsNoBorrados: ids });
+    throw err;
   }
 }
 

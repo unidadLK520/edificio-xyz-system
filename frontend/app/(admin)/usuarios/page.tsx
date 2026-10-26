@@ -2,10 +2,11 @@
 'use client'
 
 import React, { useState, useEffect } from 'react'
-import { ShieldCheck, AlertTriangle, CheckCircle2, X } from 'lucide-react'
+import { ShieldCheck, AlertTriangle, CheckCircle2, X, RotateCcw } from 'lucide-react'
 import { PersonaItem, UsuarioItem } from '@/components/usuarios/types'
 import { UsuariosTable } from '@/components/usuarios/UsuariosTable'
 import { CreateUsuarioModal } from '@/components/usuarios/CreateUsuarioModal'
+import { apiFetch } from '@/lib/api'
 
 export type { PersonaItem, UsuarioItem }
 
@@ -22,7 +23,7 @@ export default function UsuariosPage() {
     setLoading(true)
     setErrorMessage('')
     try {
-      const res = await fetch('/api/v1/usuarios')
+      const res = await apiFetch('/api/v1/usuarios')
       if (res.ok) {
         const data = await res.json()
         setUsuarios(data)
@@ -30,8 +31,8 @@ export default function UsuariosPage() {
         const err = await res.json().catch(() => ({}))
         setErrorMessage(err.message || 'No se pudo obtener la lista de usuarios')
       }
-    } catch {
-      setErrorMessage('Error de conexión al cargar usuarios')
+    } catch (err: any) {
+      setErrorMessage(err?.message || 'Error de conexión al cargar usuarios')
     } finally {
       setLoading(false)
     }
@@ -44,7 +45,7 @@ export default function UsuariosPage() {
   const handleToggleEstado = async (idUsuario: number, estadoActual: boolean) => {
     const nuevoEstado = !estadoActual
     try {
-      const res = await fetch(`/api/v1/usuarios/${idUsuario}/estado`, {
+      const res = await apiFetch(`/api/v1/usuarios/${idUsuario}/estado`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ activo: nuevoEstado })
@@ -59,14 +60,14 @@ export default function UsuariosPage() {
         const err = await res.json().catch(() => ({}))
         setErrorMessage(err.message || 'Error al actualizar el estado del usuario')
       }
-    } catch {
-      setErrorMessage('Error de conexión al cambiar el estado')
+    } catch (err: any) {
+      setErrorMessage(err?.message || 'Error de conexión al cambiar el estado')
     }
   }
 
   const handleChangeRol = async (idUsuario: number, nuevoRol: string) => {
     try {
-      const res = await fetch(`/api/v1/usuarios/${idUsuario}/rol`, {
+      const res = await apiFetch(`/api/v1/usuarios/${idUsuario}/rol`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ rol: nuevoRol })
@@ -79,8 +80,8 @@ export default function UsuariosPage() {
         const err = await res.json().catch(() => ({}))
         setErrorMessage(err.message || 'Error al cambiar el rol')
       }
-    } catch {
-      setErrorMessage('Error de conexión al cambiar el rol')
+    } catch (err: any) {
+      setErrorMessage(err?.message || 'Error de conexión al cambiar el rol')
     }
   }
 
@@ -136,121 +137,147 @@ export default function UsuariosPage() {
         </button>
       </div>
 
-      {/* ALERTAS */}
-      {errorMessage && (
-        <div className="p-4 rounded-2xl bg-rose-500/10 border border-rose-500/30 text-rose-600 dark:text-rose-400 text-sm flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <AlertTriangle className="w-4 h-4 text-rose-500 shrink-0" />
-            <span className="font-bold">Error:</span>
-            <span>{errorMessage}</span>
+      {/* ESTADO DE ERROR CUANDO NO HAY DATOS */}
+      {errorMessage && usuarios.length === 0 && !loading ? (
+        <div className="p-8 sm:p-12 text-center rounded-2xl bg-rose-500/5 dark:bg-rose-950/20 border border-rose-500/20 max-w-xl mx-auto space-y-4 shadow-sm">
+          <div className="w-12 h-12 rounded-full bg-rose-500/10 text-rose-600 dark:text-rose-400 flex items-center justify-center mx-auto">
+            <AlertTriangle className="w-6 h-6" />
+          </div>
+          <div>
+            <h3 className="text-base font-bold text-slate-900 dark:text-white">
+              Error al cargar los usuarios
+            </h3>
+            <p className="text-sm text-slate-600 dark:text-slate-400 mt-1">
+              {errorMessage}
+            </p>
           </div>
           <button
-            onClick={() => setErrorMessage('')}
-            className="text-rose-400 hover:text-rose-600 cursor-pointer p-1 rounded-lg hover:bg-rose-500/10 transition-colors"
+            onClick={fetchUsuarios}
+            className="inline-flex items-center gap-2 px-4 py-2 bg-rose-600 hover:bg-rose-500 text-white rounded-xl text-sm font-semibold transition-colors cursor-pointer shadow-md shadow-rose-600/20"
           >
-            <X className="w-4 h-4" />
+            <RotateCcw className="w-4 h-4" />
+            <span>Reintentar</span>
           </button>
         </div>
-      )}
+      ) : (
+        <>
+          {/* ALERTAS EN CASO DE ERROR/EXITO SECUNDARIO */}
+          {errorMessage && (
+            <div className="p-4 rounded-2xl bg-rose-500/10 border border-rose-500/30 text-rose-600 dark:text-rose-400 text-sm flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <AlertTriangle className="w-4 h-4 text-rose-500 shrink-0" />
+                <span className="font-bold">Error:</span>
+                <span>{errorMessage}</span>
+              </div>
+              <button
+                onClick={() => setErrorMessage('')}
+                className="text-rose-400 hover:text-rose-600 cursor-pointer p-1 rounded-lg hover:bg-rose-500/10 transition-colors"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+          )}
 
-      {successMessage && (
-        <div className="p-4 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-600 dark:text-emerald-400 text-sm flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" />
-            <span className="font-bold">Éxito:</span>
-            <span>{successMessage}</span>
+          {successMessage && (
+            <div className="p-4 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-600 dark:text-emerald-400 text-sm flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" />
+                <span className="font-bold">Éxito:</span>
+                <span>{successMessage}</span>
+              </div>
+              <button
+                onClick={() => setSuccessMessage('')}
+                className="text-emerald-400 hover:text-emerald-600 cursor-pointer p-1 rounded-lg hover:bg-emerald-500/10 transition-colors"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+          )}
+
+          {/* METRIC CARDS */}
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm">
+              <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
+                Total Cuentas
+              </p>
+              <p className="text-2xl font-bold text-slate-900 dark:text-white mt-1">{totalUsuarios}</p>
+            </div>
+            <div className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm">
+              <p className="text-xs font-semibold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider">
+                Habilitados (Activos)
+              </p>
+              <p className="text-2xl font-bold text-emerald-600 dark:text-emerald-400 mt-1">
+                {activos}
+              </p>
+            </div>
+            <div className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm">
+              <p className="text-xs font-semibold text-rose-500 uppercase tracking-wider">
+                Inhabilitados (Inactivos)
+              </p>
+              <p className="text-2xl font-bold text-rose-500 mt-1">{inactivos}</p>
+            </div>
+            <div className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm">
+              <p className="text-xs font-semibold text-indigo-500 uppercase tracking-wider">
+                Administradores
+              </p>
+              <p className="text-2xl font-bold text-indigo-500 mt-1">{admins}</p>
+            </div>
           </div>
-          <button
-            onClick={() => setSuccessMessage('')}
-            className="text-emerald-400 hover:text-emerald-600 cursor-pointer p-1 rounded-lg hover:bg-emerald-500/10 transition-colors"
-          >
-            <X className="w-4 h-4" />
-          </button>
-        </div>
-      )}
 
-      {/* METRIC CARDS */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm">
-          <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
-            Total Cuentas
-          </p>
-          <p className="text-2xl font-bold text-slate-900 dark:text-white mt-1">{totalUsuarios}</p>
-        </div>
-        <div className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm">
-          <p className="text-xs font-semibold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider">
-            Habilitados (Activos)
-          </p>
-          <p className="text-2xl font-bold text-emerald-600 dark:text-emerald-400 mt-1">
-            {activos}
-          </p>
-        </div>
-        <div className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm">
-          <p className="text-xs font-semibold text-rose-500 uppercase tracking-wider">
-            Inhabilitados (Inactivos)
-          </p>
-          <p className="text-2xl font-bold text-rose-500 mt-1">{inactivos}</p>
-        </div>
-        <div className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm">
-          <p className="text-xs font-semibold text-indigo-500 uppercase tracking-wider">
-            Administradores
-          </p>
-          <p className="text-2xl font-bold text-indigo-500 mt-1">{admins}</p>
-        </div>
-      </div>
+          {/* FILTROS Y BARRA DE BÚSQUEDA */}
+          <div className="flex flex-col sm:flex-row gap-3 items-center justify-between bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm">
+            <div className="relative w-full sm:w-96">
+              <input
+                type="text"
+                placeholder="Buscar por nombre, CI/NIT, usuario o correo..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="w-full pl-9 pr-4 py-2 text-sm rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              />
+              <svg
+                className="w-4 h-4 absolute left-3 top-3 text-slate-400"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth="2"
+                  d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
+                />
+              </svg>
+            </div>
 
-      {/* FILTROS Y BARRA DE BÚSQUEDA */}
-      <div className="flex flex-col sm:flex-row gap-3 items-center justify-between bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm">
-        <div className="relative w-full sm:w-96">
-          <input
-            type="text"
-            placeholder="Buscar por nombre, CI/NIT, usuario o correo..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full pl-9 pr-4 py-2 text-sm rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-          />
-          <svg
-            className="w-4 h-4 absolute left-3 top-3 text-slate-400"
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth="2"
-              d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
+            <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
+              <label className="text-xs text-slate-500 dark:text-slate-400 font-medium">
+                Filtrar por Rol:
+              </label>
+              <select
+                value={filterRole}
+                onChange={(e) => setFilterRole(e.target.value)}
+                className="py-2 px-3 text-sm rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer"
+              >
+                <option value="TODOS">Todos los roles</option>
+                <option value="ADMINISTRADOR">Administrador</option>
+                <option value="DIRECTORIO">Directorio</option>
+                <option value="CONSULTA">Consulta</option>
+                <option value="COPROPIETARIO">Copropietario</option>
+              </select>
+            </div>
+          </div>
+
+          {/* TABLA DE USUARIOS Y PERSONAS */}
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-sm overflow-hidden">
+            <UsuariosTable
+              usuarios={filteredUsuarios}
+              loading={loading}
+              onChangeRol={handleChangeRol}
+              onToggleEstado={handleToggleEstado}
             />
-          </svg>
-        </div>
-
-        <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
-          <label className="text-xs text-slate-500 dark:text-slate-400 font-medium">
-            Filtrar por Rol:
-          </label>
-          <select
-            value={filterRole}
-            onChange={(e) => setFilterRole(e.target.value)}
-            className="py-2 px-3 text-sm rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer"
-          >
-            <option value="TODOS">Todos los roles</option>
-            <option value="ADMINISTRADOR">Administrador</option>
-            <option value="DIRECTORIO">Directorio</option>
-            <option value="CONSULTA">Consulta</option>
-            <option value="COPROPIETARIO">Copropietario</option>
-          </select>
-        </div>
-      </div>
-
-      {/* TABLA DE USUARIOS Y PERSONAS */}
-      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-sm overflow-hidden">
-        <UsuariosTable
-          usuarios={filteredUsuarios}
-          loading={loading}
-          onChangeRol={handleChangeRol}
-          onToggleEstado={handleToggleEstado}
-        />
-      </div>
+          </div>
+        </>
+      )}
 
       {/* MODAL REGISTRAR USUARIO Y PERSONA */}
       <CreateUsuarioModal

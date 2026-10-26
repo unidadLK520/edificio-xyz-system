@@ -8,14 +8,27 @@ import { RegistrarAuditoriaParams } from './auditoria.types';
 export class AuditoriaRepository {
   async crear(params: RegistrarAuditoriaParams): Promise<Auditoria> {
     const client = params.tx || prisma;
+    const safeJson = (val: any) => {
+      if (val === undefined || val === null) return undefined;
+      try {
+        return JSON.parse(JSON.stringify(val));
+      } catch (err) {
+        console.warn(
+          `[AuditoriaRepository] Error serializando JSON para tabla "${params.tablaAfectada}", acción "${params.accion}":`,
+          err
+        );
+        return undefined;
+      }
+    };
+
     return client.auditoria.create({
       data: {
         tablaAfectada: params.tablaAfectada || 'usuarios',
         idRegistro: params.idRegistro ?? (params.idUsuario ? String(params.idUsuario) : null),
         accion: params.accion,
         resultado: params.resultado ?? null,
-        datosAnteriores: params.datosAnteriores ?? undefined,
-        datosNuevos: params.datosNuevos ?? undefined,
+        datosAnteriores: safeJson(params.datosAnteriores),
+        datosNuevos: safeJson(params.datosNuevos),
         idUsuario: params.idUsuario ?? null,
         fechaHora: new Date(),
       },

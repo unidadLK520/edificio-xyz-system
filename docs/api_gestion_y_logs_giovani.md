@@ -22,6 +22,9 @@ Ya vigente (implementado y probado):
 - Cron de mora (apagado por defecto, timezone America/La_Paz).
 - Historial de unidades: derivado de `ocupantes_departamento` (departamentos) y de `auditoria` (parqueos y bauleras), sin modelo físico `historial_asignacion_unidades`. Asignaciones y liberaciones atómicas en `$transaction`.
 - `POST /unidades` y `PUT /unidades/Departamento/:id` aceptan `idTipo` opcional con validación de existencia en `tipos_departamento` (422 si no existe). `GET /unidades` devuelve `tipo` y `monto`.
+- `POST` y `PUT /api/v1/movimientos` (US2.3): aceptan opcionalmente `tercero` (hasta 120 caracteres), `nroFactura` (hasta 50 caracteres) y `metodoPago` (hasta 30 caracteres, texto libre no restringido a lista cerrada) y los devuelven en listado y detalle; sin ellos los campos se guardan y retornan como `null` (se aplica trim automático y cadenas vacías se convierten a `null`). Si faltan campos obligatorios (`tipo`, `idCategoria`/`categoria`, `monto`, `fecha`, `descripcion`), responde `400 Validation Error` con `details` por campo.
+- `GET /api/v1/movimientos`: el filtro `q` busca coincidencias parciales (case-insensitive) tanto en `descripcion` como en `tercero` y `nro_factura`.
+- `POST /api/v1/movimientos/categorias` y `PUT /api/v1/movimientos/categorias/:id` (US2.3): gestión de categorías para Administrador con nombre único por tipo (`Ingreso` o `Egreso`), longitud máxima de 80 caracteres y eventos de auditoría (`CREAR_CATEGORIA`, `MODIFICAR_CATEGORIA`). `GET /movimientos/categorias` sigue disponible para Administrador y Directorio.
 Por implementar (cambiará, no construir sobre lo anterior):
 - `GET /expensas/estado-cuenta/:idDepartamento`: filtros `periodo`, `desde`, `hasta`, `movimientos`, `sinMovimientos`, pagador y ocupante actual.
 - Emisión y lectura de expensas y estado de cuenta para rol Consulta: queda como "Pendiente" según el código actual y la matriz RBAC.
@@ -907,6 +910,17 @@ Ubicación: `backend/src/routes/movimientos.routes.ts` · Prefijo: `/api/v1/movi
   { "idCategoria": 7, "nombre": "Alquiler Áreas Comunes / Salón", "tipo": "Ingreso" }
 ]
 ```
+`POST /api/v1/movimientos/categorias` · Rol: Administrador.
+Crea una nueva categoría. Campos: `nombre` (string obligatorio, hasta 80 caracteres), `tipo` ('Ingreso' | 'Egreso'). Validación de unicidad: el nombre debe ser único para el mismo tipo (`409 Conflict` con código `CATEGORIA_DUPLICADA` si ya existe). Audita evento `CREAR_CATEGORIA`. Responde 201 Created.
+```json
+{ "nombre": "Mantenimiento Preventivo Ascensores", "tipo": "Egreso" }
+```
+`PUT /api/v1/movimientos/categorias/:id` · Rol: Administrador.
+Modifica una categoría existente por su ID en la URL. Campos opcionales: `nombre` (hasta 80 caracteres), `tipo` ('Ingreso' | 'Egreso'). Valida unicidad si cambia de nombre o tipo (`409 Conflict`). Si cambia el `tipo` y la categoría tiene movimientos asociados, responde `409 Conflict` (código `CATEGORIA_CON_MOVIMIENTOS`); si no tiene movimientos asociados, el cambio de tipo se permite. Audita evento `MODIFICAR_CATEGORIA`. Responde 200 OK.
+```json
+{ "nombre": "Mantenimiento Integral de Ascensores" }
+```
+
 5.2 Resumen financiero y balance
 `GET /api/v1/movimientos/resumen` · Roles: Administrador, Directorio.
 Query: `anio`, `mes` (1-12), `idCategoria`, `fechaDesde`, `fechaHasta`. Considera solo movimientos no anulados.
@@ -924,6 +938,7 @@ Query: `anio`, `mes` (1-12), `idCategoria`, `fechaDesde`, `fechaHasta`. Consider
 5.3 Listado paginado
 `GET /api/v1/movimientos` · Roles: Administrador, Directorio.
 Query: `tipo` (Ingreso, Egreso, Todos), `idCategoria`, `fechaDesde`, `fechaHasta`, `q`, `page` (1), `limit` (50). Orden por fecha descendente.
+El filtro `q` busca coincidencias parciales (case-insensitive) tanto en `descripcion` como en `tercero` y `nro_factura`.
 ```json
 {
   "data": [
@@ -931,6 +946,9 @@ Query: `tipo` (Ingreso, Egreso, Todos), `idCategoria`, `fechaDesde`, `fechaHasta
       "idMovimiento": 12, "tipo": "Egreso", "idCategoria": 1, "monto": 1200.0,
       "descripcion": "Reparación y mantenimiento del ascensor principal", "fecha": "2026-10-04T15:00:00.000Z",
       "comprobanteUrl": "https://storage.edificioxyz.com/facturas/fac-9912.pdf", "anulado": false,
+      "tercero": "Schindler Ascensores Bolivia",
+      "nroFactura": "FAC-9912",
+      "metodoPago": "Transferencia QR",
       "categoria": { "idCategoria": 1, "nombre": "Mantenimiento y Reparaciones", "tipo": "Egreso" },
       "usuarioRegistro": { "idUsuario": 1, "nombreUsuario": "admin" }
     }
@@ -940,17 +958,38 @@ Query: `tipo` (Ingreso, Egreso, Todos), `idCategoria`, `fechaDesde`, `fechaHasta
 ```
 5.4 Detalle de movimiento
 `GET /api/v1/movimientos/:id` · Roles: Administrador, Directorio.
-Incluye categoría, usuario, `movimientosBancarios` y `pagosEmpleados`.
+Incluye categoría, usuario, `tercero`, `nroFactura`, `metodoPago`, `movimientosBancarios` y `pagosEmpleados`.
 5.5 Registrar movimiento
-`POST /api/v1/movimientos` · Rol: Administrador. Valida tipo, monto positivo y categoría existente. Audita `CREAR_MOVIMIENTO`.
+`POST /api/v1/movimientos` · Rol: Administrador.
+> **Cambio de contrato (US2.3):** `fecha` y `descripcion` son estrictamente obligatorios (anteriormente `fecha` admitía fallback automático a la fecha del servidor y `descripcion` era opcional). Si `fecha` o `descripcion` faltan o están vacías, responde `400 Validation Error` con `details` estructurado.
+
+Campos obligatorios: `tipo` ('Ingreso' | 'Egreso'), `idCategoria` (entero positivo), `monto` (positivo), `fecha` (válida, obligatoria), `descripcion` (string no vacío, obligatorio). Si falta algún campo obligatorio, responde `400 Validation Error` con `details` estructurado por campo.
+Campos opcionales:
+- `tercero`: string, hasta 120 caracteres.
+- `nroFactura`: string (acepta también `nro_factura`), hasta 50 caracteres.
+- `metodoPago`: string (acepta también `metodo_pago`), hasta 30 caracteres. No restringido a lista cerrada (texto libre).
+- `comprobanteUrl`: string o null.
+Se aplica `trim` automático; cadenas vacías o compuestas exclusivamente de espacios se normalizan a `null`. Si exceden su longitud máxima, responde `400 Validation Error` con `details`.
+Audita `CREAR_MOVIMIENTO`.
 ```json
-{ "tipo": "Ingreso", "idCategoria": 7, "monto": 800.0, "descripcion": "Alquiler del salón de eventos para reunión social", "fecha": "2026-10-05T18:00:00.000Z", "comprobanteUrl": "https://storage.edificioxyz.com/recibos/rec-salon-105.pdf" }
+{
+  "tipo": "Egreso",
+  "idCategoria": 1,
+  "monto": 1200.0,
+  "descripcion": "Reparación y mantenimiento de bombas de agua",
+  "fecha": "2026-10-05T18:00:00.000Z",
+  "tercero": "Bombas Hidráulicas Industriales SRL",
+  "nroFactura": "FAC-8841",
+  "metodoPago": "Transferencia Bancaria QR",
+  "comprobanteUrl": "https://storage.edificioxyz.com/recibos/rec-bombas-105.pdf"
+}
 ```
-Respuesta 201: el movimiento creado con `anulado: false`, `idUsuarioRegistro`, `categoria` y `usuarioRegistro`.
+Respuesta 201: el movimiento creado con `anulado: false`, `tercero`, `nroFactura`, `metodoPago`, `idUsuarioRegistro`, `categoria` y `usuarioRegistro`.
+
 5.6 Modificar movimiento
-`PUT /api/v1/movimientos/:id` · Rol: Administrador. `409` si ya está anulado. Audita `MODIFICAR_MOVIMIENTO` (estado anterior y nuevo).
+`PUT /api/v1/movimientos/:id` · Rol: Administrador. `409` si ya está anulado. Permite modificar `tipo`, `idCategoria`, `monto`, `descripcion`, `fecha`, `comprobanteUrl`, `tercero`, `nroFactura` y `metodoPago`. Campos opcionales enviados como cadena vacía se convierten a `null`; campos no enviados conservan su valor. Audita `MODIFICAR_MOVIMIENTO` (estado anterior y nuevo).
 ```json
-{ "monto": 850.0, "descripcion": "Alquiler de salón de eventos con extensión horaria" }
+{ "monto": 850.0, "descripcion": "Alquiler de salón de eventos con extensión horaria", "tercero": "Juan Pérez", "nroFactura": "REC-001" }
 ```
 5.7 Anular movimiento
 `DELETE /api/v1/movimientos/:id` · Rol: Administrador. Motivo obligatorio (`motivo` o `motivoAnulacion`); `409` si ya está anulado. Audita `ANULACION_MOVIMIENTO` en transacción atómica.
@@ -961,6 +1000,182 @@ Respuesta 200:
 ```json
 { "success": true, "message": "Movimiento anulado correctamente", "data": { "idMovimiento": 15, "anulado": true, "motivoAnulacion": "Cancelación de reserva y devolución formal del dinero al solicitante", "fechaAnulacion": "2026-10-06T12:00:00.000Z", "idUsuarioAnulacion": 1 } }
 ```
+
+5.8 Carga y almacenamiento de comprobantes (US2.3-T35)
+`POST /api/v1/movimientos/upload-comprobante` y `POST /api/v1/movimientos/comprobantes/upload` · Roles: Administrador, Directorio.
+Almacena comprobantes de respaldo para ingresos y egresos.
+- Entrada aceptada:
+  - `url` (string): URL externa válida (ej. Supabase Storage, CDN o S3). Responde `200 OK` con tipo `URL_EXTERNA`.
+  - `archivoBase64` (string con o sin prefijo Data URI) y opcionalmente `nombreArchivo` (string): Convierte a binario y valida tamaño contra `STORAGE_MAX_FILE_SIZE_MB` (máximo 10 MB por defecto; responde `413 Payload Too Large` si excede). Determina extensión por tipo MIME (PDF, PNG, JPG, WebP) o nombre original, generando un archivo único `comp_<timestamp>_<randomHex>.<ext>` en el directorio configurado en `STORAGE_UPLOAD_DIR` (`./uploads/comprobantes`).
+- Salida 201 Created:
+```json
+{
+  "success": true,
+  "message": "Comprobante almacenado exitosamente",
+  "comprobanteUrl": "http://localhost:4000/uploads/comprobantes/comp_1729641600000_a1b2c3d4e5f6g7h8.pdf",
+  "nombreArchivo": "comp_1729641600000_a1b2c3d4e5f6g7h8.pdf",
+  "mimeType": "application/pdf",
+  "pesoBytes": 1048576
+}
+```
+Servido de forma estática en Express bajo `/uploads`.
+
+---
+## 5.9 Módulo de Caja Chica / Efectivo (US1.4)
+Ubicación: `backend/src/routes/caja.routes.ts` · Tabla: `edificio.caja`
+Prefijo de ruta: `/api/v1/caja`
+
+### 5.9.1 Registrar Movimiento de Caja
+- **Método y Ruta:** `POST /api/v1/caja`
+- **Rol requerido:** Administrador (Directorio, Consulta y Copropietario reciben 403 Forbidden).
+- **Body:**
+```json
+{
+  "tipo": "Ingreso",
+  "monto": 350.50,
+  "concepto": "Cobro alquiler parrillero",
+  "fecha": "2026-10-23T10:00:00.000Z"
+}
+```
+- **Respuesta 201 Created:** Retorna el movimiento creado con `anulado: false`, datos de auditoría y usuario de registro.
+- **Validaciones:** `400 Bad Request` con mapa `details` por campo si faltan valores o son inválidos.
+- **Auditoría:** Registra evento `REGISTRO_MOVIMIENTO_CAJA` en tabla `caja`.
+
+### 5.9.2 Consultar Saldo Recalculado de Caja
+- **Método y Ruta:** `GET /api/v1/caja/saldo`
+- **Rol requerido:** Administrador, Directorio (Consulta y Copropietario reciben 403 Forbidden).
+- **Query Params:** `?desde=YYYY-MM-DD&hasta=YYYY-MM-DD` (opcionales).
+- **Regla de negocio:**
+  - Los saldos (`saldoInicial`, `totalIngresos`, `totalEgresos`, `saldoFinal` y `saldoDisponibleActual`) son calculados **siempre de forma dinámica y acumulativa** sobre movimientos NO anulados (`anulado = false`).
+  - Base inicial de apertura obtenida de la clave `saldo_inicial_caja` en `edificio.configuracion_global`.
+- **Respuesta 200 OK:**
+```json
+{
+  "success": true,
+  "data": {
+    "saldoInicial": 0.00,
+    "totalIngresos": 770.50,
+    "totalEgresos": 445.50,
+    "saldoFinal": 325.00,
+    "saldoDisponibleActual": 1215.50,
+    "periodo": { "desde": "2026-10-01T00:00:00.000Z", "hasta": "2026-10-31T23:59:59.999Z" }
+  }
+}
+```
+
+### 5.9.3 Listar Movimientos de Caja
+- **Método y Ruta:** `GET /api/v1/caja`
+- **Rol requerido:** Administrador, Directorio.
+- **Query Params:** `desde`, `hasta`, `tipo` (`Ingreso` | `Egreso`), `anulado` (`true` | `false`), `page`, `limit`.
+- **Respuesta 200 OK:** Lista paginada con metadatos `{ total, page, limit, totalPages }`.
+
+### 5.9.4 Detalle y Anulación Lógica de Movimiento de Caja
+- **Método y Ruta:** `GET /api/v1/caja/:id` (Lectura)
+- **Método y Ruta:** `DELETE /api/v1/caja/:id` (Anulación con motivo obligatorio)
+- **Rol requerido:** Administrador para anular; Directorio solo lectura.
+- **Regla de negocio:**
+  - Sigue el mismo patrón estricto de `DELETE /api/v1/movimientos/:id`: la fila no se elimina físicamente de la base de datos.
+  - Se registra `anulado: true`, `fecha_anulacion = now()`, `id_usuario_anulacion`, `motivo_anulacion`.
+  - Requiere obligatoriamente `{ "motivo": "string no vacío" }` en el body; responde `400 Bad Request` si falta el motivo.
+  - Si el movimiento ya está anulado, responde `409 Conflict` (`ANULACION_YA_REALIZADA`).
+- **Auditoría:** Registra evento `ANULACION_MOVIMIENTO_CAJA` con snapshot de `datosAnteriores` y `datosNuevos`.
+
+---
+## 5.10 Módulo de Cuentas y Movimientos Bancarios (US1.4)
+Ubicación: `backend/src/routes/cuentas-bancarias.routes.ts` y `backend/src/routes/movimientos-bancarios.routes.ts`
+Tablas: `edificio.cuentas_bancarias`, `edificio.movimientos_bancarios`
+Prefijos de ruta: `/api/v1/cuentas-bancarias`, `/api/v1/movimientos-bancarios`
+
+### 5.10.1 Cuentas Bancarias
+- **Listar Cuentas:** `GET /api/v1/cuentas-bancarias` (Administrador, Directorio). Devuelve todas las cuentas bancarias con su **saldo recalculado dinámicamente**:
+  $$\text{Saldo} = \text{saldo\_inicial} + \text{depósitos} - \text{retiros}$$
+  (No se utiliza `saldo_actual` estático para evitar desfasajes con movimientos registrados).
+- **Crear Cuenta:** `POST /api/v1/cuentas-bancarias` (Administrador).
+  - Body: `{ "banco": "Banco Mercantil Santa Cruz", "numeroCuenta": "401-2093849-01", "tipoCuenta": "Cuenta Corriente", "saldoInicial": 29518.00 }`.
+  - Unicidad: `numero_cuenta` es único en base de datos. Responde `409 Conflict` si ya existe.
+  - Auditoría: Registra `CONFIGURAR_CUENTA_BANCARIA`.
+- **Detalle de Cuenta:** `GET /api/v1/cuentas-bancarias/:id` con desglose de `totalDepositos`, `totalRetiros` y `saldoCalculado`.
+- **Modificar Cuenta:** `PUT /api/v1/cuentas-bancarias/:id` (Administrador). Permite actualizar banco, tipo o saldo inicial; valida unicidad si se cambia `numeroCuenta` (409). Auditoría `CONFIGURAR_CUENTA_BANCARIA`.
+- **Saldo del Período:** `GET /api/v1/cuentas-bancarias/:id/saldo?desde&hasta`. Retorna `saldoInicial` del período, `totalDepositos`, `totalRetiros`, `saldoFinal` del período y `saldoDisponibleActual`.
+
+### 5.10.2 Movimientos Bancarios
+- **Registrar Movimiento Bancario:** `POST /api/v1/movimientos-bancarios` (Administrador).
+  - Body:
+  ```json
+  {
+    "idCuenta": 2,
+    "tipo": "Deposito",
+    "monto": 1962.00,
+    "concepto": "Depósito en cuenta expensas septiembre",
+    "referencia": "TRF-982104",
+    "fecha": "2026-09-10T09:05:00.000Z"
+  }
+  ```
+  - Estado inicial: Se registra con `estadoConciliacion: "Pendiente"`, `conciliado: false`.
+  - Auditoría: Registra `REGISTRO_MOVIMIENTO_BANCARIO`.
+- **Listar Movimientos Bancarios:** `GET /api/v1/movimientos-bancarios` (Administrador, Directorio).
+  - Filtros: `idCuenta`, `desde`, `hasta`, `tipo` (`Deposito` | `Retiro`), `estado` (`Pendiente` | `Conciliado` | `Discrepancia`).
+  - Interpretación retrocompatible: El backend interpreta cualquier registro con `conciliado = true` como estado `'Conciliado'`.
+- **Detalle:** `GET /api/v1/movimientos-bancarios/:id`.
+- **Modificar Movimiento Bancario:** `PUT /api/v1/movimientos-bancarios/:id` (Administrador).
+  - Regla de negocio: **Solo se puede modificar si NO está conciliado**. Si el movimiento ya está conciliado, responde `409 Conflict` (`"No se puede modificar un movimiento bancario que ya ha sido conciliado"`).
+  - Auditoría: Registra `MODIFICACION_MOVIMIENTO_BANCARIO`.
+
+---
+## 5.11 Módulo de Conciliación Bancaria y Cotejo (US1.4)
+Ubicación: `backend/src/routes/conciliacion.routes.ts`
+Prefijo de ruta: `/api/v1/conciliacion`
+
+### 5.11.1 Cotejo y Sugerencias Automáticas
+- **Método y Ruta:** `GET /api/v1/conciliacion/cotejo`
+- **Rol requerido:** Administrador, Directorio.
+- **Query Params:** `idCuenta` (obligatorio), `desde`, `hasta` (opcionales).
+- **Respuesta:** Devuelve en una sola llamada los movimientos bancarios de la cuenta y los movimientos internos del sistema (`edificio.movimientos`) NO anulados.
+- **Algoritmo de Sugerencias Automáticas:**
+  Para cada movimiento bancario en estado `'Pendiente'`, busca coincidencias contra movimientos internos no vinculados que satisfagan:
+  1. **Misma naturaleza:** `Deposito` bancario solo con `Ingreso` interno; `Retiro` bancario solo con `Egreso` interno.
+  2. **Mismo monto exacto:** $\text{monto}_{\text{banco}} = \text{monto}_{\text{interno}}$.
+  3. **Fecha próxima:** Dentro de una ventana de $\pm 3$ días ($\Delta \text{días} \le 3$).
+  Si coincide, adjunta el objeto `sugerencia: { idMovimiento, tipo, monto, descripcion, fecha, diferenciaDias }`.
+
+### 5.11.2 Vincular Movimiento Bancario con Movimiento Interno
+- **Método y Ruta:** `POST /api/v1/conciliacion/vincular`
+- **Rol requerido:** Administrador.
+- **Body:** `{ "idMovBancario": 9001, "idMovimiento": 9001 }`.
+- **Reglas y Validaciones:**
+  1. **Naturaleza compatible:** `Deposito` exclusivamente con `Ingreso`, y `Retiro` exclusivamente con `Egreso`. Si no coincide, responde `422 Unprocessable Entity`.
+  2. **Movimiento interno no anulado:** Si `movimiento.anulado = true`, responde `422 Unprocessable Entity`.
+  3. **No conciliado previamente:** Si el movimiento bancario ya está conciliado, responde `409 Conflict`.
+  4. **Movimiento interno no duplicado:** Si el movimiento interno ya está vinculado a otro extracto bancario, responde `409 Conflict`.
+  5. **Cálculo de estados y diferencias:**
+     - Si $\text{monto}_{\text{bancario}} = \text{monto}_{\text{interno}}$: Se establece `estadoConciliacion: 'Conciliado'`, `conciliado: true`, `diferencia: 0.00`.
+     - Si $\text{monto}_{\text{bancario}} \ne \text{monto}_{\text{interno}}$: Se establece `estadoConciliacion: 'Discrepancia'`, `conciliado: false`, `diferencia = monto_bancario - monto_interno`.
+- **Auditoría:** Registra evento `CONCILIACION_VINCULAR` en `movimientos_bancarios`.
+
+### 5.11.3 Desvincular Movimiento Bancario
+- **Método y Ruta:** `DELETE /api/v1/conciliacion/desvincular/:idMovBancario`
+- **Rol requerido:** Administrador.
+- **Efecto:** Desvincula el movimiento (`id_movimiento = null`), revierte el estado a `'Pendiente'`, `conciliado = false`, `diferencia = null` y limpia los datos de conciliación.
+- **Auditoría:** Registra evento `CONCILIACION_DESVINCULAR`.
+
+### 5.11.4 Resumen de Estado de Conciliación
+- **Método y Ruta:** `GET /api/v1/conciliacion/estado`
+- **Rol requerido:** Administrador, Directorio.
+- **Query Params:** `idCuenta` (opcional).
+- **Respuesta 200 OK:**
+```json
+{
+  "success": true,
+  "data": {
+    "idCuenta": 2,
+    "totalMovimientos": 4,
+    "conciliados": { "cantidad": 3, "totalMonto": 5392.00 },
+    "pendientes": { "cantidad": 1, "totalMonto": 400.00 },
+    "discrepancias": { "cantidad": 0, "totalMonto": 0.00, "totalDiferencia": 0.00 }
+  }
+}
+```
+
 ---
 ## 6. Subsistema de Logs y Auditoría (US1.3)
 Trazabilidad de todas las operaciones que modifican el estado del sistema.
@@ -1012,6 +1227,15 @@ Evento	Tabla	Origen	Descripción / Datos Capturados
 `CREAR_MOVIMIENTO`	movimientos	`POST /movimientos`	Registro de ingreso/egreso.
 `MODIFICAR_MOVIMIENTO`	movimientos	`PUT /movimientos/:id`	Modificación de movimiento con delta.
 `ANULACION_MOVIMIENTO`	movimientos	`DELETE /movimientos/:id`	Anulación de movimiento con motivo.
+`CREAR_CATEGORIA`	categorias_movimiento	`POST /movimientos/categorias`	Creación de categoría de ingreso/egreso con nombre único por tipo.
+`MODIFICAR_CATEGORIA`	categorias_movimiento	`PUT /movimientos/categorias/:id`	Modificación de categoría (nombre único, valida movimientos asociados ante cambio de tipo).
+`REGISTRO_MOVIMIENTO_CAJA`	caja	`POST /caja`	Registro de ingreso o egreso en efectivo en caja chica.
+`ANULACION_MOVIMIENTO_CAJA`	caja	`DELETE /caja/:id`	Anulación lógica de movimiento de caja con motivo obligatorio (datosAnteriores y datosNuevos).
+`CONFIGURAR_CUENTA_BANCARIA`	cuentas_bancarias	`POST`, `PUT /cuentas-bancarias`	Creación o actualización de cuenta bancaria y saldo inicial.
+`REGISTRO_MOVIMIENTO_BANCARIO`	movimientos_bancarios	`POST /movimientos-bancarios`	Registro de depósito o retiro en extracto bancario con estado inicial Pendiente.
+`MODIFICACION_MOVIMIENTO_BANCARIO`	movimientos_bancarios	`PUT /movimientos-bancarios/:id`	Modificación de movimiento bancario no conciliado.
+`CONCILIACION_VINCULAR`	movimientos_bancarios	`POST /conciliacion/vincular`	Vinculación entre extracto bancario y movimiento interno (Conciliado o Discrepancia con cálculo de diferencia).
+`CONCILIACION_DESVINCULAR`	movimientos_bancarios	`DELETE /conciliacion/desvincular/:id`	Desvinculación y reversión de extracto bancario a estado Pendiente.
 6.3 Ejemplos
 Bloqueo de cuenta:
 ```json
@@ -1184,12 +1408,34 @@ Expensas	/expensas/:id/aplicar-anticipo/:idPago	POST	✅	✅	❌
 Expensas	/expensas/pagos/:idPago	DELETE	✅	✅	❌
 Expensas	/expensas/pagos/:idPago/corregir	PATCH	✅	✅	❌
 Movimientos	/movimientos/categorias	GET	✅	✅	❌
+Movimientos	/movimientos/categorias	POST	✅	❌	❌
+Movimientos	/movimientos/categorias/:id	PUT	✅	❌	❌
 Movimientos	/movimientos/resumen	GET	✅	✅	❌
 Movimientos	/movimientos	GET	✅	✅	❌
 Movimientos	/movimientos/:id	GET	✅	✅	❌
 Movimientos	/movimientos	POST	✅	❌	❌
 Movimientos	/movimientos/:id	PUT	✅	❌	❌
 Movimientos	/movimientos/:id	DELETE	✅	❌	❌
+Movimientos	/movimientos/upload-comprobante	POST	✅	✅	❌
+Movimientos	/movimientos/comprobantes/upload	POST	✅	✅	❌
+Caja	/caja	GET	✅	✅	❌
+Caja	/caja/saldo	GET	✅	✅	❌
+Caja	/caja/:id	GET	✅	✅	❌
+Caja	/caja	POST	✅	❌	❌
+Caja	/caja/:id	DELETE	✅	❌	❌
+Cuentas Bancarias	/cuentas-bancarias	GET	✅	✅	❌
+Cuentas Bancarias	/cuentas-bancarias/:id	GET	✅	✅	❌
+Cuentas Bancarias	/cuentas-bancarias/:id/saldo	GET	✅	✅	❌
+Cuentas Bancarias	/cuentas-bancarias	POST	✅	❌	❌
+Cuentas Bancarias	/cuentas-bancarias/:id	PUT	✅	❌	❌
+Movimientos Bancarios	/movimientos-bancarios	GET	✅	✅	❌
+Movimientos Bancarios	/movimientos-bancarios/:id	GET	✅	✅	❌
+Movimientos Bancarios	/movimientos-bancarios	POST	✅	❌	❌
+Movimientos Bancarios	/movimientos-bancarios/:id	PUT	✅	❌	❌
+Conciliación	/conciliacion/cotejo	GET	✅	✅	❌
+Conciliación	/conciliacion/estado	GET	✅	✅	❌
+Conciliación	/conciliacion/vincular	POST	✅	❌	❌
+Conciliación	/conciliacion/desvincular/:id	DELETE	✅	❌	❌
 Auditoria	/auditoria	GET	✅	✅	❌
 Auditoria	/auditoria/:id	GET	✅	✅	❌
 Health/Failover	/health/db	GET	✅	❌	❌
@@ -1234,6 +1480,29 @@ CA	Endpoint(s)	Estado	Nota
 04 Seguridad y enmascarado	`GET /auditoria`, `GET /auditoria/:id`	Cumple	Enmascara credenciales/tokens; RBAC Administrador y Directorio (403 Consulta, 401 sin token) (probado).
 05 Inmutabilidad	API solo lectura	Cumple	Sin endpoints mutadores en la API (probado); pendiente trigger/REVOKE en base de datos.
 
+US1.4: Caja, Bancos y Conciliación Bancaria
+Criterio	Endpoint(s)	Test	Estado	Nota
+CA01 registrar movimiento de caja (formulario y datos obligatorios).	`POST /api/v1/caja`	`backend/tests/caja.test.ts`	Cumple	Formulario y registro con validación obligatoria de tipo, monto, concepto y fecha (400 con details si faltan datos o son inválidos) (probado).
+CA02 identificar el movimiento de caja como ingreso o egreso.	`POST /api/v1/caja`, `GET /api/v1/caja`	`backend/tests/caja.test.ts`	Cumple	Identificación y clasificación estricta de cada movimiento como 'Ingreso' o 'Egreso', validado en persistencia y lectura (probado).
+CA03 recalcular el saldo disponible al registrar un movimiento.	`POST /api/v1/caja`, `GET /api/v1/caja/saldo`	`backend/tests/caja.test.ts`	Cumple	Recálculo dinámico e inmediato del saldo disponible acumulado en base a ingresos y egresos registrados no anulados (probado).
+CA04 consultar caja: ingresos, egresos y saldo del período.	`GET /api/v1/caja/saldo`, `GET /api/v1/caja`	`backend/tests/caja.test.ts`	Cumple	Consulta y arqueo de caja con desglose de saldoInicial, totalIngresos, totalEgresos y saldoFinal del período filtrado por fechas (probado).
+CA05 movimiento bancario con fecha, tipo, monto, concepto y cuenta.	`POST /api/v1/movimientos-bancarios`	`backend/tests/bancos.test.ts`	Cumple	Registro de extracto bancario con idCuenta, fecha, tipo, monto > 0 y concepto obligatorio (probado).
+CA06 identificar el movimiento bancario como ingreso o egreso.	`POST /api/v1/movimientos-bancarios`, `GET /api/v1/movimientos-bancarios`	`backend/tests/bancos.test.ts`	Cumple	Clasificación y validación de naturaleza bancaria como 'Deposito' (ingreso) o 'Retiro' (egreso) (probado).
+CA07 consultar los movimientos de la cuenta bancaria.	`GET /api/v1/movimientos-bancarios`	`backend/tests/bancos.test.ts`	Cumple	Listado y consulta con filtros por cuenta (idCuenta), tipo (Deposito/Retiro), estado y rango de fechas (desde, hasta) (probado).
+CA08 saldo bancario calculado desde los movimientos.	`GET /api/v1/cuentas-bancarias`, `GET /api/v1/cuentas-bancarias/:id`, `GET /api/v1/cuentas-bancarias/:id/saldo`	`backend/tests/bancos.test.ts`	Cumple	Cálculo dinámico saldo = saldo_inicial + depósitos - retiros sin usar saldo_actual estático; desglose por fechas (probado).
+CA09 comparar movimientos internos con bancarios.	`GET /api/v1/conciliacion/cotejo`	`backend/tests/conciliacion.test.ts`	Cumple	Vista unificada comparativa de movimientos bancarios e internos del período con motor de sugerencias automáticas (±3 días, mismo monto y naturaleza) (probado).
+CA10 confirmar la coincidencia y marcar ambos como conciliados.	`POST /api/v1/conciliacion/vincular`	`backend/tests/conciliacion.test.ts`	Cumple	Coincidencia exacta de montos vincula ambos registros y asigna estado 'Conciliado' (conciliado: true, diferencia: 0.00) (probado).
+CA11 identificar el movimiento o importe con diferencia.	`POST /api/v1/conciliacion/vincular`	`backend/tests/conciliacion.test.ts`	Cumple	Detección de diferencias ante montos distintos, asignando estado 'Discrepancia' (conciliado: false) y calculando diferencia = banco - interno (probado).
+CA12 distinguir conciliados de no conciliados.	`GET /api/v1/conciliacion/estado`, `GET /api/v1/movimientos-bancarios`	`backend/tests/conciliacion.test.ts`, `backend/tests/bancos.test.ts`	Cumple	Filtro por estado y reporte cuantitativo y monetario discriminando movimientos Conciliados, Pendientes y con Discrepancia (probado).
+CA13 correspondencia de importes y datos entre el movimiento interno y el bancario.	`POST /api/v1/conciliacion/vincular`, `DELETE /api/v1/conciliacion/desvincular/:id`	`backend/tests/conciliacion.test.ts`	Cumple	Validación estricta de correspondencia (422 Deposito solo con Ingreso / Retiro con Egreso; 422 si interno anulado; 409 si ya vinculado); desvinculación a Pendiente (probado).
+CA14 usuario, fecha, hora y tipo de operación al registrar, modificar o conciliar.	Módulo finanzas (`/caja`, `/cuentas-bancarias`, `/movimientos-bancarios`, `/conciliacion`)	`backend/tests/caja.test.ts`, `backend/tests/bancos.test.ts`, `backend/tests/conciliacion.test.ts`	Cumple	Registro completo de auditoría y trazabilidad (idUsuario, fechaHora, acción semántica, tabla, snapshot anterior y nuevo) para 7 eventos de finanzas (probado).
+
+#### Controles adicionales (no son criterios de la HU)
+- **Anulación de movimientos de caja:** Endpoint `DELETE /api/v1/caja/:id` con motivo obligatorio (`motivo`), soft-delete inmutable (`anulado = true`), control contra re-anulación (`409 Conflict`) y evento de auditoría `ANULACION_MOVIMIENTO_CAJA` (probado en `backend/tests/caja.test.ts`).
+- **Bloqueo de edición de movimientos conciliados:** Endpoint `PUT /api/v1/movimientos-bancarios/:id` permite modificar movimientos en estado `Pendiente`, pero bloquea con `409 Conflict` (`"No se puede modificar un movimiento bancario que ya ha sido conciliado"`) cualquier intento de editar extractos ya conciliados (probado en `backend/tests/bancos.test.ts`).
+- **Permisos y control de acceso por rol (RBAC transversal):** Middleware centralizado (`backend/src/middlewares/finanzas-permissions.middleware.ts`) aplicado a todas las rutas de Caja, Cuentas Bancarias, Movimientos Bancarios y Conciliación: `Administrador` escribe; `Administrador` y `Directorio` leen; `Consulta` y `Copropietario` reciben `403 Forbidden` (probado en `backend/tests/caja.test.ts`, `backend/tests/bancos.test.ts` y `backend/tests/conciliacion.test.ts`).
+- **Configuración de cuentas bancarias y unicidad:** Endpoints `POST` y `PUT /api/v1/cuentas-bancarias` con validación de número de cuenta único (`409 Conflict` ante duplicados en `numero_cuenta`) y evento de auditoría `CONFIGURAR_CUENTA_BANCARIA` (probado en `backend/tests/bancos.test.ts`).
+
 ---
 ## 9. Pendientes conocidos
 - [Resuelto] Montos de agua manuales: El cálculo de agua se gestiona fuera del sistema y se registra mensualmente mediante monto manual por departamento en `montos_agua`; migración 004 (`database/migrations/004_montos_agua_manuales.sql`) aplicada e integrada. Las tablas `tarifas_agua` y `lecturas_agua` quedan sin uso en el sistema.
@@ -1251,6 +1520,8 @@ CA	Endpoint(s)	Estado	Nota
 - US2.3 y US2.4: criterios pendientes de recibir (Caja y Bancos, conciliación) (Pendiente).
 - Montos provisionales: regla de mora (5 %, sin días de espera) y montos por tipo (300/350/400) pendientes de confirmar con el Scrum (Pendiente).
 - Inmutabilidad de auditoría a nivel de base de datos: En el backend los endpoints son estrictamente de solo lectura (`GET /auditoria` y `GET /auditoria/:id`, sin rutas PUT/PATCH/DELETE). En la base de datos física PostgreSQL (`001_initial_schema.sql`), la tabla `edificio.auditoria` no cuenta con triggers de protección contra UPDATE o DELETE ni con REVOKE; se deja como recomendación técnica para DevOps implementar triggers o restringir permisos para garantizar inmutabilidad a nivel de motor.
+- metodo_pago es texto libre; falta definir lista cerrada
+- las migraciones 003 a 005 deben aplicarse en Render antes de desplegar (failover)
 
 ---
 ## 10. Respaldo de Conexión y Conmutación de Base de Datos (Failover)
