@@ -6,7 +6,7 @@ Base de rutas: `/api/v1`. Autenticación: `Authorization: Bearer <token>`.
 Esta sección avisa a Frontend y QA qué está vigente y qué cambiará según el requerimiento del ingeniero (expensa fija por tipo A/B/C).
 Ya vigente (implementado y probado):
 - `generar-masivo`: el monto_base sale del tipo del departamento (`tipos_departamento.monto_expensa`: Tipo A = Bs 300, Tipo B = Bs 350, Tipo C = Bs 400), `monto_agua` sale del monto registrado para ese departamento y período (`montos_agua`), `monto = monto_base + monto_agua`, `saldo = monto`. Sin monto registrado: se emite solo con el monto base y se reporta en `advertencias[]` (sin mencionar lecturas). Omite duplicados y aplica FIFO de anticipos disponibles. `montoBase` y `excluirDepartamentos` se aceptan solo por compatibilidad hacia atrás. Cada expensa conserva su monto al emitirse de forma inmutable.
-- `PUT /api/v1/agua/montos` (Administrador, Directorio): `{ periodo, montos: [{ idDepartamento, montoAgua }] }`. Normaliza el período siempre al primer día del mes (YYYY-MM-01). Crea o actualiza por `(departamento, periodo)` en una transacción (todo o nada). Responde `400` si el monto es negativo o inválido; `422` si el departamento no existe; `409` si ya hay expensa emitida para ese departamento y período. Auditoría `REGISTRO_MONTO_AGUA` por departamento con `datosAnteriores` y `datosNuevos`.
+- `PUT /api/v1/agua/montos` (Administrador, Directorio): `{ periodo, montos: [{ idDepartamento, montoAgua }] }`. Normaliza el período siempre al primer día del mes (YYYY-MM-01). Crea o actualiza por `(departamento, periodo)` en una transacción (todo o nada). Responde `400` si el monto es negativo o inválido; `422` si el departamento no existe; `409` con código `AGUA_MENOR_A_PAGADO` si el nuevo monto queda por debajo de lo ya pagado. Si ya existe expensa emitida para el período, la expensa se recalcula automáticamente (monto, saldo pendiente, mora y estado). Auditoría `REGISTRO_MONTO_AGUA` por departamento y `ACTUALIZACION_AGUA_EXPENSA` por expensa recalculada. Devuelve `expensasActualizadas`.
 - `GET /api/v1/agua/montos` (Administrador, Directorio, Consulta): listado de montos registrados con filtros opcionales por `periodo` (normalizado) e `idDepartamento`.
 - Respuestas de expensas (`GET /expensas`, `GET /expensas/:id`, `POST /expensas`, `POST /expensas/generar-masivo`) y estado de cuenta (`GET /expensas/estado-cuenta/:idDepartamento`): devuelven `montoBase`, `montoAgua`, `monto` (total) y `concepto` ("Expensa mensual Tipo B" y "Agua" si monto_agua > 0, sin m3).
 - `GET/PUT /expensas/montos-tipo` (Administrador, Directorio): lee y actualiza `tipos_departamento.monto_expensa`. Valida monto > 0. Auditoría `CONFIGURAR_MONTO_EXPENSA` con `datosAnteriores` y `datosNuevos`. Modificar el monto no altera expensas ya emitidas.
@@ -398,12 +398,13 @@ El cálculo del agua se efectúa fuera del sistema. El sistema proporciona un ca
 
 #### 4.0.1 Registro y actualización de montos de agua
 - `PUT /api/v1/agua/montos` · Roles: Administrador, Directorio.
-  Registra o actualiza en lote los montos manuales de agua por `(departamento, periodo)` en una transacción atómica (todo o nada).
+  Registra o actualiza en lote los montos manuales de agua por `(departamento, periodo)` en una transacción atómica (todo o nada). Permite registrar agua antes o después de emitir expensas (cualquier orden).
   - Normaliza siempre el período al primer día del mes (`YYYY-MM-01`).
   - Responde `400 Bad Request` si el monto es negativo (`< 0`) o inválido.
   - Responde `422 Unprocessable Entity` si el departamento no existe.
-  - Responde `409 Conflict` si ya existe una expensa emitida para ese departamento y período.
-  - Audita el evento `REGISTRO_MONTO_AGUA` por cada departamento con `datosAnteriores` y `datosNuevos`.
+  - Si ya existe expensa emitida para ese departamento y período, la expensa se recalcula automáticamente (`montoBase + nuevoAgua`, capital pendiente, saldo y estado).
+  - Responde `409 Conflict` con código `AGUA_MENOR_A_PAGADO` si el nuevo monto total queda por debajo de lo ya pagado (pagos vigentes + anticipos aplicados) para ese departamento.
+  - Audita el evento `REGISTRO_MONTO_AGUA` por cada departamento con `datosAnteriores` y `datosNuevos`, y `ACTUALIZACION_AGUA_EXPENSA` por cada expensa efectivamente recalculada.
   Request:
   ```json
   {
@@ -420,9 +421,10 @@ El cálculo del agua se efectúa fuera del sistema. El sistema proporciona un ca
     "message": "Montos de agua registrados exitosamente",
     "periodo": "2026-10-01",
     "total": 2,
+    "expensasActualizadas": 2,
     "montos": [
-      { "idMonto": 1, "idDepartamento": 1, "periodo": "2026-10-01", "montoAgua": 85.5, ... },
-      { "idMonto": 2, "idDepartamento": 2, "periodo": "2026-10-01", "montoAgua": 110.0, ... }
+      { "idMonto": 1, "idDepartamento": 1, "periodo": "2026-10-01", "montoAgua": 85.5 },
+      { "idMonto": 2, "idDepartamento": 2, "periodo": "2026-10-01", "montoAgua": 110.0 }
     ]
   }
   ```
@@ -1215,6 +1217,7 @@ Evento	Tabla	Origen	Descripción / Datos Capturados
 `ACTUALIZAR_TIPO_DEPARTAMENTO`	tipos_departamento	`PUT /tipos-departamento/:id`	Actualización de tipo (nombre, monto, área, activo; valida 409 si tiene deptos).
 `ASIGNAR_TIPO_DEPARTAMENTO`	departamentos	`PUT /departamentos/:id/tipo` y `PUT /departamentos/asignar-tipo`	Asignación de tipo activo a depto (individual o masiva atómica con herencia de área).
 `REGISTRO_MONTO_AGUA`	montos_agua	`PUT /agua/montos`	Registro o actualización de monto mensual de agua por departamento (datosAnteriores y datosNuevos).
+`ACTUALIZACION_AGUA_EXPENSA`	expensas	`PUT /agua/montos`	Recálculo automático de expensa emitida al modificar el monto de agua (idExpensa, datosAnteriores y datosNuevos con montos y saldo).
 `GENERACION_MASIVA_EXPENSAS`	expensas	`POST /expensas/generar-masivo`	Emisión mensual masiva fija por tipo (período, generadasCount, excepcionesCount).
 `CREAR_EXPENSA`	expensas	`POST /expensas`	Emisión individual de expensa.
 `CALCULO_MORA_EXPENSAS`	expensas	`POST /expensas/calcular-mora` y cron	Cálculo de mora sobre capital pendiente sin días de espera (origen `MANUAL` o `SISTEMA_CRON`).
