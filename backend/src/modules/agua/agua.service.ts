@@ -136,20 +136,32 @@ export async function registrarOActualizarMontosAgua(
         throw error;
       }
 
-      // 4. Crear o actualizar por (departamento, periodo) y auditar
+      // 4. Buscar anteriores y departamentos en 1 sola consulta previa
+      const anteriores = await tx.montoAgua.findMany({
+        where: {
+          idDepartamento: { in: deptosIds },
+          periodo: periodoDate,
+        },
+      });
+      const mapaAnteriores = new Map(anteriores.map((a) => [a.idDepartamento, a]));
+
+      const deptosConTipo = await tx.departamento.findMany({
+        where: { idDepartamento: { in: deptosIds } },
+        select: {
+          idDepartamento: true,
+          numero: true,
+          piso: true,
+          tipo: { select: { nombre: true, montoExpensa: true } },
+        },
+      });
+      const deptosMap = new Map(deptosConTipo.map((d) => [d.idDepartamento, d]));
+
       const guardados: MontoAguaResponse[] = [];
+      const eventosAuditoria: any[] = [];
 
       for (const item of input.montos) {
         const montoRedondeado = Math.round(item.montoAgua * 100) / 100;
-
-        const anterior = await tx.montoAgua.findUnique({
-          where: {
-            idDepartamento_periodo: {
-              idDepartamento: item.idDepartamento,
-              periodo: periodoDate,
-            },
-          },
-        });
+        const anterior = mapaAnteriores.get(item.idDepartamento);
 
         let montoGuardado: any;
 
@@ -161,18 +173,6 @@ export async function registrarOActualizarMontosAgua(
               idUsuarioRegistro: input.idUsuario || null,
               fechaRegistro: new Date(),
             },
-            include: {
-              departamento: {
-                select: {
-                  numero: true,
-                  piso: true,
-                  tipo: { select: { nombre: true, montoExpensa: true } },
-                },
-              },
-              usuarioRegistro: {
-                select: { idUsuario: true, nombreUsuario: true, correo: true },
-              },
-            },
           });
         } else {
           montoGuardado = await tx.montoAgua.create({
@@ -182,23 +182,13 @@ export async function registrarOActualizarMontosAgua(
               montoAgua: montoRedondeado,
               idUsuarioRegistro: input.idUsuario || null,
             },
-            include: {
-              departamento: {
-                select: {
-                  numero: true,
-                  piso: true,
-                  tipo: { select: { nombre: true, montoExpensa: true } },
-                },
-              },
-              usuarioRegistro: {
-                select: { idUsuario: true, nombreUsuario: true, correo: true },
-              },
-            },
           });
         }
 
-        // Auditoría REGISTRO_MONTO_AGUA por departamento
-        await auditoriaService.registrarEvento({
+        mapaAnteriores.set(item.idDepartamento, montoGuardado);
+
+        // Acumular auditoría en lote para insertar en 1 sola consulta
+        eventosAuditoria.push({
           tablaAfectada: 'montos_agua',
           idRegistro: String(montoGuardado.idMonto),
           accion: 'REGISTRO_MONTO_AGUA',
@@ -210,7 +200,7 @@ export async function registrarOActualizarMontosAgua(
                 periodo: periodoNormalizado,
                 montoAgua: Number(anterior.montoAgua),
               }
-            : null,
+            : undefined,
           datosNuevos: {
             idMonto: montoGuardado.idMonto,
             idDepartamento: montoGuardado.idDepartamento,
@@ -218,20 +208,21 @@ export async function registrarOActualizarMontosAgua(
             montoAgua: Number(montoGuardado.montoAgua),
           },
           idUsuario: input.idUsuario || null,
-          tx,
+          fechaHora: new Date(),
         });
 
+        const deptoInfo = deptosMap.get(item.idDepartamento);
         guardados.push({
           idMonto: montoGuardado.idMonto,
           idDepartamento: montoGuardado.idDepartamento,
-          departamento: montoGuardado.departamento
+          departamento: deptoInfo
             ? {
-                numero: montoGuardado.departamento.numero,
-                piso: montoGuardado.departamento.piso,
-                tipo: montoGuardado.departamento.tipo
+                numero: deptoInfo.numero,
+                piso: deptoInfo.piso,
+                tipo: deptoInfo.tipo
                   ? {
-                      nombre: montoGuardado.departamento.tipo.nombre,
-                      montoExpensa: Number(montoGuardado.departamento.tipo.montoExpensa),
+                      nombre: deptoInfo.tipo.nombre,
+                      montoExpensa: Number(deptoInfo.tipo.montoExpensa),
                     }
                   : null,
               }
@@ -239,8 +230,14 @@ export async function registrarOActualizarMontosAgua(
           periodo: periodoNormalizado,
           montoAgua: Number(montoGuardado.montoAgua),
           idUsuarioRegistro: montoGuardado.idUsuarioRegistro,
-          usuarioRegistro: montoGuardado.usuarioRegistro,
           fechaRegistro: montoGuardado.fechaRegistro,
+        });
+      }
+
+      // Guardar todos los eventos de auditoría en 1 solo insert SQL
+      if (eventosAuditoria.length > 0) {
+        await tx.auditoria.createMany({
+          data: eventosAuditoria,
         });
       }
 
@@ -250,7 +247,7 @@ export async function registrarOActualizarMontosAgua(
         montos: guardados,
       };
     },
-    { timeout: 30000, maxWait: 15000 }
+    { timeout: 60000, maxWait: 25000 }
   );
 }
 

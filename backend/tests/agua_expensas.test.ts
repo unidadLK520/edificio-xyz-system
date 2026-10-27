@@ -262,6 +262,56 @@ describe('Prompt 8: Montos de Agua Manuales e Integración con Expensas', () => 
       expect(res.status).toBe(409);
       expect(res.body.message).toMatch(/ya existe una expensa emitida/i);
     });
+
+    it('1.7. Enviar el mismo departamento dos veces en una misma petición con montos distintos (200, una sola fila y auditoría por ítem)', async () => {
+      const PERIODO_DUP = '2090-06-01';
+      const res = await request(app)
+        .put('/api/v1/agua/montos')
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({
+          periodo: PERIODO_DUP,
+          montos: [
+            { idDepartamento: depto2Id, montoAgua: 60.0 },
+            { idDepartamento: depto2Id, montoAgua: 85.0 },
+          ],
+        });
+
+      expect(res.status).toBe(200);
+      expect(res.body.montos).toHaveLength(2);
+
+      res.body.montos.forEach((m: any) => createdMontosAguaIds.push(m.idMonto));
+
+      // Verificar que en montos_agua existe UNA sola fila para el departamento y período con el último monto
+      const pDate = new Date(`${PERIODO_DUP}T00:00:00.000Z`);
+      const filas = await prisma.montoAgua.findMany({
+        where: {
+          idDepartamento: depto2Id,
+          periodo: pDate,
+        },
+      });
+      expect(filas).toHaveLength(1);
+      expect(Number(filas[0].montoAgua)).toBe(85.0);
+
+      // Verificar que se registró un evento REGISTRO_MONTO_AGUA por cada ítem enviado
+      const auditorias = await prisma.auditoria.findMany({
+        where: {
+          tablaAfectada: 'montos_agua',
+          idRegistro: String(filas[0].idMonto),
+          accion: 'REGISTRO_MONTO_AGUA',
+        },
+        orderBy: { idAuditoria: 'asc' },
+      });
+      expect(auditorias).toHaveLength(2);
+
+      const dNuevos1: any = auditorias[0].datosNuevos;
+      expect(Number(dNuevos1?.montoAgua)).toBe(60.0);
+      expect(auditorias[0].datosAnteriores).toBeNull();
+
+      const dAnt2: any = auditorias[1].datosAnteriores;
+      const dNuevos2: any = auditorias[1].datosNuevos;
+      expect(Number(dAnt2?.montoAgua)).toBe(60.0);
+      expect(Number(dNuevos2?.montoAgua)).toBe(85.0);
+    });
   });
 
   describe('2. GET /api/v1/agua/montos (Consulta de Montos)', () => {
