@@ -25,6 +25,7 @@ describe('Prompt 8: Montos de Agua Manuales e Integración con Expensas', () => 
 
   const createdMontosAguaIds: number[] = [];
   const createdExpensasIds: number[] = [];
+  const createdPagosIds: number[] = [];
   const createdDepartamentosIds: number[] = [];
   const createdPersonasIds: number[] = [];
 
@@ -97,6 +98,13 @@ describe('Prompt 8: Montos de Agua Manuales e Integración con Expensas', () => 
 
   afterAll(async () => {
     // Limpieza estricta: ÚNICAMENTE por IDs creados por este test
+    // 0. Borrar pagos de prueba creados
+    if (createdPagosIds.length > 0) {
+      await prisma.pago.deleteMany({
+        where: { idPago: { in: createdPagosIds } },
+      });
+    }
+
     // 1. Borrar expensas de los departamentos de prueba primero
     if (createdDepartamentosIds.length > 0) {
       await prisma.expensa.deleteMany({
@@ -108,6 +116,7 @@ describe('Prompt 8: Montos de Agua Manuales e Integración con Expensas', () => 
     }
 
     await limpiar({
+      pagos: createdPagosIds,
       montosAgua: createdMontosAguaIds,
       expensas: createdExpensasIds,
       departamentos: createdDepartamentosIds,
@@ -249,18 +258,630 @@ describe('Prompt 8: Montos de Agua Manuales e Integración con Expensas', () => 
       expect(resExp.body.concepto).toBe('Expensa mensual Tipo B y Agua');
     });
 
-    it('1.6. Debe responder 409 si ya hay expensa emitida para ese departamento y período', async () => {
-      // Intentar modificar el monto de depto3Id en 2090-05 cuando ya existe la expensa emitida
+    // ── 1.6 Suite de Pruebas: Registro de Agua en cualquier orden y recálculo de expensas ──
+    it('1.6a. Orden agua->expensa y orden expensa->agua dan el MISMO resultado final', async () => {
+      const PER_ORDEN_A = '2092-01-01';
+      const PER_ORDEN_B = '2092-02-01';
+
+      // Orden 1: Agua primero, luego Expensa
+      const resAgua1 = await request(app)
+        .put('/api/v1/agua/montos')
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({
+          periodo: PER_ORDEN_A,
+          montos: [{ idDepartamento: depto1Id, montoAgua: 50 }],
+        });
+      expect(resAgua1.status).toBe(200);
+      createdMontosAguaIds.push(resAgua1.body.montos[0].idMonto);
+
+      const resExp1 = await request(app)
+        .post('/api/v1/expensas')
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({
+          idDepartamento: depto1Id,
+          periodo: PER_ORDEN_A,
+          fechaVencimiento: '2092-01-20',
+        });
+      expect(resExp1.status).toBe(201);
+      createdExpensasIds.push(resExp1.body.idExpensa);
+
+      // Orden 2: Expensa primero, luego Agua
+      const resExp2 = await request(app)
+        .post('/api/v1/expensas')
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({
+          idDepartamento: depto1Id,
+          periodo: PER_ORDEN_B,
+          fechaVencimiento: '2092-02-20',
+        });
+      expect(resExp2.status).toBe(201);
+      createdExpensasIds.push(resExp2.body.idExpensa);
+
+      const resAgua2 = await request(app)
+        .put('/api/v1/agua/montos')
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({
+          periodo: PER_ORDEN_B,
+          montos: [{ idDepartamento: depto1Id, montoAgua: 50 }],
+        });
+      expect(resAgua2.status).toBe(200);
+      expect(resAgua2.body.expensasActualizadas).toBe(1);
+      createdMontosAguaIds.push(resAgua2.body.montos[0].idMonto);
+
+      // Consultar ambas expensas directamente de la BD
+      const exp1 = await prisma.expensa.findUnique({ where: { idExpensa: resExp1.body.idExpensa } });
+      const exp2 = await prisma.expensa.findUnique({ where: { idExpensa: resExp2.body.idExpensa } });
+
+      expect(Number(exp1!.monto)).toBe(400); // 350 base + 50 agua
+      expect(Number(exp2!.monto)).toBe(400);
+      expect(Number(exp1!.montoBase)).toBe(350);
+      expect(Number(exp2!.montoBase)).toBe(350);
+      expect(Number(exp1!.montoAgua)).toBe(50);
+      expect(Number(exp2!.montoAgua)).toBe(50);
+      expect(Number(exp1!.saldoPendiente)).toBe(400);
+      expect(Number(exp2!.saldoPendiente)).toBe(400);
+      expect(exp1!.estado).toBe('Pendiente');
+      expect(exp2!.estado).toBe('Pendiente');
+    });
+
+    it('1.6b. Expensa sin pagos: agua 15 sobre base 300 -> monto 315, saldo 315', async () => {
+      const PER = '2092-03-01';
+      const exp = await prisma.expensa.create({
+        data: {
+          idDepartamento: depto2Id,
+          periodo: new Date(`${PER}T00:00:00.000Z`),
+          montoBase: 300,
+          montoAgua: 0,
+          monto: 300,
+          saldoPendiente: 300,
+          estado: 'Pendiente',
+          fechaVencimiento: new Date('2092-03-20T00:00:00.000Z'),
+        },
+      });
+      createdExpensasIds.push(exp.idExpensa);
+
       const res = await request(app)
         .put('/api/v1/agua/montos')
         .set('Authorization', `Bearer ${adminToken}`)
         .send({
-          periodo: PERIODO_MAY_NORMALIZED,
-          montos: [{ idDepartamento: depto3Id, montoAgua: 99.9 }],
+          periodo: PER,
+          montos: [{ idDepartamento: depto2Id, montoAgua: 15 }],
+        });
+
+      expect(res.status).toBe(200);
+      expect(res.body.expensasActualizadas).toBe(1);
+      createdMontosAguaIds.push(res.body.montos[0].idMonto);
+
+      const expActualizada = await prisma.expensa.findUnique({ where: { idExpensa: exp.idExpensa } });
+      expect(Number(expActualizada!.monto)).toBe(315);
+      expect(Number(expActualizada!.montoBase)).toBe(300);
+      expect(Number(expActualizada!.montoAgua)).toBe(15);
+      expect(Number(expActualizada!.saldoPendiente)).toBe(315);
+      expect(expActualizada!.estado).toBe('Pendiente');
+    });
+
+    it('1.6c. Expensa con pago parcial: saldo = monto nuevo − pagado', async () => {
+      const PER = '2092-04-01';
+      const exp = await prisma.expensa.create({
+        data: {
+          idDepartamento: depto2Id,
+          periodo: new Date(`${PER}T00:00:00.000Z`),
+          montoBase: 300,
+          montoAgua: 0,
+          monto: 300,
+          saldoPendiente: 200,
+          estado: 'Parcial',
+          fechaVencimiento: new Date('2092-04-20T00:00:00.000Z'),
+        },
+      });
+      createdExpensasIds.push(exp.idExpensa);
+
+      const pago = await prisma.pago.create({
+        data: {
+          idExpensa: exp.idExpensa,
+          idDepartamento: depto2Id,
+          montoPagado: 100,
+          fechaPago: new Date('2092-04-05T00:00:00.000Z'),
+          metodoPago: 'Efectivo',
+          anulado: false,
+          idPersonaPagador: personaTestId,
+        },
+      });
+      createdPagosIds.push(pago.idPago);
+
+      const res = await request(app)
+        .put('/api/v1/agua/montos')
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({
+          periodo: PER,
+          montos: [{ idDepartamento: depto2Id, montoAgua: 25 }],
+        });
+
+      expect(res.status).toBe(200);
+      createdMontosAguaIds.push(res.body.montos[0].idMonto);
+
+      const expActualizada = await prisma.expensa.findUnique({ where: { idExpensa: exp.idExpensa } });
+      expect(Number(expActualizada!.monto)).toBe(325);
+      expect(Number(expActualizada!.saldoPendiente)).toBe(225); // 325 nuevo - 100 pagado
+      expect(expActualizada!.estado).toBe('Parcial');
+    });
+
+    it('1.6d. Expensa Pagado y agua sube -> queda Parcial', async () => {
+      const PER = '2092-05-01';
+      const exp = await prisma.expensa.create({
+        data: {
+          idDepartamento: depto2Id,
+          periodo: new Date(`${PER}T00:00:00.000Z`),
+          montoBase: 300,
+          montoAgua: 0,
+          monto: 300,
+          saldoPendiente: 0,
+          estado: 'Pagado',
+          fechaVencimiento: new Date('2092-05-20T00:00:00.000Z'),
+        },
+      });
+      createdExpensasIds.push(exp.idExpensa);
+
+      const pago = await prisma.pago.create({
+        data: {
+          idExpensa: exp.idExpensa,
+          idDepartamento: depto2Id,
+          montoPagado: 300,
+          fechaPago: new Date('2092-05-05T00:00:00.000Z'),
+          metodoPago: 'Transferencia',
+          anulado: false,
+          idPersonaPagador: personaTestId,
+        },
+      });
+      createdPagosIds.push(pago.idPago);
+
+      const res = await request(app)
+        .put('/api/v1/agua/montos')
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({
+          periodo: PER,
+          montos: [{ idDepartamento: depto2Id, montoAgua: 30 }],
+        });
+
+      expect(res.status).toBe(200);
+      createdMontosAguaIds.push(res.body.montos[0].idMonto);
+
+      const expActualizada = await prisma.expensa.findUnique({ where: { idExpensa: exp.idExpensa } });
+      expect(Number(expActualizada!.monto)).toBe(330);
+      expect(Number(expActualizada!.saldoPendiente)).toBe(30);
+      expect(expActualizada!.estado).toBe('Parcial');
+    });
+
+    it('1.6e. Agua baja por debajo de lo pagado -> 409 AGUA_MENOR_A_PAGADO y NADA cambia', async () => {
+      const PER = '2092-06-01';
+      const exp = await prisma.expensa.create({
+        data: {
+          idDepartamento: depto2Id,
+          periodo: new Date(`${PER}T00:00:00.000Z`),
+          montoBase: 150,
+          montoAgua: 100,
+          monto: 250,
+          saldoPendiente: 50,
+          estado: 'Parcial',
+          fechaVencimiento: new Date('2092-06-20T00:00:00.000Z'),
+        },
+      });
+      createdExpensasIds.push(exp.idExpensa);
+
+      const mAguaPrev = await prisma.montoAgua.create({
+        data: {
+          idDepartamento: depto2Id,
+          periodo: new Date(`${PER}T00:00:00.000Z`),
+          montoAgua: 100,
+        },
+      });
+      createdMontosAguaIds.push(mAguaPrev.idMonto);
+
+      const pago = await prisma.pago.create({
+        data: {
+          idExpensa: exp.idExpensa,
+          idDepartamento: depto2Id,
+          montoPagado: 200,
+          fechaPago: new Date('2092-06-05T00:00:00.000Z'),
+          metodoPago: 'Efectivo',
+          anulado: false,
+          idPersonaPagador: personaTestId,
+        },
+      });
+      createdPagosIds.push(pago.idPago);
+
+      // Si agua baja a 20 -> nuevo total = 150 + 20 = 170 < 200 pagado -> debe fallar con 409
+      const res = await request(app)
+        .put('/api/v1/agua/montos')
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({
+          periodo: PER,
+          montos: [{ idDepartamento: depto2Id, montoAgua: 20 }],
         });
 
       expect(res.status).toBe(409);
-      expect(res.body.message).toMatch(/ya existe una expensa emitida/i);
+      expect(res.body.error).toBe('AGUA_MENOR_A_PAGADO');
+
+      // Verificar en BD que NADA cambió
+      const expBD = await prisma.expensa.findUnique({ where: { idExpensa: exp.idExpensa } });
+      expect(Number(expBD!.monto)).toBe(250);
+      expect(Number(expBD!.montoAgua)).toBe(100);
+      expect(Number(expBD!.saldoPendiente)).toBe(50);
+
+      const mAguaBD = await prisma.montoAgua.findUnique({ where: { idMonto: mAguaPrev.idMonto } });
+      expect(Number(mAguaBD!.montoAgua)).toBe(100);
+    });
+
+    it('1.6f. Agua en 0 -> monto = base', async () => {
+      const PER = '2092-07-01';
+      const exp = await prisma.expensa.create({
+        data: {
+          idDepartamento: depto2Id,
+          periodo: new Date(`${PER}T00:00:00.000Z`),
+          montoBase: 350,
+          montoAgua: 50,
+          monto: 400,
+          saldoPendiente: 400,
+          estado: 'Pendiente',
+          fechaVencimiento: new Date('2092-07-20T00:00:00.000Z'),
+        },
+      });
+      createdExpensasIds.push(exp.idExpensa);
+
+      const res = await request(app)
+        .put('/api/v1/agua/montos')
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({
+          periodo: PER,
+          montos: [{ idDepartamento: depto2Id, montoAgua: 0 }],
+        });
+
+      expect(res.status).toBe(200);
+      createdMontosAguaIds.push(res.body.montos[0].idMonto);
+
+      const expBD = await prisma.expensa.findUnique({ where: { idExpensa: exp.idExpensa } });
+      expect(Number(expBD!.montoBase)).toBe(350);
+      expect(Number(expBD!.montoAgua)).toBe(0);
+      expect(Number(expBD!.monto)).toBe(350);
+      expect(Number(expBD!.saldoPendiente)).toBe(350);
+      expect(expBD!.estado).toBe('Pendiente');
+    });
+
+    it('1.6g. Expensa vencida con mora ya calculada: tras cambiar el agua, la mora se recalcula con la tasa de la propia expensa', async () => {
+      const PER = '2090-01-01';
+      // Expensa vencida en el pasado con tasa de mora propia al 10%
+      const exp = await prisma.expensa.create({
+        data: {
+          idDepartamento: depto2Id,
+          periodo: new Date(`${PER}T00:00:00.000Z`),
+          montoBase: 300,
+          montoAgua: 0,
+          monto: 300,
+          saldoPendiente: 330, // 300 capital + 30 mora
+          montoMora: 30,
+          tasaInteresMora: 10,
+          estado: 'Moroso',
+          fechaVencimiento: new Date('2090-01-15T00:00:00.000Z'),
+        },
+      });
+      createdExpensasIds.push(exp.idExpensa);
+
+      // Modificar agua a 50 -> capital sube a 350. Mora = 10% de 350 = 35. Saldo = 385.
+      const res = await request(app)
+        .put('/api/v1/agua/montos')
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({
+          periodo: PER,
+          montos: [{ idDepartamento: depto2Id, montoAgua: 50 }],
+        });
+
+      expect(res.status).toBe(200);
+      createdMontosAguaIds.push(res.body.montos[0].idMonto);
+
+      const expBD = await prisma.expensa.findUnique({ where: { idExpensa: exp.idExpensa } });
+      expect(Number(expBD!.monto)).toBe(350);
+      expect(Number(expBD!.montoAgua)).toBe(50);
+      expect(Number(expBD!.montoMora)).toBe(35);
+      expect(Number(expBD!.saldoPendiente)).toBe(385);
+      expect(expBD!.estado).toBe('Moroso');
+    });
+
+    it('1.6h. Mismo valor otra vez: expensa sin cambios y sin nuevo evento ACTUALIZACION_AGUA_EXPENSA', async () => {
+      const PER = '2092-09-01';
+      const exp = await prisma.expensa.create({
+        data: {
+          idDepartamento: depto2Id,
+          periodo: new Date(`${PER}T00:00:00.000Z`),
+          montoBase: 350,
+          montoAgua: 40,
+          monto: 390,
+          saldoPendiente: 390,
+          estado: 'Pendiente',
+          fechaVencimiento: new Date('2092-09-20T00:00:00.000Z'),
+        },
+      });
+      createdExpensasIds.push(exp.idExpensa);
+
+      // Primera vez: enviar 40 (igual a la expensa, no debe actualizar expensa ni auditar ACTUALIZACION_AGUA_EXPENSA)
+      const res = await request(app)
+        .put('/api/v1/agua/montos')
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({
+          periodo: PER,
+          montos: [{ idDepartamento: depto2Id, montoAgua: 40 }],
+        });
+
+      expect(res.status).toBe(200);
+      expect(res.body.expensasActualizadas).toBe(0);
+      createdMontosAguaIds.push(res.body.montos[0].idMonto);
+
+      const audExp = await prisma.auditoria.findMany({
+        where: {
+          tablaAfectada: 'expensas',
+          idRegistro: String(exp.idExpensa),
+          accion: 'ACTUALIZACION_AGUA_EXPENSA',
+        },
+      });
+      expect(audExp).toHaveLength(0);
+    });
+
+    it('1.6i. Un departamento con expensa y otro sin expensa en el mismo lote', async () => {
+      const PER = '2092-10-01';
+      const exp = await prisma.expensa.create({
+        data: {
+          idDepartamento: depto1Id,
+          periodo: new Date(`${PER}T00:00:00.000Z`),
+          montoBase: 350,
+          montoAgua: 0,
+          monto: 350,
+          saldoPendiente: 350,
+          estado: 'Pendiente',
+          fechaVencimiento: new Date('2092-10-20T00:00:00.000Z'),
+        },
+      });
+      createdExpensasIds.push(exp.idExpensa);
+
+      const res = await request(app)
+        .put('/api/v1/agua/montos')
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({
+          periodo: PER,
+          montos: [
+            { idDepartamento: depto1Id, montoAgua: 45 },
+            { idDepartamento: depto2Id, montoAgua: 60 },
+          ],
+        });
+
+      expect(res.status).toBe(200);
+      expect(res.body.expensasActualizadas).toBe(1);
+      res.body.montos.forEach((m: any) => createdMontosAguaIds.push(m.idMonto));
+
+      // depto1Id tiene expensa actualizada
+      const exp1 = await prisma.expensa.findUnique({ where: { idExpensa: exp.idExpensa } });
+      expect(Number(exp1!.monto)).toBe(395);
+      expect(Number(exp1!.montoAgua)).toBe(45);
+
+      // depto2Id no tiene expensa en este período
+      const exp2 = await prisma.expensa.findFirst({
+        where: { idDepartamento: depto2Id, periodo: new Date(`${PER}T00:00:00.000Z`) },
+      });
+      expect(exp2).toBeNull();
+    });
+
+    it('1.6j. Auditoría: existe ACTUALIZACION_AGUA_EXPENSA con datosAnteriores y datosNuevos numéricos', async () => {
+      const PER = '2092-11-01';
+      const exp = await prisma.expensa.create({
+        data: {
+          idDepartamento: depto3Id,
+          periodo: new Date(`${PER}T00:00:00.000Z`),
+          montoBase: 350,
+          montoAgua: 20,
+          monto: 370,
+          saldoPendiente: 370,
+          estado: 'Pendiente',
+          fechaVencimiento: new Date('2092-11-20T00:00:00.000Z'),
+        },
+      });
+      createdExpensasIds.push(exp.idExpensa);
+
+      const res = await request(app)
+        .put('/api/v1/agua/montos')
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({
+          periodo: PER,
+          montos: [{ idDepartamento: depto3Id, montoAgua: 55 }],
+        });
+
+      expect(res.status).toBe(200);
+      createdMontosAguaIds.push(res.body.montos[0].idMonto);
+
+      const aud = await prisma.auditoria.findFirst({
+        where: {
+          tablaAfectada: 'expensas',
+          idRegistro: String(exp.idExpensa),
+          accion: 'ACTUALIZACION_AGUA_EXPENSA',
+        },
+        orderBy: { idAuditoria: 'desc' },
+      });
+
+      expect(aud).not.toBeNull();
+      const dAnt: any = aud!.datosAnteriores;
+      const dNuev: any = aud!.datosNuevos;
+
+      expect(typeof dAnt.montoAgua).toBe('number');
+      expect(typeof dAnt.monto).toBe('number');
+      expect(typeof dAnt.saldoPendiente).toBe('number');
+      expect(typeof dAnt.montoMora).toBe('number');
+      expect(typeof dAnt.estado).toBe('string');
+
+      expect(typeof dNuev.montoAgua).toBe('number');
+      expect(typeof dNuev.monto).toBe('number');
+      expect(typeof dNuev.saldoPendiente).toBe('number');
+      expect(typeof dNuev.montoMora).toBe('number');
+      expect(typeof dNuev.estado).toBe('string');
+
+      expect(dAnt.montoAgua).toBe(20);
+      expect(dAnt.monto).toBe(370);
+      expect(dNuev.montoAgua).toBe(55);
+      expect(dNuev.monto).toBe(405);
+    });
+
+    it('1.6k. Duplicados en la misma petición con expensa existente: se actualiza UNA vez con el último monto y 1 sola fila de auditoría', async () => {
+      const PER = '2092-12-01';
+      const exp = await prisma.expensa.create({
+        data: {
+          idDepartamento: depto1Id,
+          periodo: new Date(`${PER}T00:00:00.000Z`),
+          montoBase: 350,
+          montoAgua: 0,
+          monto: 350,
+          saldoPendiente: 350,
+          estado: 'Pendiente',
+          fechaVencimiento: new Date('2092-12-20T00:00:00.000Z'),
+        },
+      });
+      createdExpensasIds.push(exp.idExpensa);
+
+      const res = await request(app)
+        .put('/api/v1/agua/montos')
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({
+          periodo: PER,
+          montos: [
+            { idDepartamento: depto1Id, montoAgua: 25 },
+            { idDepartamento: depto1Id, montoAgua: 75 },
+          ],
+        });
+
+      expect(res.status).toBe(200);
+      expect(res.body.expensasActualizadas).toBe(1);
+      res.body.montos.forEach((m: any) => createdMontosAguaIds.push(m.idMonto));
+
+      // Expensa actualizada al último valor (75)
+      const expBD = await prisma.expensa.findUnique({ where: { idExpensa: exp.idExpensa } });
+      expect(Number(expBD!.montoAgua)).toBe(75);
+      expect(Number(expBD!.monto)).toBe(425);
+      expect(Number(expBD!.saldoPendiente)).toBe(425);
+
+      // Solo una fila ACTUALIZACION_AGUA_EXPENSA
+      const auds = await prisma.auditoria.findMany({
+        where: {
+          tablaAfectada: 'expensas',
+          idRegistro: String(exp.idExpensa),
+          accion: 'ACTUALIZACION_AGUA_EXPENSA',
+        },
+      });
+      expect(auds).toHaveLength(1);
+      expect((auds[0].datosNuevos as any)?.montoAgua).toBe(75);
+    });
+
+    it('1.6l. Expensa inconsistente (montoAgua 15, monto = base 300, saldo 300): PUT agua 15 recalcula monto a 315, saldo a 315 y expensasActualizadas 1', async () => {
+      const PER = '2093-01-01';
+      const exp = await prisma.expensa.create({
+        data: {
+          idDepartamento: depto1Id,
+          periodo: new Date(`${PER}T00:00:00.000Z`),
+          montoBase: 300,
+          montoAgua: 15,
+          monto: 300, // Inconsistente con el agua ya registrada (caso id 130)
+          saldoPendiente: 300,
+          estado: 'Pendiente',
+          fechaVencimiento: new Date('2093-01-20T00:00:00.000Z'),
+        },
+      });
+      createdExpensasIds.push(exp.idExpensa);
+
+      // PUT agua 15 en ese período
+      const res = await request(app)
+        .put('/api/v1/agua/montos')
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({
+          periodo: PER,
+          montos: [{ idDepartamento: depto1Id, montoAgua: 15 }],
+        });
+
+      expect(res.status).toBe(200);
+      expect(res.body.expensasActualizadas).toBe(1);
+      res.body.montos.forEach((m: any) => createdMontosAguaIds.push(m.idMonto));
+
+      // Verificar en BD que monto es 315 y saldo 315
+      const expBD = await prisma.expensa.findUnique({ where: { idExpensa: exp.idExpensa } });
+      expect(Number(expBD!.montoBase)).toBe(300);
+      expect(Number(expBD!.montoAgua)).toBe(15);
+      expect(Number(expBD!.monto)).toBe(315);
+      expect(Number(expBD!.saldoPendiente)).toBe(315);
+      expect(expBD!.estado).toBe('Pendiente');
+
+      // Segunda llamada con el mismo valor (15): ya consistente, no debe volver a actualizar expensa ni auditar
+      const res2 = await request(app)
+        .put('/api/v1/agua/montos')
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({
+          periodo: PER,
+          montos: [{ idDepartamento: depto1Id, montoAgua: 15 }],
+        });
+
+      expect(res2.status).toBe(200);
+      expect(res2.body.expensasActualizadas).toBe(0);
+
+      const auds = await prisma.auditoria.findMany({
+        where: {
+          tablaAfectada: 'expensas',
+          idRegistro: String(exp.idExpensa),
+          accion: 'ACTUALIZACION_AGUA_EXPENSA',
+        },
+      });
+      expect(auds).toHaveLength(1);
+    });
+
+    it('1.7. Enviar el mismo departamento dos veces en una misma petición con montos distintos (200, una sola fila y auditoría por ítem)', async () => {
+      const PERIODO_DUP = '2090-06-01';
+      const res = await request(app)
+        .put('/api/v1/agua/montos')
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({
+          periodo: PERIODO_DUP,
+          montos: [
+            { idDepartamento: depto2Id, montoAgua: 60.0 },
+            { idDepartamento: depto2Id, montoAgua: 85.0 },
+          ],
+        });
+
+      expect(res.status).toBe(200);
+      expect(res.body.montos).toHaveLength(2);
+
+      res.body.montos.forEach((m: any) => createdMontosAguaIds.push(m.idMonto));
+
+      // Verificar que en montos_agua existe UNA sola fila para el departamento y período con el último monto
+      const pDate = new Date(`${PERIODO_DUP}T00:00:00.000Z`);
+      const filas = await prisma.montoAgua.findMany({
+        where: {
+          idDepartamento: depto2Id,
+          periodo: pDate,
+        },
+      });
+      expect(filas).toHaveLength(1);
+      expect(Number(filas[0].montoAgua)).toBe(85.0);
+
+      // Verificar que se registró un evento REGISTRO_MONTO_AGUA por cada ítem enviado
+      const auditorias = await prisma.auditoria.findMany({
+        where: {
+          tablaAfectada: 'montos_agua',
+          idRegistro: String(filas[0].idMonto),
+          accion: 'REGISTRO_MONTO_AGUA',
+        },
+        orderBy: { idAuditoria: 'asc' },
+      });
+      expect(auditorias).toHaveLength(2);
+
+      const dNuevos1: any = auditorias[0].datosNuevos;
+      expect(Number(dNuevos1?.montoAgua)).toBe(60.0);
+      expect(auditorias[0].datosAnteriores).toBeNull();
+
+      const dAnt2: any = auditorias[1].datosAnteriores;
+      const dNuevos2: any = auditorias[1].datosNuevos;
+      expect(Number(dAnt2?.montoAgua)).toBe(60.0);
+      expect(Number(dNuevos2?.montoAgua)).toBe(85.0);
     });
   });
 
