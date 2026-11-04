@@ -13,6 +13,7 @@ import { z } from 'zod';
 import { authMiddleware, AuthRequest } from '../middlewares/auth.middleware';
 import { authorizeRoles } from '../middlewares/role.middleware';
 import { auditoriaService } from '../modules/auditoria';
+import { FINANZAS_TX_OPTIONS } from '../middlewares/finanzas-permissions.middleware';
 
 export const personalRouter: IRouter = Router();
 personalRouter.use(authMiddleware);
@@ -134,22 +135,27 @@ personalRouter.post(
 
       const { fechaIngreso, salarioBase, ...rest } = result.data;
 
-      const empleado = await prisma.empleado.create({
-        data: {
-          ...rest,
-          salarioBase,
-          fechaIngreso: new Date(fechaIngreso),
-        },
-      });
+      const empleado = await prisma.$transaction(async (tx) => {
+        const nuevo = await tx.empleado.create({
+          data: {
+            ...rest,
+            salarioBase,
+            fechaIngreso: new Date(fechaIngreso),
+          },
+        });
 
-      await auditoriaService.registrarEvento({
-        tablaAfectada: 'empleados',
-        idRegistro: empleado.idEmpleado.toString(),
-        accion: 'CREAR_EMPLEADO',
-        resultado: 'EXITO',
-        datosNuevos: empleado,
-        idUsuario: req.user?.idUsuario ?? null,
-      });
+        await auditoriaService.registrarEvento({
+          tablaAfectada: 'empleados',
+          idRegistro: nuevo.idEmpleado.toString(),
+          accion: 'CREAR_EMPLEADO',
+          resultado: 'EXITO',
+          datosNuevos: nuevo,
+          idUsuario: req.user?.idUsuario ?? null,
+          tx,
+        });
+
+        return nuevo;
+      }, FINANZAS_TX_OPTIONS);
 
       res.status(201).json(empleado);
     } catch (err) {
@@ -180,33 +186,42 @@ personalRouter.put(
         return;
       }
 
-      const existing = await prisma.empleado.findUnique({
-        where: { idEmpleado: id },
-      });
-      if (!existing) {
+      const { fechaIngreso, ...rest } = result.data;
+
+      const empleado = await prisma.$transaction(async (tx) => {
+        const existing = await tx.empleado.findUnique({
+          where: { idEmpleado: id },
+        });
+        if (!existing) {
+          return null;
+        }
+
+        const updated = await tx.empleado.update({
+          where: { idEmpleado: id },
+          data: {
+            ...rest,
+            ...(fechaIngreso && { fechaIngreso: new Date(fechaIngreso) }),
+          },
+        });
+
+        await auditoriaService.registrarEvento({
+          tablaAfectada: 'empleados',
+          idRegistro: updated.idEmpleado.toString(),
+          accion: 'ACTUALIZAR_EMPLEADO',
+          resultado: 'EXITO',
+          datosAnteriores: existing,
+          datosNuevos: updated,
+          idUsuario: req.user?.idUsuario ?? null,
+          tx,
+        });
+
+        return updated;
+      }, FINANZAS_TX_OPTIONS);
+
+      if (!empleado) {
         res.status(404).json({ error: 'Not Found', message: 'Empleado no encontrado' });
         return;
       }
-
-      const { fechaIngreso, ...rest } = result.data;
-
-      const empleado = await prisma.empleado.update({
-        where: { idEmpleado: id },
-        data: {
-          ...rest,
-          ...(fechaIngreso && { fechaIngreso: new Date(fechaIngreso) }),
-        },
-      });
-
-      await auditoriaService.registrarEvento({
-        tablaAfectada: 'empleados',
-        idRegistro: empleado.idEmpleado.toString(),
-        accion: 'ACTUALIZAR_EMPLEADO',
-        resultado: 'EXITO',
-        datosAnteriores: existing,
-        datosNuevos: empleado,
-        idUsuario: req.user?.idUsuario ?? null,
-      });
 
       res.json(empleado);
     } catch (err) {
@@ -237,7 +252,7 @@ personalRouter.post(
         return;
       }
 
-      // Verificar que existe el empleado
+      // Verificar que existe el empleado (validación previa fuera de la transacción)
       const empleado = await prisma.empleado.findUnique({ where: { idEmpleado: id } });
       if (!empleado) {
         res.status(404).json({ error: 'Not Found', message: 'Empleado no encontrado' });
@@ -247,29 +262,34 @@ personalRouter.post(
       const { periodo, salarioPagado, anticipos, bonificaciones, descuentos, idMovimiento } =
         result.data;
 
-      const pago = await prisma.pagoEmpleado.create({
-        data: {
-          idEmpleado: id,
-          periodo: new Date(periodo),
-          salarioPagado,
-          anticipos,
-          bonificaciones,
-          descuentos,
-          idMovimiento,
-        },
-        include: {
-          empleado: { select: { nombres: true, apellidos: true, cargo: true } },
-        },
-      });
+      const pago = await prisma.$transaction(async (tx) => {
+        const nuevoPago = await tx.pagoEmpleado.create({
+          data: {
+            idEmpleado: id,
+            periodo: new Date(periodo),
+            salarioPagado,
+            anticipos,
+            bonificaciones,
+            descuentos,
+            idMovimiento,
+          },
+          include: {
+            empleado: { select: { nombres: true, apellidos: true, cargo: true } },
+          },
+        });
 
-      await auditoriaService.registrarEvento({
-        tablaAfectada: 'pagos_empleados',
-        idRegistro: pago.idPagoEmpleado.toString(),
-        accion: 'REGISTRO_PAGO_EMPLEADO',
-        resultado: 'EXITO',
-        datosNuevos: pago,
-        idUsuario: req.user?.idUsuario ?? null,
-      });
+        await auditoriaService.registrarEvento({
+          tablaAfectada: 'pagos_empleados',
+          idRegistro: nuevoPago.idPagoEmpleado.toString(),
+          accion: 'REGISTRO_PAGO_EMPLEADO',
+          resultado: 'EXITO',
+          datosNuevos: nuevoPago,
+          idUsuario: req.user?.idUsuario ?? null,
+          tx,
+        });
+
+        return nuevoPago;
+      }, FINANZAS_TX_OPTIONS);
 
       res.status(201).json(pago);
     } catch (err) {
