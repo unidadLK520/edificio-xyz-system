@@ -291,6 +291,36 @@ personalRouter.get(
         return;
       }
 
+      const { anio, periodo, page = '1', limit = '12' } = req.query;
+
+      if (anio !== undefined) {
+        if (!/^\d{4}$/.test(String(anio))) {
+          res.status(400).json({ error: 'Bad Request', message: 'Año inválido (debe ser un número de 4 dígitos)' });
+          return;
+        }
+      }
+
+      if (periodo !== undefined) {
+        const periodoStr = String(periodo);
+        const match = periodoStr.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+        if (!match) {
+          res.status(400).json({ error: 'Bad Request', message: 'Período inválido (formato esperado: YYYY-MM-DD)' });
+          return;
+        }
+        const year = parseInt(match[1], 10);
+        const month = parseInt(match[2], 10);
+        const day = parseInt(match[3], 10);
+        const dateObj = new Date(Date.UTC(year, month - 1, day));
+        if (
+          dateObj.getUTCFullYear() !== year ||
+          dateObj.getUTCMonth() + 1 !== month ||
+          dateObj.getUTCDate() !== day
+        ) {
+          res.status(400).json({ error: 'Bad Request', message: 'Período inválido (fecha inexistente)' });
+          return;
+        }
+      }
+
       const empleado = await prisma.empleado.findUnique({
         where: { idEmpleado: id },
         select: { idEmpleado: true },
@@ -300,8 +330,6 @@ personalRouter.get(
         return;
       }
 
-      const { page = '1', limit = '12', anio, periodo } = req.query;
-
       const pageNum = Math.max(1, parseInt(String(page)) || 1);
       const rawLimit = parseInt(String(limit)) || 12;
       const limitNum = Math.min(50, Math.max(1, rawLimit));
@@ -310,18 +338,13 @@ personalRouter.get(
       const where: Prisma.PagoEmpleadoWhereInput = { idEmpleado: id };
 
       if (periodo) {
-        const fechaPeriodo = new Date(String(periodo));
-        if (!isNaN(fechaPeriodo.getTime())) {
-          where.periodo = fechaPeriodo;
-        }
+        where.periodo = new Date(String(periodo));
       } else if (anio) {
         const a = parseInt(String(anio));
-        if (!isNaN(a)) {
-          where.periodo = {
-            gte: new Date(Date.UTC(a, 0, 1)),
-            lte: new Date(Date.UTC(a, 11, 31, 23, 59, 59, 999)),
-          };
-        }
+        where.periodo = {
+          gte: new Date(Date.UTC(a, 0, 1)),
+          lte: new Date(Date.UTC(a, 11, 31, 23, 59, 59, 999)),
+        };
       }
 
       const [pagos, total] = await Promise.all([
@@ -337,20 +360,8 @@ personalRouter.get(
         prisma.pagoEmpleado.count({ where }),
       ]);
 
-      const data = pagos.map((p) => {
-        const salario = Number(p.salarioPagado);
-        const ant = Number(p.anticipos);
-        const bon = Number(p.bonificaciones);
-        const desc = Number(p.descuentos);
-        const neto = Math.round((salario - ant + bon - desc) * 100) / 100;
-        return {
-          ...p,
-          netoPagado: neto,
-        };
-      });
-
       res.json({
-        data,
+        data: pagos,
         meta: {
           total,
           page: pageNum,
