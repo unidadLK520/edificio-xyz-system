@@ -1,11 +1,13 @@
 // backend/src/routes/personal.routes.ts
 // Gestión de empleados y pagos de sueldos
-//   GET    /api/v1/personal           — listar empleados
-//   GET    /api/v1/personal/:id       — detalle con historial de pagos
-//   POST   /api/v1/personal           — crear empleado
-//   PUT    /api/v1/personal/:id       — actualizar empleado
-//   POST   /api/v1/personal/:id/pagos — registrar pago de sueldo
-//   GET    /api/v1/personal/:id/pagos — historial completo paginado y filtrable
+//   GET    /api/v1/personal             — listar empleados
+//   GET    /api/v1/personal/:id         — detalle con historial de pagos
+//   POST   /api/v1/personal             — crear empleado
+//   PUT    /api/v1/personal/:id         — actualizar empleado
+//   PUT    /api/v1/personal/:id/salario — modificar salario base con historial
+//   GET    /api/v1/personal/:id/salario — consultar salario actual de empleado
+//   POST   /api/v1/personal/:id/pagos   — registrar pago de sueldo
+//   GET    /api/v1/personal/:id/pagos   — historial completo paginado y filtrable
 
 import { Router, Response, NextFunction, IRouter } from 'express';
 import { prisma, Prisma } from '@edificio-xyz/database';
@@ -37,6 +39,18 @@ const pagoEmpleadoSchema = z.object({
   descuentos: z.number().min(0).default(0),
   idMovimiento: z.number().int().positive().optional(),
 });
+
+const modificarSalarioSchema = z
+  .object({
+    salarioBase: z.number().positive().optional(),
+    nuevoSalario: z.number().positive().optional(),
+    motivo: z.string().min(5),
+    fechaEfectiva: z.string().optional(),
+  })
+  .refine((data) => data.salarioBase !== undefined || data.nuevoSalario !== undefined, {
+    message: 'Debe especificar el nuevo salario',
+    path: ['salarioBase'],
+  });
 
 // ── GET /personal ────────────────────────────────────────────────────────────
 personalRouter.get(
@@ -224,6 +238,131 @@ personalRouter.put(
       }
 
       res.json(empleado);
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+// ── PUT /personal/:id/salario ────────────────────────────────────────────────
+// Modificar Salario Base con Historial (CA05, 5.12.13)
+personalRouter.put(
+  '/:id/salario',
+  authorizeRoles('Administrador'),
+  async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const id = parseInt(req.params.id);
+      if (isNaN(id)) {
+        res.status(400).json({ error: 'Bad Request', message: 'ID inválido' });
+        return;
+      }
+
+      const result = modificarSalarioSchema.safeParse(req.body);
+      if (!result.success) {
+        res.status(400).json({
+          error: 'Validation Error',
+          message: 'Datos inválidos',
+          details: result.error.flatten().fieldErrors,
+        });
+        return;
+      }
+
+      const nuevoSalario = (result.data.salarioBase ?? result.data.nuevoSalario)!;
+      const motivo = result.data.motivo;
+
+      const resultado = await prisma.$transaction(async (tx) => {
+        const existing = await tx.empleado.findUnique({
+          where: { idEmpleado: id },
+        });
+        if (!existing) {
+          return { tipo: 'NOT_FOUND' as const };
+        }
+
+        if (Number(existing.salarioBase) === nuevoSalario || existing.salarioBase.equals(nuevoSalario)) {
+          return { tipo: 'SAME_SALARY' as const };
+        }
+
+        const updated = await tx.empleado.update({
+          where: { idEmpleado: id },
+          data: {
+            salarioBase: nuevoSalario,
+          },
+        });
+
+        await auditoriaService.registrarEvento({
+          tablaAfectada: 'empleados',
+          idRegistro: updated.idEmpleado.toString(),
+          accion: 'MODIFICACION_SALARIO_EMPLEADO',
+          resultado: 'EXITO',
+          datosAnteriores: { salarioBase: Number(existing.salarioBase) },
+          datosNuevos: { salarioBase: nuevoSalario, motivo },
+          idUsuario: req.user?.idUsuario ?? null,
+          tx,
+        });
+
+        return { tipo: 'OK' as const, updated };
+      }, FINANZAS_TX_OPTIONS);
+
+      if (resultado.tipo === 'NOT_FOUND') {
+        res.status(404).json({ error: 'Not Found', message: 'Empleado no encontrado' });
+        return;
+      }
+
+      if (resultado.tipo === 'SAME_SALARY') {
+        res.status(422).json({
+          error: 'Unprocessable Entity',
+          message: 'El nuevo salario debe ser diferente al actual',
+        });
+        return;
+      }
+
+      res.json({
+        idEmpleado: resultado.updated.idEmpleado,
+        salarioBase: Number(resultado.updated.salarioBase),
+        fechaActualizacion: new Date().toISOString(),
+      });
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+// ── GET /personal/:id/salario ────────────────────────────────────────────────
+// Consultar Salario Actual de Empleado (5.12.14)
+personalRouter.get(
+  '/:id/salario',
+  authorizeRoles('Administrador', 'Directorio'),
+  async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const id = parseInt(req.params.id);
+      if (isNaN(id)) {
+        res.status(400).json({ error: 'Bad Request', message: 'ID inválido' });
+        return;
+      }
+
+      const empleado = await prisma.empleado.findUnique({
+        where: { idEmpleado: id },
+        select: {
+          idEmpleado: true,
+          salarioBase: true,
+          nombres: true,
+          apellidos: true,
+          cargo: true,
+        },
+      });
+
+      if (!empleado) {
+        res.status(404).json({ error: 'Not Found', message: 'Empleado no encontrado' });
+        return;
+      }
+
+      res.json({
+        idEmpleado: empleado.idEmpleado,
+        salarioBase: Number(empleado.salarioBase),
+        nombres: empleado.nombres,
+        apellidos: empleado.apellidos,
+        cargo: empleado.cargo,
+      });
     } catch (err) {
       next(err);
     }
