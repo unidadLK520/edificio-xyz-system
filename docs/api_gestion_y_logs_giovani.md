@@ -388,7 +388,6 @@ Respuesta 200:
 }
 ```
 ---
----
 ## 4. Módulo de Expensas, Pagos, Mora y Agua (US2.1 / US2.2, HU04)
 Ciclo de vida de las obligaciones de expensas: montos manuales de agua, generación mensual fija más monto de agua registrado, pagos, anticipos con aplicación FIFO, mora configurable sobre el total, estado de cuenta y corrección o anulación con recálculo y auditoría.
 Ubicación: `backend/src/modules/expensas/`, `backend/src/modules/agua/` · Prefijos: `/api/v1/expensas` y `/api/v1/agua`
@@ -1179,6 +1178,407 @@ Prefijo de ruta: `/api/v1/conciliacion`
 ```
 
 ---
+## 5.12 Módulo de Personal, Planilla de Sueldos y Pagos (US3.1)
+Ubicación: `backend/src/routes/personal.routes.ts` · Tablas: `edificio.empleados`, `edificio.pagos_empleados`, `edificio.conceptos_empleado`  
+Prefijo de ruta: `/api/v1/personal`
+
+> **Nota de diseño:** Los anticipos, bonificaciones y descuentos se registran de forma independiente en la tabla `edificio.conceptos_empleado` con columna `tipo` (`ANTICIPO` | `BONIFICACION` | `DESCUENTO`). El endpoint de pago mensual `POST /api/v1/personal/:id/pagos` conserva sus columnas explícitas (`salarioPagado`, `anticipos`, `bonificaciones`, `descuentos`) recibidas en el payload y **no las calcula automáticamente**, permitiendo registrar las deducciones e incrementos finales de planilla acordados.
+
+### 5.12.1 Listar Empleados (Planilla)
+- **Método y Ruta:** `GET /api/v1/personal`
+- **Estado:** Implementado
+- **Propósito:** Lista los colaboradores registrados con soporte de paginación y filtro por estado activo/inactivo. Ordenados por `activo: desc` (activos primero) y `apellidos: asc`.
+- **Rol requerido:** `Administrador`, `Directorio` (`Consulta` recibe 403 Forbidden).
+- **Query Params:**
+  - `page` (opcional, default: "1"): Número de página.
+  - `limit` (opcional, default: "20"): Cantidad de elementos por página.
+  - `activo` (opcional, "true" | "false"): Filtro por colaboradores activos o inactivos.
+- **Respuesta 200 OK:**
+```json
+{
+  "data": [
+    {
+      "idEmpleado": 101,
+      "nombres": "Juan",
+      "apellidos": "Pérez Gómez",
+      "ci": "1234567 LPZ",
+      "cargo": "Conserje",
+      "salarioBase": "2800",
+      "fechaIngreso": "2024-01-15T00:00:00.000Z",
+      "activo": true,
+      "_count": { "pagos": 1 }
+    }
+  ],
+  "meta": {
+    "total": 1,
+    "page": 1,
+    "limit": 20,
+    "totalPages": 1
+  }
+}
+```
+- **Errores:**
+  - `401 Unauthorized`: Token ausente o inválido.
+  - `403 Forbidden`: `{ "error": "Forbidden", "message": "No tiene permisos para realizar esta acción" }`.
+- **Auditoría:** No genera auditoría (lectura).
+
+### 5.12.2 Obtener Detalle de Empleado con Historial de Pagos
+- **Método y Ruta:** `GET /api/v1/personal/:id`
+- **Estado:** Implementado
+- **Propósito:** Retorna la información completa de un empleado individual junto con sus últimos 12 pagos registrados (ordenados por período descendente) y la información del movimiento financiero enlazado si existiera.
+- **Rol requerido:** `Administrador`, `Directorio` (`Consulta` recibe 403 Forbidden).
+- **Parámetro URL:** `:id` (entero, ID único del empleado).
+- **Respuesta 200 OK:**
+```json
+{
+  "idEmpleado": 101,
+  "nombres": "Juan",
+  "apellidos": "Pérez Gómez",
+  "ci": "1234567 LPZ",
+  "cargo": "Conserje",
+  "salarioBase": "2800",
+  "fechaIngreso": "2024-01-15T00:00:00.000Z",
+  "activo": true,
+  "pagos": [
+    {
+      "idPagoEmpleado": 201,
+      "idEmpleado": 101,
+      "periodo": "2026-11-01T00:00:00.000Z",
+      "salarioPagado": "2800",
+      "anticipos": "200",
+      "bonificaciones": "100",
+      "descuentos": "0",
+      "fechaPago": "2026-11-30T10:00:00.000Z",
+      "idMovimiento": null,
+      "movimiento": null
+    }
+  ]
+}
+```
+- **Errores:**
+  - `400 Bad Request`: `{ "error": "Bad Request", "message": "ID inválido" }` (si `:id` no es numérico).
+  - `401 Unauthorized`: Token ausente o inválido.
+  - `403 Forbidden`: `{ "error": "Forbidden", "message": "No tiene permisos para realizar esta acción" }`.
+  - `404 Not Found`: `{ "error": "Not Found", "message": "Empleado no encontrado" }`.
+- **Auditoría:** No genera auditoría (lectura).
+
+### 5.12.3 Registrar Colaborador / Empleado
+- **Método y Ruta:** `POST /api/v1/personal`
+- **Estado:** Implementado
+- **Propósito:** Da de alta a un nuevo empleado en el edificio con su salario base y fecha de contratación dentro de una transacción interactiva con auditoría atómica.
+- **Rol requerido:** `Administrador` (`Directorio` y `Consulta` reciben 403 Forbidden).
+- **Body:**
+```json
+{
+  "nombres": "Juan",
+  "apellidos": "Pérez Gómez",
+  "ci": "1234567 LPZ",
+  "cargo": "Conserje",
+  "salarioBase": 2800.00,
+  "fechaIngreso": "2024-01-15",
+  "activo": true
+}
+```
+- **Respuesta 201 Created:** Retorna el objeto del empleado creado con su `idEmpleado` autoincremental.
+- **Validaciones:**
+  - `nombres`: `string` min 1, máx 100 caracteres.
+  - `apellidos`: `string` min 1, máx 100 caracteres.
+  - `ci`: `string` min 1, máx 30 caracteres (único en BD).
+  - `cargo`: `string` opcional (máx 80 caracteres).
+  - `salarioBase`: `number` positivo estrictamente mayor a 0.
+  - `fechaIngreso`: `string` con formato `YYYY-MM-DD`.
+  - `activo`: `boolean` opcional (por defecto `true`).
+- **Errores:**
+  - `400 Bad Request`: `{ "error": "Validation Error", "message": "Datos inválidos", "details": { ... } }`.
+  - `401 Unauthorized`: Token ausente o inválido.
+  - `403 Forbidden`: `{ "error": "Forbidden", "message": "No tiene permisos para realizar esta acción" }`.
+  - `409 Conflict`: CI duplicado en `edificio.empleados` (`P2002`).
+- **Auditoría:** Registra evento `CREAR_EMPLEADO` en tabla `empleados` pasando `tx` dentro de la transacción interactiva.
+
+### 5.12.4 Actualizar Colaborador (Conservando Datos No Alterados)
+- **Método y Ruta:** `PUT /api/v1/personal/:id`
+- **Estado:** Implementado
+- **Propósito:** Actualiza selectivamente campos de un empleado (`nombres`, `apellidos`, `ci`, `cargo`, `salarioBase`, `fechaIngreso`, `activo`) de forma atómica dentro de una transacción interactiva. Los campos no enviados se conservan intactos.
+- **Rol requerido:** `Administrador` (`Directorio` y `Consulta` reciben 403 Forbidden).
+- **Parámetro URL:** `:id` (entero, ID del empleado).
+- **Body:**
+```json
+{
+  "cargo": "Conserje Principal",
+  "salarioBase": 3000.00
+}
+```
+- **Respuesta 200 OK:** Retorna el empleado actualizado con todos sus campos consolidados.
+- **Validaciones:** Esquema Zod parcial; si `salarioBase` se envía, debe ser positivo (`> 0`).
+- **Errores:**
+  - `400 Bad Request`: ID inválido o error de validación en campos proporcionados.
+  - `401 Unauthorized`: Token ausente o inválido.
+  - `403 Forbidden`: `{ "error": "Forbidden", "message": "No tiene permisos para realizar esta acción" }`.
+  - `404 Not Found`: Empleado inexistente.
+  - `409 Conflict`: Si el nuevo CI ya pertenece a otro colaborador.
+- **Auditoría:** Registra evento `ACTUALIZAR_EMPLEADO` en tabla `empleados` dentro de la transacción interactiva, capturando consistentemente `datosAnteriores` (mediante findUnique dentro de tx) y `datosNuevos`.
+
+### 5.12.5 Registrar Pago de Sueldo
+- **Método y Ruta:** `POST /api/v1/personal/:id/pagos`
+- **Estado:** Implementado
+- **Propósito:** Registra el pago mensual de salario para un empleado con deducción de anticipos, bonificaciones y descuentos, ejecutado en una transacción interactiva con auditoría atómica.
+- **Rol requerido:** `Administrador` (`Directorio` y `Consulta` reciben 403 Forbidden).
+- **Parámetro URL:** `:id` (entero, ID del empleado).
+- **Body:**
+```json
+{
+  "periodo": "2026-11-01",
+  "salarioPagado": 3000.00,
+  "anticipos": 200.00,
+  "bonificaciones": 100.00,
+  "descuentos": 50.00,
+  "idMovimiento": null
+}
+```
+- **Respuesta 201 Created:**
+```json
+{
+  "idPagoEmpleado": 201,
+  "idEmpleado": 101,
+  "periodo": "2026-11-01T00:00:00.000Z",
+  "salarioPagado": "3000",
+  "anticipos": "200",
+  "bonificaciones": "100",
+  "descuentos": "50",
+  "fechaPago": "2026-11-30T10:00:00.000Z",
+  "idMovimiento": null,
+  "empleado": {
+    "nombres": "Juan",
+    "apellidos": "Pérez Gómez",
+    "cargo": "Conserje Principal"
+  }
+}
+```
+- **Validaciones:**
+  - `periodo`: `string` formato estricto `YYYY-MM-DD` (primer día del mes).
+  - `salarioPagado`: `number` positivo estrictamente mayor a 0.
+  - `anticipos`: `number` no negativo (>= 0, default 0).
+  - `bonificaciones`: `number` no negativo (>= 0, default 0).
+  - `descuentos`: `number` no negativo (>= 0, default 0).
+  - `idMovimiento`: `number` opcional, entero positivo si se vincula con un movimiento financiero.
+- **Errores:**
+  - `400 Bad Request`: ID inválido o error de validación en campos.
+  - `401 Unauthorized`: Token ausente o inválido.
+  - `403 Forbidden`: `{ "error": "Forbidden", "message": "No tiene permisos para realizar esta acción" }`.
+  - `404 Not Found`: Empleado inexistente.
+- **Auditoría:** Registra evento `REGISTRO_PAGO_EMPLEADO` en tabla `pagos_empleados` dentro de la transacción interactiva.
+
+### 5.12.6 Consultar Historial de Pagos de Empleado Paginado
+- **Método y Ruta:** `GET /api/v1/personal/:id/pagos`
+- **Estado:** Implementado
+- **Propósito:** Consultar el historial completo de pagos de un colaborador con paginación configurable y filtros por año o período mensual.
+- **Rol requerido:** `Administrador`, `Directorio` (`Consulta` recibe 403 Forbidden).
+- **Parámetro URL:** `:id` (entero, ID del empleado).
+- **Query Params:**
+  - `page` (opcional, default: "1"): Número de página.
+  - `limit` (opcional, default: "12", máx: 50): Cantidad de registros por página.
+  - `anio` (opcional): Entero de 4 dígitos (ej. `2026`).
+  - `periodo` (opcional): Fecha en formato `YYYY-MM-DD` válido (ej. `2026-11-01`).
+- **Respuesta 200 OK:**
+```json
+{
+  "data": [
+    {
+      "idPagoEmpleado": 201,
+      "idEmpleado": 101,
+      "periodo": "2026-11-01T00:00:00.000Z",
+      "salarioPagado": "3000",
+      "anticipos": "200",
+      "bonificaciones": "100",
+      "descuentos": "50",
+      "fechaPago": "2026-11-30T10:00:00.000Z",
+      "idMovimiento": null,
+      "movimiento": null
+    }
+  ],
+  "meta": {
+    "total": 1,
+    "page": 1,
+    "limit": 12,
+    "totalPages": 1
+  }
+}
+```
+- **Errores:**
+  - `400 Bad Request`:
+    - ID inválido (`{ "error": "Bad Request", "message": "ID inválido" }`).
+    - Año inválido (`{ "error": "Bad Request", "message": "Año inválido (debe ser un número de 4 dígitos)" }`).
+    - Período inválido (`{ "error": "Bad Request", "message": "Período inválido (formato esperado: YYYY-MM-DD)" }` o `{ "error": "Bad Request", "message": "Período inválido (fecha inexistente)" }`).
+  - `401 Unauthorized`: Token ausente o inválido.
+  - `403 Forbidden`: `{ "error": "Forbidden", "message": "No tiene permisos para realizar esta acción" }`.
+  - `404 Not Found`: `{ "error": "Not Found", "message": "Empleado no encontrado" }`.
+- **Auditoría:** No genera auditoría (lectura).
+
+### 5.12.7 Registrar Anticipo de Sueldo
+- **Método y Ruta:** `POST /api/v1/personal/:id/anticipos`
+- **Estado:** PENDIENTE DE IMPLEMENTAR
+- **Propósito:** Registrar un adelanto de salario concedido a un empleado con su importe, fecha de entrega y motivo justificado, para su posterior deducción en la liquidación de sueldo del mes.
+- **Rol requerido propuesto:** `Administrador` (Directorio y Consulta reciben 403 Forbidden).
+- **Parámetro URL:** `:id` (entero, ID del empleado).
+- **Body propuesto:**
+```json
+{
+  "monto": 200.00,
+  "fecha": "2026-11-15",
+  "motivo": "Anticipo de sueldo quincenal"
+}
+```
+- **Respuesta 201 Created propuesta:**
+```json
+{
+  "idConcepto": 301,
+  "idEmpleado": 101,
+  "tipo": "ANTICIPO",
+  "monto": 200.00,
+  "fecha": "2026-11-15T00:00:00.000Z",
+  "motivo": "Anticipo de sueldo quincenal"
+}
+```
+- **Validaciones:** `monto > 0`, `fecha` válida `YYYY-MM-DD`, `motivo` obligatorio (máx. 200 caracteres), validación de que el anticipo no supere el salario base del empleado.
+- **Errores:** `400 Bad Request`, `401 Unauthorized`, `403 Forbidden`, `404 Not Found`, `422 Unprocessable Entity` (monto superior al salario base).
+- **Auditoría:** Registra evento `REGISTRO_ANTICIPO_EMPLEADO` en tabla `conceptos_empleado`.
+
+### 5.12.8 Consultar Anticipos de Empleado
+- **Método y Ruta:** `GET /api/v1/personal/:id/anticipos`
+- **Estado:** PENDIENTE DE IMPLEMENTAR
+- **Propósito:** Listar los anticipos concedidos al empleado registrados en `edificio.conceptos_empleado` con filtro por año o rango de fechas.
+- **Rol requerido propuesto:** `Administrador`, `Directorio` (Consulta recibe 403 Forbidden).
+- **Parámetro URL:** `:id` (entero, ID del empleado).
+- **Query Params:** `anio`, `page`, `limit`.
+- **Respuesta 200 OK propuesta:** Array paginado con detalle de anticipos (`tipo: "ANTICIPO"`), fechas de entrega y motivos.
+- **Errores:** `400 Bad Request`, `401 Unauthorized`, `403 Forbidden`, `404 Not Found`.
+- **Auditoría:** No genera auditoría (lectura).
+
+### 5.12.9 Registrar Bonificación a Empleado
+- **Método y Ruta:** `POST /api/v1/personal/:id/bonificaciones`
+- **Estado:** PENDIENTE DE IMPLEMENTAR
+- **Propósito:** Registrar un bono, estímulo o compensación adicional (ej. bono de antigüedad, horas extraordinarias o prima por desempeño) indicando importe, motivo y fecha.
+- **Rol requerido propuesto:** `Administrador` (Directorio y Consulta reciben 403 Forbidden).
+- **Parámetro URL:** `:id` (entero, ID del empleado).
+- **Body propuesto:**
+```json
+{
+  "monto": 100.00,
+  "fecha": "2026-11-20",
+  "motivo": "Bono por reemplazo de turno en feriado"
+}
+```
+- **Respuesta 201 Created propuesta:**
+```json
+{
+  "idConcepto": 302,
+  "idEmpleado": 101,
+  "tipo": "BONIFICACION",
+  "monto": 100.00,
+  "fecha": "2026-11-20T00:00:00.000Z",
+  "motivo": "Bono por reemplazo de turno en feriado"
+}
+```
+- **Validaciones:** `monto > 0`, `fecha` válida `YYYY-MM-DD`, `motivo` obligatorio (máx. 150 caracteres).
+- **Errores:** `400 Bad Request`, `401 Unauthorized`, `403 Forbidden`, `404 Not Found`.
+- **Auditoría:** Registra evento `REGISTRO_BONIFICACION_EMPLEADO` en tabla `conceptos_empleado`.
+
+### 5.12.10 Consultar Bonificaciones de Empleado
+- **Método y Ruta:** `GET /api/v1/personal/:id/bonificaciones`
+- **Estado:** PENDIENTE DE IMPLEMENTAR
+- **Propósito:** Consultar las bonificaciones registradas para un colaborador (`tipo: "BONIFICACION"`) en `edificio.conceptos_empleado`.
+- **Rol requerido propuesto:** `Administrador`, `Directorio` (Consulta recibe 403 Forbidden).
+- **Parámetro URL:** `:id` (entero, ID del empleado).
+- **Query Params:** `anio`, `page`, `limit`.
+- **Respuesta 200 OK propuesta:** Array de bonificaciones con importes, fechas y motivos descriptivos.
+- **Errores:** `400 Bad Request`, `401 Unauthorized`, `403 Forbidden`, `404 Not Found`.
+- **Auditoría:** No genera auditoría (lectura).
+
+### 5.12.11 Registrar Descuento a Empleado
+- **Método y Ruta:** `POST /api/v1/personal/:id/descuentos`
+- **Estado:** PENDIENTE DE IMPLEMENTAR
+- **Propósito:** Registrar una retención, sanción o descuento programado (ej. faltas injustificadas, atrasos reiterados o reposición de materiales) indicando importe, motivo y fecha.
+- **Rol requerido propuesto:** `Administrador` (Directorio y Consulta reciben 403 Forbidden).
+- **Parámetro URL:** `:id` (entero, ID del empleado).
+- **Body propuesto:**
+```json
+{
+  "monto": 50.00,
+  "fecha": "2026-11-22",
+  "motivo": "Falta injustificada turno tarde"
+}
+```
+- **Respuesta 201 Created propuesta:**
+```json
+{
+  "idConcepto": 303,
+  "idEmpleado": 101,
+  "tipo": "DESCUENTO",
+  "monto": 50.00,
+  "fecha": "2026-11-22T00:00:00.000Z",
+  "motivo": "Falta injustificada turno tarde"
+}
+```
+- **Validaciones:** `monto > 0`, `fecha` válida `YYYY-MM-DD`, `motivo` obligatorio (máx. 200 caracteres).
+- **Errores:** `400 Bad Request`, `401 Unauthorized`, `403 Forbidden`, `404 Not Found`.
+- **Auditoría:** Registra evento `REGISTRO_DESCUENTO_EMPLEADO` en tabla `conceptos_empleado`.
+
+### 5.12.12 Consultar Descuentos de Empleado
+- **Método y Ruta:** `GET /api/v1/personal/:id/descuentos`
+- **Estado:** PENDIENTE DE IMPLEMENTAR
+- **Propósito:** Listar los descuentos aplicados a un colaborador (`tipo: "DESCUENTO"`) en `edificio.conceptos_empleado`.
+- **Rol requerido propuesto:** `Administrador`, `Directorio` (Consulta recibe 403 Forbidden).
+- **Parámetro URL:** `:id` (entero, ID del empleado).
+- **Query Params:** `anio`, `page`, `limit`.
+- **Respuesta 200 OK propuesta:** Array de deducciones con montos, fechas y justificaciones.
+- **Errores:** `400 Bad Request`, `401 Unauthorized`, `403 Forbidden`, `404 Not Found`.
+- **Auditoría:** No genera auditoría (lectura).
+
+### 5.12.13 Modificar Salario Base con Historial
+- **Método y Ruta:** `PUT /api/v1/personal/:id/salario`
+- **Estado:** PENDIENTE DE IMPLEMENTAR
+- **Propósito:** Actualiza formalmente el atributo `salarioBase` de un colaborador en la tabla `edificio.empleados`. El registro histórico de la variación salarial (salario previo vs nuevo salario y motivo) queda almacenado íntegramente en el evento de auditoría del sistema.
+- **Rol requerido propuesto:** `Administrador` (Directorio y Consulta reciben 403 Forbidden).
+- **Parámetro URL:** `:id` (entero, ID del empleado).
+- **Body propuesto:**
+```json
+{
+  "salarioBase": 3200.00,
+  "motivo": "Ajuste salarial anual por convenio laboral"
+}
+```
+- **Respuesta 200 OK propuesta:**
+```json
+{
+  "idEmpleado": 101,
+  "salarioBase": 3200.00,
+  "fechaActualizacion": "2026-11-04T21:00:00.000Z"
+}
+```
+- **Validaciones:** `salarioBase > 0`, `motivo` obligatorio (mínimo 5 caracteres).
+- **Errores:** `400 Bad Request`, `401 Unauthorized`, `403 Forbidden`, `404 Not Found`, `422 Unprocessable Entity` (si el salario nuevo es idéntico al actual).
+- **Auditoría:** Registra evento `MODIFICACION_SALARIO_EMPLEADO` en tabla `empleados` (capturando `datosAnteriores: { salarioBase }` y `datosNuevos: { salarioBase, motivo }`).
+
+### 5.12.14 Consultar Salario Actual de Empleado
+- **Método y Ruta:** `GET /api/v1/personal/:id/salario`
+- **Estado:** PENDIENTE DE IMPLEMENTAR
+- **Propósito:** Consultar el salario base actual vigente asignado a un colaborador.
+- **Rol requerido propuesto:** `Administrador`, `Directorio` (Consulta recibe 403 Forbidden).
+- **Parámetro URL:** `:id` (entero, ID del empleado).
+- **Respuesta 200 OK propuesta:**
+```json
+{
+  "idEmpleado": 101,
+  "salarioBase": 3200.00,
+  "nombres": "Juan",
+  "apellidos": "Pérez Gómez",
+  "cargo": "Conserje Principal"
+}
+```
+- **Errores:** `400 Bad Request`, `401 Unauthorized`, `403 Forbidden`, `404 Not Found`.
+- **Auditoría:** No genera auditoría (lectura).
+
+---
 ## 6. Subsistema de Logs y Auditoría (US1.3)
 Trazabilidad de todas las operaciones que modifican el estado del sistema.
 Ubicación: `backend/src/modules/auditoria/` · Tabla: `edificio.auditoria`
@@ -1239,6 +1639,13 @@ Evento	Tabla	Origen	Descripción / Datos Capturados
 `MODIFICACION_MOVIMIENTO_BANCARIO`	movimientos_bancarios	`PUT /movimientos-bancarios/:id`	Modificación de movimiento bancario no conciliado.
 `CONCILIACION_VINCULAR`	movimientos_bancarios	`POST /conciliacion/vincular`	Vinculación entre extracto bancario y movimiento interno (Conciliado o Discrepancia con cálculo de diferencia).
 `CONCILIACION_DESVINCULAR`	movimientos_bancarios	`DELETE /conciliacion/desvincular/:id`	Desvinculación y reversión de extracto bancario a estado Pendiente.
+`CREAR_EMPLEADO`	empleados	`POST /personal`	Alta de nuevo colaborador (nombres, apellidos, CI, cargo, salarioBase, fechaIngreso).
+`ACTUALIZAR_EMPLEADO`	empleados	`PUT /personal/:id`	Modificación de datos del colaborador (datosAnteriores y datosNuevos).
+`REGISTRO_PAGO_EMPLEADO`	pagos_empleados	`POST /personal/:id/pagos`	Liquidación mensual de sueldo (periodo, salarioPagado, anticipos, bonificaciones, descuentos).
+`REGISTRO_ANTICIPO_EMPLEADO`	conceptos_empleado	`POST /personal/:id/anticipos`	Concesión de adelanto de sueldo con fecha, monto y motivo.
+`REGISTRO_BONIFICACION_EMPLEADO`	conceptos_empleado	`POST /personal/:id/bonificaciones`	Asignación de bono extraordinario, prima o premio con importe y fecha.
+`REGISTRO_DESCUENTO_EMPLEADO`	conceptos_empleado	`POST /personal/:id/descuentos`	Registro de retención o deducción por faltas o sanciones con motivo.
+`MODIFICACION_SALARIO_EMPLEADO`	empleados	`PUT /personal/:id/salario`	Ajuste salarial con motivo y snapshot de salario anterior y nuevo.
 6.3 Ejemplos
 Bloqueo de cuenta:
 ```json
@@ -1444,6 +1851,20 @@ Auditoria	/auditoria/:id	GET	✅	✅	❌
 Health/Failover	/health/db	GET	✅	❌	❌
 Health/Failover	/health/db/principal	POST	✅	❌	❌
 
+Personal	/personal	GET	✅	✅	❌
+Personal	/personal/:id	GET	✅	✅	❌
+Personal	/personal	POST	✅	❌	❌
+Personal	/personal/:id	PUT	✅	❌	❌
+Personal	/personal/:id/pagos	POST	✅	❌	❌
+Personal	/personal/:id/pagos	GET	✅	✅	❌
+Personal	/personal/:id/anticipos	POST	✅	❌	❌
+Personal	/personal/:id/anticipos	GET	✅	✅	❌
+Personal	/personal/:id/bonificaciones	POST	✅	❌	❌
+Personal	/personal/:id/bonificaciones	GET	✅	✅	❌
+Personal	/personal/:id/descuentos	POST	✅	❌	❌
+Personal	/personal/:id/descuentos	GET	✅	✅	❌
+Personal	/personal/:id/salario	PUT	✅	❌	❌
+Personal	/personal/:id/salario	GET	✅	✅	❌
 * Pendiente de confirmar contra el código y con el Scrum si Consulta tendrá lectura de expensas y estado de cuenta (requisito mínimo del cliente: emisión de estados de cuenta).
 ---
 ## 8. Trazabilidad US ↔ Criterio ↔ Endpoint
@@ -1500,6 +1921,23 @@ CA12 distinguir conciliados de no conciliados.	`GET /api/v1/conciliacion/estado`
 CA13 correspondencia de importes y datos entre el movimiento interno y el bancario.	`POST /api/v1/conciliacion/vincular`, `DELETE /api/v1/conciliacion/desvincular/:id`	`backend/tests/conciliacion.test.ts`	Cumple	Validación estricta de correspondencia (422 Deposito solo con Ingreso / Retiro con Egreso; 422 si interno anulado; 409 si ya vinculado); desvinculación a Pendiente (probado).
 CA14 usuario, fecha, hora y tipo de operación al registrar, modificar o conciliar.	Módulo finanzas (`/caja`, `/cuentas-bancarias`, `/movimientos-bancarios`, `/conciliacion`)	`backend/tests/caja.test.ts`, `backend/tests/bancos.test.ts`, `backend/tests/conciliacion.test.ts`	Cumple	Registro completo de auditoría y trazabilidad (idUsuario, fechaHora, acción semántica, tabla, snapshot anterior y nuevo) para 7 eventos de finanzas (probado).
 
+
+US3.1: Administración de Personal
+Criterio	Endpoint(s)	Estado	Nota
+CA01 registrar empleado	`POST /api/v1/personal`	Cumple	Alta en `edificio.empleados` con validación Zod, restricción RBAC (`Administrador`) y auditoría atómica `CREAR_EMPLEADO` dentro de transacción interactiva (probado con HTTP 201).
+CA02 validar registro	`POST /api/v1/personal`	Cumple	Validación Zod estricta de nombres, apellidos, CI único (`P2002` a HTTP 409), salarioBase > 0 y fechaIngreso YYYY-MM-DD (probado con HTTP 400 y `details`).
+CA03 consultar sin mezclar datos de otros empleados	`GET /api/v1/personal/:id`	Cumple	Consulta por ID con filtro exacto en base de datos; devuelve datos del empleado y sus pagos aislados sin mezclar con otros (probado con HTTP 200).
+CA04 actualizar conservando datos no alterados	`PUT /api/v1/personal/:id`	Cumple	Actualización parcial con Zod partial; conserva intactos los datos no enviados. Ejecutado dentro de transacción interactiva registrando auditoría `ACTUALIZAR_EMPLEADO` con snapshot anterior y nuevo.
+CA05 registrar/actualizar salario	`PUT /api/v1/personal/:id` (`salarioBase`)	Parcial	Funciona como atributo del empleado vía PUT registrando el cambio salarial en auditoría (probado con HTTP 200); pendiente endpoint dedicado `PUT /personal/:id/salario`.
+CA06 anticipos (importe y fecha)	`POST /api/v1/personal/:id/pagos` (`anticipos`)	Parcial	Importe registrado como columna dentro del pago mensual (probado); pendiente endpoint dedicado `POST/GET /personal/:id/anticipos` en `edificio.conceptos_empleado`.
+CA07 bonificaciones	`POST /api/v1/personal/:id/pagos` (`bonificaciones`)	Parcial	Importe registrado como columna dentro del pago mensual (probado); pendiente endpoint dedicado `POST/GET /personal/:id/bonificaciones` en `edificio.conceptos_empleado`.
+CA08 descuentos	`POST /api/v1/personal/:id/pagos` (`descuentos`)	Parcial	Importe registrado como columna dentro del pago mensual (probado); pendiente endpoint dedicado `POST/GET /personal/:id/descuentos` en `edificio.conceptos_empleado`.
+CA09 validar importes y datos obligatorios de salario/anticipo/bono/descuento	`POST /personal`, `POST /personal/:id/pagos`	Cumple	Validación con Zod: salarioBase > 0, importes de pago no negativos (probado con HTTP 400 ante importes negativos o datos obligatorios faltantes).
+CA10 registrar pago (importe y fecha)	`POST /api/v1/personal/:id/pagos`	Cumple	Registro en `edificio.pagos_empleados` con periodo, fechaPago e importes discriminados, dentro de transacción interactiva con auditoría atómica `REGISTRO_PAGO_EMPLEADO` (probado con HTTP 201).
+CA11 historial de pagos por empleado con fecha e importe	`GET /api/v1/personal/:id/pagos`, `GET /api/v1/personal/:id`	Cumple	Historial paginado (`page`, `limit` máx 50) y filtrable por `anio` (4 dígitos) y `periodo` (YYYY-MM-DD) implementado en `GET /personal/:id/pagos`, además de los 12 últimos pagos en `GET /personal/:id` (probado con HTTP 200).
+CA12 restringir por rol	Todos los endpoints de `/personal`	Cumple	Middleware `authorizeRoles` aplicado en todas las rutas: `Administrador` escribe (`POST`, `PUT`) y lee (`GET`); `Directorio` solo lectura (`GET`); `Consulta` recibe HTTP 403 Forbidden verificado en pruebas reales.
+CA13 auditoría con responsable y fecha/hora usando el mecanismo existente	`POST /personal`, `PUT /personal/:id`, `POST /personal/:id/pagos`	Cumple	Integración de `auditoriaService.registrarEvento` pasando `tx` dentro de transacciones interactivas para eventos `CREAR_EMPLEADO`, `ACTUALIZAR_EMPLEADO` y `REGISTRO_PAGO_EMPLEADO` con responsable (`idUsuario`), fecha/hora y snapshots de datos (probado en BD real).
+
 #### Controles adicionales (no son criterios de la HU)
 - **Anulación de movimientos de caja:** Endpoint `DELETE /api/v1/caja/:id` con motivo obligatorio (`motivo`), soft-delete inmutable (`anulado = true`), control contra re-anulación (`409 Conflict`) y evento de auditoría `ANULACION_MOVIMIENTO_CAJA` (probado en `backend/tests/caja.test.ts`).
 - **Bloqueo de edición de movimientos conciliados:** Endpoint `PUT /api/v1/movimientos-bancarios/:id` permite modificar movimientos en estado `Pendiente`, pero bloquea con `409 Conflict` (`"No se puede modificar un movimiento bancario que ya ha sido conciliado"`) cualquier intento de editar extractos ya conciliados (probado en `backend/tests/bancos.test.ts`).
@@ -1526,6 +1964,8 @@ CA14 usuario, fecha, hora y tipo de operación al registrar, modificar o concili
 - metodo_pago es texto libre; falta definir lista cerrada
 - las migraciones 003 a 005 deben aplicarse en Render antes de desplegar (failover)
 
+- [Pendiente] Pagos de personal y movimientos financieros: Los pagos de personal no generan movimiento de egreso (idMovimiento = null) y no aparecen en ingresos/egresos ni en reportes financieros.
+- [Pendiente] Migración de Reglas de Mora en Base de Datos: La migración `20261004000000_hu04_regla_mora` se encuentra versionada en `packages/database/prisma/migrations/20261004000000_hu04_regla_mora` pero aún no ha sido aplicada a la base de datos compartida en Supabase (`_prisma_migrations`).
 ---
 ## 10. Respaldo de Conexión y Conmutación de Base de Datos (Failover)
 
@@ -1619,3 +2059,30 @@ El backend implementa un mecanismo de conmutación de conexión transparente y s
   Dado que la preservación de operaciones transaccionales en lote depende directamente de estructuras no públicas del runtime de Prisma (`requestTransaction` y el duck-typing de `Symbol.toStringTag`), **la versión de Prisma (`@prisma/client` y `prisma`, actualmente `v6.19.3`) debe mantenerse estrictamente fija**. No deben aplicarse actualizaciones mayores o intermedias sin antes validar rigurosamente la compatibilidad del Proxy contra estos métodos internos.
 - **Detección temprana con pruebas de regresión:**
   La suite automatizada `backend/tests/database_failover.test.ts` incorpora pruebas de regresión dedicadas para ambas variantes de transacciones (`$transaction` por array de promesas y `$transaction` con callback interactivo). Estas pruebas aseguran que ante cualquier modificación en las dependencias o en el cliente Prisma, cualquier ruptura de compatibilidad interna sea detectada de forma inmediata.
+
+---
+## 11. Índice de Endpoints Documentados — Módulo Personal (US3.1)
+
+A continuación se detalla la ubicación exacta (número de sección y encabezado) de cada uno de los 14 endpoints documentados para el módulo de Personal, junto con su estado actual y su correspondencia unívoca con la Matriz RBAC (Sección 7):
+
+| N.º | Sección | Encabezado | Método | Ruta | Estado | Rol Administrador | Rol Directorio | Rol Consulta |
+|:---:|:---:|---|:---:|---|:---:|:---:|:---:|:---:|
+| 1 | 5.12.1 | Listar Empleados (Planilla) | `GET` | `/api/v1/personal` | Implementado | ✅ | ✅ | ❌ |
+| 2 | 5.12.2 | Obtener Detalle de Empleado con Historial de Pagos | `GET` | `/api/v1/personal/:id` | Implementado | ✅ | ✅ | ❌ |
+| 3 | 5.12.3 | Registrar Colaborador / Empleado | `POST` | `/api/v1/personal` | Implementado | ✅ | ❌ | ❌ |
+| 4 | 5.12.4 | Actualizar Colaborador (Conservando Datos No Alterados) | `PUT` | `/api/v1/personal/:id` | Implementado | ✅ | ❌ | ❌ |
+| 5 | 5.12.5 | Registrar Pago de Sueldo | `POST` | `/api/v1/personal/:id/pagos` | Implementado | ✅ | ❌ | ❌ |
+| 6 | 5.12.6 | Consultar Historial de Pagos de Empleado Paginado | `GET` | `/api/v1/personal/:id/pagos` | Implementado | ✅ | ✅ | ❌ |
+| 7 | 5.12.7 | Registrar Anticipo de Sueldo | `POST` | `/api/v1/personal/:id/anticipos` | PENDIENTE DE IMPLEMENTAR | ✅ | ❌ | ❌ |
+| 8 | 5.12.8 | Consultar Anticipos de Empleado | `GET` | `/api/v1/personal/:id/anticipos` | PENDIENTE DE IMPLEMENTAR | ✅ | ✅ | ❌ |
+| 9 | 5.12.9 | Registrar Bonificación a Empleado | `POST` | `/api/v1/personal/:id/bonificaciones` | PENDIENTE DE IMPLEMENTAR | ✅ | ❌ | ❌ |
+| 10 | 5.12.10 | Consultar Bonificaciones de Empleado | `GET` | `/api/v1/personal/:id/bonificaciones` | PENDIENTE DE IMPLEMENTAR | ✅ | ✅ | ❌ |
+| 11 | 5.12.11 | Registrar Descuento a Empleado | `POST` | `/api/v1/personal/:id/descuentos` | PENDIENTE DE IMPLEMENTAR | ✅ | ❌ | ❌ |
+| 12 | 5.12.12 | Consultar Descuentos de Empleado | `GET` | `/api/v1/personal/:id/descuentos` | PENDIENTE DE IMPLEMENTAR | ✅ | ✅ | ❌ |
+| 13 | 5.12.13 | Modificar Salario Base con Historial | `PUT` | `/api/v1/personal/:id/salario` | PENDIENTE DE IMPLEMENTAR | ✅ | ❌ | ❌ |
+| 14 | 5.12.14 | Consultar Salario Actual de Empleado | `GET` | `/api/v1/personal/:id/salario` | PENDIENTE DE IMPLEMENTAR | ✅ | ✅ | ❌ |
+
+### Confirmación de Conteo de Endpoints
+- **Total de endpoints documentados en la Sección 5.12:** 14 endpoints (6 implementados + 8 pendientes de implementar).
+- **Total de endpoints de Personal en la Matriz RBAC (Sección 7):** 14 endpoints.
+- **Resultado de la verificación de consistencia:** **Conteo idéntico y coincidencia exacta (14 == 14)**.

@@ -5,11 +5,15 @@
 //   POST   /api/v1/personal           — crear empleado
 //   PUT    /api/v1/personal/:id       — actualizar empleado
 //   POST   /api/v1/personal/:id/pagos — registrar pago de sueldo
+//   GET    /api/v1/personal/:id/pagos — historial completo paginado y filtrable
 
 import { Router, Response, NextFunction, IRouter } from 'express';
-import { prisma } from '@edificio-xyz/database';
+import { prisma, Prisma } from '@edificio-xyz/database';
 import { z } from 'zod';
 import { authMiddleware, AuthRequest } from '../middlewares/auth.middleware';
+import { authorizeRoles } from '../middlewares/role.middleware';
+import { auditoriaService } from '../modules/auditoria';
+import { FINANZAS_TX_OPTIONS } from '../middlewares/finanzas-permissions.middleware';
 
 export const personalRouter: IRouter = Router();
 personalRouter.use(authMiddleware);
@@ -37,11 +41,12 @@ const pagoEmpleadoSchema = z.object({
 // ── GET /personal ────────────────────────────────────────────────────────────
 personalRouter.get(
   '/',
+  authorizeRoles('Administrador', 'Directorio'),
   async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
     try {
       const { activo, page = '1', limit = '20' } = req.query;
 
-      const where: Record<string, unknown> = {};
+      const where: Prisma.EmpleadoWhereInput = {};
       if (activo !== undefined) where.activo = activo === 'true';
 
       const skip = (parseInt(String(page)) - 1) * parseInt(String(limit));
@@ -78,6 +83,7 @@ personalRouter.get(
 // ── GET /personal/:id ────────────────────────────────────────────────────────
 personalRouter.get(
   '/:id',
+  authorizeRoles('Administrador', 'Directorio'),
   async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
     try {
       const id = parseInt(req.params.id);
@@ -114,6 +120,7 @@ personalRouter.get(
 // ── POST /personal ───────────────────────────────────────────────────────────
 personalRouter.post(
   '/',
+  authorizeRoles('Administrador'),
   async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
     try {
       const result = empleadoSchema.safeParse(req.body);
@@ -128,13 +135,27 @@ personalRouter.post(
 
       const { fechaIngreso, salarioBase, ...rest } = result.data;
 
-      const empleado = await prisma.empleado.create({
-        data: {
-          ...rest,
-          salarioBase,
-          fechaIngreso: new Date(fechaIngreso),
-        },
-      });
+      const empleado = await prisma.$transaction(async (tx) => {
+        const nuevo = await tx.empleado.create({
+          data: {
+            ...rest,
+            salarioBase,
+            fechaIngreso: new Date(fechaIngreso),
+          },
+        });
+
+        await auditoriaService.registrarEvento({
+          tablaAfectada: 'empleados',
+          idRegistro: nuevo.idEmpleado.toString(),
+          accion: 'CREAR_EMPLEADO',
+          resultado: 'EXITO',
+          datosNuevos: nuevo,
+          idUsuario: req.user?.idUsuario ?? null,
+          tx,
+        });
+
+        return nuevo;
+      }, FINANZAS_TX_OPTIONS);
 
       res.status(201).json(empleado);
     } catch (err) {
@@ -146,6 +167,7 @@ personalRouter.post(
 // ── PUT /personal/:id ────────────────────────────────────────────────────────
 personalRouter.put(
   '/:id',
+  authorizeRoles('Administrador'),
   async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
     try {
       const id = parseInt(req.params.id);
@@ -166,13 +188,40 @@ personalRouter.put(
 
       const { fechaIngreso, ...rest } = result.data;
 
-      const empleado = await prisma.empleado.update({
-        where: { idEmpleado: id },
-        data: {
-          ...rest,
-          ...(fechaIngreso && { fechaIngreso: new Date(fechaIngreso) }),
-        },
-      });
+      const empleado = await prisma.$transaction(async (tx) => {
+        const existing = await tx.empleado.findUnique({
+          where: { idEmpleado: id },
+        });
+        if (!existing) {
+          return null;
+        }
+
+        const updated = await tx.empleado.update({
+          where: { idEmpleado: id },
+          data: {
+            ...rest,
+            ...(fechaIngreso && { fechaIngreso: new Date(fechaIngreso) }),
+          },
+        });
+
+        await auditoriaService.registrarEvento({
+          tablaAfectada: 'empleados',
+          idRegistro: updated.idEmpleado.toString(),
+          accion: 'ACTUALIZAR_EMPLEADO',
+          resultado: 'EXITO',
+          datosAnteriores: existing,
+          datosNuevos: updated,
+          idUsuario: req.user?.idUsuario ?? null,
+          tx,
+        });
+
+        return updated;
+      }, FINANZAS_TX_OPTIONS);
+
+      if (!empleado) {
+        res.status(404).json({ error: 'Not Found', message: 'Empleado no encontrado' });
+        return;
+      }
 
       res.json(empleado);
     } catch (err) {
@@ -184,6 +233,7 @@ personalRouter.put(
 // ── POST /personal/:id/pagos ─────────────────────────────────────────────────
 personalRouter.post(
   '/:id/pagos',
+  authorizeRoles('Administrador'),
   async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
     try {
       const id = parseInt(req.params.id);
@@ -202,7 +252,7 @@ personalRouter.post(
         return;
       }
 
-      // Verificar que existe el empleado
+      // Verificar que existe el empleado (validación previa fuera de la transacción)
       const empleado = await prisma.empleado.findUnique({ where: { idEmpleado: id } });
       if (!empleado) {
         res.status(404).json({ error: 'Not Found', message: 'Empleado no encontrado' });
@@ -212,22 +262,133 @@ personalRouter.post(
       const { periodo, salarioPagado, anticipos, bonificaciones, descuentos, idMovimiento } =
         result.data;
 
-      const pago = await prisma.pagoEmpleado.create({
-        data: {
-          idEmpleado: id,
-          periodo: new Date(periodo),
-          salarioPagado,
-          anticipos,
-          bonificaciones,
-          descuentos,
-          idMovimiento,
-        },
-        include: {
-          empleado: { select: { nombres: true, apellidos: true, cargo: true } },
-        },
-      });
+      const pago = await prisma.$transaction(async (tx) => {
+        const nuevoPago = await tx.pagoEmpleado.create({
+          data: {
+            idEmpleado: id,
+            periodo: new Date(periodo),
+            salarioPagado,
+            anticipos,
+            bonificaciones,
+            descuentos,
+            idMovimiento,
+          },
+          include: {
+            empleado: { select: { nombres: true, apellidos: true, cargo: true } },
+          },
+        });
+
+        await auditoriaService.registrarEvento({
+          tablaAfectada: 'pagos_empleados',
+          idRegistro: nuevoPago.idPagoEmpleado.toString(),
+          accion: 'REGISTRO_PAGO_EMPLEADO',
+          resultado: 'EXITO',
+          datosNuevos: nuevoPago,
+          idUsuario: req.user?.idUsuario ?? null,
+          tx,
+        });
+
+        return nuevoPago;
+      }, FINANZAS_TX_OPTIONS);
 
       res.status(201).json(pago);
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+// ── GET /personal/:id/pagos ──────────────────────────────────────────────────
+// Historial completo paginado y filtrable de pagos de un empleado (CA11, 5.12.6)
+personalRouter.get(
+  '/:id/pagos',
+  authorizeRoles('Administrador', 'Directorio'),
+  async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const id = parseInt(req.params.id);
+      if (isNaN(id)) {
+        res.status(400).json({ error: 'Bad Request', message: 'ID inválido' });
+        return;
+      }
+
+      const { anio, periodo, page = '1', limit = '12' } = req.query;
+
+      if (anio !== undefined) {
+        if (!/^\d{4}$/.test(String(anio))) {
+          res.status(400).json({ error: 'Bad Request', message: 'Año inválido (debe ser un número de 4 dígitos)' });
+          return;
+        }
+      }
+
+      if (periodo !== undefined) {
+        const periodoStr = String(periodo);
+        const match = periodoStr.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+        if (!match) {
+          res.status(400).json({ error: 'Bad Request', message: 'Período inválido (formato esperado: YYYY-MM-DD)' });
+          return;
+        }
+        const year = parseInt(match[1], 10);
+        const month = parseInt(match[2], 10);
+        const day = parseInt(match[3], 10);
+        const dateObj = new Date(Date.UTC(year, month - 1, day));
+        if (
+          dateObj.getUTCFullYear() !== year ||
+          dateObj.getUTCMonth() + 1 !== month ||
+          dateObj.getUTCDate() !== day
+        ) {
+          res.status(400).json({ error: 'Bad Request', message: 'Período inválido (fecha inexistente)' });
+          return;
+        }
+      }
+
+      const empleado = await prisma.empleado.findUnique({
+        where: { idEmpleado: id },
+        select: { idEmpleado: true },
+      });
+      if (!empleado) {
+        res.status(404).json({ error: 'Not Found', message: 'Empleado no encontrado' });
+        return;
+      }
+
+      const pageNum = Math.max(1, parseInt(String(page)) || 1);
+      const rawLimit = parseInt(String(limit)) || 12;
+      const limitNum = Math.min(50, Math.max(1, rawLimit));
+      const skip = (pageNum - 1) * limitNum;
+
+      const where: Prisma.PagoEmpleadoWhereInput = { idEmpleado: id };
+
+      if (periodo) {
+        where.periodo = new Date(String(periodo));
+      } else if (anio) {
+        const a = parseInt(String(anio));
+        where.periodo = {
+          gte: new Date(Date.UTC(a, 0, 1)),
+          lte: new Date(Date.UTC(a, 11, 31, 23, 59, 59, 999)),
+        };
+      }
+
+      const [pagos, total] = await Promise.all([
+        prisma.pagoEmpleado.findMany({
+          where,
+          skip,
+          take: limitNum,
+          orderBy: { periodo: 'desc' },
+          include: {
+            movimiento: { select: { idMovimiento: true, descripcion: true, fecha: true } },
+          },
+        }),
+        prisma.pagoEmpleado.count({ where }),
+      ]);
+
+      res.json({
+        data: pagos,
+        meta: {
+          total,
+          page: pageNum,
+          limit: limitNum,
+          totalPages: Math.ceil(total / limitNum) || 1,
+        },
+      });
     } catch (err) {
       next(err);
     }
