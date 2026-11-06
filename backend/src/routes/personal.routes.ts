@@ -4,7 +4,7 @@
 //   GET    /api/v1/personal/:id         — detalle con historial de pagos
 //   POST   /api/v1/personal             — crear empleado
 //   PUT    /api/v1/personal/:id         — actualizar empleado
-//   PUT    /api/v1/personal/:id/salario — modificar salario base con historial
+//   PUT    /api/v1/personal/:id/salario — modificar salario base (el antes/después queda en auditoría)
 //   GET    /api/v1/personal/:id/salario — consultar salario actual de empleado
 //   POST   /api/v1/personal/:id/pagos   — registrar pago de sueldo
 //   GET    /api/v1/personal/:id/pagos   — historial completo paginado y filtrable
@@ -40,17 +40,10 @@ const pagoEmpleadoSchema = z.object({
   idMovimiento: z.number().int().positive().optional(),
 });
 
-const modificarSalarioSchema = z
-  .object({
-    salarioBase: z.number().positive().optional(),
-    nuevoSalario: z.number().positive().optional(),
-    motivo: z.string().min(5),
-    fechaEfectiva: z.string().optional(),
-  })
-  .refine((data) => data.salarioBase !== undefined || data.nuevoSalario !== undefined, {
-    message: 'Debe especificar el nuevo salario',
-    path: ['salarioBase'],
-  });
+const modificarSalarioSchema = z.object({
+  salarioBase: z.number().positive(),
+  motivo: z.string().min(5),
+});
 
 // ── GET /personal ────────────────────────────────────────────────────────────
 personalRouter.get(
@@ -245,7 +238,7 @@ personalRouter.put(
 );
 
 // ── PUT /personal/:id/salario ────────────────────────────────────────────────
-// Modificar Salario Base con Historial (CA05, 5.12.13)
+// modificar salario base (el antes/después queda en auditoría)
 personalRouter.put(
   '/:id/salario',
   authorizeRoles('Administrador'),
@@ -267,8 +260,7 @@ personalRouter.put(
         return;
       }
 
-      const nuevoSalario = (result.data.salarioBase ?? result.data.nuevoSalario)!;
-      const motivo = result.data.motivo;
+      const { salarioBase, motivo } = result.data;
 
       const resultado = await prisma.$transaction(async (tx) => {
         const existing = await tx.empleado.findUnique({
@@ -278,14 +270,14 @@ personalRouter.put(
           return { tipo: 'NOT_FOUND' as const };
         }
 
-        if (Number(existing.salarioBase) === nuevoSalario || existing.salarioBase.equals(nuevoSalario)) {
+        if (Number(existing.salarioBase) === salarioBase || existing.salarioBase.equals(salarioBase)) {
           return { tipo: 'SAME_SALARY' as const };
         }
 
         const updated = await tx.empleado.update({
           where: { idEmpleado: id },
           data: {
-            salarioBase: nuevoSalario,
+            salarioBase,
           },
         });
 
@@ -295,7 +287,7 @@ personalRouter.put(
           accion: 'MODIFICACION_SALARIO_EMPLEADO',
           resultado: 'EXITO',
           datosAnteriores: { salarioBase: Number(existing.salarioBase) },
-          datosNuevos: { salarioBase: nuevoSalario, motivo },
+          datosNuevos: { salarioBase, motivo },
           idUsuario: req.user?.idUsuario ?? null,
           tx,
         });
