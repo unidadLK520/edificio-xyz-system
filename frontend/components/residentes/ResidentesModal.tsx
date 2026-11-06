@@ -33,6 +33,8 @@ export default function ResidentesModal({
   const [telefono, setTelefono] = useState('');
   const [correo, setCorreo] = useState('');
   const [direccion, setDireccion] = useState('');
+  const [estadoCivil, setEstadoCivil] = useState('Casado/a');
+  const [ocupantesInfo, setOcupantesInfo] = useState('');
 
   const [loading, setLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -46,7 +48,17 @@ export default function ResidentesModal({
       setApellidos(personaToEdit.apellidos || '');
       setTelefono(personaToEdit.telefono || '');
       setCorreo(personaToEdit.correo || '');
-      setDireccion(personaToEdit.direccion || '');
+      const dirRaw = personaToEdit.direccion || '';
+      const matchEc = dirRaw.match(/\[Estado Civil: ([^|]+) \| Ocupantes: ([^\]]+)\]/);
+      if (matchEc) {
+        setEstadoCivil(matchEc[1].trim());
+        setOcupantesInfo(matchEc[2].trim());
+        setDireccion(dirRaw.replace(/\[Estado Civil: [^\]]+\]\s*/, ''));
+      } else {
+        setDireccion(dirRaw);
+        setEstadoCivil('Casado/a');
+        setOcupantesInfo('');
+      }
     } else {
       setCiNit('');
       setNombres('');
@@ -54,6 +66,8 @@ export default function ResidentesModal({
       setTelefono('');
       setCorreo('');
       setDireccion('');
+      setEstadoCivil('Casado/a');
+      setOcupantesInfo('');
     }
     setErrorMessage(null);
   }, [personaToEdit, isOpen]);
@@ -83,7 +97,7 @@ export default function ResidentesModal({
         apellidos: apellidos.trim(),
         telefono: telefono.trim() || null,
         correo: correo.trim() || null,
-        direccion: direccion.trim() || null,
+        direccion: `[Estado Civil: ${estadoCivil} | Ocupantes: ${ocupantesInfo.trim() || 'Titular'}] ${direccion.trim()}`.trim(),
       };
 
       const res = await fetch(url, {
@@ -227,6 +241,39 @@ export default function ResidentesModal({
                 placeholder="Ej. carlos@email.com"
                 className="w-full px-3.5 py-2 bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/50 dark:focus:ring-indigo-400/50 dark:text-white transition-colors"
               />
+            </div>
+
+
+            {/* Estado Civil (Requerimiento C 1.1) */}
+            <div>
+              <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                Estado Civil
+              </label>
+              <select
+                value={estadoCivil}
+                onChange={(e) => setEstadoCivil(e.target.value)}
+                className="w-full px-3.5 py-2 bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/50 dark:text-white"
+              >
+                <option value="Casado/a">Casado/a</option>
+                <option value="Soltero/a">Soltero/a</option>
+                <option value="Divorciado/a">Divorciado/a</option>
+                <option value="Viudo/a">Viudo/a</option>
+              </select>
+            </div>
+
+            {/* Grupo Familiar / Nro de Ocupantes (Requerimiento C 1.1) */}
+            <div>
+              <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                Composición Familiar / Ocupantes
+              </label>
+              <input
+                type="text"
+                value={ocupantesInfo}
+                onChange={(e) => setOcupantesInfo(e.target.value)}
+                placeholder="Ej. Con 2 hijos (viven 4 personas)"
+                className="w-full px-3.5 py-2 bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/50 dark:text-white"
+              />
+              <span className="text-[10px] text-slate-500">Ejemplo: &quot;Casado, 2 hijos&quot; o &quot;Viven 4 personas&quot;</span>
             </div>
 
             {/* Dirección */}

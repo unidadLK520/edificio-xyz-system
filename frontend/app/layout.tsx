@@ -3,6 +3,7 @@
 
 import type { Metadata } from 'next'
 import './globals.css'
+import { FechaSistemaProvider } from '@/context/FechaSistemaContext'
 
 export const metadata: Metadata = {
   title: 'Edificio XYZ - Sistema de Administración Integral',
@@ -34,7 +35,7 @@ export default function RootLayout({
         />
       </head>
       <body className="min-h-screen bg-[#e6e2da] dark:bg-slate-950 text-[#262422] dark:text-slate-100 antialiased selection:bg-blue-500 selection:text-white transition-colors duration-200">
-        {children}
+        <FechaSistemaProvider>{children}</FechaSistemaProvider>
       </body>
     </html>
   )

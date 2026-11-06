@@ -14,8 +14,26 @@ import {
   LogOut,
   Menu,
   X,
-  KeyRound
+  KeyRound,
+  Users,
+  Wallet,
+  Users2,
+  UserCog,
+  LineChart,
+  Landmark
 } from 'lucide-react'
+
+const ADMIN_NAV_LINKS = [
+  { href: '/usuarios', label: 'Gestión de Usuarios', icon: UserCog },
+  { href: '/residentes', label: 'Residentes', icon: Users },
+  { href: '/departamentos', label: 'Departamentos', icon: Building2 },
+  { href: '/expensas', label: 'Expensas', icon: Receipt },
+  { href: '/egresos', label: 'Ingresos y Egresos', icon: Wallet },
+  { href: '/flujo-caja', label: 'Flujo de Caja', icon: LineChart },
+  { href: '/conciliacion-bancaria', label: 'Conciliación Bancaria', icon: Landmark },
+  { href: '/personal', label: 'Personal', icon: Users2 },
+  { href: '/comunicados', label: 'Comunicados', icon: Megaphone }
+]
 
 const COPROPIETARIO_LINKS = [
   { href: '/mi-cuenta', label: 'Mi Cuenta y Expensas', icon: Receipt },
@@ -24,7 +42,15 @@ const COPROPIETARIO_LINKS = [
 
 export default function CopropietarioLayout({ children }: { children: React.ReactNode }) {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
+  const [userRole, setUserRole] = useState<string>('COPROPIETARIO')
   const pathname = usePathname()
+
+  React.useEffect(() => {
+    try {
+      const saved = localStorage.getItem('user_role')
+      if (saved) setUserRole(saved.toUpperCase())
+    } catch {}
+  }, [])
 
   return (
     <div className="flex h-screen bg-[#e6e2da] dark:bg-slate-950 text-[#262422] dark:text-slate-100 font-sans overflow-hidden transition-colors duration-300 selection:bg-blue-600 selection:text-white">
@@ -52,7 +78,7 @@ export default function CopropietarioLayout({ children }: { children: React.Reac
                 Edificio <span className="text-emerald-700 dark:text-emerald-400">XYZ</span>
               </h2>
               <span className="text-[10px] text-emerald-900 dark:text-emerald-300 uppercase font-bold tracking-wider block">
-                Portal Copropietario
+                {userRole === 'ADMINISTRADOR' ? 'Panel Administrador' : 'Portal Copropietario'}
               </span>
             </div>
           </div>
@@ -65,7 +91,7 @@ export default function CopropietarioLayout({ children }: { children: React.Reac
         </div>
 
         <nav className="flex-1 p-3 space-y-1.5 overflow-y-auto">
-          {COPROPIETARIO_LINKS.map((link) => {
+          {(userRole === "ADMINISTRADOR" ? ADMIN_NAV_LINKS : COPROPIETARIO_LINKS).map((link) => {
             const IconComp = link.icon
             const isActive = pathname === link.href || pathname.startsWith(link.href + '/')
             return (
