@@ -193,14 +193,46 @@ export default function FichaResidenteModal({
                       {persona.correo || 'Sin registrar'}
                     </span>
                   </div>
-                  <div className="sm:col-span-2">
-                    <span className="text-slate-500 dark:text-slate-400 block font-medium">
-                      Dirección / Referencia:
-                    </span>
-                    <span className="font-medium text-slate-800 dark:text-slate-200">
-                      {persona.direccion || 'No especificada'}
-                    </span>
-                  </div>
+                  {(() => {
+                    const dirRaw = persona.direccion || '';
+                    const matchEc = dirRaw.match(/\[Estado Civil: ([^|]+) \| Ocupantes: ([^\]]+)\]/);
+                    const estadoCivil = matchEc ? matchEc[1].trim() : null;
+                    const ocupantes = matchEc ? matchEc[2].trim() : null;
+                    const cleanDir = dirRaw.replace(/\[Estado Civil: [^\]]+\]\s*/, '');
+
+                    return (
+                      <>
+                        {estadoCivil && (
+                          <div>
+                            <span className="text-slate-500 dark:text-slate-400 block font-medium">
+                              Estado Civil:
+                            </span>
+                            <span className="font-semibold text-slate-800 dark:text-slate-200 text-sm">
+                              {estadoCivil}
+                            </span>
+                          </div>
+                        )}
+                        {ocupantes && (
+                          <div>
+                            <span className="text-slate-500 dark:text-slate-400 block font-medium">
+                              Grupo Familiar / Ocupantes:
+                            </span>
+                            <span className="font-semibold text-slate-800 dark:text-slate-200 text-sm">
+                              {ocupantes}
+                            </span>
+                          </div>
+                        )}
+                        <div className="sm:col-span-2">
+                          <span className="text-slate-500 dark:text-slate-400 block font-medium">
+                            Dirección / Referencia:
+                          </span>
+                          <span className="font-medium text-slate-800 dark:text-slate-200">
+                            {cleanDir || 'No especificada'}
+                          </span>
+                        </div>
+                      </>
+                    );
+                  })()}
                 </div>
               </div>
 
