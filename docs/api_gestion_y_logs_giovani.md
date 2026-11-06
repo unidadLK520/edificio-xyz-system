@@ -1317,6 +1317,7 @@ Prefijo de ruta: `/api/v1/personal`
   - `404 Not Found`: Empleado inexistente.
   - `409 Conflict`: Si el nuevo CI ya pertenece a otro colaborador.
 - **Auditoría:** Registra evento `ACTUALIZAR_EMPLEADO` en tabla `empleados` dentro de la transacción interactiva, capturando consistentemente `datosAnteriores` (mediante findUnique dentro de tx) y `datosNuevos`.
+> **Nota sobre modificación de salario:** `PUT /api/v1/personal/:id` también puede modificar `salarioBase` (lo usa la pantalla de personal) y se audita como `ACTUALIZAR_EMPLEADO` con datos anteriores y nuevos; el endpoint dedicado de salario (`PUT /api/v1/personal/:id/salario`, sección 5.12.13) agrega el motivo obligatorio (mínimo 5 caracteres) y validación de cambio efectivo (422 si es idéntico).
 
 ### 5.12.5 Registrar Pago de Sueldo
 - **Método y Ruta:** `POST /api/v1/personal/:id/pagos`
@@ -1534,38 +1535,44 @@ Prefijo de ruta: `/api/v1/personal`
 - **Errores:** `400 Bad Request`, `401 Unauthorized`, `403 Forbidden`, `404 Not Found`.
 - **Auditoría:** No genera auditoría (lectura).
 
-### 5.12.13 Modificar Salario Base con Historial
+### 5.12.13 Modificar Salario Base
 - **Método y Ruta:** `PUT /api/v1/personal/:id/salario`
-- **Estado:** PENDIENTE DE IMPLEMENTAR
-- **Propósito:** Actualiza formalmente el atributo `salarioBase` de un colaborador en la tabla `edificio.empleados`. El registro histórico de la variación salarial (salario previo vs nuevo salario y motivo) queda almacenado íntegramente en el evento de auditoría del sistema.
-- **Rol requerido propuesto:** `Administrador` (Directorio y Consulta reciben 403 Forbidden).
+- **Estado:** Implementado
+- **Propósito:** Actualiza formalmente el atributo `salarioBase` de un colaborador en la tabla `edificio.empleados` dentro de una transacción interactiva. El registro de la variación salarial (el antes/después y el motivo) queda almacenado íntegramente en el subsistema de auditoría del sistema (evento `MODIFICACION_SALARIO_EMPLEADO`), sin requerir una tabla adicional de historial.
+- **Rol requerido:** `Administrador` (`Directorio` y `Consulta` reciben 403 Forbidden).
 - **Parámetro URL:** `:id` (entero, ID del empleado).
-- **Body propuesto:**
+- **Body:**
 ```json
 {
   "salarioBase": 3200.00,
   "motivo": "Ajuste salarial anual por convenio laboral"
 }
 ```
-- **Respuesta 200 OK propuesta:**
+- **Respuesta 200 OK:**
 ```json
 {
   "idEmpleado": 101,
   "salarioBase": 3200.00,
-  "fechaActualizacion": "2026-11-04T21:00:00.000Z"
+  "fechaActualizacion": "2026-11-05T18:30:00.000Z"
 }
 ```
-- **Validaciones:** `salarioBase > 0`, `motivo` obligatorio (mínimo 5 caracteres).
-- **Errores:** `400 Bad Request`, `401 Unauthorized`, `403 Forbidden`, `404 Not Found`, `422 Unprocessable Entity` (si el salario nuevo es idéntico al actual).
-- **Auditoría:** Registra evento `MODIFICACION_SALARIO_EMPLEADO` en tabla `empleados` (capturando `datosAnteriores: { salarioBase }` y `datosNuevos: { salarioBase, motivo }`).
+> **Nota sobre `fechaActualizacion` y auditoría:** El campo `fechaActualizacion` devuelto corresponde a la hora de la respuesta del servidor (formato ISO 8601 UTC). El detalle del antes y después (`datosAnteriores: { salarioBase }` y `datosNuevos: { salarioBase, motivo }`) y el motivo justificado quedan registrados permanentemente en la auditoría (evento `MODIFICACION_SALARIO_EMPLEADO`).
+- **Validaciones:** `salarioBase` requerido (número positivo `> 0`), `motivo` requerido (cadena de mínimo 5 caracteres).
+- **Errores:**
+  - `400 Bad Request`: ID inválido (no numérico) o datos inválidos en el cuerpo de la solicitud (`details`).
+  - `401 Unauthorized`: Token ausente o inválido.
+  - `403 Forbidden`: `{ "error": "Forbidden", "message": "No tiene permisos para realizar esta acción" }`.
+  - `404 Not Found`: Empleado inexistente.
+  - `422 Unprocessable Entity`: `{ "error": "Unprocessable Entity", "message": "El nuevo salario debe ser diferente al actual" }` (si el salario nuevo es idéntico al actual).
+- **Auditoría:** Registra evento `MODIFICACION_SALARIO_EMPLEADO` en tabla `empleados` pasando `tx` (capturando `datosAnteriores: { salarioBase }` y `datosNuevos: { salarioBase, motivo }`).
 
 ### 5.12.14 Consultar Salario Actual de Empleado
 - **Método y Ruta:** `GET /api/v1/personal/:id/salario`
-- **Estado:** PENDIENTE DE IMPLEMENTAR
-- **Propósito:** Consultar el salario base actual vigente asignado a un colaborador.
-- **Rol requerido propuesto:** `Administrador`, `Directorio` (Consulta recibe 403 Forbidden).
+- **Estado:** Implementado
+- **Propósito:** Consultar el salario base actual vigente asignado a un colaborador. Devuelve el salario vigente asignado en la entidad empleado y no un historial de variaciones; para consultar el historial de ajustes salariales debe consultarse el módulo de auditoría (`GET /api/v1/auditoria?tablaAfectada=empleados&accion=MODIFICACION_SALARIO_EMPLEADO`).
+- **Rol requerido:** `Administrador`, `Directorio` (`Consulta` recibe 403 Forbidden).
 - **Parámetro URL:** `:id` (entero, ID del empleado).
-- **Respuesta 200 OK propuesta:**
+- **Respuesta 200 OK:**
 ```json
 {
   "idEmpleado": 101,
@@ -1575,7 +1582,11 @@ Prefijo de ruta: `/api/v1/personal`
   "cargo": "Conserje Principal"
 }
 ```
-- **Errores:** `400 Bad Request`, `401 Unauthorized`, `403 Forbidden`, `404 Not Found`.
+- **Errores:**
+  - `400 Bad Request`: `{ "error": "Bad Request", "message": "ID inválido" }` (si `:id` no es numérico).
+  - `401 Unauthorized`: Token ausente o inválido.
+  - `403 Forbidden`: `{ "error": "Forbidden", "message": "No tiene permisos para realizar esta acción" }`.
+  - `404 Not Found`: `{ "error": "Not Found", "message": "Empleado no encontrado" }`.
 - **Auditoría:** No genera auditoría (lectura).
 
 ---
@@ -1645,7 +1656,7 @@ Evento	Tabla	Origen	Descripción / Datos Capturados
 `REGISTRO_ANTICIPO_EMPLEADO`	conceptos_empleado	`POST /personal/:id/anticipos`	Concesión de adelanto de sueldo con fecha, monto y motivo.
 `REGISTRO_BONIFICACION_EMPLEADO`	conceptos_empleado	`POST /personal/:id/bonificaciones`	Asignación de bono extraordinario, prima o premio con importe y fecha.
 `REGISTRO_DESCUENTO_EMPLEADO`	conceptos_empleado	`POST /personal/:id/descuentos`	Registro de retención o deducción por faltas o sanciones con motivo.
-`MODIFICACION_SALARIO_EMPLEADO`	empleados	`PUT /personal/:id/salario`	Ajuste salarial con motivo y snapshot de salario anterior y nuevo.
+`MODIFICACION_SALARIO_EMPLEADO`	empleados	`PUT /personal/:id/salario`	Ajuste de salario base con motivo obligatorio y snapshot de salario anterior y nuevo.
 6.3 Ejemplos
 Bloqueo de cuenta:
 ```json
@@ -1928,7 +1939,7 @@ CA01 registrar empleado	`POST /api/v1/personal`	Cumple	Alta en `edificio.emplead
 CA02 validar registro	`POST /api/v1/personal`	Cumple	Validación Zod estricta de nombres, apellidos, CI único (`P2002` a HTTP 409), salarioBase > 0 y fechaIngreso YYYY-MM-DD (probado con HTTP 400 y `details`).
 CA03 consultar sin mezclar datos de otros empleados	`GET /api/v1/personal/:id`	Cumple	Consulta por ID con filtro exacto en base de datos; devuelve datos del empleado y sus pagos aislados sin mezclar con otros (probado con HTTP 200).
 CA04 actualizar conservando datos no alterados	`PUT /api/v1/personal/:id`	Cumple	Actualización parcial con Zod partial; conserva intactos los datos no enviados. Ejecutado dentro de transacción interactiva registrando auditoría `ACTUALIZAR_EMPLEADO` con snapshot anterior y nuevo.
-CA05 registrar/actualizar salario	`PUT /api/v1/personal/:id` (`salarioBase`)	Parcial	Funciona como atributo del empleado vía PUT registrando el cambio salarial en auditoría (probado con HTTP 200); pendiente endpoint dedicado `PUT /personal/:id/salario`.
+CA05 registrar/actualizar salario	`PUT /api/v1/personal/:id` (`salarioBase`), `PUT /api/v1/personal/:id/salario`, `GET /api/v1/personal/:id/salario`	Cumple	Funciona como atributo del empleado vía PUT y mediante endpoints dedicados `PUT /personal/:id/salario` (con motivo obligatorio >= 5 caracteres, validación 422 si es idéntico y evento `MODIFICACION_SALARIO_EMPLEADO`) y `GET /personal/:id/salario` (salario vigente).
 CA06 anticipos (importe y fecha)	`POST /api/v1/personal/:id/pagos` (`anticipos`)	Parcial	Importe registrado como columna dentro del pago mensual (probado); pendiente endpoint dedicado `POST/GET /personal/:id/anticipos` en `edificio.conceptos_empleado`.
 CA07 bonificaciones	`POST /api/v1/personal/:id/pagos` (`bonificaciones`)	Parcial	Importe registrado como columna dentro del pago mensual (probado); pendiente endpoint dedicado `POST/GET /personal/:id/bonificaciones` en `edificio.conceptos_empleado`.
 CA08 descuentos	`POST /api/v1/personal/:id/pagos` (`descuentos`)	Parcial	Importe registrado como columna dentro del pago mensual (probado); pendiente endpoint dedicado `POST/GET /personal/:id/descuentos` en `edificio.conceptos_empleado`.
@@ -1936,7 +1947,7 @@ CA09 validar importes y datos obligatorios de salario/anticipo/bono/descuento	`P
 CA10 registrar pago (importe y fecha)	`POST /api/v1/personal/:id/pagos`	Cumple	Registro en `edificio.pagos_empleados` con periodo, fechaPago e importes discriminados, dentro de transacción interactiva con auditoría atómica `REGISTRO_PAGO_EMPLEADO` (probado con HTTP 201).
 CA11 historial de pagos por empleado con fecha e importe	`GET /api/v1/personal/:id/pagos`, `GET /api/v1/personal/:id`	Cumple	Historial paginado (`page`, `limit` máx 50) y filtrable por `anio` (4 dígitos) y `periodo` (YYYY-MM-DD) implementado en `GET /personal/:id/pagos`, además de los 12 últimos pagos en `GET /personal/:id` (probado con HTTP 200).
 CA12 restringir por rol	Todos los endpoints de `/personal`	Cumple	Middleware `authorizeRoles` aplicado en todas las rutas: `Administrador` escribe (`POST`, `PUT`) y lee (`GET`); `Directorio` solo lectura (`GET`); `Consulta` recibe HTTP 403 Forbidden verificado en pruebas reales.
-CA13 auditoría con responsable y fecha/hora usando el mecanismo existente	`POST /personal`, `PUT /personal/:id`, `POST /personal/:id/pagos`	Cumple	Integración de `auditoriaService.registrarEvento` pasando `tx` dentro de transacciones interactivas para eventos `CREAR_EMPLEADO`, `ACTUALIZAR_EMPLEADO` y `REGISTRO_PAGO_EMPLEADO` con responsable (`idUsuario`), fecha/hora y snapshots de datos (probado en BD real).
+CA13 auditoría con responsable y fecha/hora usando el mecanismo existente	`POST /personal`, `PUT /personal/:id`, `POST /personal/:id/pagos`, `PUT /personal/:id/salario`	Cumple	Integración de `auditoriaService.registrarEvento` pasando `tx` dentro de transacciones interactivas para eventos `CREAR_EMPLEADO`, `ACTUALIZAR_EMPLEADO`, `REGISTRO_PAGO_EMPLEADO` y `MODIFICACION_SALARIO_EMPLEADO` con responsable (`idUsuario`), fecha/hora y snapshots de datos (probado en BD real).
 
 #### Controles adicionales (no son criterios de la HU)
 - **Anulación de movimientos de caja:** Endpoint `DELETE /api/v1/caja/:id` con motivo obligatorio (`motivo`), soft-delete inmutable (`anulado = true`), control contra re-anulación (`409 Conflict`) y evento de auditoría `ANULACION_MOVIMIENTO_CAJA` (probado en `backend/tests/caja.test.ts`).
@@ -2079,10 +2090,10 @@ A continuación se detalla la ubicación exacta (número de sección y encabezad
 | 10 | 5.12.10 | Consultar Bonificaciones de Empleado | `GET` | `/api/v1/personal/:id/bonificaciones` | PENDIENTE DE IMPLEMENTAR | ✅ | ✅ | ❌ |
 | 11 | 5.12.11 | Registrar Descuento a Empleado | `POST` | `/api/v1/personal/:id/descuentos` | PENDIENTE DE IMPLEMENTAR | ✅ | ❌ | ❌ |
 | 12 | 5.12.12 | Consultar Descuentos de Empleado | `GET` | `/api/v1/personal/:id/descuentos` | PENDIENTE DE IMPLEMENTAR | ✅ | ✅ | ❌ |
-| 13 | 5.12.13 | Modificar Salario Base con Historial | `PUT` | `/api/v1/personal/:id/salario` | PENDIENTE DE IMPLEMENTAR | ✅ | ❌ | ❌ |
-| 14 | 5.12.14 | Consultar Salario Actual de Empleado | `GET` | `/api/v1/personal/:id/salario` | PENDIENTE DE IMPLEMENTAR | ✅ | ✅ | ❌ |
+| 13 | 5.12.13 | Modificar Salario Base | `PUT` | `/api/v1/personal/:id/salario` | Implementado | ✅ | ❌ | ❌ |
+| 14 | 5.12.14 | Consultar Salario Actual de Empleado | `GET` | `/api/v1/personal/:id/salario` | Implementado | ✅ | ✅ | ❌ |
 
 ### Confirmación de Conteo de Endpoints
-- **Total de endpoints documentados en la Sección 5.12:** 14 endpoints (6 implementados + 8 pendientes de implementar).
+- **Total de endpoints documentados en la Sección 5.12:** 14 endpoints (8 implementados + 6 pendientes de implementar).
 - **Total de endpoints de Personal en la Matriz RBAC (Sección 7):** 14 endpoints.
 - **Resultado de la verificación de consistencia:** **Conteo idéntico y coincidencia exacta (14 == 14)**.
