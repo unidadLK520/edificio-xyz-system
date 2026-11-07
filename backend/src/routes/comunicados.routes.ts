@@ -12,9 +12,97 @@ import { authMiddleware, AuthRequest } from '../middlewares/auth.middleware';
 import { authorizeRoles } from '../middlewares/role.middleware';
 import { FINANZAS_TX_OPTIONS } from '../middlewares/finanzas-permissions.middleware';
 import { auditoriaService } from '../modules/auditoria';
+import {
+  mailerService,
+  buildComunicadoEmailHtml,
+  buildComunicadoEmailText,
+} from '../modules/mailer';
 
 export const comunicadosRouter: IRouter = Router();
 comunicadosRouter.use(authMiddleware);
+
+// ── Helper: Envío en segundo plano de correos (US3.2 CA06) ───────────────────
+async function despacharCorreosComunicado(
+  idComunicado: number,
+  titulo: string,
+  contenido: string
+): Promise<void> {
+  try {
+    const envios = await prisma.comunicadoEnvio.findMany({
+      where: { idComunicado },
+      include: {
+        persona: {
+          select: {
+            idPersona: true,
+            correo: true,
+            nombres: true,
+            apellidos: true,
+          },
+        },
+      },
+    });
+
+    const htmlBody = buildComunicadoEmailHtml(titulo, contenido);
+    const textBody = buildComunicadoEmailText(titulo, contenido);
+
+    for (const envio of envios) {
+      const email = envio.persona?.correo?.trim();
+      // Personas sin correo registrado: no enviar (permanecen en 'Pendiente')
+      if (!email) {
+        continue;
+      }
+
+      try {
+        const sendResult = await mailerService.sendMail({
+          to: email,
+          subject: titulo,
+          text: textBody,
+          html: htmlBody,
+        });
+
+        if (sendResult.success) {
+          await prisma.comunicadoEnvio.update({
+            where: { idEnvio: envio.idEnvio },
+            data: {
+              estadoEnvio: 'Enviado',
+              fechaEnvio: new Date(),
+            },
+          });
+        } else if (!sendResult.skipped) {
+          // Fallo real en el transporte SMTP
+          await prisma.comunicadoEnvio.update({
+            where: { idEnvio: envio.idEnvio },
+            data: {
+              estadoEnvio: 'Fallido',
+              fechaEnvio: new Date(),
+            },
+          });
+        }
+      } catch (err: any) {
+        console.error(
+          `[COMUNICADOS] Error al actualizar estado de envío para idEnvio ${envio.idEnvio}:`,
+          err?.message || err
+        );
+        try {
+          await prisma.comunicadoEnvio.update({
+            where: { idEnvio: envio.idEnvio },
+            data: {
+              estadoEnvio: 'Fallido',
+              fechaEnvio: new Date(),
+            },
+          });
+        } catch {
+          // Ignorar para preservar la estabilidad del proceso
+        }
+      }
+    }
+  } catch (err: any) {
+    console.error(
+      `[COMUNICADOS] Error general al despachar correos para el comunicado ${idComunicado}:`,
+      err?.message || err
+    );
+  }
+}
 
 // ── Schemas ──────────────────────────────────────────────────────────────────
 const comunicadoSchema = z.object({
@@ -157,6 +245,19 @@ comunicadosRouter.post(
       }, FINANZAS_TX_OPTIONS);
 
       res.status(201).json(comunicado);
+
+      // Despacho de correos en segundo plano fuera de la transacción (US3.2 CA06)
+      const incluyeCorreo = canalEnvio === 'Correo' || canalEnvio === 'Ambos';
+      if (incluyeCorreo) {
+        setImmediate(() => {
+          despacharCorreosComunicado(comunicado.idComunicado, titulo, contenido).catch((err) => {
+            console.error(
+              '[COMUNICADOS] Error en ejecución background de despacho de correos:',
+              err?.message || err
+            );
+          });
+        });
+      }
     } catch (err) {
       next(err);
     }
