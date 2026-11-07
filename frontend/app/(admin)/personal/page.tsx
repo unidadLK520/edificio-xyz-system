@@ -1,11 +1,21 @@
 // frontend/app/(admin)/personal/page.tsx
 // Módulo de Gestión de Personal, Planilla de Sueldos e Historial de Pagos de Empleados (Edificio XYZ)
 // Conectado con la API real:
-//   GET  /api/v1/personal           - Listar empleados (Planilla)
-//   GET  /api/v1/personal/:id       - Detalle de empleado con historial de pagos
-//   POST /api/v1/personal           - Registrar empleado
-//   PUT  /api/v1/personal/:id       - Modificar empleado
-//   POST /api/v1/personal/:id/pagos - Registrar pago de sueldo
+//   GET    /api/v1/personal                    - Listar empleados (Planilla)
+//   GET    /api/v1/personal/pagos              - Historial general consolidado de pagos
+//   GET    /api/v1/personal/:id                - Detalle de empleado
+//   POST   /api/v1/personal                    - Registrar empleado
+//   PUT    /api/v1/personal/:id                - Modificar empleado (datos generales)
+//   PUT    /api/v1/personal/:id/salario        - Modificar salario base (con auditoría y motivo)
+//   GET    /api/v1/personal/:id/salario        - Consultar salario actual
+//   POST   /api/v1/personal/:id/pagos          - Registrar pago de sueldo
+//   GET    /api/v1/personal/:id/pagos          - Historial de pagos de empleado (kardex)
+//   POST   /api/v1/personal/:id/anticipos      - Registrar anticipo de sueldo
+//   GET    /api/v1/personal/:id/anticipos      - Consultar anticipos de empleado
+//   POST   /api/v1/personal/:id/bonificaciones - Registrar bonificación a empleado
+//   GET    /api/v1/personal/:id/bonificaciones - Consultar bonificaciones de empleado
+//   POST   /api/v1/personal/:id/descuentos     - Registrar descuento a empleado
+//   GET    /api/v1/personal/:id/descuentos     - Consultar descuentos de empleado
 
 'use client'
 
@@ -32,10 +42,14 @@ import {
   RotateCcw,
   Edit2,
   Receipt,
-  UserCheck
+  UserCheck,
+  Gift,
+  RefreshCw,
 } from 'lucide-react'
 import { apiFetch } from '@/lib/api'
 import { fechaSolo, fechaHoraBolivia } from '@/lib/fecha'
+import ModificarSalarioModal from '@/components/personal/ModificarSalarioModal'
+import ConceptosEmpleadoModal from '@/components/personal/ConceptosEmpleadoModal'
 
 export interface EmpleadoItem {
   idEmpleado: number
@@ -78,10 +92,13 @@ export interface PagoEmpleadoItem {
 export default function PersonalPage() {
   const [activeTab, setActiveTab] = useState<'planilla' | 'pagos'>('planilla')
 
-  // Datos de empleados
+  // Datos de empleados y pagos
   const [empleados, setEmpleados] = useState<EmpleadoItem[]>([])
   const [historialPagos, setHistorialPagos] = useState<PagoEmpleadoItem[]>([])
+  const [totalPagosMeta, setTotalPagosMeta] = useState<number>(0)
+  const [isHistorialPagosTruncado, setIsHistorialPagosTruncado] = useState(false)
   const [isLoading, setIsLoading] = useState<boolean>(true)
+  const [isLoadingPagos, setIsLoadingPagos] = useState<boolean>(false)
   const [apiError, setApiError] = useState<string | null>(null)
   const [toastMessage, setToastMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
 
@@ -91,6 +108,7 @@ export default function PersonalPage() {
   const [filtroEstado, setFiltroEstado] = useState('Todos')
 
   // Filtros - Historial Pagos
+  const [filtroAnioPago, setFiltroAnioPago] = useState<string>(() => String(new Date().getFullYear()))
   const [filtroEmpleadoPago, setFiltroEmpleadoPago] = useState<string>('Todos')
   const [searchPago, setSearchPago] = useState('')
   const [filtroPeriodoPago, setFiltroPeriodoPago] = useState('')
@@ -104,26 +122,33 @@ export default function PersonalPage() {
   const [empleadoParaPagar, setEmpleadoParaPagar] = useState<EmpleadoItem | null>(null)
   const [selectedBoletaPago, setSelectedBoletaPago] = useState<PagoEmpleadoItem | null>(null)
 
-  // Errores en modales (no cierran el modal en caso de error)
+  // Modales específicos US3.1
+  const [isSalarioModalOpen, setIsSalarioModalOpen] = useState(false)
+  const [empleadoParaSalario, setEmpleadoParaSalario] = useState<EmpleadoItem | null>(null)
+  const [isConceptosModalOpen, setIsConceptosModalOpen] = useState(false)
+  const [empleadoParaConceptos, setEmpleadoParaConceptos] = useState<EmpleadoItem | null>(null)
+  const [isLoadingKardex, setIsLoadingKardex] = useState(false)
+  const [totalKardexPagos, setTotalKardexPagos] = useState<number>(0)
+
+  // Errores en modales
   const [createModalError, setCreateModalError] = useState<string | null>(null)
   const [editModalError, setEditModalError] = useState<string | null>(null)
   const [pagoModalError, setPagoModalError] = useState<string | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
 
-  // Formulario Crear Empleado
+  // Formulario Crear Empleado (Salario inicial vacío y obligatorio)
   const [nuevoNombres, setNuevoNombres] = useState('')
   const [nuevoApellidos, setNuevoApellidos] = useState('')
   const [nuevoCi, setNuevoCi] = useState('')
   const [nuevoCargo, setNuevoCargo] = useState('Conserje')
-  const [nuevoSalarioBase, setNuevoSalarioBase] = useState<number | ''>(2800)
+  const [nuevoSalarioBase, setNuevoSalarioBase] = useState<number | ''>('')
   const [nuevoFechaIngreso, setNuevoFechaIngreso] = useState<string>(fechaSolo(new Date()))
 
-  // Formulario Editar Empleado
+  // Formulario Editar Empleado (salarioBase removido, se gestiona con ModificarSalarioModal)
   const [editNombres, setEditNombres] = useState('')
   const [editApellidos, setEditApellidos] = useState('')
   const [editCi, setEditCi] = useState('')
   const [editCargo, setEditCargo] = useState('')
-  const [editSalarioBase, setEditSalarioBase] = useState<number | ''>(0)
   const [editFechaIngreso, setEditFechaIngreso] = useState('')
   const [editActivo, setEditActivo] = useState(true)
 
@@ -137,12 +162,18 @@ export default function PersonalPage() {
   const [pagoBonificaciones, setPagoBonificaciones] = useState<number>(0)
   const [pagoDescuentos, setPagoDescuentos] = useState<number>(0)
 
+  // Sugerencias de conceptos en modal de pago
+  const [sugerenciasCargando, setSugerenciasCargando] = useState(false)
+  const [sugerenciasBono, setSugerenciasBono] = useState<{ total: number; items: any[] }>({ total: 0, items: [] })
+  const [sugerenciasAnticipo, setSugerenciasAnticipo] = useState<{ total: number; items: any[] }>({ total: 0, items: [] })
+  const [sugerenciasDescuento, setSugerenciasDescuento] = useState<{ total: number; items: any[] }>({ total: 0, items: [] })
+
   const showToast = (type: 'success' | 'error', text: string) => {
     setToastMessage({ type, text })
     setTimeout(() => setToastMessage(null), 4500)
   }
 
-  // Cargar lista de empleados desde la API
+  // 1. Cargar lista de empleados desde la API
   const fetchEmpleados = useCallback(async () => {
     setIsLoading(true)
     setApiError(null)
@@ -171,46 +202,6 @@ export default function PersonalPage() {
       }))
 
       setEmpleados(mapped)
-
-      // Cargar historial consolidado de pagos consultando los empleados
-      try {
-        const pagosConsolidados: PagoEmpleadoItem[] = []
-        for (const emp of mapped) {
-          if (emp._count && emp._count.pagos > 0) {
-            const detalleRes = await apiFetch(`/api/v1/personal/${emp.idEmpleado}`)
-            if (detalleRes.ok) {
-              const detalleJson = await detalleRes.json()
-              if (Array.isArray(detalleJson.pagos)) {
-                detalleJson.pagos.forEach((p: any) => {
-                  pagosConsolidados.push({
-                    idPagoEmpleado: Number(p.idPagoEmpleado),
-                    idEmpleado: Number(emp.idEmpleado),
-                    periodo: fechaSolo(p.periodo),
-                    salarioPagado: Number(p.salarioPagado || 0),
-                    anticipos: Number(p.anticipos || 0),
-                    bonificaciones: Number(p.bonificaciones || 0),
-                    descuentos: Number(p.descuentos || 0),
-                    fechaPago: p.fechaPago,
-                    idMovimiento: p.idMovimiento,
-                    empleado: {
-                      idEmpleado: emp.idEmpleado,
-                      nombres: emp.nombres,
-                      apellidos: emp.apellidos,
-                      ci: emp.ci,
-                      cargo: emp.cargo
-                    },
-                    movimiento: p.movimiento
-                  })
-                })
-              }
-            }
-          }
-        }
-        pagosConsolidados.sort((a, b) => new Date(b.periodo).getTime() - new Date(a.periodo).getTime())
-        setHistorialPagos(pagosConsolidados)
-      } catch (err) {
-        console.error('Error al cargar historial consolidado de pagos:', err)
-      }
     } catch (err: any) {
       console.error('Error al cargar personal:', err)
       setApiError(err?.message || 'Error de conexión con el servidor.')
@@ -220,9 +211,61 @@ export default function PersonalPage() {
     }
   }, [])
 
+  // 2. Cargar historial consolidado de pagos (GET /personal/pagos?limit=200&anio=...)
+  const fetchHistorialPagos = useCallback(async (anio?: string) => {
+    setIsLoadingPagos(true)
+    try {
+      const year = anio || filtroAnioPago
+      const query = year ? `&anio=${year}` : ''
+      const res = await apiFetch(`/api/v1/personal/pagos?limit=200${query}`)
+      if (!res.ok) {
+        console.error('Error al cargar historial consolidado de pagos.')
+        return
+      }
+
+      const json = await res.json()
+      const rawList = Array.isArray(json.data) ? json.data : []
+      const mapped: PagoEmpleadoItem[] = rawList.map((p: any) => ({
+        idPagoEmpleado: Number(p.idPagoEmpleado),
+        idEmpleado: Number(p.idEmpleado),
+        periodo: fechaSolo(p.periodo),
+        salarioPagado: Number(p.salarioPagado || 0),
+        anticipos: Number(p.anticipos || 0),
+        bonificaciones: Number(p.bonificaciones || 0),
+        descuentos: Number(p.descuentos || 0),
+        fechaPago: p.fechaPago,
+        idMovimiento: p.idMovimiento,
+        empleado: p.empleado
+          ? {
+              idEmpleado: p.empleado.idEmpleado,
+              nombres: p.empleado.nombres || '',
+              apellidos: p.empleado.apellidos || '',
+              ci: p.empleado.ci,
+              cargo: p.empleado.cargo,
+            }
+          : undefined,
+        movimiento: p.movimiento,
+      }))
+
+      setHistorialPagos(mapped)
+      const total = Number(json.meta?.total ?? mapped.length)
+      const limit = Number(json.meta?.limit ?? 200)
+      setTotalPagosMeta(total)
+      setIsHistorialPagosTruncado(total > limit)
+    } catch (err) {
+      console.error('Error al cargar historial consolidado de pagos:', err)
+    } finally {
+      setIsLoadingPagos(false)
+    }
+  }, [filtroAnioPago])
+
   useEffect(() => {
     fetchEmpleados()
   }, [fetchEmpleados])
+
+  useEffect(() => {
+    fetchHistorialPagos(filtroAnioPago)
+  }, [filtroAnioPago, fetchHistorialPagos])
 
   // Filtrado reactivo de planilla de personal
   const personalFiltrado = useMemo(() => {
@@ -268,7 +311,7 @@ export default function PersonalPage() {
   const masaSalarialBase = empleados
     .filter((p) => p.activo)
     .reduce((acc, curr) => acc + curr.salarioBase, 0)
-  const totalPagosRealizados = historialPagos.length
+  const totalPagosRealizados = totalPagosMeta || historialPagos.length
 
   // Métricas de Historial de Pagos
   const totalDesembolsadoPagos = useMemo(() => {
@@ -291,8 +334,8 @@ export default function PersonalPage() {
       setCreateModalError('El CI es obligatorio.')
       return
     }
-    if (Number(nuevoSalarioBase) <= 0) {
-      setCreateModalError('El salario base debe ser mayor a 0 Bs.')
+    if (nuevoSalarioBase === '' || Number(nuevoSalarioBase) <= 0) {
+      setCreateModalError('El salario base es obligatorio y debe ser mayor a 0 Bs.')
       return
     }
     if (!nuevoFechaIngreso) {
@@ -326,18 +369,17 @@ export default function PersonalPage() {
             .join(' | ')
           msg = `${msg} (${detailStr})`
         }
-        // No cerrar el modal en error
         setCreateModalError(msg)
         return
       }
 
       showToast('success', `¡Empleado "${nuevoNombres} ${nuevoApellidos}" registrado exitosamente en la planilla!`)
       setIsCreateModalOpen(false)
-      // Reset form
+      // Reset form (salario inicial vacío)
       setNuevoNombres('')
       setNuevoApellidos('')
       setNuevoCi('')
-      setNuevoSalarioBase(2800)
+      setNuevoSalarioBase('')
       setNuevoFechaIngreso(fechaSolo(new Date()))
       await fetchEmpleados()
     } catch (err: any) {
@@ -347,14 +389,13 @@ export default function PersonalPage() {
     }
   }
 
-  // Abrir Modal de Edición
+  // Abrir Modal de Edición General (sin salarioBase)
   const handleOpenEditModal = (emp: EmpleadoItem) => {
     setEmpleadoParaEditar(emp)
     setEditNombres(emp.nombres)
     setEditApellidos(emp.apellidos)
     setEditCi(emp.ci)
     setEditCargo(emp.cargo || '')
-    setEditSalarioBase(emp.salarioBase)
     setEditFechaIngreso(emp.fechaIngreso)
     setEditActivo(emp.activo)
     setEditModalError(null)
@@ -375,10 +416,6 @@ export default function PersonalPage() {
       setEditModalError('El CI es obligatorio.')
       return
     }
-    if (Number(editSalarioBase) <= 0) {
-      setEditModalError('El salario base debe ser mayor a 0 Bs.')
-      return
-    }
 
     setIsSubmitting(true)
     try {
@@ -390,7 +427,6 @@ export default function PersonalPage() {
           apellidos: editApellidos.trim(),
           ci: editCi.trim(),
           cargo: editCargo.trim() || undefined,
-          salarioBase: Number(editSalarioBase),
           fechaIngreso: editFechaIngreso,
           activo: editActivo
         })
@@ -421,6 +457,56 @@ export default function PersonalPage() {
     }
   }
 
+  // Consulta de sugerencias de conceptos para liquidación (editable, nunca automática)
+  const cargarSugerenciasPago = useCallback(async (idEmp: number, periodoMes: string) => {
+    setSugerenciasCargando(true)
+    const periodoExacto = `${periodoMes}-01`
+    const anio = periodoMes.slice(0, 4)
+
+    try {
+      const [resBonos, resDescuentos, resAnticipos] = await Promise.all([
+        apiFetch(`/api/v1/personal/${idEmp}/bonificaciones?periodo=${periodoExacto}&limit=50`),
+        apiFetch(`/api/v1/personal/${idEmp}/descuentos?periodo=${periodoExacto}&limit=50`),
+        apiFetch(`/api/v1/personal/${idEmp}/anticipos?anio=${anio}&limit=50`),
+      ])
+
+      let bonosList: any[] = []
+      if (resBonos.ok) {
+        const jsonB = await resBonos.json()
+        bonosList = Array.isArray(jsonB.data) ? jsonB.data : []
+      }
+
+      let descuentosList: any[] = []
+      if (resDescuentos.ok) {
+        const jsonD = await resDescuentos.json()
+        descuentosList = Array.isArray(jsonD.data) ? jsonD.data : []
+      }
+
+      let anticiposList: any[] = []
+      if (resAnticipos.ok) {
+        const jsonA = await resAnticipos.json()
+        const rawA = Array.isArray(jsonA.data) ? jsonA.data : []
+        // Filtrar en cliente los anticipos correspondientes al mes del período
+        anticiposList = rawA.filter((a: any) => fechaSolo(a.fecha).startsWith(periodoMes))
+      }
+
+      const totalBono = bonosList.reduce((acc, b) => acc + Number(b.monto || 0), 0)
+      const totalDescuento = descuentosList.reduce((acc, d) => acc + Number(d.monto || 0), 0)
+      const totalAnticipo = anticiposList.reduce((acc, a) => acc + Number(a.monto || 0), 0)
+
+      setSugerenciasBono({ total: totalBono, items: bonosList })
+      setSugerenciasDescuento({ total: totalDescuento, items: descuentosList })
+      setSugerenciasAnticipo({ total: totalAnticipo, items: anticiposList })
+    } catch (err) {
+      console.error('Error al consultar sugerencias de conceptos:', err)
+      setSugerenciasBono({ total: 0, items: [] })
+      setSugerenciasDescuento({ total: 0, items: [] })
+      setSugerenciasAnticipo({ total: 0, items: [] })
+    } finally {
+      setSugerenciasCargando(false)
+    }
+  }, [])
+
   // Abrir Modal de Pago de Sueldo
   const handleOpenPagoModal = (emp?: EmpleadoItem) => {
     const targetEmp = emp || empleados.find((e) => e.activo) || empleados[0]
@@ -435,6 +521,7 @@ export default function PersonalPage() {
     setPagoDescuentos(0)
     setPagoModalError(null)
     setIsPagoModalOpen(true)
+    cargarSugerenciasPago(targetEmp.idEmpleado, pagoPeriodoMes)
   }
 
   // Guardar Pago de Sueldo (POST /api/v1/personal/:id/pagos)
@@ -486,6 +573,7 @@ export default function PersonalPage() {
       setIsPagoModalOpen(false)
       setEmpleadoParaPagar(null)
       await fetchEmpleados()
+      await fetchHistorialPagos(filtroAnioPago)
     } catch (err: any) {
       setPagoModalError(err?.message || 'Error de conexión al registrar el pago.')
     } finally {
@@ -493,19 +581,89 @@ export default function PersonalPage() {
     }
   }
 
-  // Ver detalle de empleado con historial completo de pagos (GET /api/v1/personal/:id)
+  // Ver detalle de empleado con kardex completo de pagos (GET /personal/:id/pagos?limit=50)
   const handleVerDetalleEmpleado = async (emp: EmpleadoItem) => {
+    setSelectedEmpleadoDetalle(emp)
+    setIsLoadingKardex(true)
     try {
-      const res = await apiFetch(`/api/v1/personal/${emp.idEmpleado}`)
-      if (res.ok) {
-        const json = await res.json()
-        setSelectedEmpleadoDetalle(json)
-      } else {
-        setSelectedEmpleadoDetalle(emp)
+      const [resDetalle, resPagos] = await Promise.all([
+        apiFetch(`/api/v1/personal/${emp.idEmpleado}`),
+        apiFetch(`/api/v1/personal/${emp.idEmpleado}/pagos?limit=50`),
+      ])
+
+      let empData: EmpleadoItem = emp
+      if (resDetalle.ok) {
+        const jsonDetalle = await resDetalle.json()
+        empData = {
+          idEmpleado: Number(jsonDetalle.idEmpleado),
+          nombres: jsonDetalle.nombres || '',
+          apellidos: jsonDetalle.apellidos || '',
+          ci: jsonDetalle.ci || '',
+          cargo: jsonDetalle.cargo || 'General',
+          salarioBase: Number(jsonDetalle.salarioBase || 0),
+          fechaIngreso: fechaSolo(jsonDetalle.fechaIngreso),
+          activo: jsonDetalle.activo !== undefined ? Boolean(jsonDetalle.activo) : true,
+          _count: jsonDetalle._count || emp._count,
+        }
       }
-    } catch {
+
+      let kardexPagos: PagoEmpleadoItem[] = []
+      if (resPagos.ok) {
+        const jsonPagos = await resPagos.json()
+        const rawPagos = Array.isArray(jsonPagos.data) ? jsonPagos.data : []
+        setTotalKardexPagos(Number(jsonPagos.meta?.total ?? rawPagos.length))
+        kardexPagos = rawPagos.map((p: any) => ({
+          idPagoEmpleado: Number(p.idPagoEmpleado),
+          idEmpleado: Number(emp.idEmpleado),
+          periodo: fechaSolo(p.periodo),
+          salarioPagado: Number(p.salarioPagado || 0),
+          anticipos: Number(p.anticipos || 0),
+          bonificaciones: Number(p.bonificaciones || 0),
+          descuentos: Number(p.descuentos || 0),
+          fechaPago: p.fechaPago,
+          idMovimiento: p.idMovimiento,
+          empleado: {
+            idEmpleado: emp.idEmpleado,
+            nombres: emp.nombres,
+            apellidos: emp.apellidos,
+            ci: emp.ci,
+            cargo: emp.cargo,
+          },
+          movimiento: p.movimiento,
+        }))
+      }
+
+      setSelectedEmpleadoDetalle({
+        ...empData,
+        pagos: kardexPagos,
+      })
+    } catch (err) {
+      console.error('Error al cargar kardex de pagos:', err)
       setSelectedEmpleadoDetalle(emp)
+    } finally {
+      setIsLoadingKardex(false)
     }
+  }
+
+  // Abrir Modal de Salario
+  const handleOpenSalarioModal = (emp: EmpleadoItem) => {
+    setEmpleadoParaSalario(emp)
+    setIsSalarioModalOpen(true)
+  }
+
+  // Éxito al modificar salario
+  const handleSalarioSuccess = (nuevoSalario: number, mensaje: string) => {
+    showToast('success', mensaje)
+    fetchEmpleados()
+    if (selectedEmpleadoDetalle && empleadoParaSalario && selectedEmpleadoDetalle.idEmpleado === empleadoParaSalario.idEmpleado) {
+      setSelectedEmpleadoDetalle((prev) => (prev ? { ...prev, salarioBase: nuevoSalario } : null))
+    }
+  }
+
+  // Abrir Modal de Conceptos
+  const handleOpenConceptosModal = (emp: EmpleadoItem) => {
+    setEmpleadoParaConceptos(emp)
+    setIsConceptosModalOpen(true)
   }
 
   // Cálculo en vivo del líquido pagable en el modal de pago
@@ -536,7 +694,7 @@ export default function PersonalPage() {
             )}
             <span>{toastMessage.text}</span>
           </div>
-          <button onClick={() => setToastMessage(null)} className="p-1 hover:opacity-75">
+          <button onClick={() => setToastMessage(null)} className="p-1 hover:opacity-75 cursor-pointer">
             <X className="w-4 h-4" />
           </button>
         </div>
@@ -608,7 +766,7 @@ export default function PersonalPage() {
           <CreditCard className="w-4 h-4" />
           <span>Historial Pagos Empleados</span>
           <span className="ml-1 px-1.5 py-0.5 rounded-md text-[10px] font-bold bg-white/20 dark:bg-white/10">
-            {historialPagos.length}
+            {totalPagosRealizados}
           </span>
         </button>
       </div>
@@ -624,7 +782,10 @@ export default function PersonalPage() {
             </div>
           </div>
           <button
-            onClick={() => fetchEmpleados()}
+            onClick={() => {
+              fetchEmpleados()
+              fetchHistorialPagos(filtroAnioPago)
+            }}
             className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-rose-700 hover:bg-rose-800 text-white font-bold transition-colors cursor-pointer shrink-0"
           >
             <RotateCcw className="w-3.5 h-3.5" />
@@ -828,6 +989,21 @@ export default function PersonalPage() {
                               <span>Pagar</span>
                             </button>
                             <button
+                              onClick={() => handleOpenConceptosModal(p)}
+                              className="px-2 py-1 bg-purple-700 hover:bg-purple-800 text-white rounded-lg text-[11px] font-bold shadow-xs cursor-pointer flex items-center gap-1"
+                              title="Conceptos (Anticipos, Bonificaciones, Descuentos)"
+                            >
+                              <Gift className="w-3.5 h-3.5" />
+                              <span>Conceptos</span>
+                            </button>
+                            <button
+                              onClick={() => handleOpenSalarioModal(p)}
+                              className="p-1.5 rounded-lg text-amber-700 hover:bg-amber-100 dark:text-amber-400 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+                              title="Ajustar Salario Base (auditoría obligatoria)"
+                            >
+                              <DollarSign className="w-4 h-4" />
+                            </button>
+                            <button
                               onClick={() => handleVerDetalleEmpleado(p)}
                               className="p-1.5 rounded-lg text-[#5c5750] hover:text-[#262422] hover:bg-[#ded8cc] dark:text-slate-400 dark:hover:text-white dark:hover:bg-slate-800 transition-colors cursor-pointer"
                               title="Ver Ficha e Historial"
@@ -837,7 +1013,7 @@ export default function PersonalPage() {
                             <button
                               onClick={() => handleOpenEditModal(p)}
                               className="p-1.5 rounded-lg text-blue-700 hover:bg-blue-100 dark:text-blue-400 dark:hover:bg-slate-800 transition-colors cursor-pointer"
-                              title="Editar Empleado"
+                              title="Editar Datos Generales"
                             >
                               <Edit2 className="w-4 h-4" />
                             </button>
@@ -856,6 +1032,16 @@ export default function PersonalPage() {
       {/* VISTA 2: HISTORIAL DE PAGOS DE EMPLEADOS */}
       {activeTab === 'pagos' && (
         <div className="space-y-6 animate-in fade-in duration-200">
+          {/* AVISO SI HAY MÁS PAGOS QUE EL LÍMITE */}
+          {isHistorialPagosTruncado && (
+            <div className="p-3 bg-amber-100 dark:bg-amber-950/70 border border-amber-300 dark:border-amber-800 text-amber-900 dark:text-amber-200 rounded-xl flex items-center gap-2 text-xs">
+              <AlertCircle className="w-4 h-4 shrink-0 text-amber-600 dark:text-amber-400" />
+              <span>
+                Aviso: Se están mostrando los primeros 200 pagos de un total de {totalPagosMeta} registrados para el año {filtroAnioPago}. Use los filtros para acotar la búsqueda.
+              </span>
+            </div>
+          )}
+
           {/* KPIS DE PAGOS */}
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
             <div className="p-4 rounded-2xl bg-[#ede9e1] dark:bg-slate-900 border border-[#cec8bc] dark:border-slate-800 shadow-sm">
@@ -863,8 +1049,12 @@ export default function PersonalPage() {
                 <span>Total Boletas Emitidas</span>
                 <Receipt className="w-4 h-4 text-blue-700 dark:text-blue-400" />
               </div>
-              <div className="text-2xl font-bold text-[#262422] dark:text-white">{historialPagos.length}</div>
-              <span className="text-[11px] text-[#7d776f] dark:text-slate-500">Histórico de sueldos liquidados</span>
+              <div className="text-2xl font-bold text-[#262422] dark:text-white">
+                {totalPagosMeta || historialPagos.length}
+              </div>
+              <span className="text-[11px] text-[#7d776f] dark:text-slate-500">
+                Histórico del año {filtroAnioPago}
+              </span>
             </div>
 
             <div className="p-4 rounded-2xl bg-[#ede9e1] dark:bg-slate-900 border border-[#cec8bc] dark:border-slate-800 shadow-sm">
@@ -915,6 +1105,22 @@ export default function PersonalPage() {
             </div>
 
             <div className="flex flex-wrap items-center gap-2">
+              {/* SELECTOR DE AÑO */}
+              <div className="flex items-center gap-1.5 bg-[#dfd9ce] dark:bg-slate-950 px-3 py-1.5 rounded-xl border border-[#cec8bc] dark:border-slate-700 text-xs">
+                <span className="text-[10px] uppercase font-bold text-[#7d776f]">Año:</span>
+                <select
+                  value={filtroAnioPago}
+                  onChange={(e) => setFiltroAnioPago(e.target.value)}
+                  className="bg-transparent text-[#262422] dark:text-white focus:outline-none font-mono text-xs cursor-pointer font-bold"
+                >
+                  <option value="2026">2026</option>
+                  <option value="2025">2025</option>
+                  <option value="2024">2024</option>
+                  <option value="2023">2023</option>
+                </select>
+              </div>
+
+              {/* FILTRO COLABORADOR */}
               <div className="flex items-center gap-1.5 bg-[#dfd9ce] dark:bg-slate-950 px-3 py-2 rounded-xl border border-[#cec8bc] dark:border-slate-700 text-xs">
                 <Filter className="w-3.5 h-3.5 text-[#7d776f]" />
                 <select
@@ -931,6 +1137,7 @@ export default function PersonalPage() {
                 </select>
               </div>
 
+              {/* FILTRO MES */}
               <div className="flex items-center gap-1.5 bg-[#dfd9ce] dark:bg-slate-950 px-3 py-1.5 rounded-xl border border-[#cec8bc] dark:border-slate-700 text-xs">
                 <span className="text-[10px] uppercase font-bold text-[#7d776f]">Mes:</span>
                 <input
@@ -940,7 +1147,7 @@ export default function PersonalPage() {
                   className="bg-transparent text-[#262422] dark:text-white focus:outline-none font-mono text-xs cursor-pointer"
                 />
                 {filtroPeriodoPago && (
-                  <button onClick={() => setFiltroPeriodoPago('')} className="p-0.5 text-[#7d776f] hover:text-[#262422]">
+                  <button onClick={() => setFiltroPeriodoPago('')} className="p-0.5 text-[#7d776f] hover:text-[#262422] cursor-pointer">
                     <X className="w-3.5 h-3.5" />
                   </button>
                 )}
@@ -966,7 +1173,13 @@ export default function PersonalPage() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-[#cec8bc]/60 dark:divide-slate-800">
-                  {pagosFiltrados.length === 0 ? (
+                  {isLoadingPagos ? (
+                    <tr>
+                      <td colSpan={9} className="py-10 text-center text-[#7d776f]">
+                        Cargando historial de pagos desde el servidor...
+                      </td>
+                    </tr>
+                  ) : pagosFiltrados.length === 0 ? (
                     <tr>
                       <td colSpan={9} className="py-10 text-center text-[#7d776f] dark:text-slate-500">
                         No se encontraron registros de pagos de sueldos con los filtros actuales.
@@ -1030,7 +1243,7 @@ export default function PersonalPage() {
         </div>
       )}
 
-      {/* MODAL 1: REGISTRAR COLABORADOR EN PLANILLA */}
+      {/* MODAL 1: REGISTRAR COLABORADOR EN PLANILLA (Salario inicial vacío) */}
       {isCreateModalOpen && (
         <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 backdrop-blur-xs">
           <div className="w-full max-w-lg bg-[#ede9e1] dark:bg-slate-900 rounded-3xl border border-[#cec8bc] dark:border-slate-800 shadow-2xl p-6 sm:p-8 space-y-4">
@@ -1041,7 +1254,7 @@ export default function PersonalPage() {
               </h3>
               <button
                 onClick={() => setIsCreateModalOpen(false)}
-                className="text-[#7d776f] hover:text-[#262422] dark:hover:text-white p-1 rounded-lg"
+                className="text-[#7d776f] hover:text-[#262422] dark:hover:text-white p-1 rounded-lg cursor-pointer"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -1127,7 +1340,7 @@ export default function PersonalPage() {
                     step="0.01"
                     min="1"
                     required
-                    placeholder="2800.00"
+                    placeholder="Ej. 2800.00"
                     value={nuevoSalarioBase}
                     onChange={(e) => setNuevoSalarioBase(e.target.value === '' ? '' : Number(e.target.value))}
                     className="w-full px-3 py-2 rounded-xl bg-[#dfd9ce] dark:bg-slate-950 border border-[#cec8bc] dark:border-slate-800 text-xs text-emerald-700 dark:text-emerald-400 font-mono font-bold focus:outline-none focus:ring-2 focus:ring-blue-600"
@@ -1151,7 +1364,7 @@ export default function PersonalPage() {
                 <button
                   type="button"
                   onClick={() => setIsCreateModalOpen(false)}
-                  className="px-4 py-2 rounded-xl bg-[#dfd9ce] dark:bg-slate-800 text-xs font-semibold text-[#262422] dark:text-white hover:bg-[#cec8bc]"
+                  className="px-4 py-2 rounded-xl bg-[#dfd9ce] dark:bg-slate-800 text-xs font-semibold text-[#262422] dark:text-white hover:bg-[#cec8bc] cursor-pointer"
                 >
                   Cancelar
                 </button>
@@ -1168,18 +1381,18 @@ export default function PersonalPage() {
         </div>
       )}
 
-      {/* MODAL 2: EDITAR EMPLEADO */}
+      {/* MODAL 2: EDITAR DATOS GENERALES (salarioBase removido por US3.1) */}
       {isEditModalOpen && empleadoParaEditar && (
         <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 backdrop-blur-xs">
           <div className="w-full max-w-lg bg-[#ede9e1] dark:bg-slate-900 rounded-3xl border border-[#cec8bc] dark:border-slate-800 shadow-2xl p-6 sm:p-8 space-y-4">
             <div className="flex items-center justify-between border-b border-[#cec8bc] dark:border-slate-800 pb-3">
               <h3 className="font-extrabold text-base text-[#262422] dark:text-white flex items-center gap-2">
                 <Edit2 className="w-5 h-5 text-blue-700 dark:text-blue-400" />
-                Modificar Colaborador
+                Modificar Datos del Colaborador
               </h3>
               <button
                 onClick={() => setIsEditModalOpen(false)}
-                className="text-[#7d776f] hover:text-[#262422] dark:hover:text-white p-1 rounded-lg"
+                className="text-[#7d776f] hover:text-[#262422] dark:hover:text-white p-1 rounded-lg cursor-pointer"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -1246,33 +1459,17 @@ export default function PersonalPage() {
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block font-bold text-[#383430] dark:text-slate-300 mb-1">
-                    Salario Base Mensual (Bs.) *
-                  </label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    min="1"
-                    required
-                    value={editSalarioBase}
-                    onChange={(e) => setEditSalarioBase(e.target.value === '' ? '' : Number(e.target.value))}
-                    className="w-full px-3 py-2 rounded-xl bg-[#dfd9ce] dark:bg-slate-950 border border-[#cec8bc] dark:border-slate-800 text-xs text-emerald-700 dark:text-emerald-400 font-mono font-bold focus:outline-none focus:ring-2 focus:ring-blue-600"
-                  />
-                </div>
-                <div>
-                  <label className="block font-bold text-[#383430] dark:text-slate-300 mb-1">
-                    Fecha de Ingreso *
-                  </label>
-                  <input
-                    type="date"
-                    required
-                    value={editFechaIngreso}
-                    onChange={(e) => setEditFechaIngreso(e.target.value)}
-                    className="w-full px-3 py-2 rounded-xl bg-[#dfd9ce] dark:bg-slate-950 border border-[#cec8bc] dark:border-slate-800 text-xs text-[#1c1917] dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-600 font-mono"
-                  />
-                </div>
+              <div>
+                <label className="block font-bold text-[#383430] dark:text-slate-300 mb-1">
+                  Fecha de Ingreso *
+                </label>
+                <input
+                  type="date"
+                  required
+                  value={editFechaIngreso}
+                  onChange={(e) => setEditFechaIngreso(e.target.value)}
+                  className="w-full px-3 py-2 rounded-xl bg-[#dfd9ce] dark:bg-slate-950 border border-[#cec8bc] dark:border-slate-800 text-xs text-[#1c1917] dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-600 font-mono"
+                />
               </div>
 
               <div className="p-3 bg-white/60 dark:bg-slate-950/60 rounded-xl border border-[#cec8bc] dark:border-slate-800 flex items-center justify-between">
@@ -1295,7 +1492,7 @@ export default function PersonalPage() {
                 <button
                   type="button"
                   onClick={() => setIsEditModalOpen(false)}
-                  className="px-4 py-2 rounded-xl bg-[#dfd9ce] dark:bg-slate-800 text-xs font-semibold text-[#262422] dark:text-white hover:bg-[#cec8bc]"
+                  className="px-4 py-2 rounded-xl bg-[#dfd9ce] dark:bg-slate-800 text-xs font-semibold text-[#262422] dark:text-white hover:bg-[#cec8bc] cursor-pointer"
                 >
                   Cancelar
                 </button>
@@ -1312,10 +1509,10 @@ export default function PersonalPage() {
         </div>
       )}
 
-      {/* MODAL 3: REGISTRAR PAGO DE SUELDO (POST /api/v1/personal/:id/pagos) */}
+      {/* MODAL 3: REGISTRAR PAGO DE SUELDO (POST /api/v1/personal/:id/pagos) CON SUGERENCIAS EDITABLES */}
       {isPagoModalOpen && empleadoParaPagar && (
         <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 backdrop-blur-xs">
-          <div className="w-full max-w-lg bg-[#ede9e1] dark:bg-slate-900 rounded-3xl border border-[#cec8bc] dark:border-slate-800 shadow-2xl p-6 sm:p-8 space-y-4">
+          <div className="w-full max-w-lg bg-[#ede9e1] dark:bg-slate-900 rounded-3xl border border-[#cec8bc] dark:border-slate-800 shadow-2xl p-6 sm:p-8 space-y-4 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between border-b border-[#cec8bc] dark:border-slate-800 pb-3">
               <div>
                 <h3 className="font-extrabold text-base text-[#262422] dark:text-white flex items-center gap-2">
@@ -1328,7 +1525,7 @@ export default function PersonalPage() {
               </div>
               <button
                 onClick={() => setIsPagoModalOpen(false)}
-                className="text-[#7d776f] hover:text-[#262422] dark:hover:text-white p-1 rounded-lg"
+                className="text-[#7d776f] hover:text-[#262422] dark:hover:text-white p-1 rounded-lg cursor-pointer"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -1353,6 +1550,7 @@ export default function PersonalPage() {
                     if (sel) {
                       setEmpleadoParaPagar(sel)
                       setPagoSalario(sel.salarioBase)
+                      cargarSugerenciasPago(sel.idEmpleado, pagoPeriodoMes)
                     }
                   }}
                   className="w-full px-3 py-2 rounded-xl bg-[#dfd9ce] dark:bg-slate-950 border border-[#cec8bc] dark:border-slate-800 text-xs text-[#1c1917] dark:text-white cursor-pointer font-semibold"
@@ -1373,11 +1571,81 @@ export default function PersonalPage() {
                   type="month"
                   required
                   value={pagoPeriodoMes}
-                  onChange={(e) => setPagoPeriodoMes(e.target.value)}
+                  onChange={(e) => {
+                    const nuevoMes = e.target.value
+                    setPagoPeriodoMes(nuevoMes)
+                    if (empleadoParaPagar) {
+                      cargarSugerenciasPago(empleadoParaPagar.idEmpleado, nuevoMes)
+                    }
+                  }}
                   className="w-full px-3 py-2 rounded-xl bg-[#dfd9ce] dark:bg-slate-950 border border-[#cec8bc] dark:border-slate-800 text-xs text-[#1c1917] dark:text-white font-mono font-bold"
                 />
               </div>
 
+              {/* PANEL DE CONCEPTOS SUGERIDOS (EDITABLE, NUNCA AUTOMÁTICO) */}
+              <div className="p-3 rounded-2xl bg-white/70 dark:bg-slate-950/70 border border-[#cec8bc] dark:border-slate-800 text-xs space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="font-bold text-[#383430] dark:text-slate-200 flex items-center gap-1.5">
+                    <Sparkles className="w-4 h-4 text-amber-600 dark:text-amber-400" />
+                    Conceptos registrados para {pagoPeriodoMes}:
+                  </span>
+                  {sugerenciasCargando && (
+                    <span className="text-[10px] text-[#7d776f] animate-pulse">Consultando...</span>
+                  )}
+                </div>
+
+                {sugerenciasCargando ? (
+                  <p className="text-[11px] text-[#7d776f]">Buscando conceptos previos de este mes...</p>
+                ) : sugerenciasBono.items.length === 0 &&
+                  sugerenciasAnticipo.items.length === 0 &&
+                  sugerenciasDescuento.items.length === 0 ? (
+                  <p className="text-[11px] text-[#7d776f]">
+                    No se encontraron bonificaciones, anticipos ni descuentos registrados en el sistema para {pagoPeriodoMes}.
+                  </p>
+                ) : (
+                  <div className="space-y-1.5">
+                    {/* Lista detallada de registros de origen */}
+                    <div className="space-y-1 text-[11px]">
+                      {sugerenciasBono.items.map((b: any) => (
+                        <div key={b.idConceptoEmpleado} className="flex justify-between text-emerald-800 dark:text-emerald-400">
+                          <span>• Bono: {b.motivo}</span>
+                          <span className="font-mono font-bold">+ Bs. {Number(b.monto).toFixed(2)}</span>
+                        </div>
+                      ))}
+                      {sugerenciasAnticipo.items.map((a: any) => (
+                        <div key={a.idConceptoEmpleado} className="flex justify-between text-purple-800 dark:text-purple-400">
+                          <span>• Anticipo ({fechaSolo(a.fecha)}): {a.motivo}</span>
+                          <span className="font-mono font-bold">- Bs. {Number(a.monto).toFixed(2)}</span>
+                        </div>
+                      ))}
+                      {sugerenciasDescuento.items.map((d: any) => (
+                        <div key={d.idConceptoEmpleado} className="flex justify-between text-rose-800 dark:text-rose-400">
+                          <span>• Descuento: {d.motivo}</span>
+                          <span className="font-mono font-bold">- Bs. {Number(d.monto).toFixed(2)}</span>
+                        </div>
+                      ))}
+                    </div>
+
+                    <div className="pt-1.5 flex justify-end">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setPagoBonificaciones(sugerenciasBono.total)
+                          setPagoAnticipos(sugerenciasAnticipo.total)
+                          setPagoDescuentos(sugerenciasDescuento.total)
+                          showToast('success', 'Valores sugeridos cargados en los campos de liquidación. Puede editarlos libremente.')
+                        }}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-700 hover:bg-amber-800 text-white text-[11px] font-bold shadow-xs cursor-pointer"
+                      >
+                        <Sparkles className="w-3.5 h-3.5" />
+                        <span>Cargar sugerencias en los campos</span>
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* INPUTS EDITABLES DEL CONTRATO POST /personal/:id/pagos */}
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block font-bold text-[#383430] dark:text-slate-300 mb-1">
@@ -1474,7 +1742,7 @@ export default function PersonalPage() {
                 <button
                   type="button"
                   onClick={() => setIsPagoModalOpen(false)}
-                  className="px-4 py-2 rounded-xl bg-[#dfd9ce] dark:bg-slate-800 text-xs font-semibold text-[#262422] dark:text-white"
+                  className="px-4 py-2 rounded-xl bg-[#dfd9ce] dark:bg-slate-800 text-xs font-semibold text-[#262422] dark:text-white cursor-pointer"
                 >
                   Cancelar
                 </button>
@@ -1491,7 +1759,7 @@ export default function PersonalPage() {
         </div>
       )}
 
-      {/* MODAL 4: FICHA DE PERSONAL Y SU HISTORIAL INDIVIDUAL */}
+      {/* MODAL 4: FICHA DE PERSONAL Y SU KARDEX INDIVIDUAL (GET /personal/:id/pagos?limit=50) */}
       {selectedEmpleadoDetalle && (
         <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 backdrop-blur-xs">
           <div className="w-full max-w-2xl bg-[#ede9e1] dark:bg-slate-900 rounded-3xl border border-[#cec8bc] dark:border-slate-800 shadow-2xl p-6 sm:p-8 space-y-4 max-h-[90vh] overflow-y-auto animate-in fade-in duration-200">
@@ -1504,7 +1772,7 @@ export default function PersonalPage() {
               </div>
               <button
                 onClick={() => setSelectedEmpleadoDetalle(null)}
-                className="text-[#7d776f] hover:text-[#262422] dark:hover:text-white p-1 rounded-lg"
+                className="text-[#7d776f] hover:text-[#262422] dark:hover:text-white p-1 rounded-lg cursor-pointer"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -1532,9 +1800,18 @@ export default function PersonalPage() {
               </div>
               <div>
                 <span className="text-[#7d776f] text-[10px] uppercase font-bold block">Salario Base Pactado</span>
-                <span className="font-mono font-black text-emerald-700 dark:text-emerald-400 text-sm">
-                  Bs. {Number(selectedEmpleadoDetalle.salarioBase).toFixed(2)}
-                </span>
+                <div className="flex items-center gap-2">
+                  <span className="font-mono font-black text-emerald-700 dark:text-emerald-400 text-sm">
+                    Bs. {Number(selectedEmpleadoDetalle.salarioBase).toFixed(2)}
+                  </span>
+                  <button
+                    onClick={() => handleOpenSalarioModal(selectedEmpleadoDetalle)}
+                    className="p-1 text-amber-700 hover:bg-amber-100 dark:text-amber-400 rounded-md transition-colors cursor-pointer"
+                    title="Ajustar Salario Base"
+                  >
+                    <Edit2 className="w-3.5 h-3.5" />
+                  </button>
+                </div>
               </div>
               <div>
                 <span className="text-[#7d776f] text-[10px] uppercase font-bold block">Fecha de Ingreso</span>
@@ -1550,22 +1827,34 @@ export default function PersonalPage() {
               </div>
             </div>
 
-            {/* TABLA HISTORIAL INDIVIDUAL DE PAGOS */}
+            {/* TABLA HISTORIAL INDIVIDUAL DE PAGOS (KARDEX) */}
             <div className="space-y-2">
               <div className="flex justify-between items-center text-xs">
                 <h4 className="font-bold text-[#262422] dark:text-white flex items-center gap-1.5">
                   <CreditCard className="w-4 h-4 text-emerald-700" />
-                  Historial de Sueldos Desembolsados ({selectedEmpleadoDetalle.pagos?.length || 0})
+                  Historial de Sueldos Desembolsados ({totalKardexPagos || selectedEmpleadoDetalle.pagos?.length || 0})
+                  {totalKardexPagos > 50 && (
+                    <span className="text-[10px] text-[#7d776f] font-normal">(mostrando los 50 más recientes)</span>
+                  )}
                 </h4>
-                <button
-                  onClick={() => {
-                    handleOpenPagoModal(selectedEmpleadoDetalle)
-                    setSelectedEmpleadoDetalle(null)
-                  }}
-                  className="px-3 py-1 bg-emerald-700 hover:bg-emerald-800 text-white rounded-lg text-xs font-bold shadow-xs cursor-pointer"
-                >
-                  + Liquidar Nuevo Mes
-                </button>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => handleOpenConceptosModal(selectedEmpleadoDetalle)}
+                    className="px-2.5 py-1 bg-purple-700 hover:bg-purple-800 text-white rounded-lg text-xs font-bold shadow-xs cursor-pointer flex items-center gap-1"
+                  >
+                    <Gift className="w-3.5 h-3.5" />
+                    <span>Conceptos</span>
+                  </button>
+                  <button
+                    onClick={() => {
+                      handleOpenPagoModal(selectedEmpleadoDetalle)
+                      setSelectedEmpleadoDetalle(null)
+                    }}
+                    className="px-3 py-1 bg-emerald-700 hover:bg-emerald-800 text-white rounded-lg text-xs font-bold shadow-xs cursor-pointer"
+                  >
+                    + Liquidar Nuevo Mes
+                  </button>
+                </div>
               </div>
 
               <div className="rounded-2xl border border-[#cec8bc] dark:border-slate-800 overflow-hidden bg-white/60 dark:bg-slate-950/60">
@@ -1581,7 +1870,13 @@ export default function PersonalPage() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-[#cec8bc] dark:divide-slate-800">
-                    {!selectedEmpleadoDetalle.pagos || selectedEmpleadoDetalle.pagos.length === 0 ? (
+                    {isLoadingKardex ? (
+                      <tr>
+                        <td colSpan={6} className="py-6 text-center text-[#7d776f]">
+                          Cargando kardex de pagos...
+                        </td>
+                      </tr>
+                    ) : !selectedEmpleadoDetalle.pagos || selectedEmpleadoDetalle.pagos.length === 0 ? (
                       <tr>
                         <td colSpan={6} className="py-6 text-center text-[#7d776f]">
                           No cuenta con pagos de sueldo registrados todavía.
@@ -1618,7 +1913,7 @@ export default function PersonalPage() {
                                     }
                                   })
                                 }}
-                                className="px-2 py-0.5 rounded bg-blue-700 hover:bg-blue-800 text-white font-bold text-[10px]"
+                                className="px-2 py-0.5 rounded bg-blue-700 hover:bg-blue-800 text-white font-bold text-[10px] cursor-pointer"
                               >
                                 Boleta
                               </button>
@@ -1657,7 +1952,7 @@ export default function PersonalPage() {
               </div>
               <button
                 onClick={() => setSelectedBoletaPago(null)}
-                className="text-slate-400 hover:text-slate-600 p-1 rounded-lg"
+                className="text-slate-400 hover:text-slate-600 p-1 rounded-lg cursor-pointer"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -1754,7 +2049,7 @@ export default function PersonalPage() {
             <div className="flex justify-end gap-2 pt-2 border-t dark:border-slate-800">
               <button
                 onClick={() => setSelectedBoletaPago(null)}
-                className="px-4 py-2 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800"
+                className="px-4 py-2 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800 cursor-pointer"
               >
                 Cerrar
               </button>
@@ -1769,6 +2064,21 @@ export default function PersonalPage() {
           </div>
         </div>
       )}
+
+      {/* MODAL 6: MODIFICAR SALARIO BASE (PUT /api/v1/personal/:id/salario) */}
+      <ModificarSalarioModal
+        isOpen={isSalarioModalOpen}
+        onClose={() => setIsSalarioModalOpen(false)}
+        onSuccess={handleSalarioSuccess}
+        empleado={empleadoParaSalario}
+      />
+
+      {/* MODAL 7: GESTIÓN DE CONCEPTOS (ANTICIPOS, BONIFICACIONES, DESCUENTOS) */}
+      <ConceptosEmpleadoModal
+        isOpen={isConceptosModalOpen}
+        onClose={() => setIsConceptosModalOpen(false)}
+        empleado={empleadoParaConceptos}
+      />
     </div>
   )
 }
