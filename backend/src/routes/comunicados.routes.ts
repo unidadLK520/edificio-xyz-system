@@ -9,6 +9,9 @@ import { Router, Response, NextFunction, IRouter } from 'express';
 import { prisma } from '@edificio-xyz/database';
 import { z } from 'zod';
 import { authMiddleware, AuthRequest } from '../middlewares/auth.middleware';
+import { authorizeRoles } from '../middlewares/role.middleware';
+import { FINANZAS_TX_OPTIONS } from '../middlewares/finanzas-permissions.middleware';
+import { auditoriaService } from '../modules/auditoria';
 
 export const comunicadosRouter: IRouter = Router();
 comunicadosRouter.use(authMiddleware);
@@ -98,6 +101,7 @@ comunicadosRouter.get(
 // ── POST /comunicados ────────────────────────────────────────────────────────
 comunicadosRouter.post(
   '/',
+  authorizeRoles('Administrador'),
   async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
     try {
       const result = comunicadoSchema.safeParse(req.body);
@@ -119,24 +123,38 @@ comunicadosRouter.post(
         personasIds = personas.map((p) => p.idPersona);
       }
 
-      // Crear comunicado con sus envíos en una transacción
-      const comunicado = await prisma.comunicado.create({
-        data: {
-          titulo,
-          contenido,
-          canalEnvio,
-          idUsuarioCreador: req.user!.idUsuario,
-          envios: {
-            create: personasIds.map((idPersona) => ({
-              idPersona,
-              estadoEnvio: 'Pendiente',
-            })),
+      // Crear comunicado con sus envíos y auditoría en una transacción interactiva
+      const comunicado = await prisma.$transaction(async (tx) => {
+        const nuevo = await tx.comunicado.create({
+          data: {
+            titulo,
+            contenido,
+            canalEnvio,
+            idUsuarioCreador: req.user!.idUsuario,
+            envios: {
+              create: personasIds.map((idPersona) => ({
+                idPersona,
+                estadoEnvio: 'Pendiente',
+              })),
+            },
           },
-        },
-        include: {
-          _count: { select: { envios: true } },
-        },
-      });
+          include: {
+            _count: { select: { envios: true } },
+          },
+        });
+
+        await auditoriaService.registrarEvento({
+          tablaAfectada: 'comunicados',
+          idRegistro: nuevo.idComunicado.toString(),
+          accion: 'CREAR_COMUNICADO',
+          resultado: 'EXITO',
+          datosNuevos: nuevo,
+          idUsuario: req.user?.idUsuario ?? null,
+          tx,
+        });
+
+        return nuevo;
+      }, FINANZAS_TX_OPTIONS);
 
       res.status(201).json(comunicado);
     } catch (err) {
@@ -148,6 +166,7 @@ comunicadosRouter.post(
 // ── DELETE /comunicados/:id ──────────────────────────────────────────────────
 comunicadosRouter.delete(
   '/:id',
+  authorizeRoles('Administrador'),
   async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
     try {
       const id = parseInt(req.params.id);
@@ -156,11 +175,30 @@ comunicadosRouter.delete(
         return;
       }
 
-      // Eliminar envíos primero (integridad referencial)
-      await prisma.$transaction([
-        prisma.comunicadoEnvio.deleteMany({ where: { idComunicado: id } }),
-        prisma.comunicado.delete({ where: { idComunicado: id } }),
-      ]);
+      const existing = await prisma.comunicado.findUnique({
+        where: { idComunicado: id },
+      });
+
+      if (!existing) {
+        res.status(404).json({ error: 'Not Found', message: 'Comunicado no encontrado' });
+        return;
+      }
+
+      // Eliminar envíos primero (integridad referencial) y registrar auditoría en transacción interactiva
+      await prisma.$transaction(async (tx) => {
+        await tx.comunicadoEnvio.deleteMany({ where: { idComunicado: id } });
+        await tx.comunicado.delete({ where: { idComunicado: id } });
+
+        await auditoriaService.registrarEvento({
+          tablaAfectada: 'comunicados',
+          idRegistro: id.toString(),
+          accion: 'ELIMINAR_COMUNICADO',
+          resultado: 'EXITO',
+          datosAnteriores: existing,
+          idUsuario: req.user?.idUsuario ?? null,
+          tx,
+        });
+      }, FINANZAS_TX_OPTIONS);
 
       res.status(204).send();
     } catch (err) {
