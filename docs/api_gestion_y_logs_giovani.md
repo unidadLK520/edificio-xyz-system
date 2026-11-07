@@ -1417,11 +1417,11 @@ Prefijo de ruta: `/api/v1/personal`
 
 ### 5.12.7 Registrar Anticipo de Sueldo
 - **Método y Ruta:** `POST /api/v1/personal/:id/anticipos`
-- **Estado:** PENDIENTE DE IMPLEMENTAR
-- **Propósito:** Registrar un adelanto de salario concedido a un empleado con su importe, fecha de entrega y motivo justificado, para su posterior deducción en la liquidación de sueldo del mes.
-- **Rol requerido propuesto:** `Administrador` (Directorio y Consulta reciben 403 Forbidden).
+- **Estado:** Implementado
+- **Propósito:** Registrar un adelanto de salario concedido a un empleado en la tabla `edificio.conceptos_empleado`.
+- **Rol requerido:** `Administrador` (`Directorio` y `Consulta` reciben 403 Forbidden).
 - **Parámetro URL:** `:id` (entero, ID del empleado).
-- **Body propuesto:**
+- **Body:**
 ```json
 {
   "monto": 200.00,
@@ -1429,110 +1429,239 @@ Prefijo de ruta: `/api/v1/personal`
   "motivo": "Anticipo de sueldo quincenal"
 }
 ```
-- **Respuesta 201 Created propuesta:**
+- **Respuesta 201 Created:**
 ```json
 {
-  "idConcepto": 301,
+  "idConceptoEmpleado": 301,
   "idEmpleado": 101,
   "tipo": "ANTICIPO",
-  "monto": 200.00,
+  "monto": "200",
   "fecha": "2026-11-15T00:00:00.000Z",
-  "motivo": "Anticipo de sueldo quincenal"
+  "periodo": null,
+  "motivo": "Anticipo de sueldo quincenal",
+  "fechaCreacion": "2026-11-06T22:30:00.000Z",
+  "empleado": {
+    "nombres": "Juan",
+    "apellidos": "Pérez Gómez",
+    "cargo": "Conserje Principal"
+  }
 }
 ```
-- **Validaciones:** `monto > 0`, `fecha` válida `YYYY-MM-DD`, `motivo` obligatorio (máx. 200 caracteres), validación de que el anticipo no supere el salario base del empleado.
-- **Errores:** `400 Bad Request`, `401 Unauthorized`, `403 Forbidden`, `404 Not Found`, `422 Unprocessable Entity` (monto superior al salario base).
-- **Auditoría:** Registra evento `REGISTRO_ANTICIPO_EMPLEADO` en tabla `conceptos_empleado`.
+> **Nota sobre importes y cálculo en pagos:** Los importes numéricos son devueltos por la API tal como los entrega Prisma (`Decimal`). Los conceptos registrados en `edificio.conceptos_empleado` son independientes y el endpoint `POST /api/v1/personal/:id/pagos` no los deduce ni calcula automáticamente; deben consolidarse explícitamente al liquidar la planilla.
+- **Validaciones:** `monto > 0`, `fecha` válida `YYYY-MM-DD` (formato y fecha real existente en calendario), `motivo` obligatorio (entre 1 y 200 caracteres), validación de que el anticipo no supere el `salarioBase` del empleado (responde `422 Unprocessable Entity`).
+- **Errores:**
+  - `400 Bad Request`: ID inválido, datos inválidos en el cuerpo o fecha inválida/inexistente.
+  - `401 Unauthorized`: Token ausente o inválido.
+  - `403 Forbidden`: `{ "error": "Forbidden", "message": "No tiene permisos para realizar esta acción" }`.
+  - `404 Not Found`: `{ "error": "Not Found", "message": "Empleado no encontrado" }`.
+  - `422 Unprocessable Entity`: `{ "error": "Unprocessable Entity", "message": "El monto del anticipo no puede ser mayor al salario base del empleado" }`.
+- **Auditoría:** Registra evento `REGISTRO_ANTICIPO_EMPLEADO` en tabla `conceptos_empleado` pasando `tx`.
 
 ### 5.12.8 Consultar Anticipos de Empleado
 - **Método y Ruta:** `GET /api/v1/personal/:id/anticipos`
-- **Estado:** PENDIENTE DE IMPLEMENTAR
-- **Propósito:** Listar los anticipos concedidos al empleado registrados en `edificio.conceptos_empleado` con filtro por año o rango de fechas.
-- **Rol requerido propuesto:** `Administrador`, `Directorio` (Consulta recibe 403 Forbidden).
+- **Estado:** Implementado
+- **Propósito:** Listar los anticipos concedidos al empleado registrados en `edificio.conceptos_empleado` ordenados descendentemente (`fecha` desc, `idConceptoEmpleado` desc).
+- **Rol requerido:** `Administrador`, `Directorio` (`Consulta` recibe 403 Forbidden).
 - **Parámetro URL:** `:id` (entero, ID del empleado).
-- **Query Params:** `anio`, `page`, `limit`.
-- **Respuesta 200 OK propuesta:** Array paginado con detalle de anticipos (`tipo: "ANTICIPO"`), fechas de entrega y motivos.
-- **Errores:** `400 Bad Request`, `401 Unauthorized`, `403 Forbidden`, `404 Not Found`.
+- **Query Params:**
+  - `page` (opcional, default: "1"): Número de página.
+  - `limit` (opcional, default: "12", máx: 50): Cantidad de registros por página.
+  - `anio` (opcional): Entero de 4 dígitos (ej. `2026`).
+- **Respuesta 200 OK:**
+```json
+{
+  "data": [
+    {
+      "idConceptoEmpleado": 301,
+      "idEmpleado": 101,
+      "tipo": "ANTICIPO",
+      "monto": "200",
+      "fecha": "2026-11-15T00:00:00.000Z",
+      "periodo": null,
+      "motivo": "Anticipo de sueldo quincenal",
+      "fechaCreacion": "2026-11-06T22:30:00.000Z"
+    }
+  ],
+  "meta": {
+    "total": 1,
+    "page": 1,
+    "limit": 12,
+    "totalPages": 1
+  }
+}
+```
+> **Nota sobre importes:** Los importes numéricos se devuelven tal como los entrega Prisma (`Decimal`).
+- **Errores:**
+  - `400 Bad Request`: ID inválido o año inválido (debe ser un número de 4 dígitos).
+  - `401 Unauthorized`: Token ausente o inválido.
+  - `403 Forbidden`: `{ "error": "Forbidden", "message": "No tiene permisos para realizar esta acción" }`.
+  - `404 Not Found`: `{ "error": "Not Found", "message": "Empleado no encontrado" }`.
 - **Auditoría:** No genera auditoría (lectura).
 
 ### 5.12.9 Registrar Bonificación a Empleado
 - **Método y Ruta:** `POST /api/v1/personal/:id/bonificaciones`
-- **Estado:** PENDIENTE DE IMPLEMENTAR
-- **Propósito:** Registrar un bono, estímulo o compensación adicional (ej. bono de antigüedad, horas extraordinarias o prima por desempeño) indicando importe, motivo y fecha.
-- **Rol requerido propuesto:** `Administrador` (Directorio y Consulta reciben 403 Forbidden).
+- **Estado:** Implementado
+- **Propósito:** Registrar un bono, estímulo o compensación adicional (ej. bono de antigüedad, horas extraordinarias o prima por desempeño) indicando importe, motivo y período de planilla afectado (`periodo: "YYYY-MM-01"`). La fecha del registro la fija el servidor (fecha actual). El tipo `BONIFICACION` lo fija la ruta.
+- **Rol requerido:** `Administrador` (`Directorio` y `Consulta` reciben 403 Forbidden).
 - **Parámetro URL:** `:id` (entero, ID del empleado).
-- **Body propuesto:**
+- **Body:**
 ```json
 {
   "monto": 100.00,
-  "fecha": "2026-11-20",
+  "periodo": "2026-11-01",
   "motivo": "Bono por reemplazo de turno en feriado"
 }
 ```
-- **Respuesta 201 Created propuesta:**
+- **Respuesta 201 Created:**
 ```json
 {
-  "idConcepto": 302,
+  "idConceptoEmpleado": 302,
   "idEmpleado": 101,
   "tipo": "BONIFICACION",
-  "monto": 100.00,
-  "fecha": "2026-11-20T00:00:00.000Z",
-  "motivo": "Bono por reemplazo de turno en feriado"
+  "monto": "100",
+  "fecha": "2026-11-06T00:00:00.000Z",
+  "periodo": "2026-11-01T00:00:00.000Z",
+  "motivo": "Bono por reemplazo de turno en feriado",
+  "fechaCreacion": "2026-11-06T22:35:00.000Z",
+  "empleado": {
+    "nombres": "Juan",
+    "apellidos": "Pérez Gómez",
+    "cargo": "Conserje Principal"
+  }
 }
 ```
-- **Validaciones:** `monto > 0`, `fecha` válida `YYYY-MM-DD`, `motivo` obligatorio (máx. 150 caracteres).
-- **Errores:** `400 Bad Request`, `401 Unauthorized`, `403 Forbidden`, `404 Not Found`.
-- **Auditoría:** Registra evento `REGISTRO_BONIFICACION_EMPLEADO` en tabla `conceptos_empleado`.
+> **Nota sobre importes y cálculo en pagos:** Los importes numéricos son devueltos por la API tal como los entrega Prisma (`Decimal`). Los conceptos registrados en `edificio.conceptos_empleado` son independientes y el endpoint `POST /api/v1/personal/:id/pagos` no los suma ni calcula automáticamente; deben consolidarse explícitamente al liquidar la planilla.
+- **Validaciones:** `monto > 0`, `periodo` en formato estricto `YYYY-MM-01` (primer día del mes) y fecha real existente, `motivo` obligatorio (entre 1 y 200 caracteres).
+- **Errores:**
+  - `400 Bad Request`: ID inválido, datos inválidos en el cuerpo o período inválido/inexistente.
+  - `401 Unauthorized`: Token ausente o inválido.
+  - `403 Forbidden`: `{ "error": "Forbidden", "message": "No tiene permisos para realizar esta acción" }`.
+  - `404 Not Found`: `{ "error": "Not Found", "message": "Empleado no encontrado" }`.
+- **Auditoría:** Registra evento `REGISTRO_BONIFICACION_EMPLEADO` en tabla `conceptos_empleado` pasando `tx`.
 
 ### 5.12.10 Consultar Bonificaciones de Empleado
 - **Método y Ruta:** `GET /api/v1/personal/:id/bonificaciones`
-- **Estado:** PENDIENTE DE IMPLEMENTAR
-- **Propósito:** Consultar las bonificaciones registradas para un colaborador (`tipo: "BONIFICACION"`) en `edificio.conceptos_empleado`.
-- **Rol requerido propuesto:** `Administrador`, `Directorio` (Consulta recibe 403 Forbidden).
+- **Estado:** Implementado
+- **Propósito:** Consultar las bonificaciones registradas para un colaborador (`tipo: "BONIFICACION"`) en `edificio.conceptos_empleado` con orden cronológico descendente (`fecha` desc, `idConceptoEmpleado` desc).
+- **Rol requerido:** `Administrador`, `Directorio` (`Consulta` recibe 403 Forbidden).
 - **Parámetro URL:** `:id` (entero, ID del empleado).
-- **Query Params:** `anio`, `page`, `limit`.
-- **Respuesta 200 OK propuesta:** Array de bonificaciones con importes, fechas y motivos descriptivos.
-- **Errores:** `400 Bad Request`, `401 Unauthorized`, `403 Forbidden`, `404 Not Found`.
+- **Query Params:**
+  - `page` (opcional, default: "1"): Número de página.
+  - `limit` (opcional, default: "12", máx: 50): Cantidad de registros por página.
+  - `anio` (opcional): Entero de 4 dígitos (ej. `2026`).
+  - `periodo` (opcional): Fecha en formato `YYYY-MM-DD` válido (ej. `2026-11-01`).
+- **Respuesta 200 OK:**
+```json
+{
+  "data": [
+    {
+      "idConceptoEmpleado": 302,
+      "idEmpleado": 101,
+      "tipo": "BONIFICACION",
+      "monto": "100",
+      "fecha": "2026-11-06T00:00:00.000Z",
+      "periodo": "2026-11-01T00:00:00.000Z",
+      "motivo": "Bono por reemplazo de turno en feriado",
+      "fechaCreacion": "2026-11-06T22:35:00.000Z"
+    }
+  ],
+  "meta": {
+    "total": 1,
+    "page": 1,
+    "limit": 12,
+    "totalPages": 1
+  }
+}
+```
+> **Nota sobre importes:** Los importes numéricos se devuelven tal como los entrega Prisma (`Decimal`).
+- **Errores:**
+  - `400 Bad Request`: ID inválido, año inválido (debe ser un número de 4 dígitos) o período inválido (formato esperado: YYYY-MM-DD o fecha inexistente).
+  - `401 Unauthorized`: Token ausente o inválido.
+  - `403 Forbidden`: `{ "error": "Forbidden", "message": "No tiene permisos para realizar esta acción" }`.
+  - `404 Not Found`: `{ "error": "Not Found", "message": "Empleado no encontrado" }`.
 - **Auditoría:** No genera auditoría (lectura).
 
 ### 5.12.11 Registrar Descuento a Empleado
 - **Método y Ruta:** `POST /api/v1/personal/:id/descuentos`
-- **Estado:** PENDIENTE DE IMPLEMENTAR
-- **Propósito:** Registrar una retención, sanción o descuento programado (ej. faltas injustificadas, atrasos reiterados o reposición de materiales) indicando importe, motivo y fecha.
-- **Rol requerido propuesto:** `Administrador` (Directorio y Consulta reciben 403 Forbidden).
+- **Estado:** Implementado
+- **Propósito:** Registrar una retención, sanción o descuento programado (ej. faltas injustificadas, atrasos reiterados o reposición de materiales) indicando importe, motivo y período de planilla afectado (`periodo: "YYYY-MM-01"`). La fecha del registro la fija el servidor (fecha actual). El tipo `DESCUENTO` lo fija la ruta.
+- **Rol requerido:** `Administrador` (`Directorio` y `Consulta` reciben 403 Forbidden).
 - **Parámetro URL:** `:id` (entero, ID del empleado).
-- **Body propuesto:**
+- **Body:**
 ```json
 {
   "monto": 50.00,
-  "fecha": "2026-11-22",
+  "periodo": "2026-11-01",
   "motivo": "Falta injustificada turno tarde"
 }
 ```
-- **Respuesta 201 Created propuesta:**
+- **Respuesta 201 Created:**
 ```json
 {
-  "idConcepto": 303,
+  "idConceptoEmpleado": 303,
   "idEmpleado": 101,
   "tipo": "DESCUENTO",
-  "monto": 50.00,
-  "fecha": "2026-11-22T00:00:00.000Z",
-  "motivo": "Falta injustificada turno tarde"
+  "monto": "50",
+  "fecha": "2026-11-06T00:00:00.000Z",
+  "periodo": "2026-11-01T00:00:00.000Z",
+  "motivo": "Falta injustificada turno tarde",
+  "fechaCreacion": "2026-11-06T22:40:00.000Z",
+  "empleado": {
+    "nombres": "Juan",
+    "apellidos": "Pérez Gómez",
+    "cargo": "Conserje Principal"
+  }
 }
 ```
-- **Validaciones:** `monto > 0`, `fecha` válida `YYYY-MM-DD`, `motivo` obligatorio (máx. 200 caracteres).
-- **Errores:** `400 Bad Request`, `401 Unauthorized`, `403 Forbidden`, `404 Not Found`.
-- **Auditoría:** Registra evento `REGISTRO_DESCUENTO_EMPLEADO` en tabla `conceptos_empleado`.
+> **Nota sobre importes y cálculo en pagos:** Los importes numéricos son devueltos por la API tal como los entrega Prisma (`Decimal`). Los conceptos registrados en `edificio.conceptos_empleado` son independientes y el endpoint `POST /api/v1/personal/:id/pagos` no los deduce ni calcula automáticamente; deben consolidarse explícitamente al liquidar la planilla.
+- **Validaciones:** `monto > 0`, `periodo` en formato estricto `YYYY-MM-01` (primer día del mes) y fecha real existente, `motivo` obligatorio (entre 1 y 200 caracteres).
+- **Errores:**
+  - `400 Bad Request`: ID inválido, datos inválidos en el cuerpo o período inválido/inexistente.
+  - `401 Unauthorized`: Token ausente o inválido.
+  - `403 Forbidden`: `{ "error": "Forbidden", "message": "No tiene permisos para realizar esta acción" }`.
+  - `404 Not Found`: `{ "error": "Not Found", "message": "Empleado no encontrado" }`.
+- **Auditoría:** Registra evento `REGISTRO_DESCUENTO_EMPLEADO` en tabla `conceptos_empleado` pasando `tx`.
 
 ### 5.12.12 Consultar Descuentos de Empleado
 - **Método y Ruta:** `GET /api/v1/personal/:id/descuentos`
-- **Estado:** PENDIENTE DE IMPLEMENTAR
-- **Propósito:** Listar los descuentos aplicados a un colaborador (`tipo: "DESCUENTO"`) en `edificio.conceptos_empleado`.
-- **Rol requerido propuesto:** `Administrador`, `Directorio` (Consulta recibe 403 Forbidden).
+- **Estado:** Implementado
+- **Propósito:** Listar los descuentos aplicados a un colaborador (`tipo: "DESCUENTO"`) en `edificio.conceptos_empleado` ordenados descendentemente (`fecha` desc, `idConceptoEmpleado` desc).
+- **Rol requerido:** `Administrador`, `Directorio` (`Consulta` recibe 403 Forbidden).
 - **Parámetro URL:** `:id` (entero, ID del empleado).
-- **Query Params:** `anio`, `page`, `limit`.
-- **Respuesta 200 OK propuesta:** Array de deducciones con montos, fechas y justificaciones.
-- **Errores:** `400 Bad Request`, `401 Unauthorized`, `403 Forbidden`, `404 Not Found`.
+- **Query Params:**
+  - `page` (opcional, default: "1"): Número de página.
+  - `limit` (opcional, default: "12", máx: 50): Cantidad de registros por página.
+  - `anio` (opcional): Entero de 4 dígitos (ej. `2026`).
+  - `periodo` (opcional): Fecha en formato `YYYY-MM-DD` válido (ej. `2026-11-01`).
+- **Respuesta 200 OK:**
+```json
+{
+  "data": [
+    {
+      "idConceptoEmpleado": 303,
+      "idEmpleado": 101,
+      "tipo": "DESCUENTO",
+      "monto": "50",
+      "fecha": "2026-11-06T00:00:00.000Z",
+      "periodo": "2026-11-01T00:00:00.000Z",
+      "motivo": "Falta injustificada turno tarde",
+      "fechaCreacion": "2026-11-06T22:40:00.000Z"
+    }
+  ],
+  "meta": {
+    "total": 1,
+    "page": 1,
+    "limit": 12,
+    "totalPages": 1
+  }
+}
+```
+> **Nota sobre importes:** Los importes numéricos se devuelven tal como los entrega Prisma (`Decimal`).
+- **Errores:**
+  - `400 Bad Request`: ID inválido, año inválido (debe ser un número de 4 dígitos) o período inválido (formato esperado: YYYY-MM-DD o fecha inexistente).
+  - `401 Unauthorized`: Token ausente o inválido.
+  - `403 Forbidden`: `{ "error": "Forbidden", "message": "No tiene permisos para realizar esta acción" }`.
+  - `404 Not Found`: `{ "error": "Not Found", "message": "Empleado no encontrado" }`.
 - **Auditoría:** No genera auditoría (lectura).
 
 ### 5.12.13 Modificar Salario Base
@@ -1587,6 +1716,61 @@ Prefijo de ruta: `/api/v1/personal`
   - `401 Unauthorized`: Token ausente o inválido.
   - `403 Forbidden`: `{ "error": "Forbidden", "message": "No tiene permisos para realizar esta acción" }`.
   - `404 Not Found`: `{ "error": "Not Found", "message": "Empleado no encontrado" }`.
+- **Auditoría:** No genera auditoría (lectura).
+
+### 5.12.15 Consultar Historial Consolidado de Pagos de Personal
+- **Método y Ruta:** `GET /api/v1/personal/pagos`
+- **Estado:** Implementado
+- **Propósito:** Consultar el historial general consolidado de pagos de sueldos de todo el personal del condominio en una única petición sin incurrir en el antipatrón N+1 de consultar empleado por empleado ni en el límite de 12 registros de `GET /personal/:id`.
+- **Rol requerido:** `Administrador`, `Directorio` (`Consulta` recibe 403 Forbidden).
+- **Orden de registro:** Registrado en el enrutador antes de `GET /personal/:id` para evitar colisión de rutas en Express.
+- **Query Params:**
+  - `page` (opcional, default: "1"): Número de página.
+  - `limit` (opcional, default: "100", máx: 200): Cantidad de registros por página.
+  - `anio` (opcional): Entero de 4 dígitos (ej. `2026`).
+  - `periodo` (opcional): Fecha en formato `YYYY-MM-DD` válido (ej. `2026-11-01`).
+  - `idEmpleado` (opcional): Entero positivo para filtrar por empleado.
+- **Respuesta 200 OK:**
+```json
+{
+  "data": [
+    {
+      "idPagoEmpleado": 201,
+      "idEmpleado": 101,
+      "periodo": "2026-11-01T00:00:00.000Z",
+      "salarioPagado": "3000",
+      "anticipos": "200",
+      "bonificaciones": "100",
+      "descuentos": "50",
+      "fechaPago": "2026-11-30T10:00:00.000Z",
+      "idMovimiento": null,
+      "empleado": {
+        "idEmpleado": 101,
+        "nombres": "Juan",
+        "apellidos": "Pérez Gómez",
+        "ci": "4892019",
+        "cargo": "Conserje Principal"
+      },
+      "movimiento": null
+    }
+  ],
+  "meta": {
+    "total": 1,
+    "page": 1,
+    "limit": 100,
+    "totalPages": 1
+  }
+}
+```
+> **Nota sobre importes:** Los importes numéricos se devuelven tal como los entrega Prisma (`Decimal`).
+- **Ordenamiento:** Cronológico descendente por período e identificador (`periodo` desc, `idPagoEmpleado` desc).
+- **Errores:**
+  - `400 Bad Request`:
+    - Año inválido (`{ "error": "Bad Request", "message": "Año inválido (debe ser un número de 4 dígitos)" }`).
+    - Período inválido (`{ "error": "Bad Request", "message": "Período inválido (formato esperado: YYYY-MM-DD)" }` o `{ "error": "Bad Request", "message": "Período inválido (fecha inexistente)" }`).
+    - ID de empleado inválido (`{ "error": "Bad Request", "message": "ID de empleado inválido" }`).
+  - `401 Unauthorized`: Token ausente o inválido.
+  - `403 Forbidden`: `{ "error": "Forbidden", "message": "No tiene permisos para realizar esta acción" }`.
 - **Auditoría:** No genera auditoría (lectura).
 
 ---
@@ -1653,9 +1837,9 @@ Evento	Tabla	Origen	Descripción / Datos Capturados
 `CREAR_EMPLEADO`	empleados	`POST /personal`	Alta de nuevo colaborador (nombres, apellidos, CI, cargo, salarioBase, fechaIngreso).
 `ACTUALIZAR_EMPLEADO`	empleados	`PUT /personal/:id`	Modificación de datos del colaborador (datosAnteriores y datosNuevos).
 `REGISTRO_PAGO_EMPLEADO`	pagos_empleados	`POST /personal/:id/pagos`	Liquidación mensual de sueldo (periodo, salarioPagado, anticipos, bonificaciones, descuentos).
-`REGISTRO_ANTICIPO_EMPLEADO`	conceptos_empleado	`POST /personal/:id/anticipos`	Concesión de adelanto de sueldo con fecha, monto y motivo.
-`REGISTRO_BONIFICACION_EMPLEADO`	conceptos_empleado	`POST /personal/:id/bonificaciones`	Asignación de bono extraordinario, prima o premio con importe y fecha.
-`REGISTRO_DESCUENTO_EMPLEADO`	conceptos_empleado	`POST /personal/:id/descuentos`	Registro de retención o deducción por faltas o sanciones con motivo.
+`REGISTRO_ANTICIPO_EMPLEADO`	conceptos_empleado	`POST /personal/:id/anticipos`	Concesión de adelanto de sueldo con fecha (YYYY-MM-DD), monto y motivo (máx. 200 caracteres); valida que no exceda el salario base del empleado (422).
+`REGISTRO_BONIFICACION_EMPLEADO`	conceptos_empleado	`POST /personal/:id/bonificaciones`	Asignación de bonificación con período mensual afectado (YYYY-MM-01), monto y motivo; fecha asignada por el servidor.
+`REGISTRO_DESCUENTO_EMPLEADO`	conceptos_empleado	`POST /personal/:id/descuentos`	Registro de retención o deducción con período mensual afectado (YYYY-MM-01), monto y motivo; fecha asignada por el servidor.
 `MODIFICACION_SALARIO_EMPLEADO`	empleados	`PUT /personal/:id/salario`	Ajuste de salario base con motivo obligatorio y snapshot de salario anterior y nuevo.
 6.3 Ejemplos
 Bloqueo de cuenta:
@@ -1868,6 +2052,7 @@ Personal	/personal	POST	✅	❌	❌
 Personal	/personal/:id	PUT	✅	❌	❌
 Personal	/personal/:id/pagos	POST	✅	❌	❌
 Personal	/personal/:id/pagos	GET	✅	✅	❌
+Personal	/personal/pagos	GET	✅	✅	❌
 Personal	/personal/:id/anticipos	POST	✅	❌	❌
 Personal	/personal/:id/anticipos	GET	✅	✅	❌
 Personal	/personal/:id/bonificaciones	POST	✅	❌	❌
@@ -1940,12 +2125,12 @@ CA02 validar registro	`POST /api/v1/personal`	Cumple	Validación Zod estricta de
 CA03 consultar sin mezclar datos de otros empleados	`GET /api/v1/personal/:id`	Cumple	Consulta por ID con filtro exacto en base de datos; devuelve datos del empleado y sus pagos aislados sin mezclar con otros (probado con HTTP 200).
 CA04 actualizar conservando datos no alterados	`PUT /api/v1/personal/:id`	Cumple	Actualización parcial con Zod partial; conserva intactos los datos no enviados. Ejecutado dentro de transacción interactiva registrando auditoría `ACTUALIZAR_EMPLEADO` con snapshot anterior y nuevo.
 CA05 registrar/actualizar salario	`PUT /api/v1/personal/:id` (`salarioBase`), `PUT /api/v1/personal/:id/salario`, `GET /api/v1/personal/:id/salario`	Cumple	Funciona como atributo del empleado vía PUT y mediante endpoints dedicados `PUT /personal/:id/salario` (con motivo obligatorio >= 5 caracteres, validación 422 si es idéntico y evento `MODIFICACION_SALARIO_EMPLEADO`) y `GET /personal/:id/salario` (salario vigente).
-CA06 anticipos (importe y fecha)	`POST /api/v1/personal/:id/pagos` (`anticipos`)	Parcial	Importe registrado como columna dentro del pago mensual (probado); pendiente endpoint dedicado `POST/GET /personal/:id/anticipos` en `edificio.conceptos_empleado`.
-CA07 bonificaciones	`POST /api/v1/personal/:id/pagos` (`bonificaciones`)	Parcial	Importe registrado como columna dentro del pago mensual (probado); pendiente endpoint dedicado `POST/GET /personal/:id/bonificaciones` en `edificio.conceptos_empleado`.
-CA08 descuentos	`POST /api/v1/personal/:id/pagos` (`descuentos`)	Parcial	Importe registrado como columna dentro del pago mensual (probado); pendiente endpoint dedicado `POST/GET /personal/:id/descuentos` en `edificio.conceptos_empleado`.
-CA09 validar importes y datos obligatorios de salario/anticipo/bono/descuento	`POST /personal`, `POST /personal/:id/pagos`	Cumple	Validación con Zod: salarioBase > 0, importes de pago no negativos (probado con HTTP 400 ante importes negativos o datos obligatorios faltantes).
+CA06 anticipos (importe y fecha)	`POST /api/v1/personal/:id/anticipos`, `GET /api/v1/personal/:id/anticipos`, `POST /personal/:id/pagos`	Cumple	Endpoints dedicados implementados en `edificio.conceptos_empleado` con fecha, monto > 0, motivo, validación 422 si supera salario base y auditoría atómica `REGISTRO_ANTICIPO_EMPLEADO`; además de la columna agregada en `pagos_empleados`.
+CA07 bonificaciones	`POST /api/v1/personal/:id/bonificaciones`, `GET /api/v1/personal/:id/bonificaciones`, `POST /personal/:id/pagos`	Cumple	Endpoints dedicados implementados en `edificio.conceptos_empleado` con periodo (YYYY-MM-01), fecha asignada por servidor, monto > 0, motivo y auditoría atómica `REGISTRO_BONIFICACION_EMPLEADO`; además de la columna agregada en `pagos_empleados`.
+CA08 descuentos	`POST /api/v1/personal/:id/descuentos`, `GET /api/v1/personal/:id/descuentos`, `POST /personal/:id/pagos`	Cumple	Endpoints dedicados implementados en `edificio.conceptos_empleado` con periodo (YYYY-MM-01), fecha asignada por servidor, monto > 0, motivo y auditoría atómica `REGISTRO_DESCUENTO_EMPLEADO`; además de la columna agregada en `pagos_empleados`.
+CA09 validar importes y datos obligatorios de salario/anticipo/bono/descuento	`POST /personal`, `POST /personal/:id/pagos`, `POST /personal/:id/anticipos`, `POST /personal/:id/bonificaciones`, `POST /personal/:id/descuentos`	Cumple	Validación con Zod: salarioBase > 0, importes > 0, fechas reales existentes y motivos obligatorios (probado con HTTP 400 y details ante datos inválidos).
 CA10 registrar pago (importe y fecha)	`POST /api/v1/personal/:id/pagos`	Cumple	Registro en `edificio.pagos_empleados` con periodo, fechaPago e importes discriminados, dentro de transacción interactiva con auditoría atómica `REGISTRO_PAGO_EMPLEADO` (probado con HTTP 201).
-CA11 historial de pagos por empleado con fecha e importe	`GET /api/v1/personal/:id/pagos`, `GET /api/v1/personal/:id`	Cumple	Historial paginado (`page`, `limit` máx 50) y filtrable por `anio` (4 dígitos) y `periodo` (YYYY-MM-DD) implementado en `GET /personal/:id/pagos`, además de los 12 últimos pagos en `GET /personal/:id` (probado con HTTP 200).
+CA11 historial de pagos por empleado con fecha e importe	`GET /api/v1/personal/pagos`, `GET /api/v1/personal/:id/pagos`, `GET /api/v1/personal/:id`	Cumple	Historial general consolidado `GET /personal/pagos` (con paginación hasta 200, filtros anio, periodo, idEmpleado y sin N+1), historial paginado por empleado `GET /personal/:id/pagos` y los 12 últimos pagos en `GET /personal/:id`.
 CA12 restringir por rol	Todos los endpoints de `/personal`	Cumple	Middleware `authorizeRoles` aplicado en todas las rutas: `Administrador` escribe (`POST`, `PUT`) y lee (`GET`); `Directorio` solo lectura (`GET`); `Consulta` recibe HTTP 403 Forbidden verificado en pruebas reales.
 CA13 auditoría con responsable y fecha/hora usando el mecanismo existente	`POST /personal`, `PUT /personal/:id`, `POST /personal/:id/pagos`, `PUT /personal/:id/salario`	Cumple	Integración de `auditoriaService.registrarEvento` pasando `tx` dentro de transacciones interactivas para eventos `CREAR_EMPLEADO`, `ACTUALIZAR_EMPLEADO`, `REGISTRO_PAGO_EMPLEADO` y `MODIFICACION_SALARIO_EMPLEADO` con responsable (`idUsuario`), fecha/hora y snapshots de datos (probado en BD real).
 
@@ -1975,8 +2160,10 @@ CA13 auditoría con responsable y fecha/hora usando el mecanismo existente	`POST
 - metodo_pago es texto libre; falta definir lista cerrada
 - las migraciones 003 a 005 deben aplicarse en Render antes de desplegar (failover)
 
-- [Pendiente] Pagos de personal y movimientos financieros: Los pagos de personal no generan movimiento de egreso (idMovimiento = null) y no aparecen en ingresos/egresos ni en reportes financieros.
-- [Pendiente] Migración de Reglas de Mora en Base de Datos: La migración `20261004000000_hu04_regla_mora` se encuentra versionada en `packages/database/prisma/migrations/20261004000000_hu04_regla_mora` pero aún no ha sido aplicada a la base de datos compartida en Supabase (`_prisma_migrations`).
+- [Pendiente / Limitación] Pagos de personal y movimientos financieros (US3.3): Los pagos de personal no generan movimiento de egreso (`idMovimiento` nulo) y no aparecen en ingresos/egresos ni en reportes de la US3.3.
+- [Pendiente] Migración de Reglas de Mora en Base de Datos: `edificio.reglas_mora` ya existe en Supabase; su migración `20261004000000_hu04_regla_mora` figura pendiente en Prisma y se registrará con `prisma migrate resolve --applied 20261004000000_hu04_regla_mora` (no ejecutar su SQL).
+- [Pendiente] Migración de Conceptos de Empleado (US3.1) y RLS: `edificio.conceptos_empleado` se creó a mano en el SQL Editor (con RLS); la migración `20261106000000_us31_conceptos_empleado` se registrará igual con `prisma migrate resolve --applied 20261106000000_us31_conceptos_empleado`; el repo no incluye `ENABLE ROW LEVEL SECURITY`.
+- [Pendiente / Arquitectura] Liquidación de pagos y edición de salario (US3.1): `POST /api/v1/personal/:id/pagos` no calcula los conceptos; la UI ya no envía `salarioBase` en `PUT /:id` (el backend aún lo permite); el salario se cambia con `PUT /api/v1/personal/:id/salario` (requiriendo motivo ≥ 5 caracteres).
 ---
 ## 10. Respaldo de Conexión y Conmutación de Base de Datos (Failover)
 
@@ -2074,7 +2261,7 @@ El backend implementa un mecanismo de conmutación de conexión transparente y s
 ---
 ## 11. Índice de Endpoints Documentados — Módulo Personal (US3.1)
 
-A continuación se detalla la ubicación exacta (número de sección y encabezado) de cada uno de los 14 endpoints documentados para el módulo de Personal, junto con su estado actual y su correspondencia unívoca con la Matriz RBAC (Sección 7):
+A continuación se detalla la ubicación exacta (número de sección y encabezado) de cada uno de los 15 endpoints documentados para el módulo de Personal, junto con su estado actual y su correspondencia unívoca con la Matriz RBAC (Sección 7):
 
 | N.º | Sección | Encabezado | Método | Ruta | Estado | Rol Administrador | Rol Directorio | Rol Consulta |
 |:---:|:---:|---|:---:|---|:---:|:---:|:---:|:---:|
@@ -2084,16 +2271,17 @@ A continuación se detalla la ubicación exacta (número de sección y encabezad
 | 4 | 5.12.4 | Actualizar Colaborador (Conservando Datos No Alterados) | `PUT` | `/api/v1/personal/:id` | Implementado | ✅ | ❌ | ❌ |
 | 5 | 5.12.5 | Registrar Pago de Sueldo | `POST` | `/api/v1/personal/:id/pagos` | Implementado | ✅ | ❌ | ❌ |
 | 6 | 5.12.6 | Consultar Historial de Pagos de Empleado Paginado | `GET` | `/api/v1/personal/:id/pagos` | Implementado | ✅ | ✅ | ❌ |
-| 7 | 5.12.7 | Registrar Anticipo de Sueldo | `POST` | `/api/v1/personal/:id/anticipos` | PENDIENTE DE IMPLEMENTAR | ✅ | ❌ | ❌ |
-| 8 | 5.12.8 | Consultar Anticipos de Empleado | `GET` | `/api/v1/personal/:id/anticipos` | PENDIENTE DE IMPLEMENTAR | ✅ | ✅ | ❌ |
-| 9 | 5.12.9 | Registrar Bonificación a Empleado | `POST` | `/api/v1/personal/:id/bonificaciones` | PENDIENTE DE IMPLEMENTAR | ✅ | ❌ | ❌ |
-| 10 | 5.12.10 | Consultar Bonificaciones de Empleado | `GET` | `/api/v1/personal/:id/bonificaciones` | PENDIENTE DE IMPLEMENTAR | ✅ | ✅ | ❌ |
-| 11 | 5.12.11 | Registrar Descuento a Empleado | `POST` | `/api/v1/personal/:id/descuentos` | PENDIENTE DE IMPLEMENTAR | ✅ | ❌ | ❌ |
-| 12 | 5.12.12 | Consultar Descuentos de Empleado | `GET` | `/api/v1/personal/:id/descuentos` | PENDIENTE DE IMPLEMENTAR | ✅ | ✅ | ❌ |
+| 7 | 5.12.7 | Registrar Anticipo de Sueldo | `POST` | `/api/v1/personal/:id/anticipos` | Implementado | ✅ | ❌ | ❌ |
+| 8 | 5.12.8 | Consultar Anticipos de Empleado | `GET` | `/api/v1/personal/:id/anticipos` | Implementado | ✅ | ✅ | ❌ |
+| 9 | 5.12.9 | Registrar Bonificación a Empleado | `POST` | `/api/v1/personal/:id/bonificaciones` | Implementado | ✅ | ❌ | ❌ |
+| 10 | 5.12.10 | Consultar Bonificaciones de Empleado | `GET` | `/api/v1/personal/:id/bonificaciones` | Implementado | ✅ | ✅ | ❌ |
+| 11 | 5.12.11 | Registrar Descuento a Empleado | `POST` | `/api/v1/personal/:id/descuentos` | Implementado | ✅ | ❌ | ❌ |
+| 12 | 5.12.12 | Consultar Descuentos de Empleado | `GET` | `/api/v1/personal/:id/descuentos` | Implementado | ✅ | ✅ | ❌ |
 | 13 | 5.12.13 | Modificar Salario Base | `PUT` | `/api/v1/personal/:id/salario` | Implementado | ✅ | ❌ | ❌ |
 | 14 | 5.12.14 | Consultar Salario Actual de Empleado | `GET` | `/api/v1/personal/:id/salario` | Implementado | ✅ | ✅ | ❌ |
+| 15 | 5.12.15 | Consultar Historial Consolidado de Pagos de Personal | `GET` | `/api/v1/personal/pagos` | Implementado | ✅ | ✅ | ❌ |
 
 ### Confirmación de Conteo de Endpoints
-- **Total de endpoints documentados en la Sección 5.12:** 14 endpoints (8 implementados + 6 pendientes de implementar).
-- **Total de endpoints de Personal en la Matriz RBAC (Sección 7):** 14 endpoints.
-- **Resultado de la verificación de consistencia:** **Conteo idéntico y coincidencia exacta (14 == 14)**.
+- **Total de endpoints documentados en la Sección 5.12:** 15 endpoints (15 implementados, 0 pendientes).
+- **Total de endpoints de Personal en la Matriz RBAC (Sección 7):** 15 endpoints.
+- **Resultado de la verificación de consistencia:** **Conteo idéntico y coincidencia exacta (15 == 15)**.
