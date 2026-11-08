@@ -289,7 +289,9 @@ export default function ComunicadosAmigablesPage() {
       if (saved) {
         const r = saved.toUpperCase()
         setUserRole(r)
-        if (r !== 'ADMINISTRADOR') {
+        if (r === 'COPROPIETARIO') {
+          setActiveTab('cartelera')
+        } else {
           setActiveTab('enviados')
         }
       }
