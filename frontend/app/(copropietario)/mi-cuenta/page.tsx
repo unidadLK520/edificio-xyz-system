@@ -10,6 +10,8 @@
 'use client'
 
 import React, { useState } from 'react'
+import SimuladorFechaBar from '@/components/SimuladorFechaBar'
+import CobroQrSimuladorModal from '@/components/CobroQrSimuladorModal'
 import {
   Receipt,
   CreditCard,
@@ -75,6 +77,19 @@ export const RUBROS_GASTOS_COMUNES = [
 export const TOTAL_GASTOS_COMUNES = 15500.0
 
 const EXPENSAS_305_SEED: ExpensaResidenteItem[] = [
+  {
+    id: 'EXP-2026-11-305',
+    periodo: 'Noviembre 2026',
+    vencimiento: '10/11/2026',
+    deptoNumero: '305',
+    tipologia: 'Tipo B (80 m²)',
+    alicuota: 5.0,
+    montoExpensa: 350.0,
+    total: 380.0,
+    estado: 'PENDIENTE',
+    propietario: 'Juan Pérez',
+    inquilino: 'María López'
+  },
   {
     id: 'EXP-2026-10-305',
     periodo: 'Octubre 2026',
@@ -157,6 +172,8 @@ export default function MiCuentaPage() {
   const [selectedExtractoPeriodo, setSelectedExtractoPeriodo] = useState('Octubre 2026')
   const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false)
   const [isQRModalOpen, setIsQRModalOpen] = useState(false)
+  const [isQrSimuladorModalOpen, setIsQrSimuladorModalOpen] = useState(false)
+  const [selectedExpensaSimulador, setSelectedExpensaSimulador] = useState<any | null>(null)
   const [paymentSuccessMsg, setPaymentSuccessMsg] = useState(false)
 
   // Formulario de pago
@@ -294,7 +311,20 @@ export default function MiCuentaPage() {
                 Ver Extracto de Expensa
               </button>
               <button
-                onClick={() => setIsQRModalOpen(true)}
+                onClick={() => {
+                  const pending = expensas.find((e) => e.estado === 'PENDIENTE') || expensas[0]
+                  setSelectedExpensaSimulador({
+                    idExpensa: 999,
+                    periodo: pending.periodo,
+                    fechaVencimiento: '2026-11-10',
+                    monto: pending.total,
+                    montoBase: pending.montoExpensa,
+                    montoAgua: 20,
+                    saldoPendiente: pending.total,
+                    departamento: { numero: pending.deptoNumero, tipologia: pending.tipologia }
+                  })
+                  setIsQrSimuladorModalOpen(true)
+                }}
                 className="flex-1 md:flex-initial flex items-center justify-center gap-2 bg-[#ded8cc] hover:bg-[#d5cfc2] dark:bg-slate-800 dark:hover:bg-slate-700 text-[#262422] dark:text-slate-100 px-4 py-2.5 rounded-xl text-xs font-bold transition-all border border-[#cec8bc] dark:border-slate-700 cursor-pointer"
               >
                 <QrCode className="w-4 h-4 text-emerald-700 dark:text-emerald-400" />
@@ -1195,6 +1225,25 @@ export default function MiCuentaPage() {
           </div>
         </div>
       )}
+
+      {/* MODAL SIMULADOR DE PAGO POR QR (Requerimiento C 4.1, 4.2, 4.3 y C 12.6) */}
+      <CobroQrSimuladorModal
+        isOpen={isQrSimuladorModalOpen}
+        onClose={() => setIsQrSimuladorModalOpen(false)}
+        expensa={selectedExpensaSimulador}
+        onPaymentSuccess={(reciboInfo) => {
+          setPaymentSuccessMsg(true)
+          if (selectedExpensaSimulador) {
+            setExpensas((prev) =>
+              prev.map((e) =>
+                e.periodo === selectedExpensaSimulador.periodo ? { ...e, estado: 'PAGADA' } : e
+              )
+            )
+          }
+          if (reciboInfo) setSelectedReceipt(reciboInfo)
+        }}
+      />
+
     </div>
   )
 }

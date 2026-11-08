@@ -66,6 +66,47 @@ export function calcularCapitalPendiente(expensa: ExpensaConPagosYAnticipos): nu
   return Math.round(capital * 100) / 100;
 }
 
+export interface DeterminarEstadoYSaldoParams {
+  montoTotal: number;
+  capitalPendiente: number;
+  montoMora: number;
+  fechaVencimiento: Date | string;
+  fechaReferencia?: Date;
+}
+
+/**
+ * Función pura centralizada para determinar el saldo y estado de una expensa.
+ * Replica exactamente la lógica de saldo y estado de recalcularSaldoExpensa:
+ * - saldo = max(0, round(capitalPendiente + montoMora, 2))
+ * - Si saldo === 0 -> 'Pagado'
+ * - Else if capitalPendiente < montoTotal -> 'Parcial'
+ * - Else if montoMora > 0 || fechaVencimiento < ahora -> 'Moroso'
+ * - Else -> 'Pendiente'
+ */
+export function determinarEstadoYSaldoExpensa(params: DeterminarEstadoYSaldoParams): {
+  saldoPendiente: number;
+  estado: 'Pagado' | 'Parcial' | 'Moroso' | 'Pendiente';
+} {
+  const capital = Math.max(0, Math.round(params.capitalPendiente * 100) / 100);
+  const mora = Math.max(0, Math.round(params.montoMora * 100) / 100);
+  const nuevoSaldo = Math.max(0, Math.round((capital + mora) * 100) / 100);
+  const fVenc = new Date(params.fechaVencimiento);
+  const ahora = params.fechaReferencia || new Date();
+
+  let nuevoEstado: 'Pagado' | 'Parcial' | 'Moroso' | 'Pendiente' = 'Pendiente';
+  if (nuevoSaldo === 0) {
+    nuevoEstado = 'Pagado';
+  } else if (capital < Number(params.montoTotal)) {
+    nuevoEstado = 'Parcial';
+  } else if (mora > 0 || fVenc < ahora) {
+    nuevoEstado = 'Moroso';
+  } else {
+    nuevoEstado = 'Pendiente';
+  }
+
+  return { saldoPendiente: nuevoSaldo, estado: nuevoEstado };
+}
+
 export interface ConfigurarReglaMoraInput {
   tasaInteres: number;
   diasGracia?: number;

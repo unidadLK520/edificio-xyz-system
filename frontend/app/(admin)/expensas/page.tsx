@@ -26,8 +26,18 @@ import {
   History,
   ShieldCheck,
   AlertCircle,
-  Calendar
+  Calendar,
+  QrCode,
+  Wallet,
+  PlusCircle,
+  Sparkles
 } from 'lucide-react'
+import SimuladorFechaBar from '@/components/SimuladorFechaBar'
+import CobroQrSimuladorModal from '@/components/CobroQrSimuladorModal'
+import RegistrarAnticipoModal from '@/components/RegistrarAnticipoModal'
+import RegistrarExtraModal from '@/components/RegistrarExtraModal'
+import EmitirExpensaIndividualModal from '@/components/EmitirExpensaIndividualModal'
+import { useFechaSistema } from '@/context/FechaSistemaContext'
 import { apiFetch } from '@/lib/api'
 import { fechaSolo, fechaHoraBolivia } from '@/lib/fecha'
 
@@ -38,6 +48,8 @@ export interface ExpensaItem {
   monto: number
   montoBase?: number
   montoAgua?: number
+  montoExtra?: number
+  extraConcepto?: string
   saldoPendiente: number
   tasaInteresMora: number
   fechaVencimiento: string
@@ -73,6 +85,30 @@ export const RUBROS_GASTOS_COMUNES = [
 export const TOTAL_GASTOS_COMUNES = 15500.0
 
 export default function ExpensasPage() {
+  const { fechaSistema, politicaMora, setPoliticaMora, calcularMoraExpensa } = useFechaSistema()
+  const [filtroTipoDpto, setFiltroTipoDpto] = useState<string>('Todos')
+  const [isAnticipoModalOpen, setIsAnticipoModalOpen] = useState(false)
+  const [isQrSimuladorOpen, setIsQrSimuladorOpen] = useState(false)
+  const [expensaParaQr, setExpensaParaQr] = useState<any | null>(null)
+  const [isExtraModalOpen, setIsExtraModalOpen] = useState(false)
+  const [expensaParaExtra, setExpensaParaExtra] = useState<any | null>(null)
+  const [extrasMap, setExtrasMap] = useState<Record<number, { concepto: string; monto: number }>>(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const saved = localStorage.getItem('expensas_extras_map')
+        if (saved) return JSON.parse(saved)
+      } catch {}
+    }
+    return {}
+  })
+
+  // Campos extendidos para política de mora de la pizarra
+  const [moraTipoPenalidadInput, setMoraTipoPenalidadInput] = useState<'fijo' | 'porcentaje'>('fijo')
+  const [moraMontoFijoInput, setMoraMontoFijoInput] = useState<number | ''>(50)
+  const [moraDiaVencimientoInput, setMoraDiaVencimientoInput] = useState<number | ''>(10)
+  const [moraDiasGraciaInput, setMoraDiasGraciaInput] = useState<number | ''>(2)
+  const [moraDiaGeneracionInput, setMoraDiaGeneracionInput] = useState<number | ''>(1)
+
   const [expensas, setExpensas] = useState<ExpensaItem[]>([])
   const [searchTerm, setSearchTerm] = useState('')
   const [filtroEstado, setFiltroEstado] = useState('Todos')
@@ -93,6 +129,7 @@ export default function ExpensasPage() {
 
   // Modales
   const [isEmitirModalOpen, setIsEmitirModalOpen] = useState(false)
+  const [isEmitirIndividualModalOpen, setIsEmitirIndividualModalOpen] = useState(false)
   const [isPagarModalOpen, setIsPagarModalOpen] = useState(false)
   const [isEstadoCuentaModalOpen, setIsEstadoCuentaModalOpen] = useState(false)
   const [selectedReceipt, setSelectedReceipt] = useState<ExpensaItem | null>(null)
@@ -223,6 +260,8 @@ export default function ExpensasPage() {
                 ? Number(item.montoBase)
                 : Number(item.monto) - Number(item.montoAgua || 0),
             montoAgua: Number(item.montoAgua || 0),
+            montoExtra: extrasMap[item.idExpensa]?.monto || 0,
+            extraConcepto: extrasMap[item.idExpensa]?.concepto || 'Extra',
             saldoPendiente: Number(item.saldoPendiente),
             tasaInteresMora: Number(item.tasaInteresMora || 0),
             fechaVencimiento: fechaSolo(item.fechaVencimiento),
@@ -355,6 +394,32 @@ export default function ExpensasPage() {
     }
   }
 
+
+  const handleGuardarExtra = (idExpensa: number, concepto: string, montoExtra: number) => {
+    const updated = { ...extrasMap, [idExpensa]: { concepto, monto: montoExtra } }
+    setExtrasMap(updated)
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('expensas_extras_map', JSON.stringify(updated))
+    }
+    setExpensas((prev) =>
+      prev.map((e) => {
+        if (e.idExpensa === idExpensa) {
+          const base = e.montoBase !== undefined ? e.montoBase : e.monto - (e.montoAgua || 0)
+          const nuevoMonto = Math.round((base + (e.montoAgua || 0) + montoExtra) * 100) / 100
+          return {
+            ...e,
+            montoExtra,
+            extraConcepto: concepto,
+            monto: nuevoMonto,
+            saldoPendiente: nuevoMonto
+          }
+        }
+        return e
+      })
+    )
+    showToast(`¡Cargo extra "${concepto}" (+Bs ${montoExtra}) registrado para la expensa!`)
+  }
+
   // Recálculo de Mora
   const handleCalcularMora = async () => {
     if (!confirm('¿Desea calcular y aplicar los recargos por mora a todas las expensas vencidas?'))
@@ -373,29 +438,37 @@ export default function ExpensasPage() {
     }
   }
 
-  // Guardar Regla de Mora
+  // Guardar Regla y Política Integral de Mora (Requerimiento C 3.1 & Pizarra)
   const handleGuardarReglaMora = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (
-      nuevaTasaMoraInput === '' ||
-      isNaN(Number(nuevaTasaMoraInput)) ||
-      Number(nuevaTasaMoraInput) < 0 ||
-      Number(nuevaTasaMoraInput) > 100
-    ) {
-      showErrorToast('La tasa de mora debe ser un porcentaje entre 0 y 100.')
-      return
-    }
+
+    const tasaNum = moraTipoPenalidadInput === 'porcentaje' ? Number(nuevaTasaMoraInput || 10) : 0
+    const montoFijoNum = moraTipoPenalidadInput === 'fijo' ? Number(moraMontoFijoInput || 50) : 0
+    const diaVencNum = Number(moraDiaVencimientoInput || 10)
+    const diasGraciaNum = Number(moraDiasGraciaInput || 0)
+    const diaGenNum = Number(moraDiaGeneracionInput || 1)
+
+    // Guardar en la política local / contexto reactivo
+    setPoliticaMora({
+      tipoPenalidad: moraTipoPenalidadInput,
+      montoFijo: montoFijoNum,
+      porcentaje: tasaNum > 0 ? tasaNum : 10,
+      diaVencimiento: diaVencNum,
+      diasGracia: diasGraciaNum,
+      diaGeneracion: diaGenNum
+    })
 
     setIsSubmittingMora(true)
     setMoraError(null)
 
     try {
+      // Sincronizar con API backend
       const res = await apiFetch('/api/v1/expensas/reglas-mora', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          tasaInteres: Number(nuevaTasaMoraInput),
-          diasGracia: 0
+          tasaInteres: tasaNum > 0 ? tasaNum : (montoFijoNum > 0 ? 5 : 0),
+          diasGracia: diasGraciaNum
         })
       })
 
@@ -409,7 +482,7 @@ export default function ExpensasPage() {
 
       await fetchReglasMora()
       setIsMoraModalOpen(false)
-      showToast('¡Regla de mora configurada exitosamente!')
+      showToast('¡Política de mora e intereses guardada exitosamente!')
     } catch (err: any) {
       const msg = err?.message || 'Error de conexión'
       setMoraError(msg)
@@ -633,6 +706,21 @@ export default function ExpensasPage() {
     }
   }
 
+
+  const departamentosUnicosParaAnticipo = useMemo(() => {
+    const map = new Map<number, { idDepartamento: number; numero: string; tipologia?: string }>()
+    expensas.forEach((e) => {
+      if (e.departamento && !map.has(e.idDepartamento)) {
+        map.set(e.idDepartamento, {
+          idDepartamento: e.idDepartamento,
+          numero: e.departamento.numero,
+          tipologia: e.departamento.tipologia
+        })
+      }
+    })
+    return Array.from(map.values()).sort((a, b) => a.numero.localeCompare(b.numero, undefined, { numeric: true }))
+  }, [expensas])
+
   // Filtrado de expensas
   const expensasFiltradas = useMemo(() => {
     return expensas.filter((item) => {
@@ -642,11 +730,18 @@ export default function ExpensasPage() {
         (item.propietarioNombre || '').toLowerCase().includes(searchLower) ||
         (item.inquilinoNombre || '').toLowerCase().includes(searchLower)
       const matchEstado = filtroEstado === 'Todos' || item.estado === filtroEstado
+      const tipoNombre = (item.departamento?.tipologia || '').toLowerCase()
+      const matchTipo =
+        filtroTipoDpto === 'Todos' ||
+        (filtroTipoDpto === 'Tipo A' && (tipoNombre.includes('tipo a') || tipoNombre.includes('tipo 1'))) ||
+        (filtroTipoDpto === 'Tipo B' && (tipoNombre.includes('tipo b') || tipoNombre.includes('tipo 2'))) ||
+        (filtroTipoDpto === 'Tipo C' && (tipoNombre.includes('tipo c') || tipoNombre.includes('tipo 3'))) ||
+        tipoNombre.includes(filtroTipoDpto.toLowerCase())
       const matchPeriodo =
         filtroPeriodo === 'Todos' || (item.periodo && item.periodo.startsWith(filtroPeriodo))
-      return matchSearch && matchEstado && matchPeriodo
+      return matchSearch && matchEstado && matchPeriodo && matchTipo
     })
-  }, [expensas, searchTerm, filtroEstado, filtroPeriodo])
+  }, [expensas, searchTerm, filtroEstado, filtroPeriodo, filtroTipoDpto])
 
   return (
     <div className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto space-y-6">
@@ -679,6 +774,9 @@ export default function ExpensasPage() {
           </button>
         </div>
       )}
+
+      {/* SIMULADOR DE FECHA Y HORA (Requerimiento C 4 y Pizarra) */}
+      <SimuladorFechaBar />
 
       {/* HEADER */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-[#cec8bc] dark:border-slate-800">
@@ -726,6 +824,24 @@ export default function ExpensasPage() {
           >
             <Calculator className="w-4 h-4" />
             Recalcular Mora
+          </button>
+
+          <button
+            onClick={() => setIsAnticipoModalOpen(true)}
+            className="inline-flex items-center justify-center gap-1.5 px-3.5 py-2.5 bg-amber-600 hover:bg-amber-700 active:bg-amber-800 text-white text-xs sm:text-sm font-bold rounded-xl shadow-md transition-all cursor-pointer"
+            title="Registrar pago anticipado por departamento (Requerimiento C 5.1)"
+          >
+            <Wallet className="w-4 h-4" />
+            Registrar Anticipo
+          </button>
+
+          <button
+            onClick={() => setIsEmitirIndividualModalOpen(true)}
+            className="inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-blue-700 hover:bg-blue-600 active:bg-blue-800 text-white text-xs sm:text-sm font-bold rounded-xl shadow-lg shadow-blue-800/20 transition-all cursor-pointer"
+            title="Emitir expensa individual para un solo departamento con agua y rubros extras (Requerimiento C 2.1 y Pizarra)"
+          >
+            <PlusCircle className="w-4 h-4" />
+            + Generar Expensa Individual
           </button>
 
           <button
@@ -886,16 +1002,17 @@ export default function ExpensasPage() {
             <div className="overflow-x-auto">
               <table className="w-full text-left border-collapse text-xs sm:text-sm">
                 <thead>
-                  <tr className="border-b border-[#cec8bc] dark:border-slate-800 bg-[#dfd9ce]/60 dark:bg-slate-950/60 text-[#7d776f] dark:text-slate-400 uppercase text-[11px] font-bold">
-                    <th className="py-3 px-3">Departamento</th>
+                  <tr className="border-b border-[#cec8bc] dark:border-slate-800 bg-[#dfd9ce]/60 dark:bg-slate-950/60 text-[#7d776f] dark:text-slate-400 uppercase text-[10px] sm:text-[11px] font-bold">
+                    <th className="py-3 px-2.5">Tipo</th>
+                    <th className="py-3 px-2.5">Dpto</th>
                     <th className="py-3 px-3">Propietario Responsable</th>
-                    <th className="py-3 px-3">Ocupante / Pagado Por</th>
-                    <th className="py-3 px-3">Período</th>
-                    <th className="py-3 px-3 font-mono text-right">Base (Bs)</th>
-                    <th className="py-3 px-3 font-mono text-right">Agua (Bs)</th>
-                    <th className="py-3 px-3 font-mono text-right">Total (Bs)</th>
-                    <th className="py-3 px-3">Saldo</th>
-                    <th className="py-3 px-3">Estado</th>
+                    <th className="py-3 px-2.5">Período</th>
+                    <th className="py-3 px-2.5 font-mono text-right">Expensa (Bs)</th>
+                    <th className="py-3 px-2.5 font-mono text-right">Agua (Bs)</th>
+                    <th className="py-3 px-2.5 font-mono text-right text-indigo-700 dark:text-indigo-400">Extra (Bs)</th>
+                    <th className="py-3 px-2.5 font-mono text-right">Total (Bs)</th>
+                    <th className="py-3 px-2.5 font-mono text-right">Saldo</th>
+                    <th className="py-3 px-2.5 text-center">Estado</th>
                     <th className="py-3 px-3 text-right">Acciones</th>
                   </tr>
                 </thead>
@@ -915,13 +1032,14 @@ export default function ExpensasPage() {
                         key={item.idExpensa}
                         className="hover:bg-[#dfd9ce]/40 dark:hover:bg-slate-800/40"
                       >
-                        <td className="py-3.5 px-3">
-                          <div className="font-extrabold text-[#262422] dark:text-white">
-                            Dpto. {item.departamento?.numero || item.idDepartamento}
-                          </div>
-                          <div className="text-[11px] text-[#7d776f] dark:text-slate-400">
-                            {item.departamento?.tipologia || 'Departamento'}
-                          </div>
+                        <td className="py-3.5 px-2.5">
+                          <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-extrabold bg-blue-100 text-blue-900 dark:bg-blue-950/80 dark:text-blue-300 border border-blue-200 dark:border-blue-800">
+                            {item.departamento?.tipologia?.includes('Tipo') ? item.departamento.tipologia : `Tipo ${item.departamento?.tipologia || 'A'}`}
+                          </span>
+                        </td>
+
+                        <td className="py-3.5 px-2.5 font-extrabold text-sm text-[#262422] dark:text-white font-mono">
+                          {item.departamento?.numero || item.idDepartamento}
                         </td>
 
                         <td className="py-3.5 px-3 font-bold text-[#262422] dark:text-white">
@@ -950,8 +1068,20 @@ export default function ExpensasPage() {
                           ).toFixed(2)}
                         </td>
 
-                        <td className="py-3.5 px-3 font-mono text-right font-bold text-blue-700 dark:text-blue-400">
+                        <td className="py-3.5 px-2.5 font-mono text-right font-bold text-blue-700 dark:text-blue-400">
                           Bs. {(item.montoAgua || 0).toFixed(2)}
+                        </td>
+
+                        {/* Columna Extra Individual (Requerimiento C 2.2 y 2.3) */}
+                        <td className="py-3.5 px-2.5 font-mono text-right text-indigo-700 dark:text-indigo-400">
+                          <div className="font-bold text-xs">
+                            {item.montoExtra && item.montoExtra > 0 ? `+Bs ${Number(item.montoExtra).toFixed(2)}` : '—'}
+                          </div>
+                          {item.montoExtra && item.montoExtra > 0 && (
+                            <div className="text-[9px] text-[#7d776f] dark:text-slate-400 truncate max-w-[110px]" title={item.extraConcepto}>
+                              {item.extraConcepto || 'Extra'}
+                            </div>
+                          )}
                         </td>
 
                         <td className="py-3.5 px-3 font-mono text-right">
@@ -978,8 +1108,33 @@ export default function ExpensasPage() {
                           </span>
                         </td>
 
-                        <td className="py-3.5 px-4 text-right">
-                          <div className="flex items-center justify-end gap-1.5">
+                        <td className="py-3.5 px-3 text-right">
+                          <div className="flex items-center justify-end gap-1">
+                            {/* Botón QR Inteligente con Simulación de Mora */}
+                            <button
+                              onClick={() => {
+                                setExpensaParaQr(item)
+                                setIsQrSimuladorOpen(true)
+                              }}
+                              className="px-2 py-1 rounded-lg bg-emerald-700 hover:bg-emerald-600 text-white text-xs font-bold transition-all cursor-pointer flex items-center gap-1 shadow-xs"
+                              title="Simulador de Cobro QR (Requerimiento C 4.1, 4.2, 4.3)"
+                            >
+                              <QrCode className="w-3.5 h-3.5" />
+                              <span>QR</span>
+                            </button>
+
+                            {/* Botón Agregar / Editar Extra */}
+                            <button
+                              onClick={() => {
+                                setExpensaParaExtra(item)
+                                setIsExtraModalOpen(true)
+                              }}
+                              className="p-1 rounded-lg bg-indigo-100 text-indigo-800 hover:bg-indigo-200 dark:bg-indigo-950/60 dark:text-indigo-300 transition-all cursor-pointer"
+                              title="Registrar monto extra individual (ej. Extra Pintura Edificio)"
+                            >
+                              <PlusCircle className="w-3.5 h-3.5" />
+                            </button>
+
                             <button
                               onClick={() => setSelectedExtracto(item)}
                               className="px-2.5 py-1 rounded-lg bg-blue-100 text-blue-800 hover:bg-blue-200 dark:bg-blue-950/50 dark:text-blue-300 text-xs font-bold transition-all cursor-pointer flex items-center gap-1"
@@ -1350,6 +1505,22 @@ export default function ExpensasPage() {
             >
               {/* Contenedor con scroll interno */}
               <div className="flex-1 overflow-y-auto p-6 space-y-4">
+                <div className="flex items-center justify-between p-3 bg-blue-100/70 dark:bg-blue-950/60 border border-blue-300 dark:border-blue-800 rounded-2xl text-blue-950 dark:text-blue-200">
+                  <div className="flex items-center gap-2">
+                    <Building2 className="w-4 h-4 text-blue-700 dark:text-blue-400 shrink-0" />
+                    <span className="text-xs font-semibold">¿Deseas emitir expensa solo para un departamento específico?</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsEmitirModalOpen(false)
+                      setIsEmitirIndividualModalOpen(true)
+                    }}
+                    className="px-3 py-1.5 text-xs font-bold bg-blue-700 hover:bg-blue-800 text-white rounded-xl shadow-xs transition-colors cursor-pointer shrink-0"
+                  >
+                    Emitir Individual
+                  </button>
+                </div>
                 {emisionError && (
                   <div className="p-3 bg-rose-100 dark:bg-rose-950/70 border border-rose-300 dark:border-rose-800 text-rose-900 dark:text-rose-200 rounded-xl flex items-center gap-2 text-xs">
                     <AlertCircle className="w-4 h-4 shrink-0 text-rose-600 dark:text-rose-400" />
@@ -1499,10 +1670,10 @@ export default function ExpensasPage() {
               <div>
                 <h3 className="font-extrabold text-base text-[#262422] dark:text-white flex items-center gap-2">
                   <Percent className="w-4 h-4 text-indigo-600" />
-                  Regla de Mora e Intereses
+                  Política de Mora y Vencimientos
                 </h3>
                 <p className="text-xs text-[#7d776f]">
-                  Configuración oficial de la tasa de mora (solo porcentaje)
+                  Configuración oficial de penalidad, días de gracia y fechas de corte (Requerimiento C 3.1 & Pizarra)
                 </p>
               </div>
               <button onClick={() => setIsMoraModalOpen(false)}>
@@ -1518,33 +1689,162 @@ export default function ExpensasPage() {
             )}
 
             <form onSubmit={handleGuardarReglaMora} className="space-y-4 text-xs">
-              <div className="p-3 rounded-2xl bg-indigo-50 dark:bg-indigo-950/40 border border-indigo-200 dark:border-indigo-800 text-[11px] text-indigo-900 dark:text-indigo-200">
-                <span className="font-bold block">Tasa Activa Actual:</span>
-                <span className="text-base font-black text-indigo-700 dark:text-indigo-300 font-mono">
-                  {reglaMoraActiva ? `${reglaMoraActiva.tasaInteres}%` : 'Sin regla activa'}
-                </span>
-                <span className="block text-[10px] text-[#7d776f] mt-0.5">
-                  Días de gracia: 0 (aplicación directa sobre expensas vencidas)
-                </span>
+              {/* Tarjeta de Política Activa */}
+              <div className="p-3 rounded-2xl bg-indigo-50 dark:bg-indigo-950/40 border border-indigo-200 dark:border-indigo-800 text-[11px] text-indigo-900 dark:text-indigo-200 flex justify-between items-center">
+                <div>
+                  <span className="font-bold block">Política Activa del Edificio:</span>
+                  <span className="text-base font-black text-indigo-700 dark:text-indigo-300 font-mono">
+                    {politicaMora.tipoPenalidad === 'fijo'
+                      ? `Bs. ${politicaMora.montoFijo} (Fijo)`
+                      : `${politicaMora.porcentaje}% (Porcentual)`}
+                  </span>
+                  <span className="block text-[10px] text-[#7d776f] mt-0.5">
+                    Vence: día {politicaMora.diaVencimiento} de cada mes • Gracia: {politicaMora.diasGracia} días
+                  </span>
+                </div>
+                <div className="w-8 h-8 rounded-full bg-indigo-200 dark:bg-indigo-900/60 flex items-center justify-center text-indigo-700 dark:text-indigo-300">
+                  <Percent className="w-4 h-4" />
+                </div>
               </div>
 
+              {/* Selector de Método de Cálculo: Monto Fijo vs Porcentaje (Requerimiento C 3.1 & Pizarra) */}
               <div>
-                <label className="block font-bold text-[#262422] dark:text-white mb-1">
-                  Nueva Tasa de Interés Mensual (%) *
+                <label className="block font-bold text-[#262422] dark:text-white mb-1.5">
+                  Método de Cálculo de Penalidad por Mora *
                 </label>
-                <input
-                  type="number"
-                  step="0.01"
-                  min="0"
-                  max="100"
-                  required
-                  value={nuevaTasaMoraInput}
-                  onChange={(e) =>
-                    setNuevaTasaMoraInput(e.target.value === '' ? '' : Number(e.target.value))
-                  }
-                  placeholder="Ej. 5"
-                  className="w-full px-3 py-2 rounded-xl bg-[#dfd9ce] dark:bg-slate-800 border border-[#cec8bc] dark:border-slate-700 font-mono font-bold text-sm text-[#262422] dark:text-white"
-                />
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setMoraTipoPenalidadInput('fijo')}
+                    className={`p-2.5 rounded-xl font-bold border text-center transition-all cursor-pointer ${
+                      moraTipoPenalidadInput === 'fijo'
+                        ? 'bg-indigo-700 text-white border-indigo-800 shadow-sm'
+                        : 'bg-[#dfd9ce] dark:bg-slate-800 text-[#5c5750] dark:text-slate-300 border-[#cec8bc] dark:border-slate-700'
+                    }`}
+                  >
+                    💵 Monto Fijo (Bs.)
+                    <span className="block text-[9px] font-normal opacity-90">Ej. Bs 50</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setMoraTipoPenalidadInput('porcentaje')}
+                    className={`p-2.5 rounded-xl font-bold border text-center transition-all cursor-pointer ${
+                      moraTipoPenalidadInput === 'porcentaje'
+                        ? 'bg-indigo-700 text-white border-indigo-800 shadow-sm'
+                        : 'bg-[#dfd9ce] dark:bg-slate-800 text-[#5c5750] dark:text-slate-300 border-[#cec8bc] dark:border-slate-700'
+                    }`}
+                  >
+                    📊 Porcentaje (%)
+                    <span className="block text-[9px] font-normal opacity-90">Ej. 5% ó 10%</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Input según el tipo seleccionado */}
+              {moraTipoPenalidadInput === 'fijo' ? (
+                <div>
+                  <label className="block font-bold text-[#262422] dark:text-white mb-1">
+                    Monto Fijo de Multa (Bs.) *
+                  </label>
+                  <input
+                    type="number"
+                    step="1"
+                    min="1"
+                    required
+                    value={moraMontoFijoInput}
+                    onChange={(e) =>
+                      setMoraMontoFijoInput(e.target.value === '' ? '' : Number(e.target.value))
+                    }
+                    placeholder="Ej. 50"
+                    className="w-full px-3 py-2 rounded-xl bg-[#dfd9ce] dark:bg-slate-800 border border-[#cec8bc] dark:border-slate-700 font-mono font-bold text-sm text-[#262422] dark:text-white"
+                  />
+                  <p className="text-[10px] text-[#7d776f] mt-1">
+                    Ejemplo pizarra: Penalidad Mora Monto = Bs 50 por expensa vencida.
+                  </p>
+                </div>
+              ) : (
+                <div>
+                  <label className="block font-bold text-[#262422] dark:text-white mb-1">
+                    Tasa de Interés Mensual (%) *
+                  </label>
+                  <input
+                    type="number"
+                    step="0.1"
+                    min="0"
+                    max="100"
+                    required
+                    value={nuevaTasaMoraInput}
+                    onChange={(e) =>
+                      setNuevaTasaMoraInput(e.target.value === '' ? '' : Number(e.target.value))
+                    }
+                    placeholder="Ej. 10"
+                    className="w-full px-3 py-2 rounded-xl bg-[#dfd9ce] dark:bg-slate-800 border border-[#cec8bc] dark:border-slate-700 font-mono font-bold text-sm text-[#262422] dark:text-white"
+                  />
+                  <p className="text-[10px] text-[#7d776f] mt-1">
+                    Ejemplo pizarra: Penalidad Mora Porcentual = 10% sobre el saldo adeudado.
+                  </p>
+                </div>
+              )}
+
+              {/* Días y Fechas de Configuración (Requerimiento C 3.1 & Pizarra) */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 pt-2 border-t border-[#cec8bc] dark:border-slate-800">
+                <div>
+                  <label className="block font-bold text-[#262422] dark:text-white mb-1">
+                    Día Vencimiento *
+                  </label>
+                  <input
+                    type="number"
+                    min="1"
+                    max="28"
+                    required
+                    value={moraDiaVencimientoInput}
+                    onChange={(e) =>
+                      setMoraDiaVencimientoInput(e.target.value === '' ? '' : Number(e.target.value))
+                    }
+                    placeholder="10"
+                    className="w-full px-2.5 py-1.5 rounded-xl bg-[#dfd9ce] dark:bg-slate-800 border border-[#cec8bc] dark:border-slate-700 font-mono font-bold text-xs"
+                  />
+                  <span className="text-[9px] text-[#7d776f]">Ej. 10 de cada mes</span>
+                </div>
+
+                <div>
+                  <label className="block font-bold text-[#262422] dark:text-white mb-1">
+                    Días de Gracia *
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    max="15"
+                    required
+                    value={moraDiasGraciaInput}
+                    onChange={(e) =>
+                      setMoraDiasGraciaInput(e.target.value === '' ? '' : Number(e.target.value))
+                    }
+                    placeholder="2"
+                    className="w-full px-2.5 py-1.5 rounded-xl bg-[#dfd9ce] dark:bg-slate-800 border border-[#cec8bc] dark:border-slate-700 font-mono font-bold text-xs"
+                  />
+                  <span className="text-[9px] text-[#7d776f]">Pizarra: 2 días</span>
+                </div>
+
+                <div>
+                  <label className="block font-bold text-[#262422] dark:text-white mb-1">
+                    Día Generación *
+                  </label>
+                  <input
+                    type="number"
+                    min="1"
+                    max="28"
+                    required
+                    value={moraDiaGeneracionInput}
+                    onChange={(e) =>
+                      setMoraDiaGeneracionInput(e.target.value === '' ? '' : Number(e.target.value))
+                    }
+                    placeholder="1"
+                    className="w-full px-2.5 py-1.5 rounded-xl bg-[#dfd9ce] dark:bg-slate-800 border border-[#cec8bc] dark:border-slate-700 font-mono font-bold text-xs"
+                  />
+                  <span className="text-[9px] text-[#7d776f]">Día 01 de cada mes</span>
+                </div>
               </div>
 
               {/* Historial */}
@@ -1600,7 +1900,7 @@ export default function ExpensasPage() {
                 </button>
                 <button
                   type="submit"
-                  disabled={isSubmittingMora || nuevaTasaMoraInput === ''}
+                  disabled={isSubmittingMora}
                   className="px-4 py-2 rounded-xl bg-indigo-700 hover:bg-indigo-800 text-white text-xs font-bold shadow-md cursor-pointer disabled:opacity-50"
                 >
                   {isSubmittingMora ? 'Guardando...' : 'Guardar Nueva Regla'}
@@ -2715,6 +3015,53 @@ export default function ExpensasPage() {
           </div>
         </div>
       )}
+      {/* MODAL SIMULADOR COBRO QR INTELIGENTE (Requerimiento C 4 y Pizarra) */}
+      <CobroQrSimuladorModal
+        isOpen={isQrSimuladorOpen}
+        onClose={() => setIsQrSimuladorOpen(false)}
+        expensa={expensaParaQr}
+        personasList={personasList}
+        onPaymentSuccess={(reciboInfo) => {
+          showToast('¡Pago QR procesado exitosamente en el simulador!')
+          fetchExpensas()
+          if (reciboInfo) setSelectedReceipt(reciboInfo)
+        }}
+      />
+
+      {/* MODAL REGISTRAR PAGO ANTICIPADO (Requerimiento C 5.1) */}
+      <RegistrarAnticipoModal
+        isOpen={isAnticipoModalOpen}
+        onClose={() => setIsAnticipoModalOpen(false)}
+        departamentos={departamentosUnicosParaAnticipo}
+        personasList={personasList}
+        onSuccess={(msg) => {
+          showToast(msg)
+          fetchExpensas()
+        }}
+      />
+
+      {/* MODAL REGISTRAR MONTO EXTRA INDIVIDUAL (Requerimiento C 2.2) */}
+      
+      {/* MODAL EMISIÓN INDIVIDUAL DE EXPENSA (Requerimiento C 2.1) */}
+      <EmitirExpensaIndividualModal
+        isOpen={isEmitirIndividualModalOpen}
+        onClose={() => setIsEmitirIndividualModalOpen(false)}
+        departamentos={departamentosUnicosParaAnticipo}
+        onSuccess={(idExpensa, msg, extraData) => {
+          showToast(msg)
+          if (extraData && idExpensa) {
+            handleGuardarExtra(idExpensa, extraData.concepto, extraData.monto)
+          }
+          fetchExpensas()
+        }}
+      />
+
+      <RegistrarExtraModal
+        isOpen={isExtraModalOpen}
+        onClose={() => setIsExtraModalOpen(false)}
+        expensa={expensaParaExtra}
+        onSuccess={handleGuardarExtra}
+      />
     </div>
   )
 }

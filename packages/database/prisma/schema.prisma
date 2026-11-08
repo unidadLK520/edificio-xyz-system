@@ -436,8 +436,26 @@ model Empleado {
   activo       Boolean        @default(true)
   
   pagos        PagoEmpleado[]
+  conceptos    ConceptoEmpleado[]
 
   @@map("empleados")
+  @@schema("edificio")
+}
+
+model ConceptoEmpleado {
+  idConceptoEmpleado Int       @id @default(autoincrement()) @map("id_concepto_empleado")
+  idEmpleado         Int       @map("id_empleado")
+  tipo               String    @db.VarChar(20)
+  monto              Decimal   @db.Decimal(10, 2)
+  fecha              DateTime  @default(now()) @db.Date
+  periodo            DateTime? @db.Date
+  motivo             String    @db.VarChar(200)
+  fechaCreacion      DateTime  @default(now()) @map("fecha_creacion") @db.Timestamp(6)
+
+  empleado           Empleado  @relation(fields: [idEmpleado], references: [idEmpleado])
+
+  @@index([idEmpleado, tipo, fecha], map: "idx_conceptos_empleado_empleado_tipo")
+  @@map("conceptos_empleado")
   @@schema("edificio")
 }
 
