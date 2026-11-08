@@ -323,6 +323,11 @@ comunicadosRouter.post(
       }
 
       // Crear comunicado con sus envíos y auditoría en una transacción interactiva
+      const txOptions =
+        FINANZAS_TX_OPTIONS.timeout < 30000
+          ? { ...FINANZAS_TX_OPTIONS, timeout: 30000, maxWait: 15000 }
+          : FINANZAS_TX_OPTIONS;
+
       const comunicado = await prisma.$transaction(async (tx) => {
         const nuevo = await tx.comunicado.create({
           data: {
@@ -331,10 +336,12 @@ comunicadosRouter.post(
             canalEnvio,
             idUsuarioCreador: req.user!.idUsuario,
             envios: {
-              create: personasIds.map((idPersona) => ({
-                idPersona,
-                estadoEnvio: 'Pendiente',
-              })),
+              createMany: {
+                data: personasIds.map((idPersona) => ({
+                  idPersona,
+                  estadoEnvio: 'Pendiente',
+                })),
+              },
             },
           },
           include: {
@@ -353,7 +360,7 @@ comunicadosRouter.post(
         });
 
         return nuevo;
-      }, FINANZAS_TX_OPTIONS);
+      }, txOptions);
 
       res.status(201).json(comunicado);
 
