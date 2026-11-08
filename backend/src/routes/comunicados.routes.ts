@@ -47,8 +47,21 @@ async function despacharCorreosComunicado(
 
     for (const envio of envios) {
       const email = envio.persona?.correo?.trim();
-      // Personas sin correo registrado: no enviar (permanecen en 'Pendiente')
+      // Personas sin correo registrado: marcar como 'Omitido' sin llamar a SMTP
       if (!email) {
+        try {
+          await prisma.comunicadoEnvio.update({
+            where: { idEnvio: envio.idEnvio },
+            data: {
+              estadoEnvio: 'Omitido',
+            },
+          });
+        } catch (err: any) {
+          console.error(
+            `[COMUNICADOS] Error al actualizar estado de envío Omitido para idEnvio ${envio.idEnvio}:`,
+            err?.message || err
+          );
+        }
         continue;
       }
 
@@ -119,15 +132,21 @@ export interface ResumenEnvios {
   pendientes: number;
   enviados: number;
   fallidos: number;
+  omitidos: number;
 }
 
-function clasificarEstadoEnvio(estado: string | null | undefined): 'enviados' | 'fallidos' | 'pendientes' {
+function clasificarEstadoEnvio(
+  estado: string | null | undefined
+): 'enviados' | 'fallidos' | 'pendientes' | 'omitidos' {
   const norm = (estado || '').trim().toLowerCase();
   if (norm === 'enviado' || norm === 'entregado') {
     return 'enviados';
   }
   if (norm === 'fallido') {
     return 'fallidos';
+  }
+  if (norm === 'omitido') {
+    return 'omitidos';
   }
   return 'pendientes';
 }
@@ -138,6 +157,7 @@ function calcularResumenDesdeEnvios(envios: { estadoEnvio?: string | null }[]): 
     pendientes: 0,
     enviados: 0,
     fallidos: 0,
+    omitidos: 0,
   };
 
   for (const envio of envios) {
@@ -180,6 +200,7 @@ comunicadosRouter.get(
           pendientes: 0,
           enviados: 0,
           fallidos: 0,
+          omitidos: 0,
         });
       }
 
@@ -213,6 +234,7 @@ comunicadosRouter.get(
           pendientes: 0,
           enviados: 0,
           fallidos: 0,
+          omitidos: 0,
         },
       }));
 

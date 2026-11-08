@@ -69,6 +69,7 @@ export interface ResumenEnvios {
   pendientes: number
   enviados: number
   fallidos: number
+  omitidos?: number
 }
 
 export interface ComunicadoItem {
@@ -280,6 +281,12 @@ export default function ComunicadosAmigablesPage() {
   const [cargandoDetalle, setCargandoDetalle] = useState<boolean>(false)
   const [detalleEnvios, setDetalleEnvios] = useState<EnvioDetalleItem[]>([])
 
+  const enviosVisiblesModal = useMemo(() => {
+    return detalleEnvios.filter(
+      (e) => (e.estadoEnvio || '').trim().toLowerCase() !== 'omitido'
+    )
+  }, [detalleEnvios])
+
   // Temporizadores para refresco automático (Requisito 3)
   const refreshTimersRef = useRef<NodeJS.Timeout[]>([])
 
@@ -328,7 +335,8 @@ export default function ComunicadosAmigablesPage() {
               total: c._count?.envios || 0,
               pendientes: c._count?.envios || 0,
               enviados: 0,
-              fallidos: 0
+              fallidos: 0,
+              omitidos: 0
             }
           }))
           setComunicados(mapped)
@@ -464,10 +472,6 @@ export default function ComunicadosAmigablesPage() {
     return personas.filter((p) => formDestinatariosIds.includes(p.idPersona))
   }, [formTipoDestinatarios, personas, formDestinatariosIds])
 
-  const sinCorreoCount = useMemo(() => {
-    return destinatariosElegidos.filter((p) => !p.correo || !p.correo.trim()).length
-  }, [destinatariosElegidos])
-
   const conteoDptos = useMemo(() => {
     return new Set(personas.map((p) => p.dptoNumero).filter(Boolean)).size
   }, [personas])
@@ -547,7 +551,8 @@ export default function ComunicadosAmigablesPage() {
           total: targetCount,
           pendientes: targetCount,
           enviados: 0,
-          fallidos: 0
+          fallidos: 0,
+          omitidos: 0
         }
       }
 
@@ -1086,16 +1091,6 @@ export default function ComunicadosAmigablesPage() {
                 />
               </div>
 
-              {/* Banner preventivo si faltan correos (Requisito 5) */}
-              {(formCanal === 'Correo' || formCanal === 'Ambos') && sinCorreoCount > 0 && (
-                <div className="p-3.5 bg-amber-100 dark:bg-amber-950/70 border border-amber-300 dark:border-amber-800 text-amber-900 dark:text-amber-200 rounded-2xl flex items-center gap-2.5 text-xs font-bold">
-                  <AlertCircle className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0" />
-                  <span>
-                    ⚠️ {sinCorreoCount} de {destinatariosElegidos.length} vecinos no tienen correo registrado y no recibirán el aviso (su estado quedará como Pendiente).
-                  </span>
-                </div>
-              )}
-
               {/* Botón Grande de Envío */}
               <button
                 type="submit"
@@ -1246,10 +1241,14 @@ export default function ComunicadosAmigablesPage() {
               </div>
             ) : (
               comunicadosFiltrados.map((item) => {
-                const totalDest = item.resumenEnvios?.total ?? item._count?.envios ?? 0
+                const rawTotal = item.resumenEnvios?.total ?? item._count?.envios ?? 0
+                const omitidos = item.resumenEnvios?.omitidos ?? 0
+                const totalDest = Math.max(0, rawTotal - omitidos)
                 const enviados = item.resumenEnvios?.enviados ?? 0
-                const pendientes = item.resumenEnvios?.pendientes ?? totalDest
+                const pendientes = item.resumenEnvios?.pendientes ?? 0
                 const fallidos = item.resumenEnvios?.fallidos ?? 0
+                const esCorreoOAmbos = item.canalEnvio === 'Correo' || item.canalEnvio === 'Ambos'
+                const esWhatsAppOSoloSistema = item.canalEnvio === 'WhatsApp' || item.canalEnvio === 'Solo sistema'
 
                 return (
                   <div
@@ -1301,10 +1300,18 @@ export default function ComunicadosAmigablesPage() {
                             <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
                             Enviado: {enviados}
                           </span>
-                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-amber-100 text-amber-800 dark:bg-amber-950/80 dark:text-amber-300">
-                            <Clock className="w-3.5 h-3.5 text-amber-600" />
-                            Pendiente: {pendientes}
-                          </span>
+                          {esCorreoOAmbos && pendientes > 0 && (
+                            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-amber-100 text-amber-800 dark:bg-amber-950/80 dark:text-amber-300">
+                              <Clock className="w-3.5 h-3.5 text-amber-600" />
+                              Pendiente: {pendientes}
+                            </span>
+                          )}
+                          {esWhatsAppOSoloSistema && (
+                            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-slate-200 text-slate-700 dark:bg-slate-800 dark:text-slate-300">
+                              <Clock className="w-3.5 h-3.5 text-slate-500" />
+                              Sin envío automático
+                            </span>
+                          )}
                           {fallidos > 0 && (
                             <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-rose-100 text-rose-800 dark:bg-rose-950/80 dark:text-rose-300">
                               <AlertCircle className="w-3.5 h-3.5 text-rose-600" />
@@ -1470,7 +1477,7 @@ export default function ComunicadosAmigablesPage() {
               <div className="text-[11px] text-[#5c5750] dark:text-slate-300 font-bold flex items-center gap-2">
                 <span>Canal: {comunicadoSeleccionadoDetalle.canalEnvio}</span>
                 <span>•</span>
-                <span>Total destinatarios: {detalleEnvios.length}</span>
+                <span>Total destinatarios: {enviosVisiblesModal.length}</span>
               </div>
             </div>
 
@@ -1481,12 +1488,12 @@ export default function ComunicadosAmigablesPage() {
                   <RotateCcw className="w-4 h-4 animate-spin text-blue-600" />
                   <span>Consultando estados de entrega en tiempo real...</span>
                 </div>
-              ) : detalleEnvios.length === 0 ? (
+              ) : enviosVisiblesModal.length === 0 ? (
                 <div className="p-8 text-center text-xs text-[#7d776f] font-semibold">
                   No hay destinatarios registrados para este comunicado.
                 </div>
               ) : (
-                detalleEnvios.map((envio, idx) => {
+                enviosVisiblesModal.map((envio, idx) => {
                   const colorAvatar = AVATAR_COLORS[idx % AVATAR_COLORS.length]
                   const st = (envio.estadoEnvio || '').toLowerCase()
                   const isEnviado = st === 'enviado' || st === 'entregado'
