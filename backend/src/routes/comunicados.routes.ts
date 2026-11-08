@@ -45,7 +45,8 @@ async function despacharCorreosComunicado(
     const htmlBody = buildComunicadoEmailHtml(titulo, contenido);
     const textBody = buildComunicadoEmailText(titulo, contenido);
 
-    for (const envio of envios) {
+    for (let i = 0; i < envios.length; i++) {
+      const envio = envios[i];
       const email = envio.persona?.correo?.trim();
       // Personas sin correo registrado: marcar como 'Omitido' sin llamar a SMTP
       if (!email) {
@@ -107,6 +108,11 @@ async function despacharCorreosComunicado(
         } catch {
           // Ignorar para preservar la estabilidad del proceso
         }
+      }
+
+      // Pausa de 500 ms entre correos del mismo lote
+      if (i < envios.length - 1) {
+        await new Promise((resolve) => setTimeout(resolve, 500));
       }
     }
   } catch (err: any) {

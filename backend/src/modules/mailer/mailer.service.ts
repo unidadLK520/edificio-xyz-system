@@ -223,6 +223,69 @@ export async function validateEmail(email: string): Promise<EmailValidationResul
   return { valid: true };
 }
 
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/**
+ * Oculta la parte local de direcciones de correo en cadenas de texto para evitar
+ * registrarlas en logs (p. ej. "usuario@dominio.com" -> "***@dominio.com").
+ */
+export function maskEmails(text: string): string {
+  if (!text) return '';
+  return text.replace(
+    /[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@([a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)+)/g,
+    '***@$1'
+  );
+}
+
+/**
+ * Determina si un error de transporte SMTP es temporal:
+ * - responseCode 4xx (p. ej. 421, 450, 451, 452).
+ * - Códigos de red ETIMEDOUT o ECONNRESET.
+ * - Mensaje "Connection closed unexpectedly".
+ *
+ * Los errores 5xx (500 a 599) son definitivos y devuelven false (no se reintentan).
+ */
+export function isTemporarySmtpError(err: any): boolean {
+  if (!err) return false;
+
+  // 1. Errores 5xx son definitivos: NO se reintentan
+  const responseCode = Number(err.responseCode);
+  if (!isNaN(responseCode) && responseCode >= 500 && responseCode < 600) {
+    return false;
+  }
+  const responseText = typeof err.response === 'string' ? err.response.trim() : '';
+  if (/^5\d{2}\b/.test(responseText)) {
+    return false;
+  }
+
+  // 2. responseCode 4xx
+  if (!isNaN(responseCode) && responseCode >= 400 && responseCode < 500) {
+    return true;
+  }
+  if (/^4\d{2}\b/.test(responseText)) {
+    return true;
+  }
+
+  // 3. ETIMEDOUT o ECONNRESET en code, errno o message
+  const code = String(err.code || err.errno || '').toUpperCase();
+  if (code === 'ETIMEDOUT' || code === 'ECONNRESET') {
+    return true;
+  }
+
+  // 4. "Connection closed unexpectedly" o códigos en message
+  const message = String(err.message || '');
+  if (message.includes('Connection closed unexpectedly')) {
+    return true;
+  }
+  if (/\bETIMEDOUT\b/i.test(message) || /\bECONNRESET\b/i.test(message)) {
+    return true;
+  }
+
+  return false;
+}
+
 export class MailerService {
   private transporter: Transporter | null = null;
 
@@ -318,32 +381,55 @@ export class MailerService {
     }
 
     const from = process.env.MAIL_FROM || 'Edificio XYZ <noreply@edificioxyz.com>';
+    const transporter = this.getTransporter();
 
-    try {
-      const transporter = this.getTransporter();
-      const info = await transporter.sendMail({
-        from,
-        to: finalTo,
-        subject: finalSubject,
-        text: textContent,
-        html: htmlContent,
-      });
+    // Reintentos para errores SMTP temporales: hasta 2 reintentos con 5 s y 15 s
+    const retryDelaysMs = [5000, 15000];
+    let lastError: any = null;
 
-      return {
-        success: true,
-        messageId: info.messageId,
-      };
-    } catch (err: any) {
-      // Registrar únicamente el mensaje del error sin imprimir contraseñas ni la configuración SMTP
-      console.error(
-        '[MAILER] Error al enviar correo:',
-        err?.message || 'Fallo desconocido en transporte SMTP'
-      );
-      return {
-        success: false,
-        error: err?.message || 'Error en envío SMTP',
-      };
+    for (let attempt = 0; attempt <= retryDelaysMs.length; attempt++) {
+      try {
+        const info = await transporter.sendMail({
+          from,
+          to: finalTo,
+          subject: finalSubject,
+          text: textContent,
+          html: htmlContent,
+        });
+
+        return {
+          success: true,
+          messageId: info.messageId,
+        };
+      } catch (err: any) {
+        lastError = err;
+
+        // Si es error SMTP temporal y aún quedan reintentos disponibles (hasta 2)
+        if (isTemporarySmtpError(err) && attempt < retryDelaysMs.length) {
+          const waitMs = retryDelaysMs[attempt];
+          console.warn(
+            `[MAILER] Error SMTP temporal en intento ${attempt + 1}: ${maskEmails(
+              err?.message || 'Error temporal'
+            )}. Reintentando en ${waitMs / 1000} s...`
+          );
+          await sleep(waitMs);
+          continue;
+        }
+
+        // Si no es temporal (p. ej. error 5xx) o ya se agotaron los reintentos, no reintentar
+        break;
+      }
     }
+
+    // Registrar únicamente el mensaje del error sin imprimir contraseñas, configuraciones ni direcciones completas
+    console.error(
+      '[MAILER] Error al enviar correo:',
+      maskEmails(lastError?.message || 'Fallo desconocido en transporte SMTP')
+    );
+    return {
+      success: false,
+      error: lastError?.message || 'Error en envío SMTP',
+    };
   }
 }
 
