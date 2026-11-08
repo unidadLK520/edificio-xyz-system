@@ -1,27 +1,20 @@
 // frontend/app/(copropietario)/comunicados/page.tsx
 // Módulo de Comunicados y Avisos Oficiales del Edificio XYZ
 // Diseñado para ser extremadamente amigable, visual, intuitivo y claro para todo tipo de usuarios.
-// Incluye:
-// 1. UI Elaboración Comunicados: Asistente visual con plantillas de 1 clic, selector amigable de canales (WhatsApp/Correo) y simulador de celular en vivo.
-// 2. UI Vista de Comunicados enviados: Tablón visual de avisos despachados, métricas comprensibles y lista amigable de quién lo recibió (con fotos/iniciales y estados).
-// 3. Cartelera Virtual para Vecinos: Vista limpia para copropietarios e inquilinos.
+// Integrado con la API real de comunicados, auditoría, RBAC y control de entregas por correo y WhatsApp.
 
 'use client'
 
-import React, { useState, useEffect, useMemo, useCallback } from 'react'
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import {
   Megaphone,
   PenSquare,
   Send,
   CheckCircle2,
   AlertCircle,
-  Calendar,
   Building2,
   Users,
-  FileText,
-  Download,
   Search,
-  Filter,
   Pin,
   Clock,
   Sparkles,
@@ -29,20 +22,15 @@ import {
   Mail,
   Trash2,
   Printer,
-  Eye,
   Share2,
   RotateCcw,
-  Check,
   X,
   ChevronRight,
-  ShieldCheck,
   Smartphone,
   CheckCheck,
   MessageCircle,
-  Paperclip,
   Smile,
-  BadgeCheck,
-  ArrowRight
+  BadgeCheck
 } from 'lucide-react'
 import { apiFetch } from '@/lib/api'
 import { fechaSolo, fechaHoraBolivia } from '@/lib/fecha'
@@ -65,15 +53,22 @@ export interface DestinatarioPersona {
 export interface EnvioDetalleItem {
   idEnvio: number
   idPersona: number
-  fechaEnvio: string
-  estadoEnvio: EstadoEnvio
+  fechaEnvio?: string | null
+  estadoEnvio?: string | null
   canal?: CanalEnvio
-  persona: {
+  persona?: {
     nombres: string
     apellidos: string
     correo?: string
     telefono?: string
   }
+}
+
+export interface ResumenEnvios {
+  total: number
+  pendientes: number
+  enviados: number
+  fallidos: number
 }
 
 export interface ComunicadoItem {
@@ -89,11 +84,29 @@ export interface ComunicadoItem {
   autorNombre?: string
   usuarioCreador?: { nombreUsuario: string } | null
   _count?: { envios: number }
-  adjuntos?: { name: string; size: string; type: string }[]
   envios?: EnvioDetalleItem[]
+  resumenEnvios?: ResumenEnvios
 }
 
-// ── Plantillas Rápidas Amigables para Edificio XYZ ─────────────────────────────
+// ── Normalización de teléfonos y enlaces de WhatsApp (Requisito 7) ───────────
+function normalizarTelefonoBolivia(telefono?: string): string | null {
+  if (!telefono) return null
+  const digitos = telefono.replace(/\D/g, '')
+  if (!digitos) return null
+  if (digitos.length === 8) {
+    return `591${digitos}`
+  }
+  return digitos
+}
+
+function generarUrlWhatsApp(telefono?: string, titulo?: string, contenido?: string): string | null {
+  const telNorm = normalizarTelefonoBolivia(telefono)
+  if (!telNorm) return null
+  const texto = `*${titulo || 'Comunicado Edificio XYZ'}*\n\n${contenido || ''}`
+  return `https://wa.me/${telNorm}?text=${encodeURIComponent(texto)}`
+}
+
+// ── Plantillas Rápidas Amigables para Edificio XYZ (Requisito 8) ───────────────
 interface PlantillaComunicado {
   id: string
   tituloBoton: string
@@ -106,7 +119,6 @@ interface PlantillaComunicado {
   canalEnvio: CanalEnvio
   resumen: string
   contenido: string
-  adjuntos?: { name: string; size: string; type: string }[]
 }
 
 const PLANTILLAS_AMIGABLES: PlantillaComunicado[] = [
@@ -116,37 +128,33 @@ const PLANTILLAS_AMIGABLES: PlantillaComunicado[] = [
     descripcionCorta: 'Reunión anual de copropietarios, balance y elección de mesa directiva',
     icono: '📢',
     colorTag: 'bg-blue-100 text-blue-900 border-blue-300 dark:bg-blue-950/70 dark:text-blue-300',
-    titulo: 'Convocatoria Oficial: Asamblea General Ordinaria de Copropietarios 2026',
+    titulo: 'Convocatoria Oficial: Asamblea General Ordinaria de Copropietarios',
     categoria: 'ASAMBLEA',
     prioridad: 'ALTA',
     canalEnvio: 'Ambos',
-    resumen: 'Se convoca a todos los propietarios a la Asamblea General para tratar el balance financiero, pintura exterior y renovación del Directorio.',
+    resumen: 'Se convoca a todos los propietarios a la Asamblea General para tratar el balance financiero y renovación del Directorio.',
     contenido: `Estimados Copropietarios y Vecinos del Edificio XYZ:
 
 De conformidad con nuestro Reglamento Interno de Copropiedad, se convoca cordialmente a la ASAMBLEA GENERAL ORDINARIA:
 
-📅 FECHA: Sábado 15 de Noviembre de 2026
+📅 FECHA: [fecha]
 ⏰ HORA: 
-   - Primer llamado: 15:00 hrs.
-   - Segundo llamado: 15:30 hrs.
+   - Primer llamado: [hora]
+   - Segundo llamado: [hora]
 📍 LUGAR: Salón de Eventos y Usos Múltiples (Planta Baja).
 
 TEMAS A TRATAR (ORDEN DEL DÍA):
 1. Verificación de quórum y lectura del acta anterior.
-2. Informe financiero y rendición de cuentas de ingresos y gastos 2026.
-3. Propuestas y presupuesto para el mantenimiento preventivo y pintura de fachada.
+2. Informe financiero y rendición de cuentas de ingresos y gastos.
+3. Propuestas y presupuesto para el mantenimiento preventivo y mejoras.
 4. Determinación de la cuota extraordinaria para el fondo de reserva.
-5. Elección de la nueva Mesa Directiva para el período 2026 - 2028.
+5. Elección de la nueva Mesa Directiva.
 6. Preguntas y sugerencias de los vecinos.
 
 NOTA IMPORTANTE:
 Para poder participar y votar, es indispensable encontrarse al día en sus expensas comunes. Si no puede asistir en persona, puede enviar a un representante con una cartita poder simple.
 
-¡Esperamos contar con su valiosa presencia para mejorar nuestro edificio!`,
-    adjuntos: [
-      { name: 'Convocatoria_Oficial_Asamblea_2026.pdf', size: '1.2 MB', type: 'PDF' },
-      { name: 'Modelo_Carta_Poder_Representacion.pdf', size: '240 KB', type: 'PDF' }
-    ]
+¡Esperamos contar con su valiosa presencia para mejorar nuestro edificio!`
   },
   {
     id: 'mantenimiento_ascensores',
@@ -154,24 +162,21 @@ Para poder participar y votar, es indispensable encontrarse al día en sus expen
     descripcionCorta: 'Aviso de revisión técnica y horarios de corte temporal',
     icono: '🔧',
     colorTag: 'bg-amber-100 text-amber-900 border-amber-300 dark:bg-amber-950/70 dark:text-amber-300',
-    titulo: 'Mantenimiento Preventivo y Calibración de Ascensores (Torre A y B)',
+    titulo: 'Mantenimiento Preventivo y Calibración de Ascensores',
     categoria: 'MANTENIMIENTO',
     prioridad: 'MEDIA',
     canalEnvio: 'WhatsApp',
-    resumen: 'Corte programado de ascensores por calibración de seguridad este sábado de 08:00 a 13:00 hrs.',
+    resumen: 'Corte programado de ascensores por calibración técnica el día [fecha] en el horario [horario].',
     contenido: `Estimados Residentes del Edificio XYZ:
 
-Les comunicamos que los técnicos de la empresa 'Otis Elevator Services' realizarán el mantenimiento preventivo de seguridad en los ascensores.
+Les comunicamos que el equipo técnico realizará el mantenimiento preventivo de seguridad en los ascensores.
 
-🗓️ CUÁNDO: Sábado 21 de Noviembre de 2026
-⏱️ HORARIOS:
-   - Ascensor Torre A: Estará en pausa de 08:00 a 10:30 hrs.
-   - Ascensor Torre B: Estará en pausa de 10:30 a 13:00 hrs.
+🗓️ CUÁNDO: [fecha]
+⏱️ HORARIOS: [horario]
 
 Por favor tomen sus previsiones si planean subir compras pesadas o maletas en esos horarios. Las escaleras estarán completamente iluminadas y limpias.
 
-Agradecemos mucho su comprensión.`,
-    adjuntos: [{ name: 'Cronograma_Tecnico_Ascensores.pdf', size: '480 KB', type: 'PDF' }]
+Agradecemos mucho su comprensión.`
   },
   {
     id: 'lavado_tanques',
@@ -183,21 +188,21 @@ Agradecemos mucho su comprensión.`,
     categoria: 'URGENTE',
     prioridad: 'ALTA',
     canalEnvio: 'Ambos',
-    resumen: 'Corte temporal de agua este jueves de 09:00 a 15:00 hrs por limpieza sanitaria de tanques.',
+    resumen: 'Corte temporal de agua el día [fecha] en el horario [horario] por limpieza sanitaria de tanques.',
     contenido: `Estimados Vecinos:
 
-Por normas sanitarias y para cuidar la salud de todas las familias del edificio, este jueves se realizará el lavado y desinfección profunda de los tanques cisterna de agua.
+Por normas sanitarias y para cuidar la salud de todas las familias del edificio, se realizará el lavado y desinfección profunda de los tanques cisterna de agua.
 
 🚿 HORARIO DEL CORTE:
-- Jueves 12 de Noviembre de 2026, de 09:00 a 15:00 hrs.
-- El agua volverá a fluir normalmente a partir de las 15:30 hrs.
+- Día: [fecha]
+- Horario de corte: [horario]
+- Restablecimiento estimado: [horario]
 
 CONSEJOS ÚTILES:
 1. Por favor junten agua con anticipación para cocinar y aseo durante la mañana.
 2. Mantengan los grifos cerrados para evitar que entre aire o sedimentos a sus cañerías.
 
-¡Cuidar el agua limpia es salud para todos!`,
-    adjuntos: [{ name: 'Certificado_Salubridad_Productos.pdf', size: '310 KB', type: 'PDF' }]
+¡Cuidar el agua limpia es salud para todos!`
   },
   {
     id: 'normativa_parqueos',
@@ -214,134 +219,38 @@ CONSEJOS ÚTILES:
 
 Cuidar la seguridad de nuestro condominio es tarea de todos:
 
-1. 🚪 PORTÓN VEHICULAR: Al entrar o salir con su vehículo, por favor espere unos segundos hasta ver que el portón cierre por completo. Así evitamos el ingreso de extraños.
-2. 🚗 VELOCIDAD: Maneje despacio (máximo 10 km/h) con luces encendidas en las rampas y sótanos.
+1. 🚪 PORTÓN VEHICULAR: Al entrar o salir con su vehículo, por favor espere unos segundos hasta ver que el portón cierre por completo. Así evitamos el ingreso de personas ajenas.
+2. 🚗 VELOCIDAD: Maneje despacio con luces encendidas en las rampas y sótanos.
 3. 🅿️ PARQUEOS: Estacione únicamente en su espacio asignado para no incomodar a los vecinos.
 
-¡Gracias por su colaboración y buena convivencia!`,
-    adjuntos: [{ name: 'Reglamento_Uso_Parqueos.pdf', size: '185 KB', type: 'PDF' }]
+¡Gracias por su colaboración y buena convivencia!`
   },
   {
     id: 'aviso_expensas_mora',
     tituloBoton: 'Vencimiento de Expensas',
-    descripcionCorta: 'Recordatorio de pago sin mora hasta el 10 y facilidades por QR',
+    descripcionCorta: 'Recordatorio de pago de expensas y opciones de pago',
     icono: '💳',
     colorTag: 'bg-purple-100 text-purple-900 border-purple-300 dark:bg-purple-950/70 dark:text-purple-300',
     titulo: 'Recordatorio Amigable: Vencimiento de Expensas del Mes y Pago Fácil por QR',
     categoria: 'FINANZAS',
     prioridad: 'ALTA',
     canalEnvio: 'Ambos',
-    resumen: 'Recuerde pagar sus expensas hasta el 10 de Noviembre sin recargo de mora. Pague al instante con QR.',
+    resumen: 'Recuerde pagar sus expensas hasta el [fecha límite] sin recargo de mora. Pague al instante con QR.',
     contenido: `Estimados Propietarios y Residentes:
 
 Les enviamos este cordial recordatorio sobre las expensas comunes del edificio correspondientes a este mes:
 
-📅 FECHA LÍMITE SIN RECARGO: 10 de Noviembre de 2026.
+📅 FECHA LÍMITE SIN RECARGO: [fecha límite].
 
 ¿CÓMO PUEDE PAGAR FÁCILMENTE?
 - 📱 Mediante Código QR desde su aplicación móvil del banco (rápido y sin comisiones).
 - 🏦 Por transferencia bancaria a la cuenta del Edificio XYZ.
 - 💵 O con el saldo a favor si realizó un pago anticipado.
 
-A partir del 11 de Noviembre, el sistema calcula de forma automática la mora aprobada en asamblea (Bs. 50 fijos o 5%).
+A partir del [fecha de mora], el sistema calcula de forma automática la mora aprobada en asamblea ([monto]).
 
-¡Agradecemos mucho a todos los vecinos puntuales que permiten mantener limpio, seguro y funcionando nuestro edificio!`,
-    adjuntos: [{ name: 'Guia_Pago_QR_Paso_a_Paso.pdf', size: '520 KB', type: 'PDF' }]
+¡Agradecemos mucho a todos los vecinos puntuales que permiten mantener limpio, seguro y funcionando nuestro edificio!`
   }
-]
-
-// ── Fallback Inicial de Comunicados Enviados ───────────────────────────────────
-const COMUNICADOS_INICIALES: ComunicadoItem[] = [
-  {
-    idComunicado: 101,
-    titulo: 'Convocatoria Oficial: Asamblea General Ordinaria de Copropietarios 2026',
-    categoria: 'ASAMBLEA',
-    prioridad: 'ALTA',
-    canalEnvio: 'Ambos',
-    fechaPublicacion: '2026-10-20T15:30:00Z',
-    isPinned: true,
-    autorNombre: 'Administración & Mesa Directiva',
-    usuarioCreador: { nombreUsuario: 'admin_xyz' },
-    resumen: 'Convocatoria para tratar balance financiero 2026, proyecto de pintura exterior y renovación del Directorio.',
-    contenido: PLANTILLAS_AMIGABLES[0].contenido,
-    _count: { envios: 20 },
-    adjuntos: PLANTILLAS_AMIGABLES[0].adjuntos,
-    envios: [
-      { idEnvio: 1, idPersona: 1, fechaEnvio: '2026-10-20T15:31:00Z', estadoEnvio: 'Entregado', canal: 'Ambos', persona: { nombres: 'Roberto', apellidos: 'Gutiérrez Salazar', correo: 'roberto.g@gmail.com', telefono: '+591 70011223' } },
-      { idEnvio: 2, idPersona: 2, fechaEnvio: '2026-10-20T15:31:00Z', estadoEnvio: 'Entregado', canal: 'Ambos', persona: { nombres: 'Juan Carlos', apellidos: 'Pérez Morales', correo: 'juan.perez@gmail.com', telefono: '+591 71022334' } },
-      { idEnvio: 3, idPersona: 3, fechaEnvio: '2026-10-20T15:32:00Z', estadoEnvio: 'Entregado', canal: 'Ambos', persona: { nombres: 'Ana María', apellidos: 'Torres Vargas', correo: 'ana.torres@gmail.com', telefono: '+591 72033445' } },
-      { idEnvio: 4, idPersona: 4, fechaEnvio: '2026-10-20T15:32:00Z', estadoEnvio: 'Entregado', canal: 'Ambos', persona: { nombres: 'Carlos', apellidos: 'Mendoza Claros', correo: 'carlos.m@hotmail.com', telefono: '+591 73044556' } },
-      { idEnvio: 5, idPersona: 5, fechaEnvio: '2026-10-20T15:33:00Z', estadoEnvio: 'Entregado', canal: 'Ambos', persona: { nombres: 'Patricia', apellidos: 'Roca Justiniano', correo: 'patricia.r@gmail.com', telefono: '+591 74055667' } }
-    ]
-  },
-  {
-    idComunicado: 102,
-    titulo: 'Mantenimiento Preventivo y Calibración de Ascensores (Torre A y B)',
-    categoria: 'MANTENIMIENTO',
-    prioridad: 'MEDIA',
-    canalEnvio: 'WhatsApp',
-    fechaPublicacion: '2026-10-18T09:00:00Z',
-    isPinned: false,
-    autorNombre: 'Administración Edificio XYZ',
-    usuarioCreador: { nombreUsuario: 'admin_xyz' },
-    resumen: 'Corte programado de ascensores por calibración electromecánica este sábado de 08:00 a 13:00 hrs.',
-    contenido: PLANTILLAS_AMIGABLES[1].contenido,
-    _count: { envios: 20 },
-    adjuntos: PLANTILLAS_AMIGABLES[1].adjuntos,
-    envios: [
-      { idEnvio: 6, idPersona: 1, fechaEnvio: '2026-10-18T09:01:00Z', estadoEnvio: 'Entregado', canal: 'WhatsApp', persona: { nombres: 'Roberto', apellidos: 'Gutiérrez Salazar', correo: 'roberto.g@gmail.com', telefono: '+591 70011223' } },
-      { idEnvio: 7, idPersona: 2, fechaEnvio: '2026-10-18T09:01:00Z', estadoEnvio: 'Entregado', canal: 'WhatsApp', persona: { nombres: 'Juan Carlos', apellidos: 'Pérez Morales', correo: 'juan.perez@gmail.com', telefono: '+591 71022334' } },
-      { idEnvio: 8, idPersona: 3, fechaEnvio: '2026-10-18T09:02:00Z', estadoEnvio: 'Entregado', canal: 'WhatsApp', persona: { nombres: 'Ana María', apellidos: 'Torres Vargas', correo: 'ana.torres@gmail.com', telefono: '+591 72033445' } }
-    ]
-  },
-  {
-    idComunicado: 103,
-    titulo: 'Recordatorio Amigable: Vencimiento de Expensas del Mes y Pago Fácil por QR',
-    categoria: 'FINANZAS',
-    prioridad: 'ALTA',
-    canalEnvio: 'Ambos',
-    fechaPublicacion: '2026-11-01T08:00:00Z',
-    isPinned: true,
-    autorNombre: 'Administración Edificio XYZ',
-    usuarioCreador: { nombreUsuario: 'admin_xyz' },
-    resumen: 'Vencimiento sin mora hasta el 10 de Noviembre. Opciones de pago rápido mediante QR.',
-    contenido: PLANTILLAS_AMIGABLES[4].contenido,
-    _count: { envios: 20 },
-    adjuntos: PLANTILLAS_AMIGABLES[4].adjuntos,
-    envios: [
-      { idEnvio: 9, idPersona: 1, fechaEnvio: '2026-11-01T08:01:00Z', estadoEnvio: 'Entregado', canal: 'Ambos', persona: { nombres: 'Roberto', apellidos: 'Gutiérrez Salazar', correo: 'roberto.g@gmail.com', telefono: '+591 70011223' } },
-      { idEnvio: 10, idPersona: 2, fechaEnvio: '2026-11-01T08:01:00Z', estadoEnvio: 'Entregado', canal: 'Ambos', persona: { nombres: 'Juan Carlos', apellidos: 'Pérez Morales', correo: 'juan.perez@gmail.com', telefono: '+591 71022334' } }
-    ]
-  },
-  {
-    idComunicado: 104,
-    titulo: 'Recordatorio de Seguridad: Portón Automático y Parqueos en Sótanos',
-    categoria: 'NORMATIVA',
-    prioridad: 'INFORMATIVA',
-    canalEnvio: 'Solo sistema',
-    fechaPublicacion: '2026-09-12T11:20:00Z',
-    isPinned: false,
-    autorNombre: 'Comité de Seguridad y Convivencia',
-    usuarioCreador: { nombreUsuario: 'seguridad' },
-    resumen: 'Normas de velocidad máxima (10 km/h) en sótanos y verificación de cierre completo del portón.',
-    contenido: PLANTILLAS_AMIGABLES[3].contenido,
-    _count: { envios: 20 },
-    adjuntos: PLANTILLAS_AMIGABLES[3].adjuntos
-  }
-]
-
-// Lista de residentes de Edificio XYZ con iniciales y departamentos
-const PERSONAS_EDIFICIO: DestinatarioPersona[] = [
-  { idPersona: 1, nombres: 'Roberto', apellidos: 'Gutiérrez Salazar', dptoNumero: '101', correo: 'roberto.g@gmail.com', telefono: '+591 70011223', rol: 'Copropietario' },
-  { idPersona: 2, nombres: 'Juan Carlos', apellidos: 'Pérez Morales', dptoNumero: '102', correo: 'juan.perez@gmail.com', telefono: '+591 71022334', rol: 'Copropietario' },
-  { idPersona: 3, nombres: 'Ana María', apellidos: 'Torres Vargas', dptoNumero: '201', correo: 'ana.torres@gmail.com', telefono: '+591 72033445', rol: 'Copropietario' },
-  { idPersona: 4, nombres: 'Carlos', apellidos: 'Mendoza Claros', dptoNumero: '202', correo: 'carlos.m@hotmail.com', telefono: '+591 73044556', rol: 'Inquilino' },
-  { idPersona: 5, nombres: 'Patricia', apellidos: 'Roca Justiniano', dptoNumero: '301', correo: 'patricia.r@gmail.com', telefono: '+591 74055667', rol: 'Copropietario' },
-  { idPersona: 6, nombres: 'Fernando', apellidos: 'Vaca Díez', dptoNumero: '302', correo: 'fvaca@yahoo.com', telefono: '+591 75066778', rol: 'Copropietario' },
-  { idPersona: 7, nombres: 'Lucía', apellidos: 'Camacho Antelo', dptoNumero: '401', correo: 'lucia.c@gmail.com', telefono: '+591 76077889', rol: 'Copropietario' },
-  { idPersona: 8, nombres: 'Mauricio', apellidos: 'Pinto Suárez', dptoNumero: '402', correo: 'mauricio.p@outlook.com', telefono: '+591 77088990', rol: 'Inquilino' },
-  { idPersona: 9, nombres: 'Gabriela', apellidos: 'Añez Saucedo', dptoNumero: '501', correo: 'gaby.anez@gmail.com', telefono: '+591 78099001', rol: 'Copropietario' },
-  { idPersona: 10, nombres: 'Hugo', apellidos: 'Banzer Melgar', dptoNumero: '502', correo: 'hbanzer@gmail.com', telefono: '+591 79010112', rol: 'Copropietario' }
 ]
 
 // Colores de avatar agradables
@@ -359,11 +268,20 @@ export default function ComunicadosAmigablesPage() {
   // Pestañas principales
   const [activeTab, setActiveTab] = useState<'elaborar' | 'enviados' | 'cartelera'>('enviados')
 
-  // Datos
-  const [comunicados, setComunicados] = useState<ComunicadoItem[]>(COMUNICADOS_INICIALES)
-  const [personas, setPersonas] = useState<DestinatarioPersona[]>(PERSONAS_EDIFICIO)
+  // Datos reales desde la API (Requisito 6: sin mocks iniciales)
+  const [comunicados, setComunicados] = useState<ComunicadoItem[]>([])
+  const [personas, setPersonas] = useState<DestinatarioPersona[]>([])
+  const [isLoadingComunicados, setIsLoadingComunicados] = useState<boolean>(true)
   const [successToast, setSuccessToast] = useState<string | null>(null)
   const [userRole, setUserRole] = useState<string>('ADMINISTRADOR')
+
+  // Modal "¿Quién lo recibió?" (Solo Administrador)
+  const [comunicadoSeleccionadoDetalle, setComunicadoSeleccionadoDetalle] = useState<ComunicadoItem | null>(null)
+  const [cargandoDetalle, setCargandoDetalle] = useState<boolean>(false)
+  const [detalleEnvios, setDetalleEnvios] = useState<EnvioDetalleItem[]>([])
+
+  // Temporizadores para refresco automático (Requisito 3)
+  const refreshTimersRef = useRef<NodeJS.Timeout[]>([])
 
   useEffect(() => {
     try {
@@ -371,8 +289,8 @@ export default function ComunicadosAmigablesPage() {
       if (saved) {
         const r = saved.toUpperCase()
         setUserRole(r)
-        if (r === 'COPROPIETARIO') {
-          setActiveTab('cartelera')
+        if (r !== 'ADMINISTRADOR') {
+          setActiveTab('enviados')
         }
       }
     } catch {}
@@ -383,13 +301,14 @@ export default function ComunicadosAmigablesPage() {
     setTimeout(() => setSuccessToast(null), 4000)
   }
 
-  // Cargar datos reales si la API responde
+  // Cargar datos reales de comunicados
   const fetchComunicados = useCallback(async () => {
+    setIsLoadingComunicados(true)
     try {
       const res = await apiFetch('/api/v1/comunicados?limit=50')
       if (res.ok) {
         const json = await res.json()
-        if (json.data && Array.isArray(json.data) && json.data.length > 0) {
+        if (json.data && Array.isArray(json.data)) {
           const mapped: ComunicadoItem[] = json.data.map((c: any) => ({
             idComunicado: c.idComunicado,
             titulo: c.titulo,
@@ -402,21 +321,52 @@ export default function ComunicadosAmigablesPage() {
             isPinned: c.isPinned ?? false,
             autorNombre: c.usuarioCreador?.nombreUsuario || 'Administración Edificio XYZ',
             usuarioCreador: c.usuarioCreador,
-            _count: c._count || { envios: 20 },
-            adjuntos: c.adjuntos || []
+            _count: c._count || { envios: 0 },
+            resumenEnvios: c.resumenEnvios || {
+              total: c._count?.envios || 0,
+              pendientes: c._count?.envios || 0,
+              enviados: 0,
+              fallidos: 0
+            }
           }))
           setComunicados(mapped)
         }
       }
-    } catch {}
+    } catch {
+      // Error silencioso al listar para no bloquear la pantalla
+    } finally {
+      setIsLoadingComunicados(false)
+    }
   }, [])
 
+  // Programar 3 consultas automáticas del listado tras POST (2 s, 5 s, 9 s)
+  const programarRefresco = useCallback(() => {
+    refreshTimersRef.current.forEach(clearTimeout)
+    refreshTimersRef.current = []
+
+    const delays = [2000, 5000, 9000]
+    delays.forEach((delay) => {
+      const timer = setTimeout(() => {
+        fetchComunicados()
+      }, delay)
+      refreshTimersRef.current.push(timer)
+    })
+  }, [fetchComunicados])
+
+  // Cancelar temporizadores al desmontar
+  useEffect(() => {
+    return () => {
+      refreshTimersRef.current.forEach(clearTimeout)
+    }
+  }, [])
+
+  // Cargar residentes de la API
   const fetchPersonas = useCallback(async () => {
     try {
       const res = await apiFetch('/api/v1/personas?limit=100')
       if (res.ok) {
         const json = await res.json()
-        if (json.data && Array.isArray(json.data) && json.data.length > 0) {
+        if (json.data && Array.isArray(json.data)) {
           const mapped: DestinatarioPersona[] = json.data.map((p: any) => ({
             idPersona: p.idPersona,
             nombres: p.nombres,
@@ -437,6 +387,32 @@ export default function ComunicadosAmigablesPage() {
     fetchPersonas()
   }, [fetchComunicados, fetchPersonas])
 
+  // Abrir modal de entregas llamando a GET /:id (Solo Administrador)
+  const handleAbrirDetalleEntregas = async (item: ComunicadoItem) => {
+    if (userRole !== 'ADMINISTRADOR') {
+      showToast('Solo los administradores pueden consultar el detalle de entregas.')
+      return
+    }
+    setComunicadoSeleccionadoDetalle(item)
+    setCargandoDetalle(true)
+    setDetalleEnvios([])
+    try {
+      const res = await apiFetch(`/api/v1/comunicados/${item.idComunicado}`)
+      if (res.ok) {
+        const json = await res.json()
+        if (json.envios && Array.isArray(json.envios)) {
+          setDetalleEnvios(json.envios)
+        }
+      } else {
+        showToast('No se pudo cargar el detalle de entregas.')
+      }
+    } catch {
+      showToast('Error de conexión al obtener entregas.')
+    } finally {
+      setCargandoDetalle(false)
+    }
+  }
+
   // ── ESTADO: FORMULARIO DE REDACCIÓN AMIGABLE ──────────────────────────────────
   const [formTitulo, setFormTitulo] = useState<string>('')
   const [formCategoria, setFormCategoria] = useState<CategoriaComunicado>('ASAMBLEA')
@@ -447,20 +423,16 @@ export default function ComunicadosAmigablesPage() {
   const [formTipoDestinatarios, setFormTipoDestinatarios] = useState<'todos' | 'seleccion'>('todos')
   const [formDestinatariosIds, setFormDestinatariosIds] = useState<number[]>([])
   const [formSearchPersona, setFormSearchPersona] = useState<string>('')
-  const [formAdjuntos, setFormAdjuntos] = useState<{ name: string; size: string; type: string }[]>([
-    { name: 'Documento_Oficial_EdificioXYZ.pdf', size: '450 KB', type: 'PDF' }
-  ])
   const [isSubmittingForm, setIsSubmittingForm] = useState<boolean>(false)
   const [formError, setFormError] = useState<string | null>(null)
 
-  // Aplicar plantilla con un solo clic
+  // Aplicar plantilla con un solo clic (sin adjuntos simulados)
   const handleAplicarPlantilla = (p: PlantillaComunicado) => {
     setFormTitulo(p.titulo)
     setFormCategoria(p.categoria)
     setFormPrioridad(p.prioridad)
     setFormCanal(p.canalEnvio)
     setFormContenido(p.contenido)
-    if (p.adjuntos) setFormAdjuntos(p.adjuntos)
     showToast(`✨ Plantilla "${p.tituloBoton}" cargada. Puedes editarla libremente.`)
   }
 
@@ -482,10 +454,31 @@ export default function ComunicadosAmigablesPage() {
     )
   }
 
-  // Despachar el comunicado
+  // Destinatarios seleccionados y advertencia de correos no registrados (Requisito 5)
+  const destinatariosElegidos = useMemo(() => {
+    if (formTipoDestinatarios === 'todos') {
+      return personas
+    }
+    return personas.filter((p) => formDestinatariosIds.includes(p.idPersona))
+  }, [formTipoDestinatarios, personas, formDestinatariosIds])
+
+  const sinCorreoCount = useMemo(() => {
+    return destinatariosElegidos.filter((p) => !p.correo || !p.correo.trim()).length
+  }, [destinatariosElegidos])
+
+  const conteoDptos = useMemo(() => {
+    return new Set(personas.map((p) => p.dptoNumero).filter(Boolean)).size
+  }, [personas])
+
+  // Despachar el comunicado a la API real (Requisito 1)
   const handleSubmitElaborar = async (e: React.FormEvent) => {
     e.preventDefault()
     setFormError(null)
+
+    if (userRole !== 'ADMINISTRADOR') {
+      setFormError('Solo los administradores tienen permiso para emitir avisos oficiales.')
+      return
+    }
 
     if (!formTitulo.trim()) {
       setFormError('Por favor escribe un título para el aviso.')
@@ -506,42 +499,8 @@ export default function ComunicadosAmigablesPage() {
     const targetCount =
       formTipoDestinatarios === 'todos' ? personas.length : formDestinatariosIds.length
 
-    const enviosSimulados: EnvioDetalleItem[] = (
-      formTipoDestinatarios === 'todos'
-        ? personas
-        : personas.filter((p) => formDestinatariosIds.includes(p.idPersona))
-    ).map((p, idx) => ({
-      idEnvio: Date.now() + idx,
-      idPersona: p.idPersona,
-      fechaEnvio: new Date().toISOString(),
-      estadoEnvio: 'Entregado',
-      canal: formCanal,
-      persona: {
-        nombres: p.nombres,
-        apellidos: p.apellidos,
-        correo: p.correo,
-        telefono: p.telefono
-      }
-    }))
-
-    const nuevoComunicado: ComunicadoItem = {
-      idComunicado: Date.now(),
-      titulo: formTitulo.trim(),
-      contenido: formContenido.trim(),
-      resumen: formContenido.slice(0, 150) + '...',
-      categoria: formCategoria,
-      prioridad: formPrioridad,
-      canalEnvio: formCanal,
-      fechaPublicacion: new Date().toISOString(),
-      isPinned: formIsPinned,
-      autorNombre: 'Administración Edificio XYZ',
-      _count: { envios: targetCount },
-      adjuntos: formAdjuntos,
-      envios: enviosSimulados
-    }
-
     try {
-      await apiFetch('/api/v1/comunicados', {
+      const res = await apiFetch('/api/v1/comunicados', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -551,24 +510,66 @@ export default function ComunicadosAmigablesPage() {
           destinatarios: formTipoDestinatarios === 'seleccion' ? formDestinatariosIds : undefined
         })
       })
-    } catch {}
 
-    setComunicados((prev) => [nuevoComunicado, ...prev])
-    showToast(`🎉 ¡Aviso enviado con éxito a ${targetCount} vecinos vía ${formCanal}!`)
+      if (!res.ok) {
+        const errJson = await res.json().catch(() => null)
+        let errorMsg = errJson?.message || 'Error al emitir el comunicado.'
+        if (errJson?.details) {
+          const detailStrings = Object.entries(errJson.details)
+            .map(([field, msgs]) => `${field}: ${Array.isArray(msgs) ? msgs.join(', ') : msgs}`)
+            .join(' | ')
+          if (detailStrings) {
+            errorMsg += ` (${detailStrings})`
+          }
+        }
+        setFormError(errorMsg)
+        setIsSubmittingForm(false)
+        return
+      }
 
-    // Limpiar y cambiar de pestaña
-    setFormTitulo('')
-    setFormContenido('')
-    setFormDestinatariosIds([])
-    setActiveTab('enviados')
-    setIsSubmittingForm(false)
+      const creado = await res.json()
+      const nuevoComunicado: ComunicadoItem = {
+        idComunicado: creado.idComunicado,
+        titulo: creado.titulo,
+        contenido: creado.contenido,
+        resumen: creado.contenido.length > 140 ? creado.contenido.slice(0, 140) + '...' : creado.contenido,
+        categoria: formCategoria,
+        prioridad: formPrioridad,
+        canalEnvio: (creado.canalEnvio as CanalEnvio) || formCanal,
+        fechaPublicacion: creado.fechaPublicacion || new Date().toISOString(),
+        isPinned: formIsPinned,
+        autorNombre: 'Administración Edificio XYZ',
+        usuarioCreador: creado.usuarioCreador,
+        _count: creado._count || { envios: targetCount },
+        resumenEnvios: {
+          total: targetCount,
+          pendientes: targetCount,
+          enviados: 0,
+          fallidos: 0
+        }
+      }
+
+      setComunicados((prev) => [nuevoComunicado, ...prev])
+      showToast(`🎉 ¡Aviso emitido con éxito a ${targetCount} vecinos vía ${formCanal}!`)
+
+      // Limpiar formulario y cambiar de pestaña
+      setFormTitulo('')
+      setFormContenido('')
+      setFormDestinatariosIds([])
+      setActiveTab('enviados')
+      setIsSubmittingForm(false)
+
+      // Activar las 3 consultas automáticas (2 s, 5 s, 9 s)
+      programarRefresco()
+    } catch (err: any) {
+      setFormError(err?.message || 'Error de conexión al enviar el comunicado.')
+      setIsSubmittingForm(false)
+    }
   }
 
   // ── ESTADO: VISTA DE AVISOS ENVIADOS ──────────────────────────────────────────
   const [searchTerm, setSearchTerm] = useState('')
   const [filtroCategoria, setFiltroCategoria] = useState<string>('TODOS')
-  const [comunicadoSeleccionadoDetalle, setComunicadoSeleccionadoDetalle] =
-    useState<ComunicadoItem | null>(null)
   const [comunicadoALeer, setComunicadoALeer] = useState<ComunicadoItem | null>(null)
   const [comunicadoAEliminar, setComunicadoAEliminar] = useState<ComunicadoItem | null>(null)
 
@@ -582,14 +583,26 @@ export default function ComunicadosAmigablesPage() {
     })
   }, [comunicados, searchTerm, filtroCategoria])
 
-  // Eliminar comunicado
+  // Eliminar comunicado con validación de rol (Requisito 4)
   const handleConfirmarEliminar = async () => {
     if (!comunicadoAEliminar) return
+    if (userRole !== 'ADMINISTRADOR') {
+      showToast('Solo los administradores tienen permiso para retirar avisos.')
+      setComunicadoAEliminar(null)
+      return
+    }
     try {
-      await apiFetch(`/api/v1/comunicados/${comunicadoAEliminar.idComunicado}`, {
+      const res = await apiFetch(`/api/v1/comunicados/${comunicadoAEliminar.idComunicado}`, {
         method: 'DELETE'
       })
-    } catch {}
+      if (!res.ok) {
+        showToast('Error al retirar el aviso de la cartelera.')
+        return
+      }
+    } catch {
+      showToast('Error de conexión al retirar el aviso.')
+      return
+    }
     setComunicados((prev) =>
       prev.filter((c) => c.idComunicado !== comunicadoAEliminar.idComunicado)
     )
@@ -618,7 +631,7 @@ export default function ComunicadosAmigablesPage() {
             Tablón de Comunicados y Avisos a Vecinos
           </h1>
           <p className="text-xs sm:text-sm text-[#66615b] dark:text-slate-400">
-            Escribe avisos importantes, envíalos directo al WhatsApp de los copropietarios y revisa quién los recibió.
+            Escribe avisos importantes, compártelos con los copropietarios y supervisa el estado de entrega.
           </p>
         </div>
 
@@ -633,39 +646,41 @@ export default function ComunicadosAmigablesPage() {
         )}
       </div>
 
-      {/* PESTAÑAS VISUALES GRANDES Y CLARAS */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
-        <button
-          type="button"
-          onClick={() => setActiveTab('elaborar')}
-          className={`flex items-center gap-3 p-3.5 rounded-2xl border text-left transition-all cursor-pointer ${
-            activeTab === 'elaborar'
-              ? 'bg-blue-700 text-white border-blue-600 shadow-lg shadow-blue-900/20 ring-2 ring-blue-500/30'
-              : 'bg-[#ede9e1] hover:bg-[#e4ded3] dark:bg-slate-900 dark:hover:bg-slate-800/80 text-[#5c5750] dark:text-slate-400 border-[#cec8bc] dark:border-slate-800'
-          }`}
-        >
-          <div
-            className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
+      {/* PESTAÑAS VISUALES: 'elaborar' solo para Administrador (Requisito 4) */}
+      <div className={`grid grid-cols-1 ${userRole === 'ADMINISTRADOR' ? 'sm:grid-cols-3' : 'sm:grid-cols-2'} gap-2.5`}>
+        {userRole === 'ADMINISTRADOR' && (
+          <button
+            type="button"
+            onClick={() => setActiveTab('elaborar')}
+            className={`flex items-center gap-3 p-3.5 rounded-2xl border text-left transition-all cursor-pointer ${
               activeTab === 'elaborar'
-                ? 'bg-white/20 text-white'
-                : 'bg-blue-100 text-blue-800 dark:bg-slate-800 dark:text-blue-400'
+                ? 'bg-blue-700 text-white border-blue-600 shadow-lg shadow-blue-900/20 ring-2 ring-blue-500/30'
+                : 'bg-[#ede9e1] hover:bg-[#e4ded3] dark:bg-slate-900 dark:hover:bg-slate-800/80 text-[#5c5750] dark:text-slate-400 border-[#cec8bc] dark:border-slate-800'
             }`}
           >
-            <PenSquare className="w-5 h-5" />
-          </div>
-          <div className="min-w-0">
-            <div className="text-xs sm:text-sm font-extrabold truncate">
-              1. Escribir Nuevo Aviso
-            </div>
             <div
-              className={`text-[11px] truncate ${
-                activeTab === 'elaborar' ? 'text-blue-100' : 'text-[#7d776f]'
+              className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
+                activeTab === 'elaborar'
+                  ? 'bg-white/20 text-white'
+                  : 'bg-blue-100 text-blue-800 dark:bg-slate-800 dark:text-blue-400'
               }`}
             >
-              UI Elaboración Comunicados
+              <PenSquare className="w-5 h-5" />
             </div>
-          </div>
-        </button>
+            <div className="min-w-0">
+              <div className="text-xs sm:text-sm font-extrabold truncate">
+                1. Escribir Nuevo Aviso
+              </div>
+              <div
+                className={`text-[11px] truncate ${
+                  activeTab === 'elaborar' ? 'text-blue-100' : 'text-[#7d776f]'
+                }`}
+              >
+                UI Elaboración Comunicados
+              </div>
+            </div>
+          </button>
+        )}
 
         <button
           type="button"
@@ -694,7 +709,7 @@ export default function ComunicadosAmigablesPage() {
                 className={`text-[10px] font-bold px-1.5 py-0.5 rounded-md ${
                   activeTab === 'enviados'
                     ? 'bg-white/20 text-white'
-                    : 'bg-[#dfd9ce] dark:bg-slate-800 text-[#262422] dark:text-white'
+                    : 'bg-blue-100 text-blue-900 dark:bg-slate-800 dark:text-blue-300'
                 }`}
               >
                 {comunicados.length}
@@ -705,7 +720,7 @@ export default function ComunicadosAmigablesPage() {
                 activeTab === 'enviados' ? 'text-blue-100' : 'text-[#7d776f]'
               }`}
             >
-              UI Vista de Comunicados enviados
+              Supervisión de entregas y estados
             </div>
           </div>
         </button>
@@ -715,7 +730,7 @@ export default function ComunicadosAmigablesPage() {
           onClick={() => setActiveTab('cartelera')}
           className={`flex items-center gap-3 p-3.5 rounded-2xl border text-left transition-all cursor-pointer ${
             activeTab === 'cartelera'
-              ? 'bg-emerald-700 text-white border-emerald-600 shadow-lg shadow-emerald-900/20 ring-2 ring-emerald-500/30'
+              ? 'bg-blue-700 text-white border-blue-600 shadow-lg shadow-blue-900/20 ring-2 ring-blue-500/30'
               : 'bg-[#ede9e1] hover:bg-[#e4ded3] dark:bg-slate-900 dark:hover:bg-slate-800/80 text-[#5c5750] dark:text-slate-400 border-[#cec8bc] dark:border-slate-800'
           }`}
         >
@@ -730,23 +745,23 @@ export default function ComunicadosAmigablesPage() {
           </div>
           <div className="min-w-0">
             <div className="text-xs sm:text-sm font-extrabold truncate">
-              3. Cartelera de Vecinos
+              3. Cartelera Vecinos
             </div>
             <div
               className={`text-[11px] truncate ${
-                activeTab === 'cartelera' ? 'text-emerald-100' : 'text-[#7d776f]'
+                activeTab === 'cartelera' ? 'text-blue-100' : 'text-[#7d776f]'
               }`}
             >
-              Vista de lectura para copropietarios
+              Vista pública de circulares
             </div>
           </div>
         </button>
       </div>
 
       {/* ───────────────────────────────────────────────────────────────────────────
-          1. UI ELABORACIÓN COMUNICADOS (ASISTENTE VISUAL Y AMIGABLE)
+          1. UI ELABORACIÓN DE COMUNICADOS (SOLO ADMINISTRADOR)
       ──────────────────────────────────────────────────────────────────────────── */}
-      {activeTab === 'elaborar' && (
+      {activeTab === 'elaborar' && userRole === 'ADMINISTRADOR' && (
         <div className="space-y-6 animate-in fade-in duration-200">
           {/* PASO 1: PLANTILLAS DE 1 CLIC (AHORRO DE TIEMPO) */}
           <div className="p-5 rounded-3xl bg-[#ede9e1] dark:bg-slate-900 border border-[#cec8bc] dark:border-slate-800 shadow-sm space-y-3">
@@ -806,6 +821,7 @@ export default function ComunicadosAmigablesPage() {
                     setFormTitulo('')
                     setFormContenido('')
                     setFormDestinatariosIds([])
+                    setFormError(null)
                   }}
                   className="text-xs text-[#7d776f] hover:text-[#262422] dark:hover:text-white flex items-center gap-1 cursor-pointer font-bold"
                 >
@@ -829,7 +845,7 @@ export default function ComunicadosAmigablesPage() {
                 <input
                   type="text"
                   required
-                  placeholder="Ej: Corte de agua por limpieza este jueves / Convocatoria a asamblea..."
+                  placeholder="Ej: Corte programado de agua por limpieza / Convocatoria a asamblea..."
                   value={formTitulo}
                   onChange={(e) => setFormTitulo(e.target.value)}
                   className="w-full px-4 py-3 rounded-2xl bg-[#dfd9ce] dark:bg-slate-800 border border-[#cec8bc] dark:border-slate-700 text-xs sm:text-sm text-[#262422] dark:text-white font-bold focus:outline-none focus:ring-2 focus:ring-blue-600 shadow-inner"
@@ -871,7 +887,7 @@ export default function ComunicadosAmigablesPage() {
                 </div>
               </div>
 
-              {/* ¿CÓMO QUIERES ENVIARLO? (CANAL CON BOTONES GRANDES) */}
+              {/* ¿CÓMO QUIERES ENVIARLO? */}
               <div>
                 <label className="block text-xs font-black text-[#262422] dark:text-white mb-1">
                   2. ¿Cómo deseas que les llegue a los vecinos? *
@@ -896,7 +912,7 @@ export default function ComunicadosAmigablesPage() {
                           formCanal === 'Ambos' ? 'text-purple-100' : 'text-[#7d776f]'
                         }`}
                       >
-                        Recomendado (Llega al 100%)
+                        Recomendado (Correo + Enlace)
                       </div>
                     </div>
                   </button>
@@ -920,7 +936,7 @@ export default function ComunicadosAmigablesPage() {
                           formCanal === 'WhatsApp' ? 'text-emerald-100' : 'text-[#7d776f]'
                         }`}
                       >
-                        Directo al celular
+                        Envío manual vía enlace
                       </div>
                     </div>
                   </button>
@@ -944,7 +960,7 @@ export default function ComunicadosAmigablesPage() {
                           formCanal === 'Correo' ? 'text-blue-100' : 'text-[#7d776f]'
                         }`}
                       >
-                        Con archivo adjunto
+                        Llega a su bandeja
                       </div>
                     </div>
                   </button>
@@ -972,7 +988,9 @@ export default function ComunicadosAmigablesPage() {
                       onChange={() => setFormTipoDestinatarios('todos')}
                       className="text-blue-600"
                     />
-                    <span>A todos los vecinos ({personas.length} departamentos)</span>
+                    <span>
+                      A todos los vecinos ({conteoDptos > 0 ? conteoDptos : personas.length} departamentos / {personas.length} residentes)
+                    </span>
                   </label>
 
                   <label
@@ -1005,41 +1023,47 @@ export default function ComunicadosAmigablesPage() {
                     />
 
                     <div className="max-h-36 overflow-y-auto space-y-1 pr-1 border border-[#cec8bc] dark:border-slate-700 rounded-xl p-2 bg-[#ede9e1] dark:bg-slate-900">
-                      {personasFiltradas.map((p, idx) => {
-                        const checked = formDestinatariosIds.includes(p.idPersona)
-                        const colorAvatar = AVATAR_COLORS[idx % AVATAR_COLORS.length]
-                        return (
-                          <label
-                            key={p.idPersona}
-                            className={`flex items-center justify-between p-2 rounded-xl text-xs cursor-pointer transition-colors ${
-                              checked
-                                ? 'bg-blue-100 dark:bg-blue-950/60 text-blue-900 dark:text-blue-200'
-                                : 'hover:bg-[#dfd9ce] dark:hover:bg-slate-800'
-                            }`}
-                          >
-                            <div className="flex items-center gap-2.5">
-                              <input
-                                type="checkbox"
-                                checked={checked}
-                                onChange={() => togglePersonaDestinatario(p.idPersona)}
-                                className="w-4 h-4 text-blue-600 rounded"
-                              />
-                              <div
-                                className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-black shrink-0 ${colorAvatar}`}
-                              >
-                                {p.nombres[0]}
-                                {p.apellidos[0]}
+                      {personasFiltradas.length === 0 ? (
+                        <div className="p-3 text-center text-xs text-[#7d776f]">
+                          No se encontraron vecinos registrados.
+                        </div>
+                      ) : (
+                        personasFiltradas.map((p, idx) => {
+                          const checked = formDestinatariosIds.includes(p.idPersona)
+                          const colorAvatar = AVATAR_COLORS[idx % AVATAR_COLORS.length]
+                          return (
+                            <label
+                              key={p.idPersona}
+                              className={`flex items-center justify-between p-2 rounded-xl text-xs cursor-pointer transition-colors ${
+                                checked
+                                  ? 'bg-blue-100 dark:bg-blue-950/60 text-blue-900 dark:text-blue-200'
+                                  : 'hover:bg-[#dfd9ce] dark:hover:bg-slate-800'
+                              }`}
+                            >
+                              <div className="flex items-center gap-2.5">
+                                <input
+                                  type="checkbox"
+                                  checked={checked}
+                                  onChange={() => togglePersonaDestinatario(p.idPersona)}
+                                  className="w-4 h-4 text-blue-600 rounded"
+                                />
+                                <div
+                                  className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-black shrink-0 ${colorAvatar}`}
+                                >
+                                  {p.nombres[0]}
+                                  {p.apellidos[0]}
+                                </div>
+                                <span className="font-extrabold">
+                                  {p.dptoNumero ? `Dpto. ${p.dptoNumero} — ` : ''}{p.nombres} {p.apellidos}
+                                </span>
                               </div>
-                              <span className="font-extrabold">
-                                Dpto. {p.dptoNumero} — {p.nombres} {p.apellidos}
+                              <span className="text-[10px] text-[#7d776f] font-mono">
+                                {p.telefono || 'Sin celular'}
                               </span>
-                            </div>
-                            <span className="text-[10px] text-[#7d776f] font-mono">
-                              {p.telefono || 'Sin celular'}
-                            </span>
-                          </label>
-                        )
-                      })}
+                            </label>
+                          )
+                        })
+                      )}
                     </div>
                   </div>
                 )}
@@ -1059,6 +1083,16 @@ export default function ComunicadosAmigablesPage() {
                   className="w-full px-4 py-3 rounded-2xl bg-[#dfd9ce] dark:bg-slate-800 border border-[#cec8bc] dark:border-slate-700 text-xs sm:text-sm text-[#262422] dark:text-white font-normal leading-relaxed focus:outline-none focus:ring-2 focus:ring-blue-600 font-sans shadow-inner"
                 />
               </div>
+
+              {/* Banner preventivo si faltan correos (Requisito 5) */}
+              {(formCanal === 'Correo' || formCanal === 'Ambos') && sinCorreoCount > 0 && (
+                <div className="p-3.5 bg-amber-100 dark:bg-amber-950/70 border border-amber-300 dark:border-amber-800 text-amber-900 dark:text-amber-200 rounded-2xl flex items-center gap-2.5 text-xs font-bold">
+                  <AlertCircle className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0" />
+                  <span>
+                    ⚠️ {sinCorreoCount} de {destinatariosElegidos.length} vecinos no tienen correo registrado y no recibirán el aviso (su estado quedará como Pendiente).
+                  </span>
+                </div>
+              )}
 
               {/* Botón Grande de Envío */}
               <button
@@ -1155,7 +1189,7 @@ export default function ComunicadosAmigablesPage() {
       ──────────────────────────────────────────────────────────────────────────── */}
       {activeTab === 'enviados' && (
         <div className="space-y-6 animate-in fade-in duration-200">
-          {/* BUSCADOR Y FILTRO SENCILLO */}
+          {/* BUSCADOR, FILTRO Y BOTÓN DE ACTUALIZAR ESTADOS (Requisito 3) */}
           <div className="p-4 rounded-3xl bg-[#ede9e1] dark:bg-slate-900 border border-[#cec8bc] dark:border-slate-800 flex flex-col sm:flex-row gap-3 items-center justify-between shadow-sm">
             <div className="relative flex-1 w-full">
               <Search className="w-4 h-4 text-[#7d776f] absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
@@ -1181,18 +1215,40 @@ export default function ComunicadosAmigablesPage() {
                 <option value="NORMATIVA">Normas de Convivencia</option>
                 <option value="FINANZAS">Expensas y Mora</option>
               </select>
+
+              <button
+                type="button"
+                onClick={() => fetchComunicados()}
+                disabled={isLoadingComunicados}
+                className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-2xl bg-[#dfd9ce] hover:bg-[#d5cfc2] dark:bg-slate-800 hover:dark:bg-slate-700 text-[#262422] dark:text-white text-xs font-bold border border-[#cec8bc] dark:border-slate-700 transition-all cursor-pointer shrink-0 disabled:opacity-50"
+                title="Actualizar estados de entrega"
+              >
+                <RotateCcw className={`w-3.5 h-3.5 ${isLoadingComunicados ? 'animate-spin' : ''}`} />
+                <span className="hidden sm:inline">Actualizar estados</span>
+              </button>
             </div>
           </div>
 
           {/* TABLÓN DE CARDS TIPO COMUNICADO OFICIAL */}
           <div className="space-y-4">
-            {comunicadosFiltrados.length === 0 ? (
-              <div className="p-10 text-center bg-[#ede9e1] dark:bg-slate-900 border border-[#cec8bc] dark:border-slate-800 rounded-3xl text-sm text-[#7d776f]">
-                No se encontraron avisos con esa búsqueda.
+            {isLoadingComunicados ? (
+              <div className="p-12 text-center bg-[#ede9e1] dark:bg-slate-900 border border-[#cec8bc] dark:border-slate-800 rounded-3xl space-y-3">
+                <RotateCcw className="w-8 h-8 text-blue-600 animate-spin mx-auto" />
+                <p className="text-xs sm:text-sm font-bold text-[#7d776f]">Cargando avisos comunicados...</p>
+              </div>
+            ) : comunicadosFiltrados.length === 0 ? (
+              <div className="p-10 text-center bg-[#ede9e1] dark:bg-slate-900 border border-[#cec8bc] dark:border-slate-800 rounded-3xl text-sm text-[#7d776f] font-semibold">
+                {comunicados.length === 0
+                  ? 'No hay avisos registrados en el sistema.'
+                  : 'No se encontraron avisos con esa búsqueda.'}
               </div>
             ) : (
               comunicadosFiltrados.map((item) => {
-                const totalDest = item._count?.envios || 20
+                const totalDest = item.resumenEnvios?.total ?? item._count?.envios ?? 0
+                const enviados = item.resumenEnvios?.enviados ?? 0
+                const pendientes = item.resumenEnvios?.pendientes ?? totalDest
+                const fallidos = item.resumenEnvios?.fallidos ?? 0
+
                 return (
                   <div
                     key={item.idComunicado}
@@ -1212,9 +1268,15 @@ export default function ComunicadosAmigablesPage() {
                             {item.categoria}
                           </span>
 
-                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-black bg-emerald-100 text-emerald-900 dark:bg-emerald-950 dark:text-emerald-300">
-                            <Phone className="w-3 h-3 text-emerald-600" />
-                            Enviado por {item.canalEnvio}
+                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-black bg-blue-100 text-blue-900 dark:bg-blue-950 dark:text-blue-300">
+                            {item.canalEnvio === 'Correo' ? (
+                              <Mail className="w-3 h-3 text-blue-600" />
+                            ) : item.canalEnvio === 'WhatsApp' ? (
+                              <Phone className="w-3 h-3 text-emerald-600" />
+                            ) : (
+                              <Share2 className="w-3 h-3 text-purple-600" />
+                            )}
+                            Canal: {item.canalEnvio}
                           </span>
 
                           <span className="text-[11px] text-[#7d776f] font-mono flex items-center gap-1">
@@ -1231,31 +1293,40 @@ export default function ComunicadosAmigablesPage() {
                           {item.resumen || item.contenido.slice(0, 180) + '...'}
                         </p>
 
-                        <div className="flex flex-wrap items-center gap-4 pt-2 text-xs text-[#7d776f]">
-                          <span className="flex items-center gap-1 font-bold text-emerald-700 dark:text-emerald-400">
-                            <CheckCheck className="w-4 h-4 text-emerald-600" />
-                            Entregado a {totalDest} vecinos (100% recibido)
+                        {/* Estados reales de entrega desde el listado (Requisito 2) */}
+                        <div className="flex flex-wrap items-center gap-2 pt-2 text-xs">
+                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-emerald-100 text-emerald-800 dark:bg-emerald-950/80 dark:text-emerald-300">
+                            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                            Enviado: {enviados}
                           </span>
-
-                          {item.adjuntos && item.adjuntos.length > 0 && (
-                            <span className="flex items-center gap-1 text-blue-800 dark:text-blue-300 font-bold">
-                              <FileText className="w-3.5 h-3.5" />
-                              {item.adjuntos.length} documento adjunto
+                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-amber-100 text-amber-800 dark:bg-amber-950/80 dark:text-amber-300">
+                            <Clock className="w-3.5 h-3.5 text-amber-600" />
+                            Pendiente: {pendientes}
+                          </span>
+                          {fallidos > 0 && (
+                            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-rose-100 text-rose-800 dark:bg-rose-950/80 dark:text-rose-300">
+                              <AlertCircle className="w-3.5 h-3.5 text-rose-600" />
+                              Fallido: {fallidos}
                             </span>
                           )}
+                          <span className="text-[11px] text-[#7d776f] font-semibold ml-1">
+                            (Total: {totalDest})
+                          </span>
                         </div>
                       </div>
 
                       {/* BOTONES DE ACCIÓN AMIGABLES */}
                       <div className="flex flex-wrap md:flex-col items-stretch md:items-end gap-2 shrink-0 pt-2 md:pt-0">
-                        <button
-                          type="button"
-                          onClick={() => setComunicadoSeleccionadoDetalle(item)}
-                          className="inline-flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-2xl bg-blue-700 hover:bg-blue-600 active:bg-blue-800 text-white text-xs font-black transition-all shadow-md shadow-blue-800/20 cursor-pointer"
-                        >
-                          <Users className="w-4 h-4" />
-                          <span>¿Quién lo recibió? ({totalDest})</span>
-                        </button>
+                        {userRole === 'ADMINISTRADOR' && (
+                          <button
+                            type="button"
+                            onClick={() => handleAbrirDetalleEntregas(item)}
+                            className="inline-flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-2xl bg-blue-700 hover:bg-blue-600 active:bg-blue-800 text-white text-xs font-black transition-all shadow-md shadow-blue-800/20 cursor-pointer"
+                          >
+                            <Users className="w-4 h-4" />
+                            <span>¿Quién lo recibió? ({totalDest})</span>
+                          </button>
+                        )}
 
                         <button
                           type="button"
@@ -1308,51 +1379,62 @@ export default function ComunicadosAmigablesPage() {
             </span>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {comunicados.map((notice) => (
-              <div
-                key={notice.idComunicado}
-                onClick={() => setComunicadoALeer(notice)}
-                className="p-6 rounded-3xl bg-[#ede9e1] dark:bg-slate-900 border border-[#cec8bc] dark:border-slate-800 hover:border-emerald-600 shadow-sm hover:shadow-md transition-all cursor-pointer space-y-3 flex flex-col justify-between"
-              >
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between">
-                    <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">
-                      {notice.categoria}
-                    </span>
-                    <span className="text-[11px] text-[#7d776f] font-mono">
-                      {fechaSolo(notice.fechaPublicacion)}
-                    </span>
+          {isLoadingComunicados ? (
+            <div className="p-12 text-center bg-[#ede9e1] dark:bg-slate-900 border border-[#cec8bc] dark:border-slate-800 rounded-3xl space-y-3">
+              <RotateCcw className="w-8 h-8 text-emerald-600 animate-spin mx-auto" />
+              <p className="text-xs sm:text-sm font-bold text-[#7d776f]">Cargando cartelera oficial...</p>
+            </div>
+          ) : comunicados.length === 0 ? (
+            <div className="p-10 text-center bg-[#ede9e1] dark:bg-slate-900 border border-[#cec8bc] dark:border-slate-800 rounded-3xl text-sm text-[#7d776f] font-semibold">
+              No hay avisos publicados en la cartelera en este momento.
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {comunicados.map((notice) => (
+                <div
+                  key={notice.idComunicado}
+                  onClick={() => setComunicadoALeer(notice)}
+                  className="p-6 rounded-3xl bg-[#ede9e1] dark:bg-slate-900 border border-[#cec8bc] dark:border-slate-800 hover:border-emerald-600 shadow-sm hover:shadow-md transition-all cursor-pointer space-y-3 flex flex-col justify-between"
+                >
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">
+                        {notice.categoria}
+                      </span>
+                      <span className="text-[11px] text-[#7d776f] font-mono">
+                        {fechaSolo(notice.fechaPublicacion)}
+                      </span>
+                    </div>
+
+                    <h3 className="font-black text-base text-[#262422] dark:text-white leading-snug">
+                      {notice.titulo}
+                    </h3>
+
+                    <p className="text-xs text-[#5c5750] dark:text-slate-300 line-clamp-3 leading-relaxed">
+                      {notice.resumen || notice.contenido}
+                    </p>
                   </div>
 
-                  <h3 className="font-black text-base text-[#262422] dark:text-white leading-snug">
-                    {notice.titulo}
-                  </h3>
-
-                  <p className="text-xs text-[#5c5750] dark:text-slate-300 line-clamp-3 leading-relaxed">
-                    {notice.resumen || notice.contenido}
-                  </p>
+                  <div className="pt-3 border-t border-[#cec8bc] dark:border-slate-800 flex items-center justify-between text-xs text-[#7d776f]">
+                    <span className="font-bold text-emerald-800 dark:text-emerald-400 flex items-center gap-1">
+                      <Building2 className="w-3.5 h-3.5" />
+                      {notice.autorNombre || 'Administración Edificio XYZ'}
+                    </span>
+                    <span className="text-blue-700 dark:text-blue-400 font-black flex items-center gap-1">
+                      Leer aviso completo <ChevronRight className="w-4 h-4" />
+                    </span>
+                  </div>
                 </div>
-
-                <div className="pt-3 border-t border-[#cec8bc] dark:border-slate-800 flex items-center justify-between text-xs text-[#7d776f]">
-                  <span className="font-bold text-emerald-800 dark:text-emerald-400 flex items-center gap-1">
-                    <Building2 className="w-3.5 h-3.5" />
-                    {notice.autorNombre || 'Administración Edificio XYZ'}
-                  </span>
-                  <span className="text-blue-700 dark:text-blue-400 font-black flex items-center gap-1">
-                    Leer aviso completo <ChevronRight className="w-4 h-4" />
-                  </span>
-                </div>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
 
       {/* ───────────────────────────────────────────────────────────────────────────
-          MODAL AMIGABLE: ¿QUIÉN RECIBIÓ EL AVISO? (DETALLE DE ENTREGAS)
+          MODAL AMIGABLE: ¿QUIÉN RECIBIÓ EL AVISO? (DETALLE DE ENTREGAS - SOLO ADMIN)
       ──────────────────────────────────────────────────────────────────────────── */}
-      {comunicadoSeleccionadoDetalle && (
+      {comunicadoSeleccionadoDetalle && userRole === 'ADMINISTRADOR' && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in duration-200">
           <div className="bg-[#ede9e1] dark:bg-slate-900 border border-[#cec8bc] dark:border-slate-800 w-full max-w-2xl rounded-3xl shadow-2xl p-6 space-y-4 max-h-[92vh] flex flex-col">
             {/* Header */}
@@ -1366,7 +1448,7 @@ export default function ComunicadosAmigablesPage() {
                     Confirmación de Entrega a Vecinos
                   </h3>
                   <p className="text-xs text-[#7d776f]">
-                    Lista de vecinos que recibieron la notificación en su celular y correo
+                    Lista oficial de destinatarios y estados de entrega (Solo Administrador)
                   </p>
                 </div>
               </div>
@@ -1383,64 +1465,98 @@ export default function ComunicadosAmigablesPage() {
               <div className="text-xs font-black text-[#262422] dark:text-white">
                 {comunicadoSeleccionadoDetalle.titulo}
               </div>
-              <div className="text-[11px] text-emerald-800 dark:text-emerald-300 font-bold flex items-center gap-1">
-                <CheckCircle2 className="w-3.5 h-3.5" />
-                <span>
-                  Entregado a {personas.length} departamentos vía {comunicadoSeleccionadoDetalle.canalEnvio}
-                </span>
+              <div className="text-[11px] text-[#5c5750] dark:text-slate-300 font-bold flex items-center gap-2">
+                <span>Canal: {comunicadoSeleccionadoDetalle.canalEnvio}</span>
+                <span>•</span>
+                <span>Total destinatarios: {detalleEnvios.length}</span>
               </div>
             </div>
 
-            {/* Lista amigable de vecinos con avatar */}
+            {/* Lista de envíos reales */}
             <div className="flex-1 overflow-y-auto space-y-2 pr-1">
-              {personas.map((vecino, idx) => {
-                const colorAvatar = AVATAR_COLORS[idx % AVATAR_COLORS.length]
-                return (
-                  <div
-                    key={vecino.idPersona}
-                    className="flex items-center justify-between p-3 rounded-2xl bg-[#dfd9ce]/50 dark:bg-slate-800/50 border border-[#cec8bc]/50 dark:border-slate-700/50 hover:bg-[#dfd9ce] transition-colors"
-                  >
-                    <div className="flex items-center gap-3 min-w-0">
-                      <div
-                        className={`w-9 h-9 rounded-2xl flex items-center justify-center font-black text-xs shrink-0 shadow-xs ${colorAvatar}`}
-                      >
-                        {vecino.nombres[0]}
-                        {vecino.apellidos[0]}
+              {cargandoDetalle ? (
+                <div className="p-8 text-center text-xs font-bold text-[#7d776f] flex items-center justify-center gap-2">
+                  <RotateCcw className="w-4 h-4 animate-spin text-blue-600" />
+                  <span>Consultando estados de entrega en tiempo real...</span>
+                </div>
+              ) : detalleEnvios.length === 0 ? (
+                <div className="p-8 text-center text-xs text-[#7d776f] font-semibold">
+                  No hay destinatarios registrados para este comunicado.
+                </div>
+              ) : (
+                detalleEnvios.map((envio, idx) => {
+                  const colorAvatar = AVATAR_COLORS[idx % AVATAR_COLORS.length]
+                  const st = (envio.estadoEnvio || '').toLowerCase()
+                  const isEnviado = st === 'enviado' || st === 'entregado'
+                  const isFallido = st === 'fallido'
+                  const personaDpto = personas.find((p) => p.idPersona === envio.idPersona)?.dptoNumero
+
+                  const urlWhatsApp = generarUrlWhatsApp(
+                    envio.persona?.telefono,
+                    comunicadoSeleccionadoDetalle.titulo,
+                    comunicadoSeleccionadoDetalle.contenido
+                  )
+
+                  return (
+                    <div
+                      key={envio.idEnvio}
+                      className="flex items-center justify-between p-3 rounded-2xl bg-[#dfd9ce]/50 dark:bg-slate-800/50 border border-[#cec8bc]/50 dark:border-slate-700/50 hover:bg-[#dfd9ce] transition-colors"
+                    >
+                      <div className="flex items-center gap-3 min-w-0">
+                        <div
+                          className={`w-9 h-9 rounded-2xl flex items-center justify-center font-black text-xs shrink-0 shadow-xs ${colorAvatar}`}
+                        >
+                          {envio.persona?.nombres?.[0] || 'V'}
+                          {envio.persona?.apellidos?.[0] || 'X'}
+                        </div>
+                        <div className="min-w-0">
+                          <div className="text-xs sm:text-sm font-black text-[#262422] dark:text-white truncate">
+                            {personaDpto ? `Dpto. ${personaDpto} — ` : ''}
+                            {envio.persona?.nombres} {envio.persona?.apellidos}
+                          </div>
+                          <div className="text-[11px] text-[#7d776f] font-mono flex items-center gap-2">
+                            <span>📱 {envio.persona?.telefono || 'Sin celular'}</span>
+                            <span>•</span>
+                            <span>✉️ {envio.persona?.correo || 'Sin correo'}</span>
+                          </div>
+                        </div>
                       </div>
-                      <div className="min-w-0">
-                        <div className="text-xs sm:text-sm font-black text-[#262422] dark:text-white truncate">
-                          Dpto. {vecino.dptoNumero} — {vecino.nombres} {vecino.apellidos}
-                        </div>
-                        <div className="text-[11px] text-[#7d776f] font-mono flex items-center gap-2">
-                          <span>📱 {vecino.telefono}</span>
-                          <span>•</span>
-                          <span>✉️ {vecino.correo}</span>
-                        </div>
+
+                      <div className="flex items-center gap-2 shrink-0">
+                        {isEnviado ? (
+                          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-black bg-emerald-100 text-emerald-900 dark:bg-emerald-950 dark:text-emerald-300">
+                            <CheckCheck className="w-3.5 h-3.5 text-emerald-600" />
+                            <span>Enviado</span>
+                          </span>
+                        ) : isFallido ? (
+                          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-black bg-rose-100 text-rose-900 dark:bg-rose-950 dark:text-rose-300">
+                            <AlertCircle className="w-3.5 h-3.5 text-rose-600" />
+                            <span>Fallido</span>
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-black bg-amber-100 text-amber-900 dark:bg-amber-950 dark:text-amber-300">
+                            <Clock className="w-3.5 h-3.5 text-amber-600" />
+                            <span>Pendiente</span>
+                          </span>
+                        )}
+
+                        {urlWhatsApp && (
+                          <a
+                            href={urlWhatsApp}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-[10px] font-bold shadow-xs transition-colors"
+                            title="Enviar manualmente por WhatsApp"
+                          >
+                            <MessageCircle className="w-3.5 h-3.5" />
+                            <span className="hidden sm:inline">Enviar por WhatsApp</span>
+                          </a>
+                        )}
                       </div>
                     </div>
-
-                    <div className="flex items-center gap-2 shrink-0">
-                      <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-black bg-emerald-100 text-emerald-900 dark:bg-emerald-950 dark:text-emerald-300">
-                        <CheckCheck className="w-3.5 h-3.5 text-blue-500" />
-                        <span>Recibido</span>
-                      </span>
-
-                      <button
-                        type="button"
-                        onClick={() =>
-                          showToast(
-                            `💬 Reenviando mensaje por WhatsApp a ${vecino.nombres}...`
-                          )
-                        }
-                        className="p-1.5 rounded-xl bg-emerald-100 text-emerald-800 hover:bg-emerald-200 dark:bg-emerald-950 dark:text-emerald-300 transition-colors cursor-pointer"
-                        title="Reenviar mensaje por WhatsApp"
-                      >
-                        <MessageCircle className="w-4 h-4" />
-                      </button>
-                    </div>
-                  </div>
-                )
-              })}
+                  )
+                })
+              )}
             </div>
 
             {/* Footer */}
@@ -1529,8 +1645,8 @@ export default function ComunicadosAmigablesPage() {
         </div>
       )}
 
-      {/* MODAL DE CONFIRMACIÓN PARA ELIMINAR */}
-      {comunicadoAEliminar && (
+      {/* MODAL DE CONFIRMACIÓN PARA ELIMINAR (SOLO ADMINISTRADOR) */}
+      {comunicadoAEliminar && userRole === 'ADMINISTRADOR' && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in duration-200">
           <div className="bg-[#ede9e1] dark:bg-slate-900 border border-[#cec8bc] dark:border-slate-800 w-full max-w-md rounded-3xl shadow-2xl p-6 space-y-4 text-center">
             <div className="w-12 h-12 rounded-2xl bg-rose-100 text-rose-600 flex items-center justify-center mx-auto">
