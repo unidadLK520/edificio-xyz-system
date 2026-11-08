@@ -69,7 +69,7 @@ async function despacharCorreosComunicado(
             },
           });
         } else if (!sendResult.skipped) {
-          // Fallo real en el transporte SMTP
+          // Fallo en validación previa de correo o en el transporte SMTP
           await prisma.comunicadoEnvio.update({
             where: { idEnvio: envio.idEnvio },
             data: {
