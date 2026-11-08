@@ -113,6 +113,41 @@ const comunicadoSchema = z.object({
   destinatarios: z.array(z.number().int().positive()).optional(),
 });
 
+// ── Helper: Normalización y cálculo de resumen de envíos (US3.2) ─────────────
+export interface ResumenEnvios {
+  total: number;
+  pendientes: number;
+  enviados: number;
+  fallidos: number;
+}
+
+function clasificarEstadoEnvio(estado: string | null | undefined): 'enviados' | 'fallidos' | 'pendientes' {
+  const norm = (estado || '').trim().toLowerCase();
+  if (norm === 'enviado' || norm === 'entregado') {
+    return 'enviados';
+  }
+  if (norm === 'fallido') {
+    return 'fallidos';
+  }
+  return 'pendientes';
+}
+
+function calcularResumenDesdeEnvios(envios: { estadoEnvio?: string | null }[]): ResumenEnvios {
+  const resumen: ResumenEnvios = {
+    total: envios.length,
+    pendientes: 0,
+    enviados: 0,
+    fallidos: 0,
+  };
+
+  for (const envio of envios) {
+    const categoria = clasificarEstadoEnvio(envio.estadoEnvio);
+    resumen[categoria]++;
+  }
+
+  return resumen;
+}
+
 // ── GET /comunicados ─────────────────────────────────────────────────────────
 comunicadosRouter.get(
   '/',
@@ -135,8 +170,54 @@ comunicadosRouter.get(
         prisma.comunicado.count(),
       ]);
 
+      const idsPagina = comunicados.map((c) => c.idComunicado);
+
+      // Mapa para inicializar y acumular el resumen de envíos de cada comunicado de la página
+      const resumenPorComunicado = new Map<number, ResumenEnvios>();
+      for (const id of idsPagina) {
+        resumenPorComunicado.set(id, {
+          total: 0,
+          pendientes: 0,
+          enviados: 0,
+          fallidos: 0,
+        });
+      }
+
+      // Una sola consulta agrupada para todos los comunicados de la página (sin consultas N+1)
+      if (idsPagina.length > 0) {
+        const grupos = await prisma.comunicadoEnvio.groupBy({
+          by: ['idComunicado', 'estadoEnvio'],
+          where: {
+            idComunicado: { in: idsPagina },
+          },
+          _count: {
+            _all: true,
+          },
+        });
+
+        for (const grupo of grupos) {
+          const resumen = resumenPorComunicado.get(grupo.idComunicado);
+          if (resumen) {
+            const cantidad = grupo._count._all;
+            const categoria = clasificarEstadoEnvio(grupo.estadoEnvio);
+            resumen[categoria] += cantidad;
+            resumen.total += cantidad;
+          }
+        }
+      }
+
+      const data = comunicados.map((c) => ({
+        ...c,
+        resumenEnvios: resumenPorComunicado.get(c.idComunicado) || {
+          total: 0,
+          pendientes: 0,
+          enviados: 0,
+          fallidos: 0,
+        },
+      }));
+
       res.json({
-        data: comunicados,
+        data,
         meta: {
           total,
           page: parseInt(String(page)),
@@ -203,32 +284,12 @@ comunicadosRouter.get(
         return;
       }
 
-      let pendientes = 0;
-      let enviados = 0;
-      let fallidos = 0;
-
-      for (const envio of comunicado.envios) {
-        const estado = (envio.estadoEnvio || '').toLowerCase();
-        if (estado === 'enviado' || estado === 'entregado') {
-          enviados++;
-        } else if (estado === 'fallido') {
-          fallidos++;
-        } else {
-          pendientes++;
-        }
-      }
-
-      const total = comunicado.envios.length;
+      const resumenEnvios = calcularResumenDesdeEnvios(comunicado.envios);
       const { envios: _envios, ...comunicadoSinEnvios } = comunicado;
 
       res.json({
         ...comunicadoSinEnvios,
-        resumenEnvios: {
-          total,
-          pendientes,
-          enviados,
-          fallidos,
-        },
+        resumenEnvios,
       });
     } catch (err) {
       next(err);
