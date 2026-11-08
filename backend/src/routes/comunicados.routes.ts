@@ -161,15 +161,39 @@ comunicadosRouter.get(
         return;
       }
 
+      const isAdmin = req.user?.rol?.toUpperCase() === 'ADMINISTRADOR';
+
+      // Para Administrador: todo igual que hoy (incluye envíos con datos de personas)
+      if (isAdmin) {
+        const comunicado = await prisma.comunicado.findUnique({
+          where: { idComunicado: id },
+          include: {
+            usuarioCreador: { select: { nombreUsuario: true } },
+            envios: {
+              include: {
+                persona: { select: { nombres: true, apellidos: true, correo: true, telefono: true } },
+              },
+              orderBy: { fechaEnvio: 'desc' },
+            },
+          },
+        });
+
+        if (!comunicado) {
+          res.status(404).json({ error: 'Not Found', message: 'Comunicado no encontrado' });
+          return;
+        }
+
+        res.json(comunicado);
+        return;
+      }
+
+      // Para roles distintos de Administrador: sin envíos con datos de personas y con resumenEnvios
       const comunicado = await prisma.comunicado.findUnique({
         where: { idComunicado: id },
         include: {
           usuarioCreador: { select: { nombreUsuario: true } },
           envios: {
-            include: {
-              persona: { select: { nombres: true, apellidos: true, correo: true, telefono: true } },
-            },
-            orderBy: { fechaEnvio: 'desc' },
+            select: { estadoEnvio: true },
           },
         },
       });
@@ -179,7 +203,33 @@ comunicadosRouter.get(
         return;
       }
 
-      res.json(comunicado);
+      let pendientes = 0;
+      let enviados = 0;
+      let fallidos = 0;
+
+      for (const envio of comunicado.envios) {
+        const estado = (envio.estadoEnvio || '').toLowerCase();
+        if (estado === 'enviado' || estado === 'entregado') {
+          enviados++;
+        } else if (estado === 'fallido') {
+          fallidos++;
+        } else {
+          pendientes++;
+        }
+      }
+
+      const total = comunicado.envios.length;
+      const { envios: _envios, ...comunicadoSinEnvios } = comunicado;
+
+      res.json({
+        ...comunicadoSinEnvios,
+        resumenEnvios: {
+          total,
+          pendientes,
+          enviados,
+          fallidos,
+        },
+      });
     } catch (err) {
       next(err);
     }
