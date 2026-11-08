@@ -92,9 +92,19 @@ interface DnsCacheEntry {
 const DNS_CACHE_TTL_MS = 10 * 60 * 1000; // 10 minutos de caché en memoria
 const dnsResolutionCache = new Map<string, DnsCacheEntry>();
 
+function isDefinitiveDnsError(err: any): boolean {
+  const code = err?.code;
+  return code === 'ENOTFOUND' || code === 'ENODATA';
+}
+
 /**
  * Consulta registros MX o, en su defecto, registros A para un dominio con timeout de 3 segundos
  * y almacenamiento en caché en memoria por 10 minutos.
+ *
+ * Distingue errores definitivos (ENOTFOUND, ENODATA) de transitorios (timeout propio, ETIMEOUT,
+ * ESERVFAIL, ECONNREFUSED y cualquier otro):
+ * - Errores definitivos: marcan el dominio como inválido y se cachean 10 min.
+ * - Errores transitorios: no se marcan inválidos, no se cachean y devuelven hasDns: true con reason 'no verificado'.
  */
 export async function checkDomainDns(domain: string): Promise<{ hasDns: boolean; reason?: string }> {
   const now = Date.now();
@@ -104,7 +114,6 @@ export async function checkDomainDns(domain: string): Promise<{ hasDns: boolean;
   }
 
   // 1. Intentar registros MX con timeout de 3 segundos
-  let hasMx = false;
   try {
     const mxRecords = await withTimeout(
       dnsPromises.resolveMx(domain),
@@ -112,23 +121,18 @@ export async function checkDomainDns(domain: string): Promise<{ hasDns: boolean;
       `Tiempo de espera agotado (3 s) consultando registros MX para ${domain}`
     );
     if (mxRecords && mxRecords.length > 0) {
-      hasMx = true;
+      dnsResolutionCache.set(domain, { hasDns: true, expiresAt: now + DNS_CACHE_TTL_MS });
+      return { hasDns: true };
     }
   } catch (mxErr: any) {
-    if (mxErr?.message?.includes('Tiempo de espera agotado (3 s)')) {
-      const reason = `Tiempo de espera agotado (3 s) consultando DNS para el dominio ${domain}`;
-      dnsResolutionCache.set(domain, { hasDns: false, expiresAt: now + DNS_CACHE_TTL_MS, reason });
-      return { hasDns: false, reason };
+    if (!isDefinitiveDnsError(mxErr)) {
+      // Error transitorio (timeout propio, ETIMEOUT, ESERVFAIL, ECONNREFUSED u otro): no cachear ni invalidar
+      return { hasDns: true, reason: 'no verificado' };
     }
-    hasMx = false;
+    // Error definitivo (ENOTFOUND, ENODATA): continuar para intentar registros A
   }
 
-  if (hasMx) {
-    dnsResolutionCache.set(domain, { hasDns: true, expiresAt: now + DNS_CACHE_TTL_MS });
-    return { hasDns: true };
-  }
-
-  // 2. Si no hay registros MX, intentar registros A con timeout de 3 segundos
+  // 2. Si no hay registros MX (error definitivo), intentar registros A con timeout de 3 segundos
   try {
     const aRecords = await withTimeout(
       dnsPromises.resolve4(domain),
@@ -140,9 +144,14 @@ export async function checkDomainDns(domain: string): Promise<{ hasDns: boolean;
       return { hasDns: true };
     }
   } catch (aErr: any) {
-    // Si tampoco hay registro A
+    if (!isDefinitiveDnsError(aErr)) {
+      // Error transitorio (timeout propio, ETIMEOUT, ESERVFAIL, ECONNREFUSED u otro): no cachear ni invalidar
+      return { hasDns: true, reason: 'no verificado' };
+    }
+    // Error definitivo en registros A
   }
 
+  // Ambos (MX y A) fallaron con errores definitivos (ENOTFOUND / ENODATA)
   const reason = `El dominio ${domain} no posee registros MX ni A`;
   dnsResolutionCache.set(domain, { hasDns: false, expiresAt: now + DNS_CACHE_TTL_MS, reason });
   return { hasDns: false, reason };
@@ -168,7 +177,7 @@ export async function validateEmail(email: string): Promise<EmailValidationResul
   // 1. Formato válido
   const emailRegex = /^[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)+$/;
   if (!emailRegex.test(trimmed)) {
-    return { valid: false, reason: `Formato de correo inválido: "${trimmed}"` };
+    return { valid: false, reason: 'Formato de correo inválido' };
   }
 
   const atIndex = trimmed.lastIndexOf('@');
@@ -265,8 +274,10 @@ export class MailerService {
     // Validación previa del correo ORIGINAL (también en modo test)
     const validation = await validateEmail(originalTo);
     if (!validation.valid) {
+      const atIndex = originalTo.lastIndexOf('@');
+      const domain = atIndex >= 0 ? originalTo.slice(atIndex + 1).toLowerCase().trim() : 'inválido';
       console.warn(
-        `[MAILER] Validación fallida para el destinatario original "${originalTo}": ${validation.reason}`
+        `[MAILER] Validación fallida para dominio "${domain}": ${validation.reason}`
       );
       return {
         success: false,
