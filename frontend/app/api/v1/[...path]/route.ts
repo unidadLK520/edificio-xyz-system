@@ -56,6 +56,11 @@ async function proxyRequest(
       body: body || undefined
     })
 
+    const status = backendRes.status
+    if (status === 204 || status === 205 || status === 304) {
+      return new Response(null, { status, headers: backendRes.headers })
+    }
+
     const data = await backendRes.text()
     let jsonOrText: any
     try {
