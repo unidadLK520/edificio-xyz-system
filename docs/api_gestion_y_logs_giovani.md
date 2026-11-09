@@ -1774,6 +1774,255 @@ Prefijo de ruta: `/api/v1/personal`
 - **Auditoría:** No genera auditoría (lectura).
 
 ---
+## 5.13 Módulo de Comunicados Oficiales (US3.2)
+Ubicación: `backend/src/routes/comunicados.routes.ts`, `backend/src/modules/mailer/` · Tablas: `edificio.comunicados`, `edificio.comunicados_envios`  
+Prefijo de ruta: `/api/v1/comunicados`
+
+### Arquitectura de Envío y Modelo de Datos
+El módulo de comunicados permite a la administración redactar y emitir avisos oficiales dirigidos a los residentes del edificio (o a una selección específica de personas), ofreciendo registro en cartelera digital y despacho multicanal.
+
+#### Tablas en Base de Datos
+- **`edificio.comunicados` (`comunicados`):**
+  - `id_comunicado`: Int, clave primaria autoincremental (`@id @default(autoincrement())`).
+  - `titulo`: VarChar(150), título del comunicado (mínimo 3, máximo 150 caracteres).
+  - `contenido`: Text, texto completo del comunicado (mínimo 1 carácter).
+  - `fecha_publicacion`: Timestamp(6), marca temporal UTC de emisión (`@default(now())`).
+  - `canal_envio`: VarChar(30)?, canal seleccionado. Valores reales: `'Correo'`, `'WhatsApp'`, `'Ambos'`, `'Solo sistema'`.
+  - `id_usuario_creador`: Int?, clave foránea que referencia a `edificio.usuarios(id_usuario)`.
+- **`edificio.comunicados_envios` (`comunicados_envios`):**
+  - `id_envio`: Int, clave primaria autoincremental.
+  - `id_comunicado`: Int, clave foránea que referencia a `comunicados(id_comunicado)`.
+  - `id_persona`: Int, clave foránea que referencia a `personas(id_persona)`.
+  - `fecha_envio`: Timestamp(6)?, fecha y hora en que se completó el despacho.
+  - `estado_envio`: VarChar(20)?, estado de entrega (`@default("Pendiente")`). Valores del ciclo de vida:
+    - `'Pendiente'`: Estado inicial asignado al registrar el envío. Permanece en este estado para canales sin despacho automático por backend (`WhatsApp`, `Solo sistema`) o mientras se procesa la cola de correos.
+    - `'Enviado'`: El transporte SMTP confirmó la recepción exitosa del mensaje.
+    - `'Fallido'`: La dirección no superó la validación previa (formato o dominio DNS) o el transporte SMTP agotó sus reintentos tras errores transitorios o definitivos (5xx).
+    - `'Omitido'`: El destinatario no tiene correo registrado (`correo` nulo o vacío); se actualiza de inmediato sin intentar conexión SMTP.
+
+#### Configuración y Variables de Entorno del Mailer
+El servicio de mensajería (`MailerService`) utiliza Nodemailer con inicialización perezosa (lazy connection) y timeouts de transporte configurados a 20 s (`connectionTimeout`), 20 s (`greetingTimeout`) y 30 s (`socketTimeout`). Las variables de entorno leídas por el código son:
+
+| Variable | Tipo / Valores | Propósito | Ejemplo Ficticio |
+|---|---|---|---|
+| `MAIL_HOST` | String | Host o servidor SMTP de salida | `smtp.ejemplo.com` |
+| `MAIL_PORT` | Number | Puerto del servicio SMTP (587 estándar; 465 SSL) | `587` |
+| `MAIL_SECURE` | Boolean | Conexión TLS directa (`true` para puerto 465, `false` para 587/STARTTLS) | `false` |
+| `MAIL_USER` | String | Usuario o cuenta de autenticación SMTP | `notificaciones@ejemplo.com` |
+| `MAIL_PASS` | String | Contraseña de autenticación SMTP | `********` |
+| `MAIL_FROM` | String | Encabezado remitente visible | `Edificio XYZ <noreply@edificioxyz.com>` |
+| `MAIL_MODE` | `'test'` \| `'real'` | Modo de despacho (si falta o es otro valor, opera en `'test'`) | `test` |
+| `MAIL_TEST_TO` | String | Dirección receptora forzada en modo de prueba | `buzon.pruebas@ejemplo.com` |
+
+> **Política de seguridad:** Las contraseñas (`MAIL_PASS`), credenciales y objetos de transporte nunca se registran en los logs del servidor. En los registros de auditoría y salidas de error/advertencia del mailer, las direcciones de correo se enmascaran automáticamente (`***@dominio.com`) para resguardar la privacidad de los vecinos.
+
+#### Validación Previa del Correo Destino
+Antes de invocar el transporte SMTP, la dirección original de cada persona se somete a validación estricta (tanto en modo `'test'` como en `'real'`):
+1. **Formato:** Expresión regular estándar RFC 5322.
+2. **Dominio no reservado:** Rechazo automático de dominios no enrutables (`example.com`, `.net`, `.org`, `.test`, `.invalid`, `.localhost`, `.local`).
+3. **Resolución DNS:** Consulta asíncrona de registros MX y, en su defecto, registros A mediante `dns.promises` con timeout de 3 segundos y caché en memoria de 10 minutos. Los fallos definitivos de resolución (`ENOTFOUND`, `ENODATA`) invalidan el correo marcando el envío como `'Fallido'`; los fallos transitorios de red no invalidan el dominio para permitir que decida el servidor SMTP.
+
+#### Modos de Envío (`MAIL_MODE`)
+- **Modo `'test'` (por defecto):** Todo correo despachado se redirige de manera segura a la dirección configurada en `MAIL_TEST_TO`. El asunto se prefija automáticamente con `[PRUEBA]` y se añade un banner visible en el cuerpo HTML y texto plano indicando el buzón original de la persona. Si `MAIL_TEST_TO` no estuviese configurado, el envío se omite de forma segura (`skipped: true`).
+- **Modo `'real'`:** Cada correo se entrega directamente a la dirección real de la persona registrada en la base de datos.
+
+#### Envío en Segundo Plano, Reintentos y Pausa entre Lotes
+- **Despacho asíncrono no bloqueante:** El endpoint `POST /comunicados` responde HTTP 201 inmediatamente tras confirmar la transacción en base de datos. El despacho de correos se inicia a continuación en segundo plano mediante `setImmediate`.
+- **Reintentos por fallos temporales:** Si el transporte SMTP arroja un error transitorio (`responseCode` 4xx, `ETIMEDOUT`, `ECONNRESET` o `"Connection closed unexpectedly"`), el servicio reintenta hasta **2 veces** esperando **5 segundos** antes del primer reintento y **15 segundos** antes del segundo. Si el error persiste, el envío se actualiza a `'Fallido'`. Los errores 5xx (permanentes) y las validaciones fallidas no se reintentan.
+- **Pausa entre correos:** Se aplica una espera de **500 ms** entre envíos consecutivos de un mismo lote para evitar saturación de conexiones o bloqueos por rate-limiting del proveedor de correo.
+- **Canal WhatsApp:** El backend **no realiza envíos automáticos de WhatsApp** (no cuenta con integración de API externa). Al seleccionar `'WhatsApp'` o `'Ambos'`, las filas de envío se inicializan y persisten en la base de datos, y la interfaz de usuario ofrece enlaces directos formateados (`wa.me`) para apertura manual por parte del administrador.
+
+---
+
+### 5.13.1 Listar Comunicados Paginados
+- **Método y Ruta:** `GET /api/v1/comunicados`
+- **Estado:** Implementado
+- **Propósito:** Retorna la lista paginada de comunicados oficiales ordenados cronológicamente (`fechaPublicacion: 'desc'`), incluyendo el conteo de destinatarios y el resumen consolidado de entregas.
+- **Rol requerido:** `Administrador`, `Directorio`, `Consulta` (todos los roles autenticados).
+- **Query Params:**
+  - `page` (opcional, default: "1"): Número de página (entero >= 1).
+  - `limit` (opcional, default: "20"): Cantidad de comunicados por página.
+- **Diferencias por rol:** Todos los roles autorizados reciben el listado con el objeto `resumenEnvios` consolidado. La consulta calcula los estados mediante una única agregación `groupBy` sobre `comunicados_envios`, garantizando alto rendimiento sin problemas de N+1.
+- **Respuesta 200 OK:**
+```json
+{
+  "data": [
+    {
+      "idComunicado": 12,
+      "titulo": "Corte programado de agua por mantenimiento de bombas",
+      "contenido": "Se informa a los copropietarios que el día martes se suspenderá el suministro de agua entre las 09:00 y las 13:00.",
+      "fechaPublicacion": "2026-11-08T14:30:00.000Z",
+      "canalEnvio": "Ambos",
+      "idUsuarioCreador": 1,
+      "usuarioCreador": {
+        "nombreUsuario": "admin"
+      },
+      "_count": {
+        "envios": 48
+      },
+      "resumenEnvios": {
+        "total": 48,
+        "pendientes": 0,
+        "enviados": 45,
+        "fallidos": 1,
+        "omitidos": 2
+      }
+    }
+  ],
+  "meta": {
+    "total": 1,
+    "page": 1,
+    "limit": 20,
+    "totalPages": 1
+  }
+}
+```
+- **Errores:**
+  - `401 Unauthorized`: Token de autenticación ausente o inválido.
+- **Auditoría:** No genera auditoría (operación de lectura).
+
+---
+
+### 5.13.2 Obtener Detalle de Comunicado
+- **Método y Ruta:** `GET /api/v1/comunicados/:id`
+- **Estado:** Implementado
+- **Propósito:** Retorna los datos detallados de un comunicado específico y el estado individual o agrupado de sus envíos.
+- **Rol requerido:** `Administrador`, `Directorio`, `Consulta` (todos los roles autenticados).
+- **Parámetro URL:** `:id` (entero positivo, identificador único del comunicado).
+- **Diferencias por rol:**
+  - **`Administrador`:** Recibe el objeto completo con la relación `envios`, detallando cada destinatario con sus datos de contacto (`persona: { nombres, apellidos, correo, telefono }`), fecha de envío y estado particular, ordenados por `fechaEnvio: 'desc'`.
+  - **`Directorio` y `Consulta`:** Por políticas de privacidad y protección de datos personales, **no reciben el array `envios`**. En su lugar, reciben el comunicado con el objeto `resumenEnvios` numérico (`total`, `pendientes`, `enviados`, `fallidos`, `omitidos`).
+- **Respuesta 200 OK (Rol Administrador):**
+```json
+{
+  "idComunicado": 12,
+  "titulo": "Corte programado de agua por mantenimiento de bombas",
+  "contenido": "Se informa a los copropietarios que el día martes se suspenderá el suministro de agua entre las 09:00 y las 13:00.",
+  "fechaPublicacion": "2026-11-08T14:30:00.000Z",
+  "canalEnvio": "Ambos",
+  "idUsuarioCreador": 1,
+  "usuarioCreador": {
+    "nombreUsuario": "admin"
+  },
+  "envios": [
+    {
+      "idEnvio": 101,
+      "idComunicado": 12,
+      "idPersona": 15,
+      "fechaEnvio": "2026-11-08T14:30:05.120Z",
+      "estadoEnvio": "Enviado",
+      "persona": {
+        "nombres": "Carlos",
+        "apellidos": "Mendoza Rojas",
+        "correo": "cmendoza@ejemplo.com",
+        "telefono": "+591 71234567"
+      }
+    },
+    {
+      "idEnvio": 102,
+      "idComunicado": 12,
+      "idPersona": 18,
+      "fechaEnvio": null,
+      "estadoEnvio": "Omitido",
+      "persona": {
+        "nombres": "Beatriz",
+        "apellidos": "Vargas Siles",
+        "correo": null,
+        "telefono": "+591 79876543"
+      }
+    }
+  ]
+}
+```
+- **Respuesta 200 OK (Roles Directorio y Consulta):**
+```json
+{
+  "idComunicado": 12,
+  "titulo": "Corte programado de agua por mantenimiento de bombas",
+  "contenido": "Se informa a los copropietarios que el día martes se suspenderá el suministro de agua entre las 09:00 y las 13:00.",
+  "fechaPublicacion": "2026-11-08T14:30:00.000Z",
+  "canalEnvio": "Ambos",
+  "idUsuarioCreador": 1,
+  "usuarioCreador": {
+    "nombreUsuario": "admin"
+  },
+  "resumenEnvios": {
+    "total": 2,
+    "pendientes": 0,
+    "enviados": 1,
+    "fallidos": 0,
+    "omitidos": 1
+  }
+}
+```
+- **Errores:**
+  - `400 Bad Request`: `{ "error": "Bad Request", "message": "ID inválido" }` (cuando `:id` no es un número).
+  - `401 Unauthorized`: Token de autenticación ausente o inválido.
+  - `404 Not Found`: `{ "error": "Not Found", "message": "Comunicado no encontrado" }`.
+- **Auditoría:** No genera auditoría (operación de lectura).
+
+---
+
+### 5.13.3 Publicar / Crear Comunicado Oficial
+- **Método y Ruta:** `POST /api/v1/comunicados`
+- **Estado:** Implementado
+- **Propósito:** Registra un nuevo comunicado oficial, asocia a los destinatarios en la tabla `comunicados_envios`, registra auditoría atómica en una transacción interactiva y desencadena el proceso de envío de correos en segundo plano.
+- **Rol requerido:** `Administrador` exclusivamente (`Directorio` y `Consulta` reciben `403 Forbidden`).
+- **Body (JSON):**
+```json
+{
+  "titulo": "Asamblea Extraordinaria de Copropietarios",
+  "contenido": "Se convoca a todos los copropietarios a la asamblea que se llevará a cabo el día 20 de noviembre a las 19:30 en el salón de eventos.",
+  "canalEnvio": "Correo",
+  "destinatarios": [15, 18, 22]
+}
+```
+- **Validaciones (Zod Schema):**
+  - `titulo`: `string`, mínimo 3 caracteres, máximo 150 caracteres (obligatorio).
+  - `contenido`: `string`, mínimo 1 carácter (obligatorio).
+  - `canalEnvio`: `string` opcional, enum `['Correo', 'WhatsApp', 'Ambos', 'Solo sistema']`. Si se omite, se guarda como `null`.
+  - `destinatarios`: `array` opcional de números enteros positivos (`number[]`). Si se omite o es un array vacío, el sistema consulta automáticamente a todas las personas registradas en `edificio.personas` y genera envíos para todas ellas.
+- **Respuesta 201 Created:**
+```json
+{
+  "idComunicado": 14,
+  "titulo": "Asamblea Extraordinaria de Copropietarios",
+  "contenido": "Se convoca a todos los copropietarios a la asamblea que se llevará a cabo el día 20 de noviembre a las 19:30 en el salón de eventos.",
+  "fechaPublicacion": "2026-11-08T21:00:00.000Z",
+  "canalEnvio": "Correo",
+  "idUsuarioCreador": 1,
+  "_count": {
+    "envios": 3
+  }
+}
+```
+- **Momento de respuesta y ciclo en segundo plano:**
+  1. Se ejecuta la transacción interactiva de base de datos creando el comunicado, insertando los registros de envío en `comunicados_envios` con estado `'Pendiente'` vía `createMany`, y registrando el evento de auditoría `CREAR_COMUNICADO`.
+  2. El servidor responde **HTTP 201 Created** de inmediato al cliente.
+  3. Si el canal incluye correo (`'Correo'` o `'Ambos'`), la función `despacharCorreosComunicado` se ejecuta de forma asíncrona fuera de la transacción mediante `setImmediate`.
+- **Errores:**
+  - `400 Bad Request`: `{ "error": "Validation Error", "message": "Datos inválidos", "details": { "titulo": ["String must contain at least 3 character(s)"] } }`.
+  - `401 Unauthorized`: Token de autenticación ausente o inválido.
+  - `403 Forbidden`: `{ "error": "Forbidden", "message": "No tiene permisos para realizar esta acción" }`.
+- **Auditoría:** Registra evento `CREAR_COMUNICADO` en la tabla `comunicados` con `idRegistro` del nuevo comunicado, `idUsuario` y snapshot de `datosNuevos` dentro de la transacción.
+
+---
+
+### 5.13.4 Eliminar Comunicado
+- **Método y Ruta:** `DELETE /api/v1/comunicados/:id`
+- **Estado:** Implementado
+- **Propósito:** Elimina un comunicado oficial y todos sus registros de envíos asociados (`comunicados_envios`) garantizando integridad referencial mediante una transacción interactiva con auditoría atómica.
+- **Rol requerido:** `Administrador` exclusivamente (`Directorio` y `Consulta` reciben `403 Forbidden`).
+- **Parámetro URL:** `:id` (entero positivo, ID del comunicado a eliminar).
+- **Respuesta 204 No Content:** Respuesta exitosa con cuerpo vacío (`Response(null, { status: 204 })`).
+- **Errores:**
+  - `400 Bad Request`: `{ "error": "Bad Request", "message": "ID inválido" }`.
+  - `401 Unauthorized`: Token de autenticación ausente o inválido.
+  - `403 Forbidden`: `{ "error": "Forbidden", "message": "No tiene permisos para realizar esta acción" }`.
+  - `404 Not Found`: `{ "error": "Not Found", "message": "Comunicado no encontrado" }`.
+- **Auditoría:** Registra evento `ELIMINAR_COMUNICADO` en la tabla `comunicados` con `idRegistro` del ID eliminado y snapshot de `datosAnteriores` con la información previa del comunicado.
+
+---
 ## 6. Subsistema de Logs y Auditoría (US1.3)
 Trazabilidad de todas las operaciones que modifican el estado del sistema.
 Ubicación: `backend/src/modules/auditoria/` · Tabla: `edificio.auditoria`
@@ -1841,6 +2090,8 @@ Evento	Tabla	Origen	Descripción / Datos Capturados
 `REGISTRO_BONIFICACION_EMPLEADO`	conceptos_empleado	`POST /personal/:id/bonificaciones`	Asignación de bonificación con período mensual afectado (YYYY-MM-01), monto y motivo; fecha asignada por el servidor.
 `REGISTRO_DESCUENTO_EMPLEADO`	conceptos_empleado	`POST /personal/:id/descuentos`	Registro de retención o deducción con período mensual afectado (YYYY-MM-01), monto y motivo; fecha asignada por el servidor.
 `MODIFICACION_SALARIO_EMPLEADO`	empleados	`PUT /personal/:id/salario`	Ajuste de salario base con motivo obligatorio y snapshot de salario anterior y nuevo.
+`CREAR_COMUNICADO`	comunicados	`POST /comunicados`	Alta de comunicado oficial y generación de destinatarios en `comunicados_envios` (idComunicado, titulo, canalEnvio, idUsuarioCreador, _count.envios).
+`ELIMINAR_COMUNICADO`	comunicados	`DELETE /comunicados/:id`	Eliminación de comunicado oficial y de sus registros de envíos asociados en cascada (datosAnteriores con snapshot del comunicado).
 6.3 Ejemplos
 Bloqueo de cuenta:
 ```json
@@ -2061,6 +2312,10 @@ Personal	/personal/:id/descuentos	POST	✅	❌	❌
 Personal	/personal/:id/descuentos	GET	✅	✅	❌
 Personal	/personal/:id/salario	PUT	✅	❌	❌
 Personal	/personal/:id/salario	GET	✅	✅	❌
+Comunicados	/comunicados	GET	✅	✅	✅
+Comunicados	/comunicados/:id	GET	✅	✅	✅
+Comunicados	/comunicados	POST	✅	❌	❌
+Comunicados	/comunicados/:id	DELETE	✅	❌	❌
 * Pendiente de confirmar contra el código y con el Scrum si Consulta tendrá lectura de expensas y estado de cuenta (requisito mínimo del cliente: emisión de estados de cuenta).
 ---
 ## 8. Trazabilidad US ↔ Criterio ↔ Endpoint
@@ -2134,6 +2389,17 @@ CA11 historial de pagos por empleado con fecha e importe	`GET /api/v1/personal/p
 CA12 restringir por rol	Todos los endpoints de `/personal`	Cumple	Middleware `authorizeRoles` aplicado en todas las rutas: `Administrador` escribe (`POST`, `PUT`) y lee (`GET`); `Directorio` solo lectura (`GET`); `Consulta` recibe HTTP 403 Forbidden verificado en pruebas reales.
 CA13 auditoría con responsable y fecha/hora usando el mecanismo existente	`POST /personal`, `PUT /personal/:id`, `POST /personal/:id/pagos`, `PUT /personal/:id/salario`	Cumple	Integración de `auditoriaService.registrarEvento` pasando `tx` dentro de transacciones interactivas para eventos `CREAR_EMPLEADO`, `ACTUALIZAR_EMPLEADO`, `REGISTRO_PAGO_EMPLEADO` y `MODIFICACION_SALARIO_EMPLEADO` con responsable (`idUsuario`), fecha/hora y snapshots de datos (probado en BD real).
 
+US3.2: Comunicados Oficiales y Notificaciones a Copropietarios
+Criterio	Endpoint(s)	Estado	Nota
+CA01 redacción y publicación de comunicado	`POST /api/v1/comunicados`	Cumple	Creación de comunicado con título (3-150 caracteres), contenido obligatorio, vinculación a usuario creador y registro en transacción interactiva con auditoría (probado con HTTP 201).
+CA02 selección de canales de envío	`POST /api/v1/comunicados`	Cumple	Soporte de canales `'Correo'`, `'WhatsApp'`, `'Ambos'` y `'Solo sistema'` en payload validado por Zod y persistido en `edificio.comunicados` (probado).
+CA03 cartelera y consulta de comunicados	`GET /api/v1/comunicados`	Cumple	Listado paginado ordenado cronológicamente descendente con agregación de `resumenEnvios` (enviados, pendientes, fallidos, omitidos) calculada en consulta única sin N+1 (probado con HTTP 200).
+CA04 detalle de comunicado y privacidad por rol	`GET /api/v1/comunicados/:id`	Cumple	Diferenciación estricta por rol: `Administrador` recibe detalle con destinatarios y datos de contacto; `Directorio` y `Consulta` reciben `resumenEnvios` sin datos personales (probado con HTTP 200).
+CA05 eliminación de comunicados	`DELETE /api/v1/comunicados/:id`	Cumple	Eliminación atómica en cascada de envíos dependientes y comunicado en transacción interactiva con auditoría `ELIMINAR_COMUNICADO` restringida a `Administrador` (probado con HTTP 204).
+CA06 despacho automático de notificaciones	`POST /api/v1/comunicados`, `mailerService`	Parcial: correo sí, WhatsApp pendiente	Despacho asíncrono en segundo plano vía Nodemailer con validación previa de formato y DNS (MX/A), modos test/real y reintentos ante fallos SMTP temporales; WhatsApp automático pendiente de integración con proveedor externo (probado).
+CA07 seguimiento de estados de entrega	`GET /comunicados`, `GET /comunicados/:id`	Cumple	Persistencia y actualización de estados (`Pendiente`, `Enviado`, `Fallido`, `Omitido`) por destinatario en `edificio.comunicados_envios` y consolidación en tiempo real (probado).
+CA08 registro de auditoría transversal	`POST /comunicados`, `DELETE /comunicados/:id`	Cumple	Eventos `CREAR_COMUNICADO` y `ELIMINAR_COMUNICADO` registrados en `edificio.auditoria` con usuario responsable, fecha/hora y snapshots de datos (probado).
+
 #### Controles adicionales (no son criterios de la HU)
 - **Anulación de movimientos de caja:** Endpoint `DELETE /api/v1/caja/:id` con motivo obligatorio (`motivo`), soft-delete inmutable (`anulado = true`), control contra re-anulación (`409 Conflict`) y evento de auditoría `ANULACION_MOVIMIENTO_CAJA` (probado en `backend/tests/caja.test.ts`).
 - **Bloqueo de edición de movimientos conciliados:** Endpoint `PUT /api/v1/movimientos-bancarios/:id` permite modificar movimientos en estado `Pendiente`, pero bloquea con `409 Conflict` (`"No se puede modificar un movimiento bancario que ya ha sido conciliado"`) cualquier intento de editar extractos ya conciliados (probado en `backend/tests/bancos.test.ts`).
@@ -2164,6 +2430,11 @@ CA13 auditoría con responsable y fecha/hora usando el mecanismo existente	`POST
 - [Pendiente] Migración de Reglas de Mora en Base de Datos: `edificio.reglas_mora` ya existe en Supabase; su migración `20261004000000_hu04_regla_mora` figura pendiente en Prisma y se registrará con `prisma migrate resolve --applied 20261004000000_hu04_regla_mora` (no ejecutar su SQL).
 - [Pendiente] Migración de Conceptos de Empleado (US3.1) y RLS: `edificio.conceptos_empleado` se creó a mano en el SQL Editor (con RLS); la migración `20261106000000_us31_conceptos_empleado` se registrará igual con `prisma migrate resolve --applied 20261106000000_us31_conceptos_empleado`; el repo no incluye `ENABLE ROW LEVEL SECURITY`.
 - [Pendiente / Arquitectura] Liquidación de pagos y edición de salario (US3.1): `POST /api/v1/personal/:id/pagos` no calcula los conceptos; la UI ya no envía `salarioBase` en `PUT /:id` (el backend aún lo permite); el salario se cambia con `PUT /api/v1/personal/:id/salario` (requiriendo motivo ≥ 5 caracteres).
+- [Pendiente / DevOps] WhatsApp automático: El canal WhatsApp no envía mensajes automáticos desde el backend por falta de integración con un proveedor oficial (ej. Twilio, Meta Cloud API o Baileys/sidecar); actualmente el canal se registra en el sistema y el frontend ofrece enlaces directos `wa.me`.
+- [Pendiente / Esquema] Adjuntos sin soporte en la BD: El modelo físico `edificio.comunicados` no cuenta con columna ni relación para almacenar URLs o metadatos de archivos adjuntos (a diferencia del modelo general `documentos`), por lo que los comunicados soportan únicamente título y texto plano/HTML.
+- [Pendiente / Resiliencia] Envío sin reintentos persistentes tras reinicio: El despacho de correos se ejecuta en memoria mediante `setImmediate`; si el backend se reinicia durante el proceso de envío de un lote, los envíos pendientes quedan en estado `'Pendiente'` sin reanudación automática, al no contar con una cola persistente de tareas (ej. Redis/BullMQ) ni un cron de reintento.
+- [Pendiente / Infraestructura] SMTP bloqueado en el plan gratis de Render: Los planes gratuitos de Render bloquean las conexiones salientes por los puertos SMTP estándar (25, 465, 587); para enviar correos en producción se requiere una IP dedicada/plan de pago o el uso de un servicio de envío vía API REST (como SendGrid, Mailgun o Resend).
+- [Pendiente / Pruebas] Correos de prueba en la BD: En modo de prueba (`MAIL_MODE=test`), los correos se redirigen al buzón de testing (`MAIL_TEST_TO`), pero en la tabla `edificio.comunicados_envios` quedan registrados con el ID de la persona destinataria original y marcados como `'Enviado'` o `'Fallido'` según el resultado del transporte, reflejando el resultado del test y no una entrega real a los buzones de los residentes.
 ---
 ## 10. Respaldo de Conexión y Conmutación de Base de Datos (Failover)
 
@@ -2259,7 +2530,9 @@ El backend implementa un mecanismo de conmutación de conexión transparente y s
   La suite automatizada `backend/tests/database_failover.test.ts` incorpora pruebas de regresión dedicadas para ambas variantes de transacciones (`$transaction` por array de promesas y `$transaction` con callback interactivo). Estas pruebas aseguran que ante cualquier modificación en las dependencias o en el cliente Prisma, cualquier ruptura de compatibilidad interna sea detectada de forma inmediata.
 
 ---
-## 11. Índice de Endpoints Documentados — Módulo Personal (US3.1)
+## 11. Índice de Endpoints Documentados
+
+### 11.1 Módulo Personal (US3.1)
 
 A continuación se detalla la ubicación exacta (número de sección y encabezado) de cada uno de los 15 endpoints documentados para el módulo de Personal, junto con su estado actual y su correspondencia unívoca con la Matriz RBAC (Sección 7):
 
@@ -2281,7 +2554,23 @@ A continuación se detalla la ubicación exacta (número de sección y encabezad
 | 14 | 5.12.14 | Consultar Salario Actual de Empleado | `GET` | `/api/v1/personal/:id/salario` | Implementado | ✅ | ✅ | ❌ |
 | 15 | 5.12.15 | Consultar Historial Consolidado de Pagos de Personal | `GET` | `/api/v1/personal/pagos` | Implementado | ✅ | ✅ | ❌ |
 
-### Confirmación de Conteo de Endpoints
+### Confirmación de Conteo de Endpoints — Personal
 - **Total de endpoints documentados en la Sección 5.12:** 15 endpoints (15 implementados, 0 pendientes).
 - **Total de endpoints de Personal en la Matriz RBAC (Sección 7):** 15 endpoints.
 - **Resultado de la verificación de consistencia:** **Conteo idéntico y coincidencia exacta (15 == 15)**.
+
+### 11.2 Módulo Comunicados Oficiales (US3.2)
+
+A continuación se detalla la ubicación exacta (número de sección y encabezado) de cada uno de los 4 endpoints documentados para el módulo de Comunicados Oficiales, junto con su estado actual y su correspondencia unívoca con la Matriz RBAC (Sección 7):
+
+| N.º | Sección | Encabezado | Método | Ruta | Estado | Rol Administrador | Rol Directorio | Rol Consulta |
+|:---:|:---:|---|:---:|---|:---:|:---:|:---:|:---:|
+| 1 | 5.13.1 | Listar Comunicados Paginados | `GET` | `/api/v1/comunicados` | Implementado | ✅ | ✅ | ✅ |
+| 2 | 5.13.2 | Obtener Detalle de Comunicado | `GET` | `/api/v1/comunicados/:id` | Implementado | ✅ | ✅ | ✅ |
+| 3 | 5.13.3 | Publicar / Crear Comunicado Oficial | `POST` | `/api/v1/comunicados` | Implementado | ✅ | ❌ | ❌ |
+| 4 | 5.13.4 | Eliminar Comunicado | `DELETE` | `/api/v1/comunicados/:id` | Implementado | ✅ | ❌ | ❌ |
+
+#### Confirmación de Conteo de Endpoints — Comunicados
+- **Total de endpoints documentados en la Sección 5.13:** 4 endpoints (4 implementados, 0 pendientes).
+- **Total de endpoints de Comunicados en la Matriz RBAC (Sección 7):** 4 endpoints.
+- **Resultado de la verificación de consistencia:** **Conteo idéntico y coincidencia exacta (4 == 4)**.
