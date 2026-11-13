@@ -5,6 +5,7 @@ import { Router, Response, NextFunction, IRouter } from 'express';
 import { authMiddleware, AuthRequest } from '../middlewares/auth.middleware';
 import { authorizeRoles } from '../middlewares/role.middleware';
 import { auditoriaService } from '../modules/auditoria';
+import { exportAndPruneOldest } from '../modules/auditoria/auditoria.export';
 
 export const auditoriaRouter: IRouter = Router();
 
@@ -47,6 +48,33 @@ auditoriaRouter.get(
       });
 
       res.json(resultadoPaginado);
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+/**
+ * POST /api/v1/auditoria/export-prune
+ * Exporta los 150 registros más antiguos a Excel y los elimina.
+ * Sólo accesible por Administrador y Directorio.
+ */
+auditoriaRouter.post(
+  '/export-prune',
+  authorizeRoles('Administrador', 'Directorio'),
+  async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const buffer = await exportAndPruneOldest();
+      const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+      res.setHeader(
+        'Content-Type',
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+      );
+      res.setHeader(
+        'Content-Disposition',
+        `attachment; filename="auditoria_${timestamp}.xlsx"`
+      );
+      res.send(buffer);
     } catch (err) {
       next(err);
     }

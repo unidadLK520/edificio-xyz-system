@@ -135,6 +135,41 @@ export default function UsuariosPage() {
           </svg>
           <span>Registrar Usuario y Persona</span>
         </button>
+        {/* BOTÓN LIMPIAR AUDITORIA */}
+        <button
+          onClick={async () => {
+            try {
+              const res = await apiFetch('/api/v1/auditoria/export-prune', {
+                method: 'POST',
+              });
+              if (!res.ok) {
+                const err = await res.json().catch(() => ({}));
+                alert(err.message || 'Error al exportar auditoría');
+                return;
+              }
+              const blob = await res.blob();
+              const url = window.URL.createObjectURL(blob);
+              const a = document.createElement('a');
+              a.href = url;
+              a.download = 'auditoria_export.xlsx';
+              a.click();
+              window.URL.revokeObjectURL(url);
+            } catch (e) {
+              alert('Error de conexión al exportar auditoría');
+            }
+          }}
+          className="inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700 text-white font-semibold text-sm rounded-xl shadow-lg shadow-emerald-600/20 transition-all cursor-pointer mt-2"
+        >
+          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth="2"
+              d="M9 5l7 7-7 7"
+            />
+          </svg>
+          <span>Exportar y limpiar auditoría</span>
+        </button>
       </div>
 
       {/* ESTADO DE ERROR CUANDO NO HAY DATOS */}

@@ -14,6 +14,7 @@
     "check:t37-t38": "tsx scripts/verificar_t37_t38.ts"
   },
   "dependencies": {
+    "exceljs": "^4.4.0",
     "@edificio-xyz/database": "workspace:*",
     "bcryptjs": "^3.0.2",
     "cors": "^2.8.5",
