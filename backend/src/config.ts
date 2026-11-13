@@ -9,7 +9,10 @@ if (!jwtSecretEnv) {
   );
 }
 
+export const isDev = (process.env.NODE_ENV || 'development') === 'development';
 export const config = {
+  // ...
+  corsOrigin: isDev ? 'http://localhost:3000' : process.env.CORS_ORIGIN || 'https://edificio-xyz-system-frontend.vercel.app',
   port: parseInt(process.env.PORT || '4000', 10),
   nodeEnv: process.env.NODE_ENV || 'development',
   jwtSecret: new TextEncoder().encode(jwtSecretEnv),
