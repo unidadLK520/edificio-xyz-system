@@ -1,12 +1,22 @@
 // frontend/lib/api.ts
 // Cliente fetch centralizado con manejo de autenticación y errores del servidor
 
+function getCookie(name: string): string | null {
+  if (typeof window === 'undefined') return null
+  const value = `; ${document.cookie}`
+  const parts = value.split(`; ${name}=`)
+  if (parts.length === 2) {
+    return parts.pop()?.split(';').shift() || null
+  }
+  return null
+}
+
 export async function apiFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
   let res: Response
   try {
     let finalInit = init || {}
     if (typeof window !== 'undefined') {
-      const token = localStorage.getItem('auth_token')
+      const token = localStorage.getItem('auth_token') || getCookie('auth_token')
       if (token) {
         const existingHeaders = new Headers(finalInit.headers || {})
         if (!existingHeaders.has('Authorization')) {
