@@ -3,7 +3,7 @@
 
 import { NextResponse, type NextRequest } from 'next/server'
 
-const BACKEND_URL = process.env.BACKEND_URL || 'http://localhost:4000/api/v1'
+const BACKEND_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api/v1'
 
 export async function GET(request: NextRequest) {
   try {

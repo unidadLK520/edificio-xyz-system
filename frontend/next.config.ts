@@ -23,14 +23,6 @@ const nextConfig: NextConfig = {
   },
   experimental: {
     optimizePackageImports: ['lucide-react', 'jose', 'clsx', 'tailwind-merge']
-  },
-  async rewrites() {
-    return [
-      {
-        source: '/api/v1/:path*',
-        destination: 'http://localhost:4000/api/v1/:path*',
-      },
-    ]
   }
 }
 
