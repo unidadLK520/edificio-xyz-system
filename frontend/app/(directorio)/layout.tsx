@@ -6,16 +6,57 @@ import Image from 'next/image'
 import { usePathname } from 'next/navigation'
 import ThemeToggle from '@/components/ThemeToggle'
 import edificioBg from '@/public/images/edificio_bg.jpg'
-import { Building2, FileBarChart, ShieldAlert, LogOut, Menu, X, Briefcase } from 'lucide-react'
+import {
+  Building2,
+  FileBarChart,
+  ShieldAlert,
+  LogOut,
+  Menu,
+  X,
+  Briefcase,
+  Megaphone,
+  Receipt,
+  Users,
+  Wallet,
+  Users2,
+  UserCog,
+  LineChart,
+  Landmark
+} from 'lucide-react'
 
 const DIRECTORIO_LINKS = [
   { href: '/reportes', label: 'Reportes y Finanzas', icon: FileBarChart },
-  { href: '/auditoria', label: 'Auditoría y Trazabilidad', icon: ShieldAlert }
+  { href: '/auditoria', label: 'Auditoría y Trazabilidad', icon: ShieldAlert },
+  { href: '/comunicados', label: 'Comunicados Oficiales', icon: Megaphone }
+]
+
+const ADMIN_LINKS = [
+  { href: '/usuarios', label: 'Gestión de Usuarios', icon: UserCog },
+  { href: '/residentes', label: 'Residentes', icon: Users },
+  { href: '/departamentos', label: 'Departamentos', icon: Building2 },
+  { href: '/expensas', label: 'Expensas', icon: Receipt },
+  { href: '/egresos', label: 'Ingresos y Egresos', icon: Wallet },
+  { href: '/flujo-caja', label: 'Flujo de Caja', icon: LineChart },
+  { href: '/conciliacion-bancaria', label: 'Conciliación Bancaria', icon: Landmark },
+  { href: '/personal', label: 'Personal', icon: Users2 },
+  { href: '/reportes', label: 'Reportes Financieros', icon: FileBarChart },
+  { href: '/comunicados', label: 'Comunicados', icon: Megaphone }
 ]
 
 export default function DirectorioLayout({ children }: { children: React.ReactNode }) {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
+  const [userRole, setUserRole] = useState<string>('DIRECTORIO')
   const pathname = usePathname()
+
+  React.useEffect(() => {
+    try {
+      const saved = localStorage.getItem('user_role')
+      if (saved) setUserRole(saved.toUpperCase())
+    } catch {}
+  }, [])
+
+  const currentLinks = userRole === 'ADMINISTRADOR' ? ADMIN_LINKS : DIRECTORIO_LINKS
+  const isAdmin = userRole === 'ADMINISTRADOR'
 
   return (
     <div className="flex h-screen bg-[#e6e2da] dark:bg-slate-950 text-[#262422] dark:text-slate-100 font-sans overflow-hidden transition-colors duration-300 selection:bg-blue-600 selection:text-white">
@@ -35,15 +76,28 @@ export default function DirectorioLayout({ children }: { children: React.ReactNo
       >
         <div className="p-5 border-b border-[#cec8bc] dark:border-slate-800 flex justify-between items-center bg-[#e3ded4] dark:bg-slate-950">
           <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-xl bg-purple-700 dark:bg-purple-600 text-white flex items-center justify-center shadow-md shadow-purple-800/20">
-              <Briefcase className="w-4 h-4" />
+            <div
+              className={`w-8 h-8 rounded-xl text-white flex items-center justify-center shadow-md ${
+                isAdmin
+                  ? 'bg-blue-700 dark:bg-indigo-600 shadow-blue-800/20'
+                  : 'bg-purple-700 dark:bg-purple-600 shadow-purple-800/20'
+              }`}
+            >
+              {isAdmin ? <Building2 className="w-4 h-4" /> : <Briefcase className="w-4 h-4" />}
             </div>
             <div>
               <h2 className="font-extrabold text-base text-[#262422] dark:text-white leading-tight">
-                Edificio <span className="text-purple-700 dark:text-purple-400">XYZ</span>
+                Edificio{' '}
+                <span className={isAdmin ? 'text-blue-700 dark:text-indigo-400' : 'text-purple-700 dark:text-purple-400'}>
+                  XYZ
+                </span>
               </h2>
-              <span className="text-[10px] text-purple-900 dark:text-purple-300 uppercase font-bold tracking-wider block">
-                Panel Directorio
+              <span
+                className={`text-[10px] uppercase font-bold tracking-wider block ${
+                  isAdmin ? 'text-blue-900 dark:text-blue-300' : 'text-purple-900 dark:text-purple-300'
+                }`}
+              >
+                {isAdmin ? 'Panel Administrador' : 'Panel Directorio'}
               </span>
             </div>
           </div>
@@ -56,7 +110,7 @@ export default function DirectorioLayout({ children }: { children: React.ReactNo
         </div>
 
         <nav className="flex-1 p-3 space-y-1.5 overflow-y-auto">
-          {DIRECTORIO_LINKS.map((link) => {
+          {currentLinks.map((link) => {
             const IconComp = link.icon
             const isActive = pathname === link.href || pathname.startsWith(link.href + '/')
             return (
@@ -66,12 +120,20 @@ export default function DirectorioLayout({ children }: { children: React.ReactNo
                 onClick={() => setIsMobileMenuOpen(false)}
                 className={`flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-semibold transition-all ${
                   isActive
-                    ? 'bg-[#ded8cc] text-purple-900 border border-purple-600/30 dark:bg-purple-600/20 dark:text-white dark:border-purple-500/40 shadow-xs'
+                    ? isAdmin
+                      ? 'bg-[#ded8cc] text-blue-900 border border-blue-600/30 dark:bg-indigo-600/20 dark:text-white dark:border-indigo-500/40 shadow-xs'
+                      : 'bg-[#ded8cc] text-purple-900 border border-purple-600/30 dark:bg-purple-600/20 dark:text-white dark:border-purple-500/40 shadow-xs'
                     : 'text-[#5c5750] hover:text-[#262422] hover:bg-[#e4dfd5] dark:text-slate-400 dark:hover:text-white dark:hover:bg-slate-800/60'
                 }`}
               >
                 <IconComp
-                  className={`w-4 h-4 ${isActive ? 'text-purple-700 dark:text-purple-400' : 'text-[#7d776f]'}`}
+                  className={`w-4 h-4 ${
+                    isActive
+                      ? isAdmin
+                        ? 'text-blue-700 dark:text-indigo-400'
+                        : 'text-purple-700 dark:text-purple-400'
+                      : 'text-[#7d776f]'
+                  }`}
                 />
                 <span>{link.label}</span>
               </Link>

@@ -6,7 +6,7 @@ import Image from 'next/image'
 import { usePathname } from 'next/navigation'
 import ThemeToggle from '@/components/ThemeToggle'
 import edificioBg from '@/public/images/edificio_bg.jpg'
-import { Building2, Receipt, Users, Wallet, Users2, UserCog, LogOut, Menu, X, LineChart, Landmark, Megaphone } from 'lucide-react'
+import { Building2, Receipt, Users, Wallet, Users2, UserCog, LogOut, Menu, X, LineChart, Landmark, Megaphone, FileBarChart } from 'lucide-react'
 
 const ADMIN_LINKS = [
   { href: '/usuarios', label: 'Gestión de Usuarios', icon: UserCog },
@@ -17,6 +17,7 @@ const ADMIN_LINKS = [
   { href: '/flujo-caja', label: 'Flujo de Caja', icon: LineChart },
   { href: '/conciliacion-bancaria', label: 'Conciliación Bancaria', icon: Landmark },
   { href: '/personal', label: 'Personal', icon: Users2 },
+  { href: '/reportes', label: 'Reportes Financieros', icon: FileBarChart },
   { href: '/comunicados', label: 'Comunicados', icon: Megaphone }
 ]
 

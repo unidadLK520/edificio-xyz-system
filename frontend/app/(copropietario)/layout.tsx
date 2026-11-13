@@ -20,7 +20,8 @@ import {
   Users2,
   UserCog,
   LineChart,
-  Landmark
+  Landmark,
+  FileBarChart
 } from 'lucide-react'
 
 const ADMIN_NAV_LINKS = [
@@ -32,6 +33,7 @@ const ADMIN_NAV_LINKS = [
   { href: '/flujo-caja', label: 'Flujo de Caja', icon: LineChart },
   { href: '/conciliacion-bancaria', label: 'Conciliación Bancaria', icon: Landmark },
   { href: '/personal', label: 'Personal', icon: Users2 },
+  { href: '/reportes', label: 'Reportes Financieros', icon: FileBarChart },
   { href: '/comunicados', label: 'Comunicados', icon: Megaphone }
 ]
 
