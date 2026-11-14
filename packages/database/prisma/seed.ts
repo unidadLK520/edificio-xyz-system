@@ -181,26 +181,85 @@ async function main() {
     },
   });
 
-  // 6. Departamentos
+  // Copropietario oficial del pliego de evaluación (Requerimiento C 1.1)
+  const pJuanPerez = await prisma.persona.upsert({
+    where: { ciNit: '5544332' },
+    update: {},
+    create: {
+      nombres: 'Juan',
+      apellidos: 'Perez',
+      ciNit: '5544332',
+      telefono: '+591 70011223',
+      correo: 'juan.perez@edificioxyz.com',
+      direccion: '[Estado Civil: Casado | Ocupantes: Con 2 hijos (viven 4 personas)] Av. América #123',
+    },
+  });
+
+  // Tipologías de Departamentos (Requerimiento C 2.1)
+  const tipoA = await prisma.tipoDepartamento.upsert({
+    where: { nombre: 'Tipo A' },
+    update: { montoExpensa: 300, areaM2: 60 },
+    create: { nombre: 'Tipo A', montoExpensa: 300, areaM2: 60, activo: true },
+  });
+  const tipoB = await prisma.tipoDepartamento.upsert({
+    where: { nombre: 'Tipo B' },
+    update: { montoExpensa: 350, areaM2: 80 },
+    create: { nombre: 'Tipo B', montoExpensa: 350, areaM2: 80, activo: true },
+  });
+  const tipoC = await prisma.tipoDepartamento.upsert({
+    where: { nombre: 'Tipo C' },
+    update: { montoExpensa: 400, areaM2: 100 },
+    create: { nombre: 'Tipo C', montoExpensa: 400, areaM2: 100, activo: true },
+  });
+
+  // 6. Departamentos (Requerimiento C 1.2 y C 2.1)
   const d101 = await prisma.departamento.upsert({
     where: { numero: '101' },
-    update: {},
+    update: { idTipo: tipoB.idTipo },
     create: {
       numero: '101',
       piso: 1,
-      areaM2: 85.5,
+      areaM2: 80.0,
+      idTipo: tipoB.idTipo,
       idPropietario: p1.idPersona,
+      estado: 'Ocupado',
+    },
+  });
+
+  const dA1 = await prisma.departamento.upsert({
+    where: { numero: 'A1' },
+    update: { idTipo: tipoA.idTipo },
+    create: {
+      numero: 'A1',
+      piso: 1,
+      areaM2: 60.0,
+      idTipo: tipoA.idTipo,
+      idPropietario: p2.idPersona,
+      estado: 'Ocupado',
+    },
+  });
+
+  const dB5 = await prisma.departamento.upsert({
+    where: { numero: 'B5' },
+    update: { idTipo: tipoB.idTipo, idPropietario: pJuanPerez.idPersona },
+    create: {
+      numero: 'B5',
+      piso: 2,
+      areaM2: 80.0,
+      idTipo: tipoB.idTipo,
+      idPropietario: pJuanPerez.idPersona,
       estado: 'Ocupado',
     },
   });
 
   const d102 = await prisma.departamento.upsert({
     where: { numero: '102' },
-    update: {},
+    update: { idTipo: tipoB.idTipo },
     create: {
       numero: '102',
       piso: 1,
-      areaM2: 92.0,
+      areaM2: 80.0,
+      idTipo: tipoB.idTipo,
       idPropietario: p2.idPersona,
       estado: 'Ocupado',
     },
@@ -208,11 +267,12 @@ async function main() {
 
   const d201 = await prisma.departamento.upsert({
     where: { numero: '201' },
-    update: {},
+    update: { idTipo: tipoC.idTipo },
     create: {
       numero: '201',
       piso: 2,
-      areaM2: 120.0,
+      areaM2: 100.0,
+      idTipo: tipoC.idTipo,
       idPropietario: p3.idPersona,
       estado: 'Ocupado',
     },
@@ -220,16 +280,28 @@ async function main() {
 
   const d202 = await prisma.departamento.upsert({
     where: { numero: '202' },
-    update: {},
+    update: { idTipo: tipoB.idTipo },
     create: {
       numero: '202',
       piso: 2,
-      areaM2: 88.0,
+      areaM2: 80.0,
+      idTipo: tipoB.idTipo,
       estado: 'Desocupado',
     },
   });
 
-  // Parqueos y Bauleras
+  // Parqueos y Bauleras (Requerimiento C 1.2: Dpto B5 tiene el Parqueo 21 y la Baulera 15)
+  await prisma.parqueo.upsert({
+    where: { numero: 'Parqueo 21' },
+    update: { idDepartamento: dB5.idDepartamento },
+    create: { numero: 'Parqueo 21', idDepartamento: dB5.idDepartamento, estado: 'Ocupado' },
+  });
+  await prisma.baulera.upsert({
+    where: { numero: 'Baulera 15' },
+    update: { idDepartamento: dB5.idDepartamento },
+    create: { numero: 'Baulera 15', idDepartamento: dB5.idDepartamento, estado: 'Ocupado' },
+  });
+
   await prisma.parqueo.upsert({
     where: { numero: 'P-01' },
     update: {},
@@ -285,6 +357,63 @@ async function main() {
       periodo: primerDiaMes,
       monto: 480.0,
       saldoPendiente: 480.0,
+      estado: 'Pendiente',
+      fechaVencimiento: fechaVenc,
+    },
+  });
+
+  // Expensas oficiales del pliego (Requerimiento C 2.3)
+  // Dpto A1: Tipo A (300 Bs) + Agua (25 Bs) + Extra Pintura Edificio (250 Bs) = Total 575 Bs
+  await prisma.expensa.upsert({
+    where: {
+      idDepartamento_periodo: {
+        idDepartamento: dA1.idDepartamento,
+        periodo: primerDiaMes,
+      },
+    },
+    update: {
+      monto: 575.0,
+      montoBase: 300.0,
+      montoAgua: 25.0,
+      saldoPendiente: 575.0,
+      estado: 'Pendiente',
+      fechaVencimiento: fechaVenc,
+    },
+    create: {
+      idDepartamento: dA1.idDepartamento,
+      periodo: primerDiaMes,
+      monto: 575.0,
+      montoBase: 300.0,
+      montoAgua: 25.0,
+      saldoPendiente: 575.0,
+      estado: 'Pendiente',
+      fechaVencimiento: fechaVenc,
+    },
+  });
+
+  // Dpto B5: Tipo B (350 Bs) + Agua (25 Bs) + Extra Pintura Edificio (250 Bs) = Total 625 Bs
+  await prisma.expensa.upsert({
+    where: {
+      idDepartamento_periodo: {
+        idDepartamento: dB5.idDepartamento,
+        periodo: primerDiaMes,
+      },
+    },
+    update: {
+      monto: 625.0,
+      montoBase: 350.0,
+      montoAgua: 25.0,
+      saldoPendiente: 625.0,
+      estado: 'Pendiente',
+      fechaVencimiento: fechaVenc,
+    },
+    create: {
+      idDepartamento: dB5.idDepartamento,
+      periodo: primerDiaMes,
+      monto: 625.0,
+      montoBase: 350.0,
+      montoAgua: 25.0,
+      saldoPendiente: 625.0,
       estado: 'Pendiente',
       fechaVencimiento: fechaVenc,
     },
