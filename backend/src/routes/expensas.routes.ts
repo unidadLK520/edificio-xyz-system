@@ -76,7 +76,9 @@ const pagoSchema = z.object({
   metodoPago: z.enum(['Efectivo', 'Transferencia', 'Cheque', 'QR']).optional(),
   esAnticipado: z.boolean().default(false),
   idCuenta: z.number().int().positive().optional(),
-  comprobanteUrl: z.string().optional()
+  comprobanteUrl: z.string().optional(),
+  esSimulacion: z.boolean().optional(),
+  fechaPagoSimulada: z.string().optional()
 })
 
 const aplicarAnticipoSchema = z.object({
@@ -1493,6 +1495,71 @@ expensasRouter.post(
       const expensa = await prisma.expensa.findUnique({ where: { idExpensa: expensaId } })
       if (!expensa) {
         res.status(404).json({ error: 'Not Found', message: 'Expensa no encontrada' })
+        return
+      }
+
+      // Soporte para Simulación de Pago QR (Requerimiento C 4)
+      if (result.data.esSimulacion) {
+        const montoEfectivo =
+          montoPagado > 0 ? montoPagado : Number(expensa.saldoPendiente || expensa.monto || 300)
+        const reciboSimulado = {
+          idPago: 900000 + (expensaId % 1000),
+          idExpensa: expensaId,
+          montoPagado: montoEfectivo,
+          interesPagado: Number(interesPagado || 0),
+          totalPagado: Math.round((montoEfectivo + Number(interesPagado || 0)) * 100) / 100,
+          metodoPago: metodoPago || 'QR',
+          fechaPago: result.data.fechaPagoSimulada || new Date().toISOString(),
+          comprobanteUrl: comprobanteUrl || `QR-SIM-${Date.now()}`,
+          esSimulacion: true,
+          estado: 'Pagado'
+        }
+
+        // Si la expensa está pendiente, registrar también el pago real en la base de datos
+        if (expensa.estado !== 'Pagado' && Number(expensa.saldoPendiente) > 0) {
+          const nuevoSaldo = Math.max(
+            0,
+            Math.round((Number(expensa.saldoPendiente) - montoEfectivo) * 100) / 100
+          )
+          await prisma.expensa.update({
+            where: { idExpensa: expensaId },
+            data: {
+              saldoPendiente: nuevoSaldo,
+              estado: nuevoSaldo === 0 ? 'Pagado' : 'Parcial'
+            }
+          })
+          await prisma.pago.create({
+            data: {
+              idExpensa: expensaId,
+              idDepartamento: expensa.idDepartamento,
+              idPersonaPagador,
+              montoPagado: montoEfectivo,
+              interesPagado: Number(interesPagado || 0),
+              metodoPago: 'QR',
+              comprobanteUrl: reciboSimulado.comprobanteUrl,
+              idUsuarioRegistro: req.user?.idUsuario || null
+            }
+          })
+        }
+
+        await auditoriaService.registrarEvento({
+          tablaAfectada: 'pagos',
+          idRegistro: String(reciboSimulado.idPago),
+          accion: 'SIMULACION_PAGO_QR',
+          resultado: 'EXITO',
+          datosNuevos: reciboSimulado,
+          idUsuario: req.user?.idUsuario || null
+        })
+
+        res.status(200).json({
+          message: 'Pago QR simulado con éxito',
+          pago: reciboSimulado,
+          expensa: {
+            ...expensa,
+            estado: 'Pagado',
+            saldoPendiente: 0
+          }
+        })
         return
       }
 

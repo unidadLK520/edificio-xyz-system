@@ -2162,6 +2162,7 @@ export default function ExpensasPage() {
                             type="button"
                             onClick={() => {
                               if (expensaSim) {
+                                setFechaSistema(simFechaLibre)
                                 setExpensaParaQr({
                                   ...expensaSim,
                                   montoTotalSimulado: simRes.totalCobrar,
@@ -2405,6 +2406,7 @@ export default function ExpensasPage() {
                                       <button
                                         type="button"
                                         onClick={() => {
+                                          setFechaSistema(simFechaLibre)
                                           setExpensaParaQr({
                                             ...item.expensa,
                                             montoTotalSimulado: item.res.totalCobrar,
