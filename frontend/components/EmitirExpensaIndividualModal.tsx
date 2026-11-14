@@ -4,34 +4,61 @@
 'use client'
 
 import React, { useState, useEffect, useMemo } from 'react'
-import { PlusCircle, X, AlertCircle, Calendar, Building2, Droplets, Sparkles, CheckCircle2 } from 'lucide-react'
+import {
+  PlusCircle,
+  X,
+  AlertCircle,
+  AlertTriangle,
+  Calendar,
+  Building2,
+  Droplets,
+  Sparkles,
+  CheckCircle2,
+  RefreshCw
+} from 'lucide-react'
 import { apiFetch } from '@/lib/api'
 import { fechaSolo } from '@/lib/fecha'
 
-interface DepartamentoOption {
+export interface DepartamentoOption {
   idDepartamento: number
   numero: string
   tipologia?: string
   expensaBase?: number
 }
 
+interface ExpensaItemMin {
+  idDepartamento: number
+  periodo?: string
+  monto?: number
+  montoBase?: number
+  montoAgua?: number
+  estado?: string
+}
+
 interface EmitirExpensaIndividualModalProps {
   isOpen: boolean
   onClose: () => void
   departamentos: DepartamentoOption[]
+  expensasExistentes?: ExpensaItemMin[]
   defaultPeriodo?: string
   defaultVencimiento?: string
-  onSuccess: (idExpensa: number, mensaje: string, extraData?: { concepto: string; monto: number }) => void
+  onSuccess: (
+    idExpensa: number,
+    mensaje: string,
+    extraData?: { concepto: string; monto: number }
+  ) => void
 }
 
 export default function EmitirExpensaIndividualModal({
   isOpen,
   onClose,
-  departamentos,
+  departamentos: departamentosProp,
+  expensasExistentes = [],
   defaultPeriodo = '2026-11-01',
   defaultVencimiento = '2026-11-10',
   onSuccess
 }: EmitirExpensaIndividualModalProps) {
+  const [internalDeptos, setInternalDeptos] = useState<DepartamentoOption[]>([])
   const [selectedDeptoId, setSelectedDeptoId] = useState<number | ''>('')
   const [periodo, setPeriodo] = useState<string>(defaultPeriodo)
   const [fechaVencimiento, setFechaVencimiento] = useState<string>(defaultVencimiento)
@@ -40,18 +67,44 @@ export default function EmitirExpensaIndividualModal({
   const [incluirExtra, setIncluirExtra] = useState<boolean>(false)
   const [extraConcepto, setExtraConcepto] = useState<string>('Extra Pintura Edificio')
   const [extraMonto, setExtraMonto] = useState<number | ''>(10)
+  const [actualizarSiExiste, setActualizarSiExiste] = useState<boolean>(false)
 
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
 
+  // Cargar departamentos por fallback si la prop viene vacía
+  useEffect(() => {
+    if (departamentosProp && departamentosProp.length > 0) {
+      setInternalDeptos(departamentosProp)
+    } else if (isOpen) {
+      apiFetch('/api/v1/departamentos?limit=100')
+        .then((res) => res.json())
+        .then((json) => {
+          if (json.data && Array.isArray(json.data)) {
+            const mapped = json.data.map((d: any) => ({
+              idDepartamento: d.idDepartamento,
+              numero: d.numero,
+              tipologia: d.tipo?.nombre || d.tipologia || 'Tipo A'
+            }))
+            setInternalDeptos(mapped)
+          }
+        })
+        .catch((e) => console.error('Error cargando deptos en modal:', e))
+    }
+  }, [departamentosProp, isOpen])
+
+  const listaDeptos = useMemo(() => {
+    return departamentosProp && departamentosProp.length > 0 ? departamentosProp : internalDeptos
+  }, [departamentosProp, internalDeptos])
+
   // Seleccionar el primer departamento por defecto al abrir
   useEffect(() => {
-    if (departamentos.length > 0 && !selectedDeptoId) {
-      const primerDepto = departamentos[0]
+    if (listaDeptos.length > 0 && !selectedDeptoId) {
+      const primerDepto = listaDeptos[0]
       setSelectedDeptoId(primerDepto.idDepartamento)
       determinarMontoBaseSugerido(primerDepto.tipologia)
     }
-  }, [departamentos, selectedDeptoId, isOpen])
+  }, [listaDeptos, selectedDeptoId, isOpen])
 
   const determinarMontoBaseSugerido = (tipologia?: string) => {
     const t = (tipologia || '').toLowerCase()
@@ -62,11 +115,21 @@ export default function EmitirExpensaIndividualModal({
 
   const handleDeptoChange = (idDepto: number) => {
     setSelectedDeptoId(idDepto)
-    const depto = departamentos.find((d) => d.idDepartamento === idDepto)
+    const depto = listaDeptos.find((d) => d.idDepartamento === idDepto)
     if (depto) {
       determinarMontoBaseSugerido(depto.tipologia)
     }
   }
+
+  // Detectar si ya existe expensa para este depto y período
+  const expensaExistente = useMemo(() => {
+    if (!selectedDeptoId || !periodo || !expensasExistentes) return null
+    const [y, m] = periodo.split('-')
+    const prefijo = `${y}-${m}`
+    return expensasExistentes.find(
+      (e) => e.idDepartamento === Number(selectedDeptoId) && (e.periodo || '').startsWith(prefijo)
+    )
+  }, [selectedDeptoId, periodo, expensasExistentes])
 
   // Desglose calculado en vivo según la fórmula de la pizarra
   const totalCalculado = useMemo(() => {
@@ -121,7 +184,8 @@ export default function EmitirExpensaIndividualModal({
           fechaVencimiento,
           montoBase: baseNum,
           montoAgua: aguaNum,
-          monto: totalCalculado
+          monto: totalCalculado,
+          actualizarSiExiste: Boolean(actualizarSiExiste || expensaExistente)
         })
       })
 
@@ -139,14 +203,17 @@ export default function EmitirExpensaIndividualModal({
         return
       }
 
-      const idExpensaCreada = data.idExpensa || (data.data && data.data.idExpensa)
-      const deptoObj = departamentos.find((d) => d.idDepartamento === Number(selectedDeptoId))
+      const idExpensaCreada =
+        data.idExpensa || (data.data && data.data.idExpensa) || expensaExistente?.idDepartamento
+      const deptoObj = listaDeptos.find((d) => d.idDepartamento === Number(selectedDeptoId))
       const deptoLabel = deptoObj ? `Dpto. ${deptoObj.numero}` : `Dpto. #${selectedDeptoId}`
 
       onSuccess(
         idExpensaCreada,
-        `¡Expensa individual emitida exitosamente para ${deptoLabel} por Bs. ${totalCalculado.toFixed(2)}!`,
-        incluirExtra && extraNum > 0 ? { concepto: extraConcepto.trim() || 'Extra', monto: extraNum } : undefined
+        `¡Expensa individual ${actualizarSiExiste ? 'actualizada' : 'emitida'} exitosamente para ${deptoLabel} por Bs. ${totalCalculado.toFixed(2)}!`,
+        incluirExtra && extraNum > 0
+          ? { concepto: extraConcepto.trim() || 'Extra', monto: extraNum }
+          : undefined
       )
       onClose()
     } catch (err: any) {
@@ -182,11 +249,55 @@ export default function EmitirExpensaIndividualModal({
           </button>
         </div>
 
+        {/* Alerta si ya existe expensa en el período */}
+        {expensaExistente && (
+          <div className="p-3 bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-800 rounded-2xl text-xs text-amber-900 dark:text-amber-200 space-y-1.5 animate-in fade-in duration-150">
+            <div className="flex items-center gap-2 font-bold">
+              <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
+              <span>Ya existe expensa registrada para este departamento en este mes</span>
+            </div>
+            <p className="text-[11px] text-amber-800 dark:text-amber-300">
+              Monto actual: <b>Bs. {Number(expensaExistente.monto || 0).toFixed(2)}</b> • Estado:{' '}
+              <b>{expensaExistente.estado || 'Pendiente'}</b>
+            </p>
+            <label className="flex items-center gap-2 cursor-pointer pt-1 font-semibold text-[11px] text-amber-950 dark:text-amber-100">
+              <input
+                type="checkbox"
+                checked={actualizarSiExiste}
+                onChange={(e) => setActualizarSiExiste(e.target.checked)}
+                className="w-4 h-4 rounded text-blue-600 cursor-pointer"
+              />
+              <span>
+                Actualizar los montos de la expensa existente con los valores de este formulario
+              </span>
+            </label>
+            <p className="text-[10px] text-amber-700 dark:text-amber-400">
+              (Si deseas emitir para otro mes, puedes cambiar la fecha del período abajo a otro
+              mes).
+            </p>
+          </div>
+        )}
+
         {/* Error inline */}
         {errorMessage && (
-          <div className="p-3 bg-rose-100 dark:bg-rose-950/70 border border-rose-300 dark:border-rose-800 text-rose-900 dark:text-rose-200 rounded-xl flex items-center gap-2 text-xs animate-in shake duration-200">
-            <AlertCircle className="w-4 h-4 shrink-0 text-rose-600 dark:text-rose-400" />
-            <span>{errorMessage}</span>
+          <div className="p-3 bg-rose-100 dark:bg-rose-950/70 border border-rose-300 dark:border-rose-800 text-rose-900 dark:text-rose-200 rounded-xl space-y-2 text-xs animate-in shake duration-200">
+            <div className="flex items-center gap-2">
+              <AlertCircle className="w-4 h-4 shrink-0 text-rose-600 dark:text-rose-400" />
+              <span>{errorMessage}</span>
+            </div>
+            {errorMessage.includes('Ya existe') && !actualizarSiExiste && (
+              <button
+                type="button"
+                onClick={() => {
+                  setActualizarSiExiste(true)
+                  setErrorMessage(null)
+                }}
+                className="px-3 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-700 text-white font-bold text-[11px] transition-colors cursor-pointer flex items-center gap-1.5"
+              >
+                <RefreshCw className="w-3.5 h-3.5" />
+                Actualizar expensa existente de este mes
+              </button>
+            )}
           </div>
         )}
 
@@ -200,13 +311,15 @@ export default function EmitirExpensaIndividualModal({
               required
               value={selectedDeptoId}
               onChange={(e) => handleDeptoChange(Number(e.target.value))}
-              className="w-full px-3 py-2 rounded-xl bg-[#dfd9ce] dark:bg-slate-800 border border-[#cec8bc] dark:border-slate-700 text-xs text-[#262422] dark:text-white font-medium"
+              className="w-full px-3 py-2 rounded-xl bg-[#dfd9ce] dark:bg-slate-800 border border-[#cec8bc] dark:border-slate-700 text-xs text-[#262422] dark:text-white font-medium cursor-pointer"
             >
               <option value="" disabled>
-                Seleccione un departamento...
+                {listaDeptos.length === 0
+                  ? 'Cargando departamentos...'
+                  : 'Seleccione un departamento...'}
               </option>
-              {departamentos.map((d) => (
-                <option key={d.idDepartamento} value={d.idDepartamento}>
+              {listaDeptos.map((d, idx) => (
+                <option key={`depto-opt-${d.idDepartamento}-${idx}`} value={d.idDepartamento}>
                   Dpto. {d.numero} {d.tipologia ? `— (${d.tipologia})` : ''}
                 </option>
               ))}
@@ -214,7 +327,7 @@ export default function EmitirExpensaIndividualModal({
           </div>
 
           {/* Período y Fecha de Vencimiento */}
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label className="block font-bold text-[#262422] dark:text-white mb-1">
                 Período (Mes/Año) *
@@ -245,7 +358,7 @@ export default function EmitirExpensaIndividualModal({
           </div>
 
           {/* Desglose de Montos: Base y Agua */}
-          <div className="grid grid-cols-2 gap-3 pt-1">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
             <div>
               <label className="block font-bold text-[#262422] dark:text-white mb-1">
                 Expensa Base (Bs.) *
@@ -256,9 +369,7 @@ export default function EmitirExpensaIndividualModal({
                 min="1"
                 required
                 value={montoBase}
-                onChange={(e) =>
-                  setMontoBase(e.target.value === '' ? '' : Number(e.target.value))
-                }
+                onChange={(e) => setMontoBase(e.target.value === '' ? '' : Number(e.target.value))}
                 placeholder="300"
                 className="w-full px-3 py-2 rounded-xl bg-[#dfd9ce] dark:bg-slate-800 border border-[#cec8bc] dark:border-slate-700 font-mono font-bold text-sm text-[#262422] dark:text-white"
               />
@@ -274,9 +385,7 @@ export default function EmitirExpensaIndividualModal({
                 step="0.01"
                 min="0"
                 value={montoAgua}
-                onChange={(e) =>
-                  setMontoAgua(e.target.value === '' ? '' : Number(e.target.value))
-                }
+                onChange={(e) => setMontoAgua(e.target.value === '' ? '' : Number(e.target.value))}
                 placeholder="20"
                 className="w-full px-3 py-2 rounded-xl bg-[#dfd9ce] dark:bg-slate-800 border border-[#cec8bc] dark:border-slate-700 font-mono font-bold text-sm text-blue-700 dark:text-blue-400"
               />
@@ -369,7 +478,11 @@ export default function EmitirExpensaIndividualModal({
               disabled={isSubmitting}
               className="px-5 py-2.5 rounded-xl bg-blue-700 hover:bg-blue-600 active:bg-blue-800 text-white text-xs font-bold shadow-md transition-all cursor-pointer disabled:opacity-50"
             >
-              {isSubmitting ? 'Emitiendo expensa...' : '⚡ Emitir Expensa Individual'}
+              {isSubmitting
+                ? 'Emitiendo expensa...'
+                : actualizarSiExiste || expensaExistente
+                  ? '⚡ Actualizar Expensa Individual'
+                  : '⚡ Emitir Expensa Individual'}
             </button>
           </div>
         </form>
@@ -377,4 +490,3 @@ export default function EmitirExpensaIndividualModal({
     </div>
   )
 }
-
