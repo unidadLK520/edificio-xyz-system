@@ -1086,10 +1086,10 @@ export default function ExpensasPage() {
       </div>
 
       {/* PESTAÑAS */}
-      <div className="flex border-b border-[#cec8bc] dark:border-slate-800 gap-2">
+      <div className="flex border-b border-[#cec8bc] dark:border-slate-800 gap-2 overflow-x-auto pb-1 scrollbar-thin">
         <button
           onClick={() => setActiveTab('todas')}
-          className={`flex items-center gap-2 px-4 py-2.5 font-bold text-xs border-b-2 transition-all cursor-pointer ${
+          className={`flex items-center gap-2 px-4 py-2.5 font-bold text-xs border-b-2 transition-all cursor-pointer shrink-0 whitespace-nowrap ${
             activeTab === 'todas'
               ? 'border-emerald-600 text-emerald-800 dark:border-emerald-400 dark:text-emerald-400'
               : 'border-transparent text-[#7d776f] dark:text-slate-400'
@@ -1100,7 +1100,7 @@ export default function ExpensasPage() {
         </button>
         <button
           onClick={() => setActiveTab('cuotas')}
-          className={`flex items-center gap-2 px-4 py-2.5 font-bold text-xs border-b-2 transition-all cursor-pointer ${
+          className={`flex items-center gap-2 px-4 py-2.5 font-bold text-xs border-b-2 transition-all cursor-pointer shrink-0 whitespace-nowrap ${
             activeTab === 'cuotas'
               ? 'border-blue-600 text-blue-800 dark:border-blue-400 dark:text-blue-400'
               : 'border-transparent text-[#7d776f] dark:text-slate-400'
@@ -1111,7 +1111,7 @@ export default function ExpensasPage() {
         </button>
         <button
           onClick={() => setActiveTab('morosos')}
-          className={`flex items-center gap-2 px-4 py-2.5 font-bold text-xs border-b-2 transition-all cursor-pointer ${
+          className={`flex items-center gap-2 px-4 py-2.5 font-bold text-xs border-b-2 transition-all cursor-pointer shrink-0 whitespace-nowrap ${
             activeTab === 'morosos'
               ? 'border-red-600 text-red-800 dark:border-red-400 dark:text-red-400'
               : 'border-transparent text-[#7d776f] dark:text-slate-400'
@@ -1122,7 +1122,7 @@ export default function ExpensasPage() {
         </button>
         <button
           onClick={() => setActiveTab('simulador')}
-          className={`flex items-center gap-2 px-4 py-2.5 font-bold text-xs border-b-2 transition-all cursor-pointer ${
+          className={`flex items-center gap-2 px-4 py-2.5 font-bold text-xs border-b-2 transition-all cursor-pointer shrink-0 whitespace-nowrap ${
             activeTab === 'simulador'
               ? 'border-indigo-600 text-indigo-800 dark:border-indigo-400 dark:text-indigo-400'
               : 'border-transparent text-[#7d776f] dark:text-slate-400'
@@ -1198,8 +1198,8 @@ export default function ExpensasPage() {
 
           {/* TABLA DE EXPENSAS */}
           <div className="rounded-2xl bg-[#ede9e1] dark:bg-slate-900 border border-[#cec8bc] dark:border-slate-800 overflow-hidden shadow-sm">
-            <div className="overflow-x-auto">
-              <table className="w-full text-left border-collapse text-xs sm:text-sm">
+            <div className="overflow-x-auto scrollbar-thin">
+              <table className="w-full text-left border-collapse text-xs sm:text-sm min-w-[950px]">
                 <thead>
                   <tr className="border-b border-[#cec8bc] dark:border-slate-800 bg-[#dfd9ce]/60 dark:bg-slate-950/60 text-[#7d776f] dark:text-slate-400 uppercase text-[10px] sm:text-[11px] font-bold">
                     <th className="py-3 px-2.5">Tipo Dpto</th>
@@ -1508,8 +1508,8 @@ export default function ExpensasPage() {
               </span>
             </div>
 
-            <div className="overflow-x-auto">
-              <table className="w-full text-left border-collapse text-xs">
+            <div className="overflow-x-auto scrollbar-thin">
+              <table className="w-full text-left border-collapse text-xs min-w-[700px]">
                 <thead>
                   <tr className="border-b border-[#cec8bc] dark:border-slate-800 bg-[#dfd9ce]/60 dark:bg-slate-950/60 text-[#7d776f] dark:text-slate-400 uppercase text-[10px] font-bold">
                     <th className="py-3 px-3">Unidad</th>
@@ -1944,8 +1944,8 @@ export default function ExpensasPage() {
                             </span>
                           </div>
                         ) : (
-                          <div className="overflow-x-auto rounded-xl border border-[#cec8bc] dark:border-slate-800">
-                            <table className="w-full text-left text-xs">
+                          <div className="overflow-x-auto rounded-xl border border-[#cec8bc] dark:border-slate-800 scrollbar-thin">
+                            <table className="w-full text-left text-xs min-w-[550px]">
                               <thead className="bg-[#ede9e1] dark:bg-slate-900 text-[#7d776f] font-bold text-[10px] uppercase">
                                 <tr>
                                   <th className="py-2 px-3">Período de Atraso</th>
@@ -2206,8 +2206,8 @@ export default function ExpensasPage() {
                       </button>
                     </div>
 
-                    <div className="overflow-x-auto">
-                      <table className="w-full text-left text-xs">
+                    <div className="overflow-x-auto scrollbar-thin">
+                      <table className="w-full text-left text-xs min-w-[850px]">
                         <thead className="bg-[#ede9e1] dark:bg-slate-900 text-[#7d776f] font-bold text-[10px] uppercase">
                           <tr className="border-b border-[#cec8bc] dark:border-slate-800">
                             <th className="py-2.5 px-3">Dpto</th>

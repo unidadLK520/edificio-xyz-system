@@ -212,8 +212,8 @@ export default function DetalleMoraModal({
           </div>
 
           <div className="rounded-2xl bg-[#dfd9ce]/60 dark:bg-slate-950/60 border border-[#cec8bc] dark:border-slate-800 overflow-hidden shadow-xs">
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs border-collapse">
+            <div className="overflow-x-auto scrollbar-thin">
+              <table className="w-full text-left text-xs border-collapse min-w-[550px]">
                 <thead>
                   <tr className="border-b border-[#cec8bc] dark:border-slate-800 bg-[#dfd9ce] dark:bg-slate-900 text-[#7d776f] dark:text-slate-400 uppercase text-[10px] font-bold">
                     <th className="py-2.5 px-3">Mes Retraso</th>
