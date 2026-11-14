@@ -1046,9 +1046,9 @@ export default function ExpensasPage() {
                       </td>
                     </tr>
                   ) : (
-                    expensasFiltradas.map((item) => (
+                    expensasFiltradas.map((item, idx) => (
                       <tr
-                        key={item.idExpensa}
+                        key={item.idExpensa ? `exp-${item.idExpensa}-${idx}` : `dpto-${item.idDepartamento}-${item.periodo || idx}`}
                         className="hover:bg-[#dfd9ce]/40 dark:hover:bg-slate-800/40"
                       >
                         <td className="py-3.5 px-2.5">
@@ -1339,9 +1339,9 @@ export default function ExpensasPage() {
                       </td>
                     </tr>
                   ) : (
-                    expensas.map((item) => (
+                    expensas.map((item, idx) => (
                       <tr
-                        key={item.idExpensa}
+                        key={item.idExpensa ? `cuota-${item.idExpensa}-${idx}` : `cuota-${item.idDepartamento}-${idx}`}
                         className="hover:bg-[#dfd9ce]/40 dark:hover:bg-slate-800/40"
                       >
                         <td className="py-2.5 px-3 font-extrabold text-[#262422] dark:text-white">
@@ -1446,9 +1446,9 @@ export default function ExpensasPage() {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {expensas
               .filter((e) => e.estado === 'Moroso')
-              .map((m) => (
+              .map((m, idx) => (
                 <div
-                  key={m.idExpensa}
+                  key={m.idExpensa ? `moroso-${m.idExpensa}-${idx}` : `moroso-${m.idDepartamento}-${idx}`}
                   className="p-4 rounded-2xl bg-[#ede9e1] dark:bg-slate-900 border border-[#cec8bc] dark:border-slate-800 space-y-3"
                 >
                   <div className="flex justify-between items-start">
@@ -2035,9 +2035,9 @@ export default function ExpensasPage() {
                     {historialReglasMora.length === 0 ? (
                       <p className="text-[11px] text-[#7d776f]">No hay historial registrado.</p>
                     ) : (
-                      historialReglasMora.map((reg) => (
+                      historialReglasMora.map((reg, idx) => (
                         <div
-                          key={reg.idReglaMora}
+                          key={reg.idRegla ?? reg.idReglaMora ?? `regla-${idx}`}
                           className={`p-2 rounded-xl border text-[11px] flex justify-between items-center ${
                             reg.activa
                               ? 'bg-emerald-50 dark:bg-emerald-950/40 border-emerald-300 dark:border-emerald-800 text-emerald-900 dark:text-emerald-200'
