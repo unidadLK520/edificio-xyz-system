@@ -33,7 +33,10 @@ import {
   Sparkles,
   Clock,
   Layers,
-  TrendingUp
+  TrendingUp,
+  User,
+  Users,
+  Info
 } from 'lucide-react'
 import SimuladorFechaBar from '@/components/SimuladorFechaBar'
 import CobroQrSimuladorModal from '@/components/CobroQrSimuladorModal'
@@ -121,8 +124,13 @@ export default function ExpensasPage() {
   const [searchTerm, setSearchTerm] = useState('')
   const [filtroEstado, setFiltroEstado] = useState('Todos')
   const [filtroPeriodo, setFiltroPeriodo] = useState('Todos')
-  const [activeTab, setActiveTab] = useState<'todas' | 'cuotas' | 'morosos'>('todas')
+  const [activeTab, setActiveTab] = useState<'todas' | 'cuotas' | 'morosos' | 'simulador'>('todas')
   const [listadoMorosos, setListadoMorosos] = useState<any[]>([])
+
+  // Estado del Laboratorio de Simulación de Mora (Individual y Global)
+  const [modoSimulador, setModoSimulador] = useState<'individual' | 'global'>('individual')
+  const [simDptoId, setSimDptoId] = useState<number | ''>('')
+  const [simFechaLibre, setSimFechaLibre] = useState<string>('2027-01-13') // Caso docente: 2 meses y 3 días desde 10/Nov/2026
 
   const periodosDisponibles = useMemo(() => {
     const set = new Set<string>()
@@ -807,6 +815,102 @@ export default function ExpensasPage() {
     })
   }, [expensas, searchTerm, filtroEstado, filtroPeriodo, filtroTipoDpto])
 
+  // Helper para simulación de mora con fecha evaluada arbitraria (Individual y Global)
+  const calcularMoraSimulada = (
+    fechaVencimiento: string,
+    saldoBase: number,
+    fechaEvaluacion: string
+  ) => {
+    if (!fechaVencimiento) {
+      return {
+        aplicaMora: false,
+        diasRetraso: 0,
+        mesesMora: 0,
+        penalidadMes: 0,
+        montoMora: 0,
+        totalCobrar: saldoBase,
+        desglose: [] as Array<{
+          mesNum: number
+          concepto: string
+          rangoDias: string
+          diasEnEsteMes: number
+          esFraccion: boolean
+          penalidadMes: number
+          moraAcumulada: number
+          totalConMora: number
+        }>
+      }
+    }
+
+    const fActual = new Date(`${fechaEvaluacion}T00:00:00`)
+    const fVenc = new Date(`${fechaSolo(fechaVencimiento)}T00:00:00`)
+    const diffDias = Math.floor((fActual.getTime() - fVenc.getTime()) / (1000 * 60 * 60 * 24))
+    const diasGracia = politicaMora.diasGracia || 0
+
+    if (diffDias <= diasGracia) {
+      return {
+        aplicaMora: false,
+        diasRetraso: Math.max(0, diffDias),
+        mesesMora: 0,
+        penalidadMes: 0,
+        montoMora: 0,
+        totalCobrar: saldoBase,
+        desglose: [] as Array<{
+          mesNum: number
+          concepto: string
+          rangoDias: string
+          diasEnEsteMes: number
+          esFraccion: boolean
+          penalidadMes: number
+          moraAcumulada: number
+          totalConMora: number
+        }>
+      }
+    }
+
+    // Mes o fracción de mes iniciada (regla estándar de condominios)
+    const mesesMora = Math.max(1, Math.ceil(diffDias / 30))
+    const penalidadMes =
+      politicaMora.tipoPenalidad === 'fijo'
+        ? Number(politicaMora.montoFijo || 50)
+        : Math.round(((saldoBase * Number(politicaMora.porcentaje || 10)) / 100) * 100) / 100
+
+    const desglose = []
+    let acum = 0
+    for (let i = 1; i <= mesesMora; i++) {
+      acum = Math.round((acum + penalidadMes) * 100) / 100
+      const dDesde = (i - 1) * 30 + 1
+      const dHasta = Math.min(i * 30, diffDias)
+      const diasEnEsteMes = dHasta - dDesde + 1
+      const esUltimo = i === mesesMora
+      const esFraccion = esUltimo && diasEnEsteMes < 30
+
+      desglose.push({
+        mesNum: i,
+        concepto: esFraccion
+          ? `Mes ${i} de retraso (Fracción de ${diasEnEsteMes} día${diasEnEsteMes > 1 ? 's' : ''} transcurrido${diasEnEsteMes > 1 ? 's' : ''})`
+          : `Mes ${i} completo (30 días de retraso)`,
+        rangoDias: `Día +${dDesde} a +${dHasta}`,
+        diasEnEsteMes,
+        esFraccion,
+        penalidadMes,
+        moraAcumulada: acum,
+        totalConMora: Math.round((saldoBase + acum) * 100) / 100
+      })
+    }
+
+    const montoMoraTotal = Math.round(penalidadMes * mesesMora * 100) / 100
+    return {
+      aplicaMora: true,
+      diasRetraso: diffDias,
+      mesesMora,
+      penalidadMes,
+      montoMora: montoMoraTotal,
+      totalCobrar: Math.round((saldoBase + montoMoraTotal) * 100) / 100,
+      desglose
+    }
+  }
+
   return (
     <div className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto space-y-6">
       {/* Toast */}
@@ -1015,6 +1119,17 @@ export default function ExpensasPage() {
         >
           <UserX className="w-4 h-4" />
           Listado de Morosos ({expensas.filter((e) => e.estado === 'Moroso').length})
+        </button>
+        <button
+          onClick={() => setActiveTab('simulador')}
+          className={`flex items-center gap-2 px-4 py-2.5 font-bold text-xs border-b-2 transition-all cursor-pointer ${
+            activeTab === 'simulador'
+              ? 'border-indigo-600 text-indigo-800 dark:border-indigo-400 dark:text-indigo-400'
+              : 'border-transparent text-[#7d776f] dark:text-slate-400'
+          }`}
+        >
+          <Sparkles className="w-4 h-4 text-amber-500" />
+          Simulador de Cobro & Mora
         </button>
       </div>
 
@@ -1496,7 +1611,7 @@ export default function ExpensasPage() {
             </div>
           </div>
         </div>
-      ) : (
+      ) : activeTab === 'morosos' ? (
         /* VISTA DE MOROSOS */
         <div className="space-y-4">
           <div className="p-4 rounded-2xl bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-900/50 flex justify-between items-center">
@@ -1573,6 +1688,646 @@ export default function ExpensasPage() {
                 </div>
               ))}
           </div>
+        </div>
+      ) : (
+        /* ========================================================
+           VISTA SIMULADOR DE COBRO & MORA (INDIVIDUAL Y GLOBAL)
+           ======================================================== */
+        <div className="space-y-6">
+          {/* Header con Switch 1 Dpto vs Todo el Edificio */}
+          <div className="p-4 sm:p-5 rounded-2xl bg-indigo-50/70 dark:bg-indigo-950/40 border border-indigo-200 dark:border-indigo-900/60 shadow-xs flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+            <div>
+              <div className="flex items-center gap-2">
+                <Sparkles className="w-5 h-5 text-indigo-700 dark:text-indigo-400" />
+                <h3 className="font-black text-indigo-950 dark:text-indigo-200 text-sm sm:text-base">
+                  Laboratorio de Simulación: Mora y Cobros por QR
+                </h3>
+              </div>
+              <p className="text-xs text-indigo-800 dark:text-indigo-300 mt-1 max-w-2xl">
+                Simula cómo se aplica la mora en un departamento puntual (incluyendo casos de varios meses y días) o analiza el impacto financiero global sobre todos los morosos del edificio.
+              </p>
+            </div>
+
+            {/* Switch: 1 Dpto vs Todos los Morosos */}
+            <div className="flex bg-[#ede9e1] dark:bg-slate-900 p-1 rounded-xl border border-indigo-300 dark:border-slate-700 shrink-0 shadow-inner">
+              <button
+                type="button"
+                onClick={() => setModoSimulador('individual')}
+                className={`px-3.5 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
+                  modoSimulador === 'individual'
+                    ? 'bg-indigo-700 text-white shadow-sm'
+                    : 'text-[#66615b] dark:text-slate-400 hover:text-[#262422]'
+                }`}
+              >
+                <User className="w-4 h-4" />
+                <span>1 Departamento (Individual)</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setModoSimulador('global')}
+                className={`px-3.5 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
+                  modoSimulador === 'global'
+                    ? 'bg-indigo-700 text-white shadow-sm'
+                    : 'text-[#66615b] dark:text-slate-400 hover:text-[#262422]'
+                }`}
+              >
+                <Users className="w-4 h-4" />
+                <span>Todos los Morosos ({expensas.filter((e) => e.estado === 'Moroso').length})</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Selector de Fecha de Simulación y Botones Rápidos (Compartido) */}
+          <div className="p-4 sm:p-5 rounded-2xl bg-[#ede9e1] dark:bg-slate-900 border border-[#cec8bc] dark:border-slate-800 shadow-sm space-y-3">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-[#cec8bc] dark:border-slate-800 pb-3">
+              <div>
+                <span className="font-extrabold text-sm text-[#262422] dark:text-white flex items-center gap-2">
+                  <Calendar className="w-4 h-4 text-indigo-700 dark:text-indigo-400" />
+                  Fecha de Simulación del Pago / Auditoría
+                </span>
+                <p className="text-xs text-[#7d776f] dark:text-slate-400">
+                  Elige una fecha para calcular de inmediato cuántos días de atraso han transcurrido y la mora generada.
+                </p>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <input
+                  type="date"
+                  value={simFechaLibre}
+                  onChange={(e) => setSimFechaLibre(e.target.value)}
+                  className="px-3 py-1.5 rounded-xl bg-[#dfd9ce] dark:bg-slate-950 border border-[#cec8bc] dark:border-slate-700 text-xs font-mono font-bold text-[#262422] dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-600"
+                />
+              </div>
+            </div>
+
+            {/* Botones de Casos Rápidos */}
+            <div className="space-y-1.5">
+              <span className="text-[11px] font-bold text-[#66615b] dark:text-slate-400 uppercase tracking-wide">
+                Casos Rápidos de Prueba (1 Clic):
+              </span>
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={() => setSimFechaLibre('2026-11-08')}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer border ${
+                    simFechaLibre === '2026-11-08'
+                      ? 'bg-emerald-700 text-white border-emerald-800 shadow-sm'
+                      : 'bg-emerald-100 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300 border-emerald-300 hover:bg-emerald-200'
+                  }`}
+                  title="Simular pago 2 días antes del vencimiento (Sin mora)"
+                >
+                  🟢 08/Nov: A tiempo (Sin mora)
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setSimFechaLibre('2026-11-10')}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer border ${
+                    simFechaLibre === '2026-11-10'
+                      ? 'bg-amber-600 text-white border-amber-700 shadow-sm'
+                      : 'bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300 border-amber-300 hover:bg-amber-200'
+                  }`}
+                  title="Simular pago en la fecha límite de vencimiento (Sin mora)"
+                >
+                  🟡 10/Nov: Día de Vencimiento (Sin mora)
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setSimFechaLibre('2026-11-15')}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer border ${
+                    simFechaLibre === '2026-11-15'
+                      ? 'bg-rose-700 text-white border-rose-800 shadow-sm'
+                      : 'bg-rose-100 dark:bg-rose-950/60 text-rose-800 dark:text-rose-300 border-rose-300 hover:bg-rose-200'
+                  }`}
+                  title="Simular pago con 5 días de retraso (+1 mes de mora)"
+                >
+                  🔴 15/Nov: 5 días tarde (1er mes de mora)
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setSimFechaLibre('2027-01-13')}
+                  className={`px-3.5 py-1.5 rounded-xl text-xs font-black transition-all cursor-pointer border shadow-xs ${
+                    simFechaLibre === '2027-01-13'
+                      ? 'bg-purple-800 text-white border-purple-900 ring-2 ring-purple-400'
+                      : 'bg-purple-100 dark:bg-purple-950/60 text-purple-900 dark:text-purple-200 border-purple-300 hover:bg-purple-200'
+                  }`}
+                  title="Caso solicitado por el docente: 2 meses y 3 días de atraso (63 días en total)"
+                >
+                  🔥 13/Ene: 2 Meses y 3 Días de Atraso (Caso Docente)
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* CONTENIDO SEGÚN MODO SELECCIONADO */}
+          {modoSimulador === 'individual' ? (
+            /* ========================================================
+               MODO 1: SIMULACIÓN INDIVIDUAL (1 DEPARTAMENTO)
+               ======================================================== */
+            (() => {
+              const expensaSim =
+                expensas.find((e) => e.idDepartamento === simDptoId) || expensas[0] || null
+              const saldoBase = Number(expensaSim?.monto || 300)
+              const fechaVenc = expensaSim?.fechaVencimiento || '2026-11-10'
+              const simRes = calcularMoraSimulada(fechaVenc, saldoBase, simFechaLibre)
+              const dptoNum = expensaSim?.departamento?.numero || expensaSim?.idDepartamento || '101'
+              const propNombre = expensaSim?.propietarioNombre || 'Propietario Responsable'
+
+              return (
+                <div className="space-y-6">
+                  {/* Selector de Departamento */}
+                  <div className="p-4 rounded-2xl bg-[#ede9e1] dark:bg-slate-900 border border-[#cec8bc] dark:border-slate-800 space-y-2">
+                    <label className="text-xs font-bold text-[#66615b] dark:text-slate-400 uppercase tracking-wide block">
+                      Seleccionar Departamento a Simular:
+                    </label>
+                    <select
+                      value={expensaSim?.idDepartamento || ''}
+                      onChange={(e) => setSimDptoId(Number(e.target.value))}
+                      className="w-full px-3 py-2.5 rounded-xl bg-[#dfd9ce] dark:bg-slate-950 border border-[#cec8bc] dark:border-slate-700 text-xs sm:text-sm font-bold text-[#262422] dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-600 cursor-pointer"
+                    >
+                      {expensas.map((item, idx) => (
+                        <option
+                          key={`sim-dpto-opt-${item.idDepartamento}-${idx}`}
+                          value={item.idDepartamento}
+                        >
+                          Dpto {item.departamento?.numero || item.idDepartamento} —{' '}
+                          {item.propietarioNombre || 'Propietario'} ({item.departamento?.tipologia || 'Tipo A'} • Base: Bs. {item.monto.toFixed(2)})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* Grid de Resultados: Desglose Matemático + Código QR */}
+                  <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                    {/* Columna 1 y 2: Tarjetas y Desglose Mes a Mes */}
+                    <div className="lg:col-span-2 space-y-4">
+                      {/* KPIs del Resultado */}
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                        <div className="p-3.5 rounded-2xl bg-white dark:bg-slate-950 border border-[#cec8bc] dark:border-slate-800 space-y-1">
+                          <span className="text-[10px] font-bold text-[#7d776f] uppercase block">
+                            Capital Base
+                          </span>
+                          <div className="text-lg font-black font-mono text-[#262422] dark:text-white">
+                            Bs. {saldoBase.toFixed(2)}
+                          </div>
+                          <span className="text-[10px] text-[#7d776f]">Cuota del dpto</span>
+                        </div>
+
+                        <div className="p-3.5 rounded-2xl bg-white dark:bg-slate-950 border border-[#cec8bc] dark:border-slate-800 space-y-1">
+                          <span className="text-[10px] font-bold text-[#7d776f] uppercase block">
+                            Retraso Total
+                          </span>
+                          <div
+                            className={`text-lg font-black font-mono ${
+                              simRes.diasRetraso > 0
+                                ? 'text-amber-700 dark:text-amber-400'
+                                : 'text-emerald-700'
+                            }`}
+                          >
+                            {simRes.diasRetraso > 0
+                              ? `+${simRes.diasRetraso} días`
+                              : '0 días (Al día)'}
+                          </div>
+                          <span className="text-[10px] text-[#7d776f]">
+                            {simRes.mesesMora > 0 ? `${simRes.mesesMora} meses mora` : 'Sin retraso'}
+                          </span>
+                        </div>
+
+                        <div className="p-3.5 rounded-2xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900/50 space-y-1">
+                          <span className="text-[10px] font-bold text-rose-800 dark:text-rose-400 uppercase block">
+                            Mora Acumulada
+                          </span>
+                          <div className="text-lg font-black font-mono text-rose-700 dark:text-rose-400">
+                            +Bs. {simRes.montoMora.toFixed(2)}
+                          </div>
+                          <span className="text-[10px] text-rose-800 dark:text-rose-300 font-semibold">
+                            {politicaMora.tipoPenalidad === 'fijo'
+                              ? `Bs. ${politicaMora.montoFijo || 50}/mes fijo`
+                              : `${politicaMora.porcentaje || 10}% mensual`}
+                          </span>
+                        </div>
+
+                        <div className="p-3.5 rounded-2xl bg-indigo-50 dark:bg-indigo-950/40 border border-indigo-200 dark:border-indigo-900/50 space-y-1">
+                          <span className="text-[10px] font-bold text-indigo-800 dark:text-indigo-400 uppercase block">
+                            Total a Cobrar
+                          </span>
+                          <div className="text-xl font-black font-mono text-indigo-700 dark:text-indigo-300">
+                            Bs. {simRes.totalCobrar.toFixed(2)}
+                          </div>
+                          <span className="text-[10px] text-indigo-800 dark:text-indigo-300 font-semibold">
+                            Base + Mora
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Explicación paso a paso de cómo se aplica la mora */}
+                      <div className="p-4 sm:p-5 rounded-2xl bg-white dark:bg-slate-950 border border-[#cec8bc] dark:border-slate-800 space-y-3 shadow-xs">
+                        <div className="flex items-center justify-between border-b border-[#cec8bc] dark:border-slate-800 pb-2">
+                          <h4 className="font-extrabold text-xs sm:text-sm text-[#262422] dark:text-white flex items-center gap-1.5">
+                            <TrendingUp className="w-4 h-4 text-rose-600" />
+                            Cronología de Acumulación Mes a Mes: Dpto {dptoNum} ({propNombre})
+                          </h4>
+                          <span className="text-[10px] px-2 py-0.5 rounded-full font-bold bg-indigo-100 text-indigo-900 dark:bg-indigo-950 dark:text-indigo-200">
+                            {simRes.aplicaMora
+                              ? `${simRes.mesesMora} períodos aplicados`
+                              : 'Al día'}
+                          </span>
+                        </div>
+
+                        {!simRes.aplicaMora ? (
+                          <div className="p-4 rounded-xl bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800 text-xs text-emerald-900 dark:text-emerald-200 flex items-center gap-2">
+                            <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                            <span>
+                              <strong>A tiempo:</strong> Al pagar en fecha {fechaSolo(simFechaLibre)}, la expensa se encuentra dentro del plazo o del período de gracia (+{politicaMora.diasGracia || 2} días). No se genera ningún recargo.
+                            </span>
+                          </div>
+                        ) : (
+                          <div className="overflow-x-auto rounded-xl border border-[#cec8bc] dark:border-slate-800">
+                            <table className="w-full text-left text-xs">
+                              <thead className="bg-[#ede9e1] dark:bg-slate-900 text-[#7d776f] font-bold text-[10px] uppercase">
+                                <tr>
+                                  <th className="py-2 px-3">Período de Atraso</th>
+                                  <th className="py-2 px-3">Rango Días</th>
+                                  <th className="py-2 px-3 font-mono text-right">Recargo Mes</th>
+                                  <th className="py-2 px-3 font-mono text-right text-rose-700">Mora Acumulada</th>
+                                  <th className="py-2 px-3 font-mono text-right text-indigo-700">Saldo + Mora</th>
+                                </tr>
+                              </thead>
+                              <tbody className="divide-y divide-[#cec8bc]/50 dark:divide-slate-800">
+                                {simRes.desglose.map((m) => (
+                                  <tr
+                                    key={`sim-desglose-${m.mesNum}`}
+                                    className={
+                                      m.esFraccion
+                                        ? 'bg-amber-50/70 dark:bg-amber-950/30 font-semibold'
+                                        : 'hover:bg-slate-50 dark:hover:bg-slate-900/40'
+                                    }
+                                  >
+                                    <td className="py-2.5 px-3">
+                                      <div className="font-bold text-[#262422] dark:text-white">
+                                        {m.concepto}
+                                      </div>
+                                      {m.esFraccion && (
+                                        <div className="text-[10px] text-amber-800 dark:text-amber-300">
+                                          ⚠️ Ingresó {m.diasEnEsteMes} día{m.diasEnEsteMes > 1 ? 's' : ''} al mes {m.mesNum} → Genera la cuota del período según política
+                                        </div>
+                                      )}
+                                    </td>
+                                    <td className="py-2.5 px-3 font-mono text-[11px] text-[#7d776f]">
+                                      {m.rangoDias}
+                                    </td>
+                                    <td className="py-2.5 px-3 font-mono text-right text-[#5c5750] dark:text-slate-300">
+                                      +Bs. {m.penalidadMes.toFixed(2)}
+                                    </td>
+                                    <td className="py-2.5 px-3 font-mono text-right font-bold text-rose-700 dark:text-rose-400">
+                                      Bs. {m.moraAcumulada.toFixed(2)}
+                                    </td>
+                                    <td className="py-2.5 px-3 font-mono text-right font-black text-indigo-800 dark:text-indigo-300">
+                                      Bs. {m.totalConMora.toFixed(2)}
+                                    </td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        )}
+
+                        <div className="p-3 rounded-xl bg-[#dfd9ce]/60 dark:bg-slate-900/60 text-[11px] text-[#66615b] dark:text-slate-400 flex items-start gap-2">
+                          <Info className="w-4 h-4 text-indigo-600 shrink-0 mt-0.5" />
+                          <div>
+                            <strong>Regla de cálculo aplicada:</strong>{' '}
+                            {politicaMora.tipoPenalidad === 'fijo'
+                              ? `Mora fija de Bs. ${politicaMora.montoFijo || 50} por cada mes o fracción de mes iniciada tras vencer el día ${politicaMora.diaVencimiento || 10}.`
+                              : `Mora del ${politicaMora.porcentaje || 10}% mensual sobre el capital base (Bs. ${saldoBase.toFixed(2)}) por cada mes o fracción transcurrida.`}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Columna 3: Tarjeta de Cobro QR en Tiempo Real */}
+                    <div className="p-5 rounded-2xl bg-white dark:bg-slate-950 border border-[#cec8bc] dark:border-slate-800 shadow-sm flex flex-col justify-between space-y-4">
+                      <div className="space-y-3">
+                        <div className="flex items-center justify-between border-b border-[#cec8bc] dark:border-slate-800 pb-2">
+                          <span className="font-bold text-xs uppercase tracking-wider text-[#66615b] dark:text-slate-400 flex items-center gap-1.5">
+                            <QrCode className="w-4 h-4 text-emerald-700" />
+                            Cobro QR Dinámico
+                          </span>
+                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">
+                            Simple QR
+                          </span>
+                        </div>
+
+                        {/* Visual Mock del Código QR */}
+                        <div className="p-4 bg-white rounded-2xl border-2 border-dashed border-[#cec8bc] dark:border-slate-700 flex flex-col items-center justify-center space-y-2">
+                          <div className="w-36 h-36 bg-slate-900 p-2 rounded-xl flex items-center justify-center text-white relative shadow-sm">
+                            <QrCode className="w-28 h-28 text-white" />
+                            <div className="absolute inset-0 flex items-center justify-center">
+                              <span className="bg-emerald-600 text-white font-black text-[9px] px-1.5 py-0.5 rounded shadow">
+                                BS {simRes.totalCobrar.toFixed(0)}
+                              </span>
+                            </div>
+                          </div>
+                          <div className="text-center">
+                            <span className="text-[10px] text-[#7d776f] block">
+                              Monto total simulado a transferir:
+                            </span>
+                            <span className="text-xl font-black font-mono text-emerald-800 dark:text-emerald-500">
+                              Bs. {simRes.totalCobrar.toFixed(2)}
+                            </span>
+                          </div>
+                        </div>
+
+                        <div className="space-y-1 text-xs">
+                          <div className="flex justify-between text-[#7d776f]">
+                            <span>Destino:</span>
+                            <span className="font-bold text-[#262422] dark:text-white">Edificio XYZ</span>
+                          </div>
+                          <div className="flex justify-between text-[#7d776f]">
+                            <span>Departamento:</span>
+                            <span className="font-bold text-[#262422] dark:text-white">Dpto {dptoNum}</span>
+                          </div>
+                          <div className="flex justify-between text-[#7d776f]">
+                            <span>Concepto:</span>
+                            <span
+                              className="font-bold text-[#262422] dark:text-white truncate max-w-[170px]"
+                              title={`Expensa ${expensaSim?.periodo || 'Noviembre 2026'} + Mora`}
+                            >
+                              Expensa + Mora ({simRes.mesesMora}m)
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="space-y-2 pt-3 border-t border-[#cec8bc] dark:border-slate-800">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (expensaSim) {
+                              setExpensaParaQr({
+                                ...expensaSim,
+                                montoTotalSimulado: simRes.totalCobrar,
+                                moraSimulada: simRes.montoMora,
+                                fechaSimulada: simFechaLibre
+                              })
+                              setIsQrSimuladorOpen(true)
+                            }
+                          }}
+                          className="w-full py-2.5 px-4 rounded-xl bg-emerald-700 hover:bg-emerald-800 active:bg-emerald-900 text-white font-bold text-xs flex items-center justify-center gap-2 shadow-md cursor-pointer transition-all"
+                        >
+                          <QrCode className="w-4 h-4" />
+                          <span>Simular Pago QR de este Monto</span>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setFechaSistema(simFechaLibre)
+                            showToast(
+                              `⚡ Fecha del sistema actualizada a ${simFechaLibre}. Ahora toda la aplicación calcula con esta fecha.`
+                            )
+                          }}
+                          className="w-full py-2 px-3 rounded-xl bg-indigo-100 hover:bg-indigo-200 dark:bg-indigo-950 dark:hover:bg-indigo-900 text-indigo-900 dark:text-indigo-200 font-bold text-[11px] flex items-center justify-center gap-1.5 cursor-pointer transition-all"
+                        >
+                          <Clock className="w-3.5 h-3.5" />
+                          <span>Aplicar fecha ({simFechaLibre}) a todo el sistema</span>
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )
+            })()
+          ) : (
+            /* ========================================================
+               MODO 2: SIMULACIÓN GLOBAL (TODOS LOS MOROSOS DEL EDIFICIO)
+               ======================================================== */
+            (() => {
+              // Calcular para cada departamento de expensas el resultado bajo simFechaLibre
+              const analisisGlobal = expensas.map((item) => {
+                const base = Number(item.saldoPendiente || item.monto || 0)
+                const fVenc = item.fechaVencimiento || '2026-11-10'
+                const res = calcularMoraSimulada(fVenc, base, simFechaLibre)
+                return {
+                  expensa: item,
+                  base,
+                  fVenc,
+                  res
+                }
+              })
+
+              const conMora = analisisGlobal.filter((a) => a.res.aplicaMora)
+              const moraTotalEdificio = conMora.reduce((acc, curr) => acc + curr.res.montoMora, 0)
+              const carteraTotalConMora = analisisGlobal.reduce(
+                (acc, curr) => acc + curr.res.totalCobrar,
+                0
+              )
+
+              return (
+                <div className="space-y-6">
+                  {/* Tarjetas KPI de Impacto Global en el Edificio */}
+                  <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+                    <div className="p-4 rounded-2xl bg-white dark:bg-slate-950 border border-[#cec8bc] dark:border-slate-800 shadow-xs">
+                      <span className="text-xs font-bold text-[#7d776f] uppercase block">
+                        Departamentos Analizados
+                      </span>
+                      <div className="text-2xl font-black text-[#262422] dark:text-white mt-1">
+                        {expensas.length} Dptos
+                      </div>
+                      <span className="text-[11px] text-[#7d776f]">Total unidades en cartera</span>
+                    </div>
+
+                    <div className="p-4 rounded-2xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900/50 shadow-xs">
+                      <span className="text-xs font-bold text-rose-800 dark:text-rose-400 uppercase block">
+                        En Mora a esta Fecha
+                      </span>
+                      <div className="text-2xl font-black text-rose-700 dark:text-rose-400 mt-1">
+                        {conMora.length} Morosos
+                      </div>
+                      <span className="text-[11px] text-rose-800 dark:text-rose-300 font-semibold">
+                        {expensas.length > 0
+                          ? Math.round((conMora.length / expensas.length) * 100)
+                          : 0}
+                        % de morosidad
+                      </span>
+                    </div>
+
+                    <div className="p-4 rounded-2xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900/50 shadow-xs">
+                      <span className="text-xs font-bold text-amber-800 dark:text-amber-400 uppercase block">
+                        Mora Total a Recaudar
+                      </span>
+                      <div className="text-2xl font-black text-amber-700 dark:text-amber-400 mt-1 font-mono">
+                        +Bs. {moraTotalEdificio.toFixed(2)}
+                      </div>
+                      <span className="text-[11px] text-amber-800 dark:text-amber-300">
+                        Recargo neto para el condominio
+                      </span>
+                    </div>
+
+                    <div className="p-4 rounded-2xl bg-indigo-50 dark:bg-indigo-950/40 border border-indigo-200 dark:border-indigo-900/50 shadow-xs">
+                      <span className="text-xs font-bold text-indigo-800 dark:text-indigo-400 uppercase block">
+                        Cartera Total + Mora
+                      </span>
+                      <div className="text-2xl font-black text-indigo-700 dark:text-indigo-300 mt-1 font-mono">
+                        Bs. {carteraTotalConMora.toFixed(2)}
+                      </div>
+                      <span className="text-[11px] text-indigo-800 dark:text-indigo-300">
+                        Capital base + moras devengadas
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Tabla Comparativa de Todos los Departamentos */}
+                  <div className="rounded-2xl bg-white dark:bg-slate-950 border border-[#cec8bc] dark:border-slate-800 overflow-hidden shadow-xs">
+                    <div className="p-4 border-b border-[#cec8bc] dark:border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                      <div>
+                        <h4 className="font-extrabold text-sm text-[#262422] dark:text-white flex items-center gap-2">
+                          <Users className="w-4 h-4 text-indigo-700" />
+                          Auditoría Comparativa de Departamentos al {fechaSolo(simFechaLibre)}
+                        </h4>
+                        <p className="text-xs text-[#7d776f]">
+                          Compara cómo le afecta la fecha a cada departamento y salta a su simulación individual con 1 clic.
+                        </p>
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setFechaSistema(simFechaLibre)
+                          showToast(
+                            `⚡ Fecha del sistema actualizada a ${simFechaLibre}. Ahora toda la aplicación calcula con esta fecha.`
+                          )
+                        }}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-indigo-700 hover:bg-indigo-800 text-white text-xs font-bold transition-all cursor-pointer shadow-xs"
+                      >
+                        <Clock className="w-3.5 h-3.5" />
+                        <span>Aplicar esta fecha a todo el sistema</span>
+                      </button>
+                    </div>
+
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-left text-xs">
+                        <thead className="bg-[#ede9e1] dark:bg-slate-900 text-[#7d776f] font-bold text-[10px] uppercase">
+                          <tr className="border-b border-[#cec8bc] dark:border-slate-800">
+                            <th className="py-2.5 px-3">Dpto</th>
+                            <th className="py-2.5 px-3">Propietario / Responsable</th>
+                            <th className="py-2.5 px-3">Tipología</th>
+                            <th className="py-2.5 px-3 font-mono text-right">Capital Base</th>
+                            <th className="py-2.5 px-3 text-center">Días Atraso</th>
+                            <th className="py-2.5 px-3 text-center">Meses Mora</th>
+                            <th className="py-2.5 px-3 font-mono text-right text-rose-700">Mora Acum.</th>
+                            <th className="py-2.5 px-3 font-mono text-right text-indigo-700">Total a Cobrar</th>
+                            <th className="py-2.5 px-3 text-center">Estado</th>
+                            <th className="py-2.5 px-3 text-right">Acciones</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-[#cec8bc]/40 dark:divide-slate-800">
+                          {analisisGlobal.map((item, idx) => {
+                            const dptoNum =
+                              item.expensa.departamento?.numero || item.expensa.idDepartamento
+                            return (
+                              <tr
+                                key={`analisis-global-${item.expensa.idDepartamento}-${idx}`}
+                                className={
+                                  item.res.aplicaMora
+                                    ? 'hover:bg-rose-50/40 dark:hover:bg-rose-950/20'
+                                    : 'hover:bg-slate-50 dark:hover:bg-slate-900/40'
+                                }
+                              >
+                                <td className="py-3 px-3 font-mono font-black text-[#262422] dark:text-white">
+                                  {dptoNum}
+                                </td>
+                                <td className="py-3 px-3 font-medium text-[#262422] dark:text-slate-200">
+                                  {item.expensa.propietarioNombre || 'Propietario Responsable'}
+                                </td>
+                                <td className="py-3 px-3">
+                                  <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-blue-100 text-blue-900 dark:bg-blue-950 dark:text-blue-300">
+                                    {item.expensa.departamento?.tipologia || 'Tipo A'}
+                                  </span>
+                                </td>
+                                <td className="py-3 px-3 font-mono text-right font-semibold">
+                                  Bs. {item.base.toFixed(2)}
+                                </td>
+                                <td className="py-3 px-3 text-center font-mono font-bold">
+                                  {item.res.diasRetraso > 0 ? (
+                                    <span className="text-rose-600 dark:text-rose-400">
+                                      +{item.res.diasRetraso}d
+                                    </span>
+                                  ) : (
+                                    <span className="text-emerald-600">0d</span>
+                                  )}
+                                </td>
+                                <td className="py-3 px-3 text-center font-mono">
+                                  {item.res.mesesMora > 0 ? (
+                                    <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300">
+                                      {item.res.mesesMora}m
+                                    </span>
+                                  ) : (
+                                    <span className="text-[#7d776f]">—</span>
+                                  )}
+                                </td>
+                                <td className="py-3 px-3 font-mono text-right font-bold text-rose-700 dark:text-rose-400">
+                                  +Bs. {item.res.montoMora.toFixed(2)}
+                                </td>
+                                <td className="py-3 px-3 font-mono text-right font-black text-indigo-700 dark:text-indigo-300">
+                                  Bs. {item.res.totalCobrar.toFixed(2)}
+                                </td>
+                                <td className="py-3 px-3 text-center">
+                                  <span
+                                    className={`px-2 py-0.5 rounded-full text-[10px] font-black ${
+                                      item.res.aplicaMora
+                                        ? 'bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300'
+                                        : 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300'
+                                    }`}
+                                  >
+                                    {item.res.aplicaMora ? 'En Mora' : 'Al Día'}
+                                  </span>
+                                </td>
+                                <td className="py-3 px-3 text-right">
+                                  <div className="flex items-center justify-end gap-1.5">
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setSimDptoId(item.expensa.idDepartamento)
+                                        setModoSimulador('individual')
+                                      }}
+                                      className="px-2.5 py-1 rounded-lg bg-indigo-100 text-indigo-800 hover:bg-indigo-200 dark:bg-indigo-950 dark:text-indigo-300 text-xs font-bold transition-all cursor-pointer flex items-center gap-1"
+                                      title="Ver simulación detallada y cronología de este departamento"
+                                    >
+                                      <User className="w-3 h-3" />
+                                      <span>Simular</span>
+                                    </button>
+
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setExpensaParaQr({
+                                          ...item.expensa,
+                                          montoTotalSimulado: item.res.totalCobrar,
+                                          moraSimulada: item.res.montoMora,
+                                          fechaSimulada: simFechaLibre
+                                        })
+                                        setIsQrSimuladorOpen(true)
+                                      }}
+                                      className="p-1 rounded-lg bg-emerald-700 hover:bg-emerald-800 text-white text-xs transition-all cursor-pointer"
+                                      title="Cobro QR de este departamento"
+                                    >
+                                      <QrCode className="w-3.5 h-3.5" />
+                                    </button>
+                                  </div>
+                                </td>
+                              </tr>
+                            )
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                </div>
+              )
+            })()
+          )}
         </div>
       )}
 
