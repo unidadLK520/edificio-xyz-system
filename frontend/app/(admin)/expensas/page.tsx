@@ -30,7 +30,8 @@ import {
   QrCode,
   Wallet,
   PlusCircle,
-  Sparkles
+  Sparkles,
+  Clock
 } from 'lucide-react'
 import SimuladorFechaBar from '@/components/SimuladorFechaBar'
 import CobroQrSimuladorModal from '@/components/CobroQrSimuladorModal'
@@ -85,7 +86,7 @@ export const RUBROS_GASTOS_COMUNES = [
 export const TOTAL_GASTOS_COMUNES = 15500.0
 
 export default function ExpensasPage() {
-  const { fechaSistema, politicaMora, setPoliticaMora, calcularMoraExpensa } = useFechaSistema()
+  const { fechaSistema, setFechaSistema, politicaMora, setPoliticaMora, calcularMoraExpensa } = useFechaSistema()
   const [filtroTipoDpto, setFiltroTipoDpto] = useState<string>('Todos')
   const [isAnticipoModalOpen, setIsAnticipoModalOpen] = useState(false)
   const [isQrSimuladorOpen, setIsQrSimuladorOpen] = useState(false)
@@ -102,12 +103,16 @@ export default function ExpensasPage() {
     return {}
   })
 
-  // Campos extendidos para política de mora de la pizarra
+  // Campos extendidos para política de mora de la pizarra y simulador
   const [moraTipoPenalidadInput, setMoraTipoPenalidadInput] = useState<'fijo' | 'porcentaje'>('fijo')
   const [moraMontoFijoInput, setMoraMontoFijoInput] = useState<number | ''>(50)
   const [moraDiaVencimientoInput, setMoraDiaVencimientoInput] = useState<number | ''>(10)
   const [moraDiasGraciaInput, setMoraDiasGraciaInput] = useState<number | ''>(2)
   const [moraDiaGeneracionInput, setMoraDiaGeneracionInput] = useState<number | ''>(1)
+
+  // Estados del Simulador Rápido de Mora en Vivo (Docente)
+  const [simuladorMontoBaseInput, setSimuladorMontoBaseInput] = useState<number>(350)
+  const [simuladorFechaPruebaInput, setSimuladorFechaPruebaInput] = useState<string>('2026-11-15')
 
   const [expensas, setExpensas] = useState<ExpensaItem[]>([])
   const [searchTerm, setSearchTerm] = useState('')
@@ -807,14 +812,28 @@ export default function ExpensasPage() {
           <button
             onClick={() => {
               setMoraError(null)
-              if (reglaMoraActiva) setNuevaTasaMoraInput(Number(reglaMoraActiva.tasaInteres))
+              if (politicaMora.tipoPenalidad === 'porcentaje') {
+                setMoraTipoPenalidadInput('porcentaje')
+                setNuevaTasaMoraInput(Number(politicaMora.porcentaje || reglaMoraActiva?.tasaInteres || 10))
+              } else {
+                setMoraTipoPenalidadInput('fijo')
+                setMoraMontoFijoInput(Number(politicaMora.montoFijo || 50))
+              }
+              setMoraDiaVencimientoInput(Number(politicaMora.diaVencimiento || 10))
+              setMoraDiasGraciaInput(Number(politicaMora.diasGracia || 2))
+              setMoraDiaGeneracionInput(Number(politicaMora.diaGeneracion || 1))
               setIsMoraModalOpen(true)
             }}
             className="inline-flex items-center justify-center gap-1.5 px-3.5 py-2.5 bg-indigo-700 hover:bg-indigo-800 text-white text-xs font-bold rounded-xl shadow-md transition-all cursor-pointer"
-            title="Ver y configurar regla de mora activa e historial"
+            title="Simulador y Configuración de Mora (en Bs. y %)"
           >
-            <Percent className="w-4 h-4" />
-            Mora: {reglaMoraActiva ? `${reglaMoraActiva.tasaInteres}%` : '—'}
+            <Calculator className="w-4 h-4" />
+            <span>
+              Simulador Mora:{' '}
+              {politicaMora.tipoPenalidad === 'fijo'
+                ? `Bs. ${politicaMora.montoFijo} (Fijo)`
+                : `${politicaMora.porcentaje}%`}
+            </span>
           </button>
 
           <button
@@ -1663,253 +1682,414 @@ export default function ExpensasPage() {
       )}
 
       {/* MODAL CONFIGURAR REGLA DE MORA (HU04 / CA09) */}
-      {isMoraModalOpen && (
-        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 backdrop-blur-xs">
-          <div className="w-full max-w-md bg-[#ede9e1] dark:bg-slate-900 rounded-3xl border border-[#cec8bc] dark:border-slate-800 p-6 space-y-4 shadow-2xl">
-            <div className="flex justify-between items-center border-b border-[#cec8bc] dark:border-slate-800 pb-3">
-              <div>
-                <h3 className="font-extrabold text-base text-[#262422] dark:text-white flex items-center gap-2">
-                  <Percent className="w-4 h-4 text-indigo-600" />
-                  Política de Mora y Vencimientos
-                </h3>
-                <p className="text-xs text-[#7d776f]">
-                  Configuración oficial de penalidad, días de gracia y fechas de corte (Requerimiento C 3.1 & Pizarra)
-                </p>
-              </div>
-              <button onClick={() => setIsMoraModalOpen(false)}>
-                <X className="w-5 h-5 text-[#7d776f] hover:text-[#262422]" />
-              </button>
-            </div>
+      {isMoraModalOpen && (() => {
+        const fPrueba = new Date(`${simuladorFechaPruebaInput}T00:00:00`)
+        const diaVencNum = Number(moraDiaVencimientoInput || 10)
+        const diasGraciaNum = Number(moraDiasGraciaInput || 0)
+        const fVenc = new Date(fPrueba.getFullYear(), fPrueba.getMonth(), diaVencNum)
+        const diffMs = fPrueba.getTime() - fVenc.getTime()
+        const diffDias = Math.floor(diffMs / (1000 * 60 * 60 * 24))
 
-            {moraError && (
-              <div className="p-3 bg-rose-100 dark:bg-rose-950/70 border border-rose-300 dark:border-rose-800 text-rose-900 dark:text-rose-200 rounded-xl flex items-center gap-2 text-xs">
-                <AlertCircle className="w-4 h-4 shrink-0 text-rose-600 dark:text-rose-400" />
-                <span>{moraError}</span>
-              </div>
-            )}
+        let simMontoMora = 0
+        let simEstadoLabel = ''
+        let simEstadoColor = ''
 
-            <form onSubmit={handleGuardarReglaMora} className="space-y-4 text-xs">
-              {/* Tarjeta de Política Activa */}
-              <div className="p-3 rounded-2xl bg-indigo-50 dark:bg-indigo-950/40 border border-indigo-200 dark:border-indigo-800 text-[11px] text-indigo-900 dark:text-indigo-200 flex justify-between items-center">
+        if (diffDias <= 0) {
+          simMontoMora = 0
+          simEstadoLabel = 'A tiempo (Sin mora)'
+          simEstadoColor = 'text-emerald-700 dark:text-emerald-400 bg-emerald-100 dark:bg-emerald-950/70 border-emerald-300'
+        } else if (diffDias <= diasGraciaNum) {
+          simMontoMora = 0
+          simEstadoLabel = `En gracia (+${diffDias}d de ${diasGraciaNum}d - Sin mora)`
+          simEstadoColor = 'text-amber-800 dark:text-amber-300 bg-amber-100 dark:bg-amber-950/70 border-amber-300'
+        } else {
+          if (moraTipoPenalidadInput === 'fijo') {
+            simMontoMora = Number(moraMontoFijoInput || 50)
+          } else {
+            const pct = Number(nuevaTasaMoraInput || 10)
+            simMontoMora = Math.round(((simuladorMontoBaseInput * pct) / 100) * 100) / 100
+          }
+          simEstadoLabel = `Con Mora aplicada (+${diffDias} días de mora)`
+          simEstadoColor = 'text-rose-800 dark:text-rose-300 bg-rose-100 dark:bg-rose-950/70 border-rose-300'
+        }
+        const simTotal = Math.round((simuladorMontoBaseInput + simMontoMora) * 100) / 100
+
+        return (
+          <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 backdrop-blur-xs overflow-y-auto">
+            <div className="w-full max-w-2xl bg-[#ede9e1] dark:bg-slate-900 rounded-3xl border border-[#cec8bc] dark:border-slate-800 p-6 sm:p-7 space-y-4 shadow-2xl my-8">
+              <div className="flex justify-between items-center border-b border-[#cec8bc] dark:border-slate-800 pb-3">
                 <div>
-                  <span className="font-bold block">Política Activa del Edificio:</span>
-                  <span className="text-base font-black text-indigo-700 dark:text-indigo-300 font-mono">
-                    {politicaMora.tipoPenalidad === 'fijo'
-                      ? `Bs. ${politicaMora.montoFijo} (Fijo)`
-                      : `${politicaMora.porcentaje}% (Porcentual)`}
-                  </span>
-                  <span className="block text-[10px] text-[#7d776f] mt-0.5">
-                    Vence: día {politicaMora.diaVencimiento} de cada mes • Gracia: {politicaMora.diasGracia} días
-                  </span>
-                </div>
-                <div className="w-8 h-8 rounded-full bg-indigo-200 dark:bg-indigo-900/60 flex items-center justify-center text-indigo-700 dark:text-indigo-300">
-                  <Percent className="w-4 h-4" />
-                </div>
-              </div>
-
-              {/* Selector de Método de Cálculo: Monto Fijo vs Porcentaje (Requerimiento C 3.1 & Pizarra) */}
-              <div>
-                <label className="block font-bold text-[#262422] dark:text-white mb-1.5">
-                  Método de Cálculo de Penalidad por Mora *
-                </label>
-                <div className="grid grid-cols-2 gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setMoraTipoPenalidadInput('fijo')}
-                    className={`p-2.5 rounded-xl font-bold border text-center transition-all cursor-pointer ${
-                      moraTipoPenalidadInput === 'fijo'
-                        ? 'bg-indigo-700 text-white border-indigo-800 shadow-sm'
-                        : 'bg-[#dfd9ce] dark:bg-slate-800 text-[#5c5750] dark:text-slate-300 border-[#cec8bc] dark:border-slate-700'
-                    }`}
-                  >
-                    💵 Monto Fijo (Bs.)
-                    <span className="block text-[9px] font-normal opacity-90">Ej. Bs 50</span>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => setMoraTipoPenalidadInput('porcentaje')}
-                    className={`p-2.5 rounded-xl font-bold border text-center transition-all cursor-pointer ${
-                      moraTipoPenalidadInput === 'porcentaje'
-                        ? 'bg-indigo-700 text-white border-indigo-800 shadow-sm'
-                        : 'bg-[#dfd9ce] dark:bg-slate-800 text-[#5c5750] dark:text-slate-300 border-[#cec8bc] dark:border-slate-700'
-                    }`}
-                  >
-                    📊 Porcentaje (%)
-                    <span className="block text-[9px] font-normal opacity-90">Ej. 5% ó 10%</span>
-                  </button>
-                </div>
-              </div>
-
-              {/* Input según el tipo seleccionado */}
-              {moraTipoPenalidadInput === 'fijo' ? (
-                <div>
-                  <label className="block font-bold text-[#262422] dark:text-white mb-1">
-                    Monto Fijo de Multa (Bs.) *
-                  </label>
-                  <input
-                    type="number"
-                    step="1"
-                    min="1"
-                    required
-                    value={moraMontoFijoInput}
-                    onChange={(e) =>
-                      setMoraMontoFijoInput(e.target.value === '' ? '' : Number(e.target.value))
-                    }
-                    placeholder="Ej. 50"
-                    className="w-full px-3 py-2 rounded-xl bg-[#dfd9ce] dark:bg-slate-800 border border-[#cec8bc] dark:border-slate-700 font-mono font-bold text-sm text-[#262422] dark:text-white"
-                  />
-                  <p className="text-[10px] text-[#7d776f] mt-1">
-                    Ejemplo pizarra: Penalidad Mora Monto = Bs 50 por expensa vencida.
+                  <h3 className="font-extrabold text-base text-[#262422] dark:text-white flex items-center gap-2">
+                    <Calculator className="w-5 h-5 text-indigo-600" />
+                    Simulador y Configuración de Mora (en Bs. y %)
+                  </h3>
+                  <p className="text-xs text-[#7d776f]">
+                    Configura la política oficial del edificio y simula en tiempo real antes, en fecha y después del vencimiento.
                   </p>
                 </div>
-              ) : (
-                <div>
-                  <label className="block font-bold text-[#262422] dark:text-white mb-1">
-                    Tasa de Interés Mensual (%) *
-                  </label>
-                  <input
-                    type="number"
-                    step="0.1"
-                    min="0"
-                    max="100"
-                    required
-                    value={nuevaTasaMoraInput}
-                    onChange={(e) =>
-                      setNuevaTasaMoraInput(e.target.value === '' ? '' : Number(e.target.value))
-                    }
-                    placeholder="Ej. 10"
-                    className="w-full px-3 py-2 rounded-xl bg-[#dfd9ce] dark:bg-slate-800 border border-[#cec8bc] dark:border-slate-700 font-mono font-bold text-sm text-[#262422] dark:text-white"
-                  />
-                  <p className="text-[10px] text-[#7d776f] mt-1">
-                    Ejemplo pizarra: Penalidad Mora Porcentual = 10% sobre el saldo adeudado.
-                  </p>
+                <button onClick={() => setIsMoraModalOpen(false)}>
+                  <X className="w-5 h-5 text-[#7d776f] hover:text-[#262422]" />
+                </button>
+              </div>
+
+              {moraError && (
+                <div className="p-3 bg-rose-100 dark:bg-rose-950/70 border border-rose-300 dark:border-rose-800 text-rose-900 dark:text-rose-200 rounded-xl flex items-center gap-2 text-xs">
+                  <AlertCircle className="w-4 h-4 shrink-0 text-rose-600 dark:text-rose-400" />
+                  <span>{moraError}</span>
                 </div>
               )}
 
-              {/* Días y Fechas de Configuración (Requerimiento C 3.1 & Pizarra) */}
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 pt-2 border-t border-[#cec8bc] dark:border-slate-800">
-                <div>
-                  <label className="block font-bold text-[#262422] dark:text-white mb-1">
-                    Día Vencimiento *
-                  </label>
-                  <input
-                    type="number"
-                    min="1"
-                    max="28"
-                    required
-                    value={moraDiaVencimientoInput}
-                    onChange={(e) =>
-                      setMoraDiaVencimientoInput(e.target.value === '' ? '' : Number(e.target.value))
-                    }
-                    placeholder="10"
-                    className="w-full px-2.5 py-1.5 rounded-xl bg-[#dfd9ce] dark:bg-slate-800 border border-[#cec8bc] dark:border-slate-700 font-mono font-bold text-xs"
-                  />
-                  <span className="text-[9px] text-[#7d776f]">Ej. 10 de cada mes</span>
+              <form onSubmit={handleGuardarReglaMora} className="space-y-4 text-xs">
+                {/* Tarjeta de Política Activa */}
+                <div className="p-3.5 rounded-2xl bg-indigo-50 dark:bg-indigo-950/40 border border-indigo-200 dark:border-indigo-800 text-[11px] text-indigo-900 dark:text-indigo-200 flex justify-between items-center">
+                  <div>
+                    <span className="font-bold block">Política Activa del Edificio:</span>
+                    <span className="text-base font-black text-indigo-700 dark:text-indigo-300 font-mono">
+                      {politicaMora.tipoPenalidad === 'fijo'
+                        ? `Bs. ${politicaMora.montoFijo} (Fijo en Bolivianos)`
+                        : `${politicaMora.porcentaje}% (Porcentual mensual)`}
+                    </span>
+                    <span className="block text-[10px] text-[#7d776f] mt-0.5">
+                      Vence: día {politicaMora.diaVencimiento} de cada mes • Gracia: {politicaMora.diasGracia} días • Generación: día {politicaMora.diaGeneracion}
+                    </span>
+                  </div>
+                  <div className="w-9 h-9 rounded-2xl bg-indigo-200 dark:bg-indigo-900/60 flex items-center justify-center text-indigo-700 dark:text-indigo-300 shrink-0">
+                    <Percent className="w-4 h-4" />
+                  </div>
                 </div>
 
+                {/* Selector de Método de Cálculo: Monto Fijo vs Porcentaje (Requerimiento C 3.1 & Pizarra) */}
                 <div>
-                  <label className="block font-bold text-[#262422] dark:text-white mb-1">
-                    Días de Gracia *
+                  <label className="block font-bold text-[#262422] dark:text-white mb-1.5">
+                    1. Modalidad de Penalidad por Mora *
                   </label>
-                  <input
-                    type="number"
-                    min="0"
-                    max="15"
-                    required
-                    value={moraDiasGraciaInput}
-                    onChange={(e) =>
-                      setMoraDiasGraciaInput(e.target.value === '' ? '' : Number(e.target.value))
-                    }
-                    placeholder="2"
-                    className="w-full px-2.5 py-1.5 rounded-xl bg-[#dfd9ce] dark:bg-slate-800 border border-[#cec8bc] dark:border-slate-700 font-mono font-bold text-xs"
-                  />
-                  <span className="text-[9px] text-[#7d776f]">Pizarra: 2 días</span>
+                  <div className="grid grid-cols-2 gap-2.5">
+                    <button
+                      type="button"
+                      onClick={() => setMoraTipoPenalidadInput('fijo')}
+                      className={`p-3 rounded-2xl font-bold border text-center transition-all cursor-pointer ${
+                        moraTipoPenalidadInput === 'fijo'
+                          ? 'bg-indigo-700 text-white border-indigo-800 shadow-md ring-2 ring-indigo-500/30'
+                          : 'bg-[#dfd9ce] dark:bg-slate-800 text-[#5c5750] dark:text-slate-300 border-[#cec8bc] dark:border-slate-700'
+                      }`}
+                    >
+                      <div className="text-xs">💵 Monto Fijo en Bolivianos (Bs.)</div>
+                      <span className="block text-[10px] font-normal opacity-90 mt-0.5">
+                        Ej. Cobro fijo de Bs. 50 a cualquier expensa vencida
+                      </span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setMoraTipoPenalidadInput('porcentaje')}
+                      className={`p-3 rounded-2xl font-bold border text-center transition-all cursor-pointer ${
+                        moraTipoPenalidadInput === 'porcentaje'
+                          ? 'bg-indigo-700 text-white border-indigo-800 shadow-md ring-2 ring-indigo-500/30'
+                          : 'bg-[#dfd9ce] dark:bg-slate-800 text-[#5c5750] dark:text-slate-300 border-[#cec8bc] dark:border-slate-700'
+                      }`}
+                    >
+                      <div className="text-xs">📊 Porcentaje de Interés (%)</div>
+                      <span className="block text-[10px] font-normal opacity-90 mt-0.5">
+                        Ej. 5% ó 10% calculado sobre el capital pendiente
+                      </span>
+                    </button>
+                  </div>
                 </div>
 
-                <div>
-                  <label className="block font-bold text-[#262422] dark:text-white mb-1">
-                    Día Generación *
-                  </label>
-                  <input
-                    type="number"
-                    min="1"
-                    max="28"
-                    required
-                    value={moraDiaGeneracionInput}
-                    onChange={(e) =>
-                      setMoraDiaGeneracionInput(e.target.value === '' ? '' : Number(e.target.value))
-                    }
-                    placeholder="1"
-                    className="w-full px-2.5 py-1.5 rounded-xl bg-[#dfd9ce] dark:bg-slate-800 border border-[#cec8bc] dark:border-slate-700 font-mono font-bold text-xs"
-                  />
-                  <span className="text-[9px] text-[#7d776f]">Día 01 de cada mes</span>
-                </div>
-              </div>
-
-              {/* Historial */}
-              <div className="space-y-1.5 pt-2 border-t border-[#cec8bc] dark:border-slate-800">
-                <span className="font-bold text-xs text-[#262422] dark:text-white flex items-center gap-1.5">
-                  <History className="w-3.5 h-3.5 text-indigo-600" />
-                  Historial de Reglas de Mora
-                </span>
-                <div className="max-h-36 overflow-y-auto space-y-1.5 pr-1">
-                  {historialReglasMora.length === 0 ? (
-                    <p className="text-[11px] text-[#7d776f]">No hay historial registrado.</p>
+                {/* Input según el tipo seleccionado */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {moraTipoPenalidadInput === 'fijo' ? (
+                    <div>
+                      <label className="block font-bold text-[#262422] dark:text-white mb-1">
+                        Monto Fijo de Multa (Bs.) *
+                      </label>
+                      <input
+                        type="number"
+                        step="1"
+                        min="1"
+                        required
+                        value={moraMontoFijoInput}
+                        onChange={(e) =>
+                          setMoraMontoFijoInput(e.target.value === '' ? '' : Number(e.target.value))
+                        }
+                        placeholder="Ej. 50"
+                        className="w-full px-3 py-2 rounded-xl bg-[#dfd9ce] dark:bg-slate-800 border border-[#cec8bc] dark:border-slate-700 font-mono font-bold text-sm text-[#262422] dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-600"
+                      />
+                      <p className="text-[10px] text-[#7d776f] mt-1">
+                        Valor en Bs. aplicado a departamentos en mora.
+                      </p>
+                    </div>
                   ) : (
-                    historialReglasMora.map((reg) => (
-                      <div
-                        key={reg.idReglaMora}
-                        className={`p-2 rounded-xl border text-[11px] flex justify-between items-center ${
-                          reg.activa
-                            ? 'bg-emerald-50 dark:bg-emerald-950/40 border-emerald-300 dark:border-emerald-800 text-emerald-900 dark:text-emerald-200'
-                            : 'bg-[#dfd9ce]/60 dark:bg-slate-800/60 border-[#cec8bc] dark:border-slate-700 text-[#5c5750] dark:text-slate-400'
-                        }`}
-                      >
-                        <div>
-                          <span className="font-bold font-mono text-xs">{reg.tasaInteres}%</span>
-                          <span className="text-[10px] block text-[#7d776f]">
-                            {fechaHoraBolivia(reg.fechaCreacion)}{' '}
-                            {reg.usuarioCreacion?.nombreUsuario
-                              ? `• ${reg.usuarioCreacion.nombreUsuario}`
-                              : ''}
-                          </span>
-                        </div>
-                        <span
-                          className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
-                            reg.activa
-                              ? 'bg-emerald-200 dark:bg-emerald-900 text-emerald-800 dark:text-emerald-200'
-                              : 'bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300'
-                          }`}
-                        >
-                          {reg.activa ? 'Activa' : 'Histórica'}
+                    <div>
+                      <label className="block font-bold text-[#262422] dark:text-white mb-1">
+                        Tasa de Interés Mensual (%) *
+                      </label>
+                      <input
+                        type="number"
+                        step="0.1"
+                        min="0"
+                        max="100"
+                        required
+                        value={nuevaTasaMoraInput}
+                        onChange={(e) =>
+                          setNuevaTasaMoraInput(e.target.value === '' ? '' : Number(e.target.value))
+                        }
+                        placeholder="Ej. 10"
+                        className="w-full px-3 py-2 rounded-xl bg-[#dfd9ce] dark:bg-slate-800 border border-[#cec8bc] dark:border-slate-700 font-mono font-bold text-sm text-[#262422] dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-600"
+                      />
+                      <p className="text-[10px] text-[#7d776f] mt-1">
+                        Porcentaje sobre saldo adeudado (Ej. 5% ó 10%).
+                      </p>
+                    </div>
+                  )}
+
+                  <div className="grid grid-cols-3 gap-2">
+                    <div>
+                      <label className="block font-bold text-[#262422] dark:text-white mb-1">
+                        Día Venc. *
+                      </label>
+                      <input
+                        type="number"
+                        min="1"
+                        max="28"
+                        required
+                        value={moraDiaVencimientoInput}
+                        onChange={(e) =>
+                          setMoraDiaVencimientoInput(e.target.value === '' ? '' : Number(e.target.value))
+                        }
+                        placeholder="10"
+                        className="w-full px-2 py-2 rounded-xl bg-[#dfd9ce] dark:bg-slate-800 border border-[#cec8bc] dark:border-slate-700 font-mono font-bold text-xs"
+                      />
+                      <span className="text-[9px] text-[#7d776f]">Día 10</span>
+                    </div>
+
+                    <div>
+                      <label className="block font-bold text-[#262422] dark:text-white mb-1">
+                        Gracia *
+                      </label>
+                      <input
+                        type="number"
+                        min="0"
+                        max="15"
+                        required
+                        value={moraDiasGraciaInput}
+                        onChange={(e) =>
+                          setMoraDiasGraciaInput(e.target.value === '' ? '' : Number(e.target.value))
+                        }
+                        placeholder="2"
+                        className="w-full px-2 py-2 rounded-xl bg-[#dfd9ce] dark:bg-slate-800 border border-[#cec8bc] dark:border-slate-700 font-mono font-bold text-xs"
+                      />
+                      <span className="text-[9px] text-[#7d776f]">2 días</span>
+                    </div>
+
+                    <div>
+                      <label className="block font-bold text-[#262422] dark:text-white mb-1">
+                        Emisión *
+                      </label>
+                      <input
+                        type="number"
+                        min="1"
+                        max="28"
+                        required
+                        value={moraDiaGeneracionInput}
+                        onChange={(e) =>
+                          setMoraDiaGeneracionInput(e.target.value === '' ? '' : Number(e.target.value))
+                        }
+                        placeholder="1"
+                        className="w-full px-2 py-2 rounded-xl bg-[#dfd9ce] dark:bg-slate-800 border border-[#cec8bc] dark:border-slate-700 font-mono font-bold text-xs"
+                      />
+                      <span className="text-[9px] text-[#7d776f]">Día 01</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* ── SIMULADOR EN VIVO PARA DEMOSTRACIÓN AL DOCENTE ───────────────── */}
+                <div className="p-4 rounded-2xl bg-[#dfd9ce] dark:bg-slate-800/90 border border-indigo-300 dark:border-indigo-800/50 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div className="font-extrabold text-xs text-indigo-950 dark:text-indigo-200 flex items-center gap-1.5">
+                      <Sparkles className="w-4 h-4 text-indigo-600" />
+                      Calculadora de Simulación en Vivo (Demostración)
+                    </div>
+                    <span className="text-[10px] font-mono text-[#7d776f] dark:text-slate-400">
+                      Modo activo: {moraTipoPenalidadInput === 'fijo' ? 'Fijo en Bs.' : 'Porcentual %'}
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-[11px] font-bold text-[#5c5750] dark:text-slate-300 mb-1">
+                        Monto Expensa a Probar (Bs.):
+                      </label>
+                      <input
+                        type="number"
+                        value={simuladorMontoBaseInput}
+                        onChange={(e) => setSimuladorMontoBaseInput(Number(e.target.value) || 0)}
+                        className="w-full px-3 py-1.5 rounded-xl bg-[#ede9e1] dark:bg-slate-900 border border-[#cec8bc] dark:border-slate-700 font-mono font-black text-xs"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-[11px] font-bold text-[#5c5750] dark:text-slate-300 mb-1">
+                        Fecha a Simular:
+                      </label>
+                      <input
+                        type="date"
+                        value={simuladorFechaPruebaInput}
+                        onChange={(e) => setSimuladorFechaPruebaInput(e.target.value)}
+                        className="w-full px-3 py-1.5 rounded-xl bg-[#ede9e1] dark:bg-slate-900 border border-[#cec8bc] dark:border-slate-700 font-mono font-bold text-xs cursor-pointer"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Botones de Casos Rápidos */}
+                  <div className="flex flex-wrap items-center gap-1.5 pt-1">
+                    <span className="text-[10px] font-bold text-[#7d776f] mr-1">Casos Rápidos:</span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const m = simuladorFechaPruebaInput.slice(0, 7) || '2026-11'
+                        setSimuladorFechaPruebaInput(`${m}-05`)
+                      }}
+                      className="px-2 py-0.5 rounded-md bg-emerald-100 hover:bg-emerald-200 text-emerald-800 text-[10px] font-bold cursor-pointer"
+                    >
+                      🟢 05/Nov: Antes (0 Bs)
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const m = simuladorFechaPruebaInput.slice(0, 7) || '2026-11'
+                        const d = String(moraDiaVencimientoInput || 10).padStart(2, '0')
+                        setSimuladorFechaPruebaInput(`${m}-${d}`)
+                      }}
+                      className="px-2 py-0.5 rounded-md bg-blue-100 hover:bg-blue-200 text-blue-800 text-[10px] font-bold cursor-pointer"
+                    >
+                      🔵 10/Nov: Vencimiento (0 Bs)
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const m = simuladorFechaPruebaInput.slice(0, 7) || '2026-11'
+                        const d = String(Number(moraDiaVencimientoInput || 10) + Number(moraDiasGraciaInput || 2)).padStart(2, '0')
+                        setSimuladorFechaPruebaInput(`${m}-${d}`)
+                      }}
+                      className="px-2 py-0.5 rounded-md bg-amber-100 hover:bg-amber-200 text-amber-800 text-[10px] font-bold cursor-pointer"
+                    >
+                      🟡 12/Nov: Gracia (0 Bs)
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const m = simuladorFechaPruebaInput.slice(0, 7) || '2026-11'
+                        setSimuladorFechaPruebaInput(`${m}-15`)
+                      }}
+                      className="px-2 py-0.5 rounded-md bg-rose-100 hover:bg-rose-200 text-rose-800 text-[10px] font-bold cursor-pointer"
+                    >
+                      🔴 15/Nov: Con Retraso (+Mora)
+                    </button>
+                  </div>
+
+                  {/* Tarjeta de Resultado de Simulación */}
+                  <div className="p-3 rounded-xl bg-white dark:bg-slate-950 border border-[#cec8bc] dark:border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-xs">
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className={`px-2 py-0.5 rounded-md text-[10px] font-black border ${simEstadoColor}`}>
+                          {simEstadoLabel}
                         </span>
                       </div>
-                    ))
-                  )}
-                </div>
-              </div>
+                      <div className="text-[11px] text-[#7d776f] dark:text-slate-400 mt-1 font-mono">
+                        Expensa Base: Bs. {simuladorMontoBaseInput.toFixed(2)} + Recargo Mora:{' '}
+                        <span className={simMontoMora > 0 ? 'text-rose-600 font-bold' : 'text-emerald-600'}>
+                          Bs. {simMontoMora.toFixed(2)}
+                        </span>
+                      </div>
+                    </div>
 
-              <div className="flex justify-end gap-2 pt-3 border-t border-[#cec8bc] dark:border-slate-800">
-                <button
-                  type="button"
-                  onClick={() => setIsMoraModalOpen(false)}
-                  className="px-4 py-2 rounded-xl text-xs font-bold text-[#7d776f]"
-                >
-                  Cancelar
-                </button>
-                <button
-                  type="submit"
-                  disabled={isSubmittingMora}
-                  className="px-4 py-2 rounded-xl bg-indigo-700 hover:bg-indigo-800 text-white text-xs font-bold shadow-md cursor-pointer disabled:opacity-50"
-                >
-                  {isSubmittingMora ? 'Guardando...' : 'Guardar Nueva Regla'}
-                </button>
-              </div>
-            </form>
+                    <div className="text-right">
+                      <span className="text-[10px] text-[#7d776f] block uppercase font-bold">Total a Cobrar</span>
+                      <span className="text-base font-black text-indigo-700 dark:text-indigo-400 font-mono">
+                        Bs. {simTotal.toFixed(2)}
+                      </span>
+                    </div>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setFechaSistema(simuladorFechaPruebaInput)
+                      showToast(`⚡ Fecha del sistema actualizada a ${simuladorFechaPruebaInput}. Ahora toda la pantalla calcula con esta fecha.`)
+                    }}
+                    className="w-full py-1.5 px-3 rounded-xl bg-indigo-100 hover:bg-indigo-200 dark:bg-indigo-950 dark:hover:bg-indigo-900 text-indigo-900 dark:text-indigo-200 font-bold text-[11px] flex items-center justify-center gap-1.5 cursor-pointer transition-colors"
+                  >
+                    <Clock className="w-3.5 h-3.5" />
+                    <span>Aplicar fecha simulada ({simuladorFechaPruebaInput}) al sistema general</span>
+                  </button>
+                </div>
+
+                {/* Historial */}
+                <div className="space-y-1.5 pt-2 border-t border-[#cec8bc] dark:border-slate-800">
+                  <span className="font-bold text-xs text-[#262422] dark:text-white flex items-center gap-1.5">
+                    <History className="w-3.5 h-3.5 text-indigo-600" />
+                    Historial de Reglas de Mora Registradas
+                  </span>
+                  <div className="max-h-28 overflow-y-auto space-y-1.5 pr-1">
+                    {historialReglasMora.length === 0 ? (
+                      <p className="text-[11px] text-[#7d776f]">No hay historial registrado.</p>
+                    ) : (
+                      historialReglasMora.map((reg) => (
+                        <div
+                          key={reg.idReglaMora}
+                          className={`p-2 rounded-xl border text-[11px] flex justify-between items-center ${
+                            reg.activa
+                              ? 'bg-emerald-50 dark:bg-emerald-950/40 border-emerald-300 dark:border-emerald-800 text-emerald-900 dark:text-emerald-200'
+                              : 'bg-[#dfd9ce]/60 dark:bg-slate-800/60 border-[#cec8bc] dark:border-slate-700 text-[#5c5750] dark:text-slate-400'
+                          }`}
+                        >
+                          <div>
+                            <span className="font-bold font-mono text-xs">{reg.tasaInteres}%</span>
+                            <span className="text-[10px] block text-[#7d776f]">
+                              {fechaHoraBolivia(reg.fechaCreacion)}{' '}
+                              {reg.usuarioCreacion?.nombreUsuario
+                                ? `• ${reg.usuarioCreacion.nombreUsuario}`
+                                : ''}
+                            </span>
+                          </div>
+                          <span
+                            className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                              reg.activa
+                                ? 'bg-emerald-200 dark:bg-emerald-900 text-emerald-800 dark:text-emerald-200'
+                                : 'bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300'
+                            }`}
+                          >
+                            {reg.activa ? 'Activa' : 'Histórica'}
+                          </span>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+
+                <div className="flex justify-end gap-2 pt-3 border-t border-[#cec8bc] dark:border-slate-800">
+                  <button
+                    type="button"
+                    onClick={() => setIsMoraModalOpen(false)}
+                    className="px-4 py-2 rounded-xl text-xs font-bold text-[#7d776f] hover:text-[#262422] cursor-pointer"
+                  >
+                    Cerrar
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={isSubmittingMora}
+                    className="px-5 py-2.5 rounded-xl bg-indigo-700 hover:bg-indigo-800 text-white text-xs font-bold shadow-md cursor-pointer disabled:opacity-50 inline-flex items-center gap-1.5"
+                  >
+                    <CheckCircle2 className="w-4 h-4" />
+                    <span>{isSubmittingMora ? 'Guardando...' : 'Guardar y Aplicar Regla'}</span>
+                  </button>
+                </div>
+              </form>
+            </div>
           </div>
-        </div>
-      )}
+        )
+      })()}
 
       {/* MODAL REGISTRO DE COBRO / PAGO DE EXPENSA */}
       {isPagarModalOpen && expensaAPagar && (
