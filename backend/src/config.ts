@@ -9,12 +9,14 @@ if (!jwtSecretEnv) {
   );
 }
 
+export const isDev = (process.env.NODE_ENV || 'development') === 'development';
 export const config = {
+  // ...
+  corsOrigin: isDev ? 'http://localhost:3000' : process.env.CORS_ORIGIN || 'https://edificio-xyz-system-frontend.vercel.app',
   port: parseInt(process.env.PORT || '4000', 10),
   nodeEnv: process.env.NODE_ENV || 'development',
+  isDev: isDev,
   jwtSecret: new TextEncoder().encode(jwtSecretEnv),
-  corsOrigin: process.env.CORS_ORIGIN || 'http://localhost:3000',
-  isDev: (process.env.NODE_ENV || 'development') === 'development',
   sessionIdleTimeoutMinutes: parseFloat(process.env.SESSION_IDLE_TIMEOUT_MINUTES || '30'),
   moraCron: process.env.MORA_CRON || '0 1 * * *',
   moraCronEnabled: process.env.MORA_CRON_ENABLED === 'true',
