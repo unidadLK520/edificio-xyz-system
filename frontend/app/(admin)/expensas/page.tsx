@@ -32,13 +32,15 @@ import {
   PlusCircle,
   Sparkles,
   Clock,
-  Layers
+  Layers,
+  TrendingUp
 } from 'lucide-react'
 import SimuladorFechaBar from '@/components/SimuladorFechaBar'
 import CobroQrSimuladorModal from '@/components/CobroQrSimuladorModal'
 import RegistrarAnticipoModal from '@/components/RegistrarAnticipoModal'
 import RegistrarExtraModal from '@/components/RegistrarExtraModal'
 import EmitirExpensaIndividualModal from '@/components/EmitirExpensaIndividualModal'
+import DetalleMoraModal from '@/components/DetalleMoraModal'
 import { useFechaSistema } from '@/context/FechaSistemaContext'
 import { apiFetch } from '@/lib/api'
 import { fechaSolo, fechaHoraBolivia } from '@/lib/fecha'
@@ -142,6 +144,7 @@ export default function ExpensasPage() {
   const [selectedExtracto, setSelectedExtracto] = useState<ExpensaItem | null>(null)
   const [isExtractoGeneralOpen, setIsExtractoGeneralOpen] = useState(false)
   const [expensaAPagar, setExpensaAPagar] = useState<ExpensaItem | null>(null)
+  const [selectedExpensaParaMora, setSelectedExpensaParaMora] = useState<ExpensaItem | null>(null)
   const [estadoCuentaData, setEstadoCuentaData] = useState<any | null>(null)
   const [successToast, setSuccessToast] = useState<string | null>(null)
   const [errorToast, setErrorToast] = useState<string | null>(null)
@@ -885,20 +888,11 @@ export default function ExpensasPage() {
           >
             <Calculator className="w-4 h-4" />
             <span>
-              Simulador Mora:{' '}
+              Configuración & Mora:{' '}
               {politicaMora.tipoPenalidad === 'fijo'
                 ? `Bs. ${politicaMora.montoFijo} (Fijo)`
                 : `${politicaMora.porcentaje}%`}
             </span>
-          </button>
-
-          <button
-            onClick={handleCalcularMora}
-            className="inline-flex items-center justify-center gap-1.5 px-3 py-2.5 bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold rounded-xl shadow-md transition-all cursor-pointer"
-            title="Recalcular mora de unidades vencidas"
-          >
-            <Calculator className="w-4 h-4" />
-            Recalcular Mora
           </button>
 
           <button
@@ -1186,21 +1180,33 @@ export default function ExpensasPage() {
                         </td>
 
                         <td className="py-3.5 px-4">
-                          <span
-                            className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-extrabold ${
+                          <button
+                            type="button"
+                            onClick={() => setSelectedExpensaParaMora(item)}
+                            className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-extrabold cursor-pointer transition-transform hover:scale-105 ${
                               item.estado === 'Pagado'
                                 ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-400'
                                 : item.estado === 'Pendiente'
                                   ? 'bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-400'
                                   : 'bg-red-100 text-red-800 dark:bg-red-950/60 dark:text-red-400'
                             }`}
+                            title="Click para ver el cálculo y desglose de mora acumulada"
                           >
                             {item.estado}
-                          </span>
+                          </button>
                         </td>
 
                         <td className="py-3.5 px-3 text-right">
                           <div className="flex items-center justify-end gap-1">
+                            {/* Botón Ver Desglose y Acumulación de Mora */}
+                            <button
+                              onClick={() => setSelectedExpensaParaMora(item)}
+                              className="p-1 rounded-lg bg-rose-100 text-rose-800 hover:bg-rose-200 dark:bg-rose-950/60 dark:text-rose-300 transition-all cursor-pointer"
+                              title="Ver cómo se calculó y acumuló la mora mes a mes (Requerimiento C 3)"
+                            >
+                              <TrendingUp className="w-3.5 h-3.5" />
+                            </button>
+
                             {/* Botón QR Inteligente con Simulación de Mora */}
                             <button
                               onClick={() => {
@@ -1549,6 +1555,14 @@ export default function ExpensasPage() {
                   </div>
 
                   <div className="flex justify-end gap-2 pt-2">
+                    <button
+                      onClick={() => setSelectedExpensaParaMora(m)}
+                      className="px-3 py-1.5 rounded-xl bg-rose-700 hover:bg-rose-800 active:bg-rose-900 text-white text-xs font-bold inline-flex items-center gap-1.5 cursor-pointer shadow-xs transition-all"
+                      title="Ver cómo se calculó y acumuló la mora mes a mes (Requerimiento C 3)"
+                    >
+                      <TrendingUp className="w-3.5 h-3.5" />
+                      <span>Ver Desglose de Mora Acumulada</span>
+                    </button>
                     <button
                       onClick={() => handleVerEstadoCuenta(m.idDepartamento)}
                       className="px-3 py-1.5 rounded-xl bg-blue-700 hover:bg-blue-800 text-white text-xs font-bold"
@@ -2084,6 +2098,65 @@ export default function ExpensasPage() {
                     </div>
                   </div>
 
+                  {/* Tabla de Acumulación Mensual Progresiva de Mora (Requerimiento C 3 y Pizarra) */}
+                  <div className="p-3 rounded-2xl bg-[#dfd9ce]/60 dark:bg-slate-950/60 border border-[#cec8bc] dark:border-slate-800 space-y-2">
+                    <div className="flex items-center justify-between text-xs font-bold text-[#262422] dark:text-white">
+                      <span className="flex items-center gap-1.5 text-rose-700 dark:text-rose-400">
+                        <TrendingUp className="w-3.5 h-3.5" />
+                        Tabla de Acumulación Mensual de Mora
+                      </span>
+                      <span className="text-[10px] text-[#7d776f] font-mono">
+                        {politicaMora.tipoPenalidad === 'fijo'
+                          ? `Bs. ${politicaMora.montoFijo || 50}/mes fijo`
+                          : `${politicaMora.porcentaje || 10}% mensual`}
+                      </span>
+                    </div>
+
+                    <div className="overflow-x-auto rounded-xl border border-[#cec8bc] dark:border-slate-800 bg-white dark:bg-slate-900">
+                      <table className="w-full text-[11px] text-left">
+                        <thead className="bg-[#ede9e1] dark:bg-slate-950 text-[#7d776f] font-bold text-[10px] uppercase">
+                          <tr>
+                            <th className="py-1.5 px-2.5">Atraso</th>
+                            <th className="py-1.5 px-2 font-mono text-right">Recargo Mes</th>
+                            <th className="py-1.5 px-2 font-mono text-right text-rose-700 dark:text-rose-400">Mora Acumulada</th>
+                            <th className="py-1.5 px-2.5 font-mono text-right text-indigo-700 dark:text-indigo-300">Total Adeudado</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-[#cec8bc]/40 dark:divide-slate-800">
+                          {[1, 2, 3, 4, 5, 6].map((mesNum) => {
+                            const moraMes =
+                              politicaMora.tipoPenalidad === 'fijo'
+                                ? Number(politicaMora.montoFijo || 50)
+                                : Math.round(
+                                    ((simuladorMontoBaseInput * Number(politicaMora.porcentaje || 10)) / 100) * 100
+                                  ) / 100
+                            const acumulado = Math.round(moraMes * mesNum * 100) / 100
+                            const totalMes = Math.round((simuladorMontoBaseInput + acumulado) * 100) / 100
+                            return (
+                              <tr
+                                key={`sim-mora-mes-${mesNum}`}
+                                className="hover:bg-rose-50/50 dark:hover:bg-rose-950/20"
+                              >
+                                <td className="py-1.5 px-2.5 font-medium text-[#262422] dark:text-slate-200">
+                                  Mes {mesNum} <span className="text-[10px] text-[#7d776f]">(+{mesNum * 30} d)</span>
+                                </td>
+                                <td className="py-1.5 px-2 font-mono text-right text-[#5c5750] dark:text-slate-300">
+                                  +Bs. {moraMes.toFixed(2)}
+                                </td>
+                                <td className="py-1.5 px-2 font-mono text-right font-bold text-rose-700 dark:text-rose-400">
+                                  Bs. {acumulado.toFixed(2)}
+                                </td>
+                                <td className="py-1.5 px-2.5 font-mono text-right font-black text-indigo-800 dark:text-indigo-300">
+                                  Bs. {totalMes.toFixed(2)}
+                                </td>
+                              </tr>
+                            )
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+
                   <button
                     type="button"
                     onClick={() => {
@@ -2109,7 +2182,7 @@ export default function ExpensasPage() {
                     ) : (
                       historialReglasMora.map((reg, idx) => (
                         <div
-                          key={reg.idRegla ?? reg.idReglaMora ?? `regla-${idx}`}
+                          key={`regla-${reg.idRegla ?? reg.idReglaMora ?? idx}-${idx}`}
                           className={`p-2 rounded-xl border text-[11px] flex justify-between items-center ${
                             reg.activa
                               ? 'bg-emerald-50 dark:bg-emerald-950/40 border-emerald-300 dark:border-emerald-800 text-emerald-900 dark:text-emerald-200'
@@ -2215,8 +2288,8 @@ export default function ExpensasPage() {
                   <option value="" disabled>
                     Seleccione una persona...
                   </option>
-                  {personasList.map((p) => (
-                    <option key={p.idPersona} value={p.idPersona}>
+                  {personasList.map((p, idx) => (
+                    <option key={`persona-pagador-${p.idPersona}-${idx}`} value={p.idPersona}>
                       {p.nombres} {p.apellidos} {p.ciNit ? `(CI: ${p.ciNit})` : ''}
                     </option>
                   ))}
@@ -2548,7 +2621,7 @@ export default function ExpensasPage() {
                     const montoExpensa = selectedExtracto ? selectedExtracto.monto : 775.0
                     const cuotaRubro = montoExpensa * (r.porcentaje / 100)
                     return (
-                      <tr key={idx} className="hover:bg-slate-50 dark:hover:bg-slate-900/40">
+                      <tr key={`rubro-${idx}-${r.concepto}`} className="hover:bg-slate-50 dark:hover:bg-slate-900/40">
                         <td className="py-2 px-3 font-medium text-[#262422] dark:text-slate-200">
                           {r.concepto}
                         </td>
@@ -2903,7 +2976,7 @@ export default function ExpensasPage() {
                         const esAnticipo = mov.tipo === 'ANTICIPO'
                         return (
                           <tr
-                            key={mov.id || idx}
+                            key={`mov-${mov.id ?? idx}-${idx}`}
                             className="hover:bg-[#dfd9ce]/30 dark:hover:bg-slate-800/30"
                           >
                             <td className="py-2.5 px-3 font-bold font-mono text-[#262422] dark:text-white whitespace-nowrap">
@@ -3205,8 +3278,8 @@ export default function ExpensasPage() {
                   <option value="" disabled>
                     Seleccione persona pagadora...
                   </option>
-                  {personasList.map((p) => (
-                    <option key={p.idPersona} value={p.idPersona}>
+                  {personasList.map((p, idx) => (
+                    <option key={`persona-pagador-${p.idPersona}-${idx}`} value={p.idPersona}>
                       {p.nombres} {p.apellidos} {p.ciNit ? `(CI: ${p.ciNit})` : ''}
                     </option>
                   ))}
@@ -3313,6 +3386,18 @@ export default function ExpensasPage() {
         onClose={() => setIsExtraModalOpen(false)}
         expensa={expensaParaExtra}
         onSuccess={handleGuardarExtra}
+      />
+
+      {/* MODAL DETALLE Y ACUMULACIÓN MENSUAL DE MORA (Requerimiento C 3 y Pizarra) */}
+      <DetalleMoraModal
+        isOpen={Boolean(selectedExpensaParaMora)}
+        onClose={() => setSelectedExpensaParaMora(null)}
+        expensa={selectedExpensaParaMora}
+        onOpenQr={(exp) => {
+          setSelectedExpensaParaMora(null)
+          setExpensaParaQr(exp)
+          setIsQrSimuladorOpen(true)
+        }}
       />
     </div>
   )

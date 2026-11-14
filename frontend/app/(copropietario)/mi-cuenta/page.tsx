@@ -12,6 +12,7 @@
 import React, { useState } from 'react'
 import SimuladorFechaBar from '@/components/SimuladorFechaBar'
 import CobroQrSimuladorModal from '@/components/CobroQrSimuladorModal'
+import DetalleMoraModal from '@/components/DetalleMoraModal'
 import {
   Receipt,
   CreditCard,
@@ -32,7 +33,8 @@ import {
   Info,
   User,
   Building2,
-  Home
+  Home,
+  TrendingUp
 } from 'lucide-react'
 
 export interface ExpensaResidenteItem {
@@ -174,6 +176,7 @@ export default function MiCuentaPage() {
   const [isQRModalOpen, setIsQRModalOpen] = useState(false)
   const [isQrSimuladorModalOpen, setIsQrSimuladorModalOpen] = useState(false)
   const [selectedExpensaSimulador, setSelectedExpensaSimulador] = useState<any | null>(null)
+  const [selectedExpensaParaMora, setSelectedExpensaParaMora] = useState<any | null>(null)
   const [paymentSuccessMsg, setPaymentSuccessMsg] = useState(false)
 
   // Formulario de pago
@@ -520,6 +523,29 @@ export default function MiCuentaPage() {
                             <FileText className="w-3.5 h-3.5" />
                             Extracto
                           </button>
+
+                          {item.estado !== 'PAGADA' && (
+                            <button
+                              onClick={() =>
+                                setSelectedExpensaParaMora({
+                                  departamento: { numero: item.deptoNumero, tipologia: item.tipologia },
+                                  propietarioNombre: item.propietario,
+                                  inquilinoNombre: item.inquilino,
+                                  montoBase: item.montoExpensa,
+                                  saldoPendiente: item.total,
+                                  fechaVencimiento: item.vencimiento.includes('/')
+                                    ? item.vencimiento.split('/').reverse().join('-')
+                                    : item.vencimiento,
+                                  periodo: item.periodo
+                                })
+                              }
+                              className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-rose-100 text-rose-800 hover:bg-rose-200 dark:bg-rose-950/50 dark:text-rose-300 text-xs font-bold transition-all cursor-pointer"
+                              title="Ver cómo se calculó y acumuló la mora mes a mes (Requerimiento C 3)"
+                            >
+                              <TrendingUp className="w-3.5 h-3.5" />
+                              Mora
+                            </button>
+                          )}
 
                           {item.estado === 'PAGADA' ? (
                             <button
@@ -1244,6 +1270,25 @@ export default function MiCuentaPage() {
         }}
       />
 
+      {/* MODAL DETALLE Y ACUMULACIÓN MENSUAL DE MORA (Requerimiento C 3 y Pizarra) */}
+      <DetalleMoraModal
+        isOpen={Boolean(selectedExpensaParaMora)}
+        onClose={() => setSelectedExpensaParaMora(null)}
+        expensa={selectedExpensaParaMora}
+        onOpenQr={(exp) => {
+          setSelectedExpensaParaMora(null)
+          setSelectedExpensaSimulador({
+            periodo: exp.periodo || 'Noviembre 2026',
+            monto: exp.montoBase || exp.saldoPendiente || 775,
+            montoTotal: exp.montoBase || exp.saldoPendiente || 775,
+            fechaVencimiento: exp.fechaVencimiento || '2026-11-10',
+            departamento: exp.departamento || { numero: '305', tipologia: 'Tipo B (80 m²)' },
+            propietarioNombre: exp.propietarioNombre || 'Juan Pérez',
+            inquilinoNombre: exp.inquilinoNombre || 'María López'
+          })
+          setIsQrSimuladorModalOpen(true)
+        }}
+      />
     </div>
   )
 }
