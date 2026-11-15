@@ -8,6 +8,16 @@ import { z } from 'zod';
 // Schemas Zod de Validación
 // ============================================================================
 
+export const EstadoCivilEnum = z.enum(
+  ['Soltero', 'Casado', 'Divorciado', 'Viudo', 'Unión libre'],
+  {
+    errorMap: () => ({
+      message: "estadoCivil debe ser 'Soltero', 'Casado', 'Divorciado', 'Viudo' o 'Unión libre'",
+    }),
+  }
+);
+export type EstadoCivil = z.infer<typeof EstadoCivilEnum>;
+
 export const crearPersonaSchema = z.object({
   ciNit: z
     .string({ required_error: 'El CI/NIT es obligatorio' })
@@ -42,6 +52,13 @@ export const crearPersonaSchema = z.object({
     .string()
     .trim()
     .max(500, 'La dirección no puede exceder 500 caracteres')
+    .optional()
+    .nullable(),
+  estadoCivil: EstadoCivilEnum.optional().nullable(),
+  cantidadHijos: z
+    .number({ invalid_type_error: 'La cantidad de hijos debe ser un número entero' })
+    .int('La cantidad de hijos debe ser un número entero')
+    .min(0, 'La cantidad de hijos debe ser mayor o igual a 0')
     .optional()
     .nullable(),
 });
@@ -83,6 +100,13 @@ export const actualizarPersonaSchema = z.object({
     .string()
     .trim()
     .max(500, 'La dirección no puede exceder 500 caracteres')
+    .optional()
+    .nullable(),
+  estadoCivil: EstadoCivilEnum.optional().nullable(),
+  cantidadHijos: z
+    .number({ invalid_type_error: 'La cantidad de hijos debe ser un número entero' })
+    .int('La cantidad de hijos debe ser un número entero')
+    .min(0, 'La cantidad de hijos debe ser mayor o igual a 0')
     .optional()
     .nullable(),
 });

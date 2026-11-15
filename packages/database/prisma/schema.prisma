@@ -65,6 +65,8 @@ model Persona {
   telefono       String?                @db.VarChar(30)
   correo         String?                @db.VarChar(150)
   direccion      String?                @db.Text
+  estadoCivil    String?                @map("estado_civil") @db.VarChar(30)
+  cantidadHijos  Int?                   @map("cantidad_hijos") @db.SmallInt
   fechaRegistro  DateTime               @default(now()) @map("fecha_registro") @db.Timestamp(6)
   
   departamentosPropios Departamento[]   @relation("PropietarioDepartamentos")
@@ -99,6 +101,7 @@ model Departamento {
   idPropietario  Int?                   @map("id_propietario")
   estado         String                 @default("Ocupado") @db.VarChar(20)
   idTipo         Int?                   @map("id_tipo")
+  cantidadHabitantes Int?               @map("cantidad_habitantes") @db.SmallInt
   
   propietario    Persona?               @relation("PropietarioDepartamentos", fields: [idPropietario], references: [idPersona])
   tipo           TipoDepartamento?      @relation(fields: [idTipo], references: [idTipo], onDelete: Restrict)
