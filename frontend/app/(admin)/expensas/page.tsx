@@ -1249,29 +1249,29 @@ export default function ExpensasPage() {
             </div>
           </div>
 
-          {/* TABLA Y TARJETAS DE EXPENSAS (100% RESPONSIVO) */}
+          {/* TABLA Y TARJETAS DE EXPENSAS (100% RESPONSIVO Y AJUSTADO AL CUADRO) */}
           <div className="rounded-2xl bg-[#ede9e1] dark:bg-slate-900 border border-[#cec8bc] dark:border-slate-800 overflow-hidden shadow-sm">
-            {/* VISTA ESCRITORIO (md y superior): TABLA COMPLETA CON HORIZONTAL SCROLLING SEGURO */}
+            {/* VISTA ESCRITORIO (md y superior): TABLA AJUSTADA 100% AL CONTENEDOR */}
             <div className="hidden md:block overflow-x-auto scrollbar-thin">
-              <table className="w-full text-left border-collapse text-xs sm:text-sm min-w-[1100px]">
+              <table className="w-full text-left border-collapse text-xs">
                 <thead>
-                  <tr className="border-b border-[#cec8bc] dark:border-slate-800 bg-[#dfd9ce]/60 dark:bg-slate-950/60 text-[#7d776f] dark:text-slate-400 uppercase text-[10px] sm:text-[11px] font-bold">
-                    <th className="py-3 px-2.5 whitespace-nowrap">Tipo Dpto</th>
-                    <th className="py-3 px-2.5 whitespace-nowrap">Dpto</th>
-                    <th className="py-3 px-3">Propietario / Responsable</th>
-                    <th className="py-3 px-2.5 whitespace-nowrap">Período</th>
-                    <th className="py-3 px-2.5 font-mono text-right whitespace-nowrap">Expensa (Bs)</th>
-                    <th className="py-3 px-2.5 font-mono text-right whitespace-nowrap">Agua (Bs)</th>
-                    <th className="py-3 px-2.5 font-mono text-right text-indigo-700 dark:text-indigo-400 whitespace-nowrap">
-                      <div>Cargos Extras (Bs)</div>
-                      <div className="text-[9px] font-normal normal-case text-indigo-600/80 dark:text-indigo-300/80">
-                        Pintura, Mant., etc.
-                      </div>
+                  <tr className="border-b border-[#cec8bc] dark:border-slate-800 bg-[#dfd9ce]/60 dark:bg-slate-950/60 text-[#7d776f] dark:text-slate-400 uppercase text-[10px] font-bold">
+                    <th className="py-2.5 px-2 whitespace-nowrap">Tipo</th>
+                    <th className="py-2.5 px-1.5 whitespace-nowrap">Dpto</th>
+                    <th className="py-2.5 px-2">Propietario / Responsable</th>
+                    <th className="py-2.5 px-2 whitespace-nowrap">Período</th>
+                    <th className="py-2.5 px-2 font-mono text-right whitespace-nowrap">Base (Bs)</th>
+                    <th className="py-2.5 px-1.5 font-mono text-right whitespace-nowrap">Agua (Bs)</th>
+                    <th
+                      className="py-2.5 px-1.5 font-mono text-right text-indigo-700 dark:text-indigo-400 whitespace-nowrap"
+                      title="Cargos extras (Pintura, Mantenimiento, etc.)"
+                    >
+                      Extras (Bs)
                     </th>
-                    <th className="py-3 px-2.5 font-mono text-right whitespace-nowrap">Total (Bs)</th>
-                    <th className="py-3 px-2.5 font-mono text-right whitespace-nowrap">Saldo</th>
-                    <th className="py-3 px-2.5 text-center whitespace-nowrap">Estado</th>
-                    <th className="py-3 px-3 text-right whitespace-nowrap">Acciones</th>
+                    <th className="py-2.5 px-2 font-mono text-right whitespace-nowrap">Total (Bs)</th>
+                    <th className="py-2.5 px-2 font-mono text-right whitespace-nowrap">Saldo (Bs)</th>
+                    <th className="py-2.5 px-1.5 text-center whitespace-nowrap">Estado</th>
+                    <th className="py-2.5 px-2 text-right whitespace-nowrap">Acciones</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-[#cec8bc] dark:divide-slate-800">
@@ -1316,58 +1316,67 @@ export default function ExpensasPage() {
                           )}
 
                           <tr className="hover:bg-[#dfd9ce]/40 dark:hover:bg-slate-800/40 transition-colors">
-                            <td className="py-3.5 px-2.5 whitespace-nowrap">
-                              <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-extrabold bg-blue-100 text-blue-900 dark:bg-blue-950/80 dark:text-blue-300 border border-blue-200 dark:border-blue-800">
+                            <td className="py-2.5 px-2 whitespace-nowrap">
+                              <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-extrabold bg-blue-100 text-blue-900 dark:bg-blue-950/80 dark:text-blue-300 border border-blue-200 dark:border-blue-800">
                                 {item.departamento?.tipologia?.includes('Tipo')
                                   ? item.departamento.tipologia
                                   : `Tipo ${item.departamento?.tipologia || 'A'}`}
                               </span>
                             </td>
 
-                            <td className="py-3.5 px-2.5 font-extrabold text-sm text-[#262422] dark:text-white font-mono whitespace-nowrap">
+                            <td className="py-2.5 px-1.5 font-extrabold text-xs sm:text-sm text-[#262422] dark:text-white font-mono whitespace-nowrap">
                               {item.departamento?.numero || item.idDepartamento}
                             </td>
 
-                            <td className="py-3.5 px-3 min-w-[150px]">
-                              <div className="font-bold text-[#262422] dark:text-white leading-tight">
+                            <td className="py-2.5 px-2">
+                              <div
+                                className="font-bold text-[#262422] dark:text-white leading-tight truncate max-w-[130px] lg:max-w-[170px]"
+                                title={item.propietarioNombre}
+                              >
                                 {item.propietarioNombre || 'Propietario Titular'}
                               </div>
                               {item.inquilinoNombre && item.inquilinoNombre !== '—' && (
-                                <div className="text-[11px] text-[#7d776f] dark:text-slate-400">
+                                <div
+                                  className="text-[10px] text-[#7d776f] dark:text-slate-400 truncate max-w-[130px]"
+                                  title={item.inquilinoNombre}
+                                >
                                   Ocupante: {item.inquilinoNombre}
                                 </div>
                               )}
                               {item.pagadoPor && (
-                                <div className="text-[10px] text-emerald-700 dark:text-emerald-400 font-semibold">
-                                  Pagado por: {item.pagadoPor}
+                                <div className="text-[9px] text-emerald-700 dark:text-emerald-400 font-semibold truncate max-w-[130px]">
+                                  Pagó: {item.pagadoPor}
                                 </div>
                               )}
                             </td>
 
-                            <td className="py-3.5 px-2.5 font-mono text-xs whitespace-nowrap">{item.periodo}</td>
+                            <td className="py-2.5 px-2 font-mono text-xs whitespace-nowrap">
+                              {item.periodo}
+                            </td>
 
-                            {/* Columnas monetarias con whitespace-nowrap anti-quiebres */}
-                            <td className="py-3.5 px-2.5 font-mono text-right font-bold text-[#262422] dark:text-white whitespace-nowrap">
+                            {/* Base */}
+                            <td className="py-2.5 px-2 font-mono text-right font-bold text-[#262422] dark:text-white whitespace-nowrap text-xs">
                               Bs.&nbsp;{(item.montoBase !== undefined
                                 ? item.montoBase
                                 : item.monto - (item.montoAgua || 0)
                               ).toFixed(2)}
                             </td>
 
-                            <td className="py-3.5 px-2.5 font-mono text-right font-bold text-blue-700 dark:text-blue-400 whitespace-nowrap">
+                            {/* Agua */}
+                            <td className="py-2.5 px-1.5 font-mono text-right font-bold text-blue-700 dark:text-blue-400 whitespace-nowrap text-xs">
                               Bs.&nbsp;{(item.montoAgua || 0).toFixed(2)}
                             </td>
 
-                            {/* Columna Extra Individual (Requerimiento C 2.2 y 2.3) */}
-                            <td className="py-3.5 px-2.5 font-mono text-right text-indigo-700 dark:text-indigo-400 whitespace-nowrap">
-                              <div className="font-bold text-xs">
+                            {/* Extras */}
+                            <td className="py-2.5 px-1.5 font-mono text-right text-indigo-700 dark:text-indigo-400 whitespace-nowrap text-xs">
+                              <span className="font-bold">
                                 {item.montoExtra && Number(item.montoExtra) > 0
                                   ? `+Bs. ${Number(item.montoExtra).toFixed(2)}`
                                   : '—'}
-                              </div>
+                              </span>
                               {Boolean(item.montoExtra && Number(item.montoExtra) > 0) && (
                                 <div
-                                  className="text-[9px] text-[#7d776f] dark:text-slate-400 truncate max-w-[110px] ml-auto"
+                                  className="text-[9px] text-[#7d776f] dark:text-slate-400 truncate max-w-[80px] ml-auto"
                                   title={item.extraConcepto}
                                 >
                                   {item.extraConcepto || 'Extra'}
@@ -1375,23 +1384,32 @@ export default function ExpensasPage() {
                               )}
                             </td>
 
-                            <td className="py-3.5 px-2.5 font-mono text-right whitespace-nowrap">
-                              <div className="font-extrabold text-emerald-800 dark:text-emerald-300 text-sm">
+                            {/* Total */}
+                            <td className="py-2.5 px-2 font-mono text-right whitespace-nowrap">
+                              <span className="font-extrabold text-emerald-800 dark:text-emerald-300 text-xs">
                                 Bs.&nbsp;{item.monto.toFixed(2)}
-                              </div>
+                              </span>
                             </td>
 
-                            <td className="py-3.5 px-3 font-bold font-mono text-right whitespace-nowrap">
-                              <span className={item.saldoPendiente > 0 ? 'text-red-600 dark:text-red-400' : 'text-emerald-700 dark:text-emerald-400'}>
+                            {/* Saldo */}
+                            <td className="py-2.5 px-2 font-bold font-mono text-right whitespace-nowrap text-xs">
+                              <span
+                                className={
+                                  item.saldoPendiente > 0
+                                    ? 'text-red-600 dark:text-red-400'
+                                    : 'text-emerald-700 dark:text-emerald-400'
+                                }
+                              >
                                 Bs.&nbsp;{item.saldoPendiente.toFixed(2)}
                               </span>
                             </td>
 
-                            <td className="py-3.5 px-2 text-center whitespace-nowrap">
+                            {/* Estado */}
+                            <td className="py-2.5 px-1.5 text-center whitespace-nowrap">
                               <button
                                 type="button"
                                 onClick={() => setSelectedExpensaParaMora(item)}
-                                className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-extrabold cursor-pointer transition-transform hover:scale-105 ${
+                                className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-extrabold cursor-pointer transition-transform hover:scale-105 ${
                                   item.estado === 'Pagado'
                                     ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-400'
                                     : item.estado === 'Pendiente'
@@ -1404,12 +1422,13 @@ export default function ExpensasPage() {
                               </button>
                             </td>
 
-                            <td className="py-3.5 px-3 text-right whitespace-nowrap">
+                            {/* Acciones */}
+                            <td className="py-2.5 px-2 text-right whitespace-nowrap">
                               <div className="flex items-center justify-end gap-1">
                                 {/* Botón Ver Desglose y Acumulación de Mora */}
                                 <button
                                   onClick={() => setSelectedExpensaParaMora(item)}
-                                  className="p-1.5 rounded-lg bg-rose-100 text-rose-800 hover:bg-rose-200 dark:bg-rose-950/60 dark:text-rose-300 transition-all cursor-pointer"
+                                  className="p-1 rounded-lg bg-rose-100 text-rose-800 hover:bg-rose-200 dark:bg-rose-950/60 dark:text-rose-300 transition-all cursor-pointer"
                                   title="Ver cómo se calculó y acumuló la mora mes a mes (Requerimiento C 3)"
                                 >
                                   <TrendingUp className="w-3.5 h-3.5" />
@@ -1421,11 +1440,11 @@ export default function ExpensasPage() {
                                     setExpensaParaQr(item)
                                     setIsQrSimuladorOpen(true)
                                   }}
-                                  className="px-2 py-1 rounded-lg bg-emerald-700 hover:bg-emerald-600 text-white text-xs font-bold transition-all cursor-pointer flex items-center gap-1 shadow-xs"
+                                  className="px-1.5 py-1 rounded-lg bg-emerald-700 hover:bg-emerald-600 text-white text-[11px] font-bold transition-all cursor-pointer flex items-center gap-0.5 shadow-xs"
                                   title="Simulador de Cobro QR (Requerimiento C 4.1, 4.2, 4.3)"
                                 >
                                   <QrCode className="w-3.5 h-3.5" />
-                                  <span>QR</span>
+                                  <span className="text-[10px]">QR</span>
                                 </button>
 
                                 {/* Botón Agregar / Editar Extra */}
@@ -1434,25 +1453,26 @@ export default function ExpensasPage() {
                                     setExpensaParaExtra(item)
                                     setIsExtraModalOpen(true)
                                   }}
-                                  className="p-1.5 rounded-lg bg-indigo-100 text-indigo-800 hover:bg-indigo-200 dark:bg-indigo-950/60 dark:text-indigo-300 transition-all cursor-pointer"
+                                  className="p-1 rounded-lg bg-indigo-100 text-indigo-800 hover:bg-indigo-200 dark:bg-indigo-950/60 dark:text-indigo-300 transition-all cursor-pointer"
                                   title="Registrar monto extra individual (ej. Cuota Extraordinaria, Pintura, etc.)"
                                 >
                                   <PlusCircle className="w-3.5 h-3.5" />
                                 </button>
 
+                                {/* Botón Extracto (icono compacto con tooltip) */}
                                 <button
                                   onClick={() => setSelectedExtracto(item)}
-                                  className="px-2 py-1 rounded-lg bg-blue-100 text-blue-800 hover:bg-blue-200 dark:bg-blue-950/50 dark:text-blue-300 text-xs font-bold transition-all cursor-pointer flex items-center gap-1"
+                                  className="p-1 rounded-lg bg-blue-100 text-blue-800 hover:bg-blue-200 dark:bg-blue-950/50 dark:text-blue-300 transition-all cursor-pointer"
                                   title="Ver extracto y desglose analítico de lo que se cobra"
                                 >
                                   <FileText className="w-3.5 h-3.5" />
-                                  Extracto
                                 </button>
 
+                                {/* Botón Recibo o Cobrar */}
                                 {item.estado === 'Pagado' ? (
                                   <button
                                     onClick={() => setSelectedReceipt(item)}
-                                    className="px-2 py-1 rounded-lg bg-emerald-100 text-emerald-800 hover:bg-emerald-200 dark:bg-emerald-950/50 dark:text-emerald-300 text-xs font-bold transition-all cursor-pointer"
+                                    className="px-2 py-1 rounded-lg bg-emerald-100 text-emerald-800 hover:bg-emerald-200 dark:bg-emerald-950/50 dark:text-emerald-300 text-[11px] font-bold transition-all cursor-pointer"
                                     title="Ver Recibo Oficial de Caja"
                                   >
                                     Recibo
@@ -1476,12 +1496,14 @@ export default function ExpensasPage() {
                                       setModalError(null)
                                       setIsPagarModalOpen(true)
                                     }}
-                                    className="px-2 py-1 rounded-lg bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold cursor-pointer"
+                                    className="px-2 py-1 rounded-lg bg-emerald-700 hover:bg-emerald-800 text-white text-[11px] font-bold cursor-pointer"
+                                    title="Cobrar expensa"
                                   >
                                     Cobrar
                                   </button>
                                 )}
 
+                                {/* Historial */}
                                 <button
                                   onClick={() => handleVerEstadoCuenta(item.idDepartamento)}
                                   className="p-1 rounded-lg text-[#5c5750] hover:text-[#262422] hover:bg-[#ded8cc] dark:hover:bg-slate-800"
