@@ -65,7 +65,7 @@ export default function EmitirExpensaIndividualModal({
   const [montoBase, setMontoBase] = useState<number | ''>(350)
   const [montoAgua, setMontoAgua] = useState<number | ''>(20)
   const [incluirExtra, setIncluirExtra] = useState<boolean>(false)
-  const [extraConcepto, setExtraConcepto] = useState<string>('Extra Pintura Edificio')
+  const [extraConcepto, setExtraConcepto] = useState<string>('Cuota Extraordinaria')
   const [extraMonto, setExtraMonto] = useState<number | ''>(10)
   const [actualizarSiExiste, setActualizarSiExiste] = useState<boolean>(false)
 
@@ -415,7 +415,7 @@ export default function EmitirExpensaIndividualModal({
                     type="text"
                     value={extraConcepto}
                     onChange={(e) => setExtraConcepto(e.target.value)}
-                    placeholder="Ej. Extra Pintura Edificio"
+                    placeholder="Ej. Cuota Extraordinaria, Pintura, Mantenimiento"
                     className="w-full px-2.5 py-1.5 rounded-lg bg-white dark:bg-slate-900 border text-xs"
                   />
                 </div>

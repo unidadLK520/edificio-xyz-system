@@ -321,35 +321,23 @@ export default function ExpensasPage() {
             const montoExtra =
               extraGuardado !== undefined
                 ? extraGuardado.monto
-                : deptoNum === 'A1' || deptoNum === 'B5' || item.idExpensa === 1
-                  ? 250
-                  : 0
+                : Number(item.montoExtra || 0)
             const extraConcepto =
               extraGuardado !== undefined
                 ? extraGuardado.concepto
-                : deptoNum === 'A1' || deptoNum === 'B5' || item.idExpensa === 1
-                  ? 'Extra Pintura Edificio'
-                  : 'Extra'
+                : item.extraConcepto || (montoExtra > 0 ? 'Cargo Extra' : '')
 
-            const montoAgua =
-              Number(item.montoAgua || 0) > 0
-                ? Number(item.montoAgua)
-                : deptoNum === 'A1' || deptoNum === 'B5' || item.idExpensa === 1
-                  ? 25
-                  : Number(item.montoAgua || 0)
+            const montoAgua = Number(item.montoAgua || 0)
 
             const totalCalculado =
-              Number(item.monto) > 0 && !extraGuardado && deptoNum !== 'A1' && deptoNum !== 'B5'
+              Number(item.monto) > 0 && !extraGuardado && montoExtra === 0
                 ? Number(item.monto)
                 : Math.round((montoBase + montoAgua + montoExtra) * 100) / 100
 
             const saldoCalc =
               item.estado === 'Pagado'
                 ? 0
-                : Number(item.saldoPendiente) > 0 &&
-                    !extraGuardado &&
-                    deptoNum !== 'A1' &&
-                    deptoNum !== 'B5'
+                : Number(item.saldoPendiente) > 0 && !extraGuardado && montoExtra === 0
                   ? Number(item.saldoPendiente)
                   : totalCalculado
 
@@ -833,29 +821,50 @@ export default function ExpensasPage() {
     )
   }, [departamentosList, expensas])
 
-  // Filtrado de expensas
+  // Filtrado y ordenamiento jerárquico de expensas (Requerimiento C 2.3: Listado por tipo de Dpto en cada mes)
   const expensasFiltradas = useMemo(() => {
-    return expensas.filter((item) => {
-      const searchLower = searchTerm.toLowerCase()
-      const matchSearch =
-        (item.departamento?.numero || '').toLowerCase().includes(searchLower) ||
-        (item.propietarioNombre || '').toLowerCase().includes(searchLower) ||
-        (item.inquilinoNombre || '').toLowerCase().includes(searchLower)
-      const matchEstado = filtroEstado === 'Todos' || item.estado === filtroEstado
-      const tipoNombre = (item.departamento?.tipologia || '').toLowerCase()
-      const matchTipo =
-        filtroTipoDpto === 'Todos' ||
-        (filtroTipoDpto === 'Tipo A' &&
-          (tipoNombre.includes('tipo a') || tipoNombre.includes('tipo 1'))) ||
-        (filtroTipoDpto === 'Tipo B' &&
-          (tipoNombre.includes('tipo b') || tipoNombre.includes('tipo 2'))) ||
-        (filtroTipoDpto === 'Tipo C' &&
-          (tipoNombre.includes('tipo c') || tipoNombre.includes('tipo 3'))) ||
-        tipoNombre.includes(filtroTipoDpto.toLowerCase())
-      const matchPeriodo =
-        filtroPeriodo === 'Todos' || (item.periodo && item.periodo.startsWith(filtroPeriodo))
-      return matchSearch && matchEstado && matchPeriodo && matchTipo
-    })
+    return expensas
+      .filter((item) => {
+        const searchLower = searchTerm.toLowerCase()
+        const matchSearch =
+          (item.departamento?.numero || '').toLowerCase().includes(searchLower) ||
+          (item.propietarioNombre || '').toLowerCase().includes(searchLower) ||
+          (item.inquilinoNombre || '').toLowerCase().includes(searchLower)
+        const matchEstado = filtroEstado === 'Todos' || item.estado === filtroEstado
+        const tipoNombre = (item.departamento?.tipologia || '').toLowerCase()
+        const matchTipo =
+          filtroTipoDpto === 'Todos' ||
+          (filtroTipoDpto === 'Tipo A' &&
+            (tipoNombre.includes('tipo a') || tipoNombre.includes('tipo 1'))) ||
+          (filtroTipoDpto === 'Tipo B' &&
+            (tipoNombre.includes('tipo b') || tipoNombre.includes('tipo 2'))) ||
+          (filtroTipoDpto === 'Tipo C' &&
+            (tipoNombre.includes('tipo c') || tipoNombre.includes('tipo 3'))) ||
+          tipoNombre.includes(filtroTipoDpto.toLowerCase())
+        const matchPeriodo =
+          filtroPeriodo === 'Todos' || (item.periodo && item.periodo.startsWith(filtroPeriodo))
+        return matchSearch && matchEstado && matchPeriodo && matchTipo
+      })
+      .sort((a, b) => {
+        // 1. Período más reciente primero (descendente)
+        const pA = a.periodo || ''
+        const pB = b.periodo || ''
+        if (pA !== pB) {
+          return pB.localeCompare(pA)
+        }
+
+        // 2. Tipo de Departamento (Requerimiento C 2.3: Listado por tipo de Dpto)
+        const tA = (a.departamento?.tipologia || 'Tipo A').toUpperCase()
+        const tB = (b.departamento?.tipologia || 'Tipo A').toUpperCase()
+        if (tA !== tB) {
+          return tA.localeCompare(tB)
+        }
+
+        // 3. Número de Departamento en orden numérico natural (100, 101, 102...)
+        const numA = a.departamento?.numero || String(a.idDepartamento || '')
+        const numB = b.departamento?.numero || String(b.idDepartamento || '')
+        return numA.localeCompare(numB, undefined, { numeric: true })
+      })
   }, [expensas, searchTerm, filtroEstado, filtroPeriodo, filtroTipoDpto])
 
   // Helper para simulación de mora con fecha evaluada arbitraria (Individual y Global)
@@ -1240,25 +1249,29 @@ export default function ExpensasPage() {
             </div>
           </div>
 
-          {/* TABLA DE EXPENSAS */}
+          {/* TABLA Y TARJETAS DE EXPENSAS (100% RESPONSIVO) */}
           <div className="rounded-2xl bg-[#ede9e1] dark:bg-slate-900 border border-[#cec8bc] dark:border-slate-800 overflow-hidden shadow-sm">
-            <div className="overflow-x-auto scrollbar-thin">
-              <table className="w-full text-left border-collapse text-xs sm:text-sm min-w-[950px]">
+            {/* VISTA ESCRITORIO (md y superior): TABLA COMPLETA CON HORIZONTAL SCROLLING SEGURO */}
+            <div className="hidden md:block overflow-x-auto scrollbar-thin">
+              <table className="w-full text-left border-collapse text-xs sm:text-sm min-w-[1100px]">
                 <thead>
                   <tr className="border-b border-[#cec8bc] dark:border-slate-800 bg-[#dfd9ce]/60 dark:bg-slate-950/60 text-[#7d776f] dark:text-slate-400 uppercase text-[10px] sm:text-[11px] font-bold">
-                    <th className="py-3 px-2.5">Tipo Dpto</th>
-                    <th className="py-3 px-2.5">Dpto</th>
+                    <th className="py-3 px-2.5 whitespace-nowrap">Tipo Dpto</th>
+                    <th className="py-3 px-2.5 whitespace-nowrap">Dpto</th>
                     <th className="py-3 px-3">Propietario / Responsable</th>
-                    <th className="py-3 px-2.5">Período</th>
-                    <th className="py-3 px-2.5 font-mono text-right">Expensa (Bs)</th>
-                    <th className="py-3 px-2.5 font-mono text-right">Agua (Bs)</th>
-                    <th className="py-3 px-2.5 font-mono text-right text-indigo-700 dark:text-indigo-400">
-                      Extra Pintura Edificio (Bs)
+                    <th className="py-3 px-2.5 whitespace-nowrap">Período</th>
+                    <th className="py-3 px-2.5 font-mono text-right whitespace-nowrap">Expensa (Bs)</th>
+                    <th className="py-3 px-2.5 font-mono text-right whitespace-nowrap">Agua (Bs)</th>
+                    <th className="py-3 px-2.5 font-mono text-right text-indigo-700 dark:text-indigo-400 whitespace-nowrap">
+                      <div>Cargos Extras (Bs)</div>
+                      <div className="text-[9px] font-normal normal-case text-indigo-600/80 dark:text-indigo-300/80">
+                        Pintura, Mant., etc.
+                      </div>
                     </th>
-                    <th className="py-3 px-2.5 font-mono text-right">Total (Bs)</th>
-                    <th className="py-3 px-2.5 font-mono text-right">Saldo</th>
-                    <th className="py-3 px-2.5 text-center">Estado</th>
-                    <th className="py-3 px-3 text-right">Acciones</th>
+                    <th className="py-3 px-2.5 font-mono text-right whitespace-nowrap">Total (Bs)</th>
+                    <th className="py-3 px-2.5 font-mono text-right whitespace-nowrap">Saldo</th>
+                    <th className="py-3 px-2.5 text-center whitespace-nowrap">Estado</th>
+                    <th className="py-3 px-3 text-right whitespace-nowrap">Acciones</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-[#cec8bc] dark:divide-slate-800">
@@ -1272,28 +1285,275 @@ export default function ExpensasPage() {
                       </td>
                     </tr>
                   ) : (
-                    expensasFiltradas.map((item, idx) => (
-                      <tr
-                        key={
-                          item.idExpensa
-                            ? `exp-${item.idExpensa}-${idx}`
-                            : `dpto-${item.idDepartamento}-${item.periodo || idx}`
-                        }
-                        className="hover:bg-[#dfd9ce]/40 dark:hover:bg-slate-800/40"
-                      >
-                        <td className="py-3.5 px-2.5">
-                          <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-extrabold bg-blue-100 text-blue-900 dark:bg-blue-950/80 dark:text-blue-300 border border-blue-200 dark:border-blue-800">
-                            {item.departamento?.tipologia?.includes('Tipo')
-                              ? item.departamento.tipologia
-                              : `Tipo ${item.departamento?.tipologia || 'A'}`}
+                    expensasFiltradas.map((item, idx) => {
+                      const prevItem = idx > 0 ? expensasFiltradas[idx - 1] : null
+                      const isNewPeriod = !prevItem || prevItem.periodo !== item.periodo
+
+                      return (
+                        <React.Fragment
+                          key={
+                            item.idExpensa
+                              ? `exp-${item.idExpensa}-${idx}`
+                              : `dpto-${item.idDepartamento}-${item.periodo || idx}`
+                          }
+                        >
+                          {isNewPeriod && (
+                            <tr className="bg-[#ded7c9]/80 dark:bg-slate-950/80 border-t-2 border-b border-[#c4bcad] dark:border-slate-800">
+                              <td colSpan={11} className="py-2 px-3">
+                                <div className="flex items-center justify-between text-xs">
+                                  <div className="flex items-center gap-2">
+                                    <Calendar className="w-3.5 h-3.5 text-emerald-700 dark:text-emerald-400" />
+                                    <span className="font-extrabold text-[#262422] dark:text-white uppercase tracking-wider">
+                                      Período: {item.periodo}
+                                    </span>
+                                    <span className="text-[11px] text-[#7d776f] dark:text-slate-400 font-medium hidden sm:inline">
+                                      • Listado ordenado por Tipo de Dpto (Requerimiento C 2.3)
+                                    </span>
+                                  </div>
+                                </div>
+                              </td>
+                            </tr>
+                          )}
+
+                          <tr className="hover:bg-[#dfd9ce]/40 dark:hover:bg-slate-800/40 transition-colors">
+                            <td className="py-3.5 px-2.5 whitespace-nowrap">
+                              <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-extrabold bg-blue-100 text-blue-900 dark:bg-blue-950/80 dark:text-blue-300 border border-blue-200 dark:border-blue-800">
+                                {item.departamento?.tipologia?.includes('Tipo')
+                                  ? item.departamento.tipologia
+                                  : `Tipo ${item.departamento?.tipologia || 'A'}`}
+                              </span>
+                            </td>
+
+                            <td className="py-3.5 px-2.5 font-extrabold text-sm text-[#262422] dark:text-white font-mono whitespace-nowrap">
+                              {item.departamento?.numero || item.idDepartamento}
+                            </td>
+
+                            <td className="py-3.5 px-3 min-w-[150px]">
+                              <div className="font-bold text-[#262422] dark:text-white leading-tight">
+                                {item.propietarioNombre || 'Propietario Titular'}
+                              </div>
+                              {item.inquilinoNombre && item.inquilinoNombre !== '—' && (
+                                <div className="text-[11px] text-[#7d776f] dark:text-slate-400">
+                                  Ocupante: {item.inquilinoNombre}
+                                </div>
+                              )}
+                              {item.pagadoPor && (
+                                <div className="text-[10px] text-emerald-700 dark:text-emerald-400 font-semibold">
+                                  Pagado por: {item.pagadoPor}
+                                </div>
+                              )}
+                            </td>
+
+                            <td className="py-3.5 px-2.5 font-mono text-xs whitespace-nowrap">{item.periodo}</td>
+
+                            {/* Columnas monetarias con whitespace-nowrap anti-quiebres */}
+                            <td className="py-3.5 px-2.5 font-mono text-right font-bold text-[#262422] dark:text-white whitespace-nowrap">
+                              Bs.&nbsp;{(item.montoBase !== undefined
+                                ? item.montoBase
+                                : item.monto - (item.montoAgua || 0)
+                              ).toFixed(2)}
+                            </td>
+
+                            <td className="py-3.5 px-2.5 font-mono text-right font-bold text-blue-700 dark:text-blue-400 whitespace-nowrap">
+                              Bs.&nbsp;{(item.montoAgua || 0).toFixed(2)}
+                            </td>
+
+                            {/* Columna Extra Individual (Requerimiento C 2.2 y 2.3) */}
+                            <td className="py-3.5 px-2.5 font-mono text-right text-indigo-700 dark:text-indigo-400 whitespace-nowrap">
+                              <div className="font-bold text-xs">
+                                {item.montoExtra && Number(item.montoExtra) > 0
+                                  ? `+Bs. ${Number(item.montoExtra).toFixed(2)}`
+                                  : '—'}
+                              </div>
+                              {Boolean(item.montoExtra && Number(item.montoExtra) > 0) && (
+                                <div
+                                  className="text-[9px] text-[#7d776f] dark:text-slate-400 truncate max-w-[110px] ml-auto"
+                                  title={item.extraConcepto}
+                                >
+                                  {item.extraConcepto || 'Extra'}
+                                </div>
+                              )}
+                            </td>
+
+                            <td className="py-3.5 px-2.5 font-mono text-right whitespace-nowrap">
+                              <div className="font-extrabold text-emerald-800 dark:text-emerald-300 text-sm">
+                                Bs.&nbsp;{item.monto.toFixed(2)}
+                              </div>
+                            </td>
+
+                            <td className="py-3.5 px-3 font-bold font-mono text-right whitespace-nowrap">
+                              <span className={item.saldoPendiente > 0 ? 'text-red-600 dark:text-red-400' : 'text-emerald-700 dark:text-emerald-400'}>
+                                Bs.&nbsp;{item.saldoPendiente.toFixed(2)}
+                              </span>
+                            </td>
+
+                            <td className="py-3.5 px-2 text-center whitespace-nowrap">
+                              <button
+                                type="button"
+                                onClick={() => setSelectedExpensaParaMora(item)}
+                                className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-extrabold cursor-pointer transition-transform hover:scale-105 ${
+                                  item.estado === 'Pagado'
+                                    ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-400'
+                                    : item.estado === 'Pendiente'
+                                      ? 'bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-400'
+                                      : 'bg-red-100 text-red-800 dark:bg-red-950/60 dark:text-red-400'
+                                }`}
+                                title="Click para ver el cálculo y desglose de mora acumulada"
+                              >
+                                {item.estado}
+                              </button>
+                            </td>
+
+                            <td className="py-3.5 px-3 text-right whitespace-nowrap">
+                              <div className="flex items-center justify-end gap-1">
+                                {/* Botón Ver Desglose y Acumulación de Mora */}
+                                <button
+                                  onClick={() => setSelectedExpensaParaMora(item)}
+                                  className="p-1.5 rounded-lg bg-rose-100 text-rose-800 hover:bg-rose-200 dark:bg-rose-950/60 dark:text-rose-300 transition-all cursor-pointer"
+                                  title="Ver cómo se calculó y acumuló la mora mes a mes (Requerimiento C 3)"
+                                >
+                                  <TrendingUp className="w-3.5 h-3.5" />
+                                </button>
+
+                                {/* Botón QR Inteligente con Simulación de Mora */}
+                                <button
+                                  onClick={() => {
+                                    setExpensaParaQr(item)
+                                    setIsQrSimuladorOpen(true)
+                                  }}
+                                  className="px-2 py-1 rounded-lg bg-emerald-700 hover:bg-emerald-600 text-white text-xs font-bold transition-all cursor-pointer flex items-center gap-1 shadow-xs"
+                                  title="Simulador de Cobro QR (Requerimiento C 4.1, 4.2, 4.3)"
+                                >
+                                  <QrCode className="w-3.5 h-3.5" />
+                                  <span>QR</span>
+                                </button>
+
+                                {/* Botón Agregar / Editar Extra */}
+                                <button
+                                  onClick={() => {
+                                    setExpensaParaExtra(item)
+                                    setIsExtraModalOpen(true)
+                                  }}
+                                  className="p-1.5 rounded-lg bg-indigo-100 text-indigo-800 hover:bg-indigo-200 dark:bg-indigo-950/60 dark:text-indigo-300 transition-all cursor-pointer"
+                                  title="Registrar monto extra individual (ej. Cuota Extraordinaria, Pintura, etc.)"
+                                >
+                                  <PlusCircle className="w-3.5 h-3.5" />
+                                </button>
+
+                                <button
+                                  onClick={() => setSelectedExtracto(item)}
+                                  className="px-2 py-1 rounded-lg bg-blue-100 text-blue-800 hover:bg-blue-200 dark:bg-blue-950/50 dark:text-blue-300 text-xs font-bold transition-all cursor-pointer flex items-center gap-1"
+                                  title="Ver extracto y desglose analítico de lo que se cobra"
+                                >
+                                  <FileText className="w-3.5 h-3.5" />
+                                  Extracto
+                                </button>
+
+                                {item.estado === 'Pagado' ? (
+                                  <button
+                                    onClick={() => setSelectedReceipt(item)}
+                                    className="px-2 py-1 rounded-lg bg-emerald-100 text-emerald-800 hover:bg-emerald-200 dark:bg-emerald-950/50 dark:text-emerald-300 text-xs font-bold transition-all cursor-pointer"
+                                    title="Ver Recibo Oficial de Caja"
+                                  >
+                                    Recibo
+                                  </button>
+                                ) : (
+                                  <button
+                                    onClick={() => {
+                                      setExpensaAPagar(item)
+                                      setMontoPagoInput(item.saldoPendiente)
+                                      const propId = item.departamento?.propietario?.idPersona
+                                      if (propId) {
+                                        setIdPersonaPagadorInput(propId)
+                                      } else if (personasList.length > 0) {
+                                        setIdPersonaPagadorInput(personasList[0].idPersona)
+                                      } else {
+                                        setIdPersonaPagadorInput('')
+                                      }
+                                      setMetodoPagoInput('Transferencia')
+                                      setComprobanteUrlInput('')
+                                      setEsAnticipadoInput(false)
+                                      setModalError(null)
+                                      setIsPagarModalOpen(true)
+                                    }}
+                                    className="px-2 py-1 rounded-lg bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold cursor-pointer"
+                                  >
+                                    Cobrar
+                                  </button>
+                                )}
+
+                                <button
+                                  onClick={() => handleVerEstadoCuenta(item.idDepartamento)}
+                                  className="p-1 rounded-lg text-[#5c5750] hover:text-[#262422] hover:bg-[#ded8cc] dark:hover:bg-slate-800"
+                                  title="Ver Estado de Cuenta"
+                                >
+                                  <History className="w-4 h-4" />
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        </React.Fragment>
+                      )
+                    })
+                  )}
+                </tbody>
+              </table>
+            </div>
+
+            {/* VISTA MÓVIL Y TABLET (< md / 768px): TARJETAS INDIVIDUALES TOTALMENTE RESPONSIVAS */}
+            <div className="block md:hidden p-3 space-y-3">
+              {expensasFiltradas.length === 0 ? (
+                <div className="py-8 text-center text-sm text-[#7d776f] dark:text-slate-500 bg-[#dfd9ce]/30 dark:bg-slate-950/40 rounded-xl">
+                  No se encontraron expensas registradas con los filtros seleccionados.
+                </div>
+              ) : (
+                expensasFiltradas.map((item, idx) => {
+                  const prevItem = idx > 0 ? expensasFiltradas[idx - 1] : null
+                  const isNewPeriod = !prevItem || prevItem.periodo !== item.periodo
+
+                  return (
+                    <div key={`m-card-${item.idExpensa || idx}`} className="space-y-2">
+                      {isNewPeriod && (
+                        <div className="flex items-center gap-2 px-3 py-1.5 bg-[#dfd9ce] dark:bg-slate-950 rounded-lg text-xs font-black text-[#262422] dark:text-white border border-[#cec8bc] dark:border-slate-800">
+                          <Calendar className="w-3.5 h-3.5 text-emerald-700 dark:text-emerald-400" />
+                          <span>Período: {item.periodo}</span>
+                          <span className="text-[10px] text-[#7d776f] dark:text-slate-400 font-medium ml-auto">
+                            Por Tipo Dpto
                           </span>
-                        </td>
+                        </div>
+                      )}
 
-                        <td className="py-3.5 px-2.5 font-extrabold text-sm text-[#262422] dark:text-white font-mono">
-                          {item.departamento?.numero || item.idDepartamento}
-                        </td>
+                      <div className="p-3.5 rounded-xl bg-[#f5f1e8] dark:bg-slate-950 border border-[#cec8bc] dark:border-slate-800 shadow-xs space-y-3">
+                        {/* Cabecera Tarjeta */}
+                        <div className="flex items-center justify-between gap-2 border-b border-[#cec8bc]/50 dark:border-slate-800 pb-2">
+                          <div className="flex items-center gap-2">
+                            <span className="font-mono font-black text-sm text-[#262422] dark:text-white bg-[#dfd9ce] dark:bg-slate-800 px-2 py-0.5 rounded-md">
+                              Dpto {item.departamento?.numero || item.idDepartamento}
+                            </span>
+                            <span className="px-2 py-0.5 rounded-md text-[10px] font-extrabold bg-blue-100 text-blue-900 dark:bg-blue-950/80 dark:text-blue-300 border border-blue-200 dark:border-blue-800">
+                              {item.departamento?.tipologia?.includes('Tipo')
+                                ? item.departamento.tipologia
+                                : `Tipo ${item.departamento?.tipologia || 'A'}`}
+                            </span>
+                          </div>
 
-                        <td className="py-3.5 px-3">
+                          <button
+                            type="button"
+                            onClick={() => setSelectedExpensaParaMora(item)}
+                            className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-extrabold ${
+                              item.estado === 'Pagado'
+                                ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-400'
+                                : item.estado === 'Pendiente'
+                                  ? 'bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-400'
+                                  : 'bg-red-100 text-red-800 dark:bg-red-950/60 dark:text-red-400'
+                            }`}
+                          >
+                            {item.estado}
+                          </button>
+                        </div>
+
+                        {/* Propietario / Inquilino */}
+                        <div className="text-xs space-y-0.5">
                           <div className="font-bold text-[#262422] dark:text-white">
                             {item.propietarioNombre || 'Propietario Titular'}
                           </div>
@@ -1307,159 +1567,123 @@ export default function ExpensasPage() {
                               Pagado por: {item.pagadoPor}
                             </div>
                           )}
-                        </td>
+                        </div>
 
-                        <td className="py-3.5 px-3 font-mono text-xs">{item.periodo}</td>
-
-                        {/* Columnas separadas: montoBase, montoAgua, monto */}
-                        <td className="py-3.5 px-3 font-mono text-right font-bold text-[#262422] dark:text-white">
-                          Bs.{' '}
-                          {(item.montoBase !== undefined
-                            ? item.montoBase
-                            : item.monto - (item.montoAgua || 0)
-                          ).toFixed(2)}
-                        </td>
-
-                        <td className="py-3.5 px-2.5 font-mono text-right font-bold text-blue-700 dark:text-blue-400">
-                          Bs. {(item.montoAgua || 0).toFixed(2)}
-                        </td>
-
-                        {/* Columna Extra Individual (Requerimiento C 2.2 y 2.3) */}
-                        <td className="py-3.5 px-2.5 font-mono text-right text-indigo-700 dark:text-indigo-400">
-                          <div className="font-bold text-xs">
-                            {item.montoExtra && item.montoExtra > 0
-                              ? `+Bs ${Number(item.montoExtra).toFixed(2)}`
-                              : '—'}
-                          </div>
-                          {item.montoExtra && item.montoExtra > 0 && (
-                            <div
-                              className="text-[9px] text-[#7d776f] dark:text-slate-400 truncate max-w-[110px]"
-                              title={item.extraConcepto}
-                            >
-                              {item.extraConcepto || 'Extra'}
+                        {/* Grilla Financiera Limpia sin desbordes */}
+                        <div className="grid grid-cols-3 gap-2 bg-[#dfd9ce]/40 dark:bg-slate-900/50 p-2.5 rounded-lg text-xs font-mono">
+                          <div>
+                            <div className="text-[10px] text-[#7d776f] dark:text-slate-400 font-sans">Base</div>
+                            <div className="font-bold text-[#262422] dark:text-white whitespace-nowrap">
+                              Bs.&nbsp;{(item.montoBase !== undefined ? item.montoBase : item.monto - (item.montoAgua || 0)).toFixed(2)}
                             </div>
-                          )}
-                        </td>
-
-                        <td className="py-3.5 px-3 font-mono text-right">
-                          <div className="font-extrabold text-emerald-800 dark:text-emerald-300 text-sm">
-                            Bs. {item.monto.toFixed(2)}
                           </div>
-                        </td>
+                          <div>
+                            <div className="text-[10px] text-blue-700 dark:text-blue-400 font-sans">Agua</div>
+                            <div className="font-bold text-blue-700 dark:text-blue-400 whitespace-nowrap">
+                              Bs.&nbsp;{(item.montoAgua || 0).toFixed(2)}
+                            </div>
+                          </div>
+                          <div>
+                            <div className="text-[10px] text-indigo-700 dark:text-indigo-400 font-sans">Extra</div>
+                            <div className="font-bold text-indigo-700 dark:text-indigo-400 whitespace-nowrap">
+                              {item.montoExtra && Number(item.montoExtra) > 0 ? `+Bs.&nbsp;${Number(item.montoExtra).toFixed(2)}` : '—'}
+                            </div>
+                          </div>
+                          <div className="col-span-3 pt-1.5 mt-0.5 border-t border-[#cec8bc]/50 dark:border-slate-800 flex justify-between items-center text-xs">
+                            <div>
+                              <span className="text-[10px] text-[#7d776f] dark:text-slate-400 font-sans">Total: </span>
+                              <span className="font-black text-emerald-800 dark:text-emerald-300 whitespace-nowrap">
+                                Bs.&nbsp;{item.monto.toFixed(2)}
+                              </span>
+                            </div>
+                            <div>
+                              <span className="text-[10px] text-[#7d776f] dark:text-slate-400 font-sans">Saldo: </span>
+                              <span className={`font-black whitespace-nowrap ${item.saldoPendiente > 0 ? 'text-red-600 dark:text-red-400' : 'text-emerald-700 dark:text-emerald-400'}`}>
+                                Bs.&nbsp;{item.saldoPendiente.toFixed(2)}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
 
-                        <td className="py-3.5 px-4 font-bold font-mono text-red-600 dark:text-red-400">
-                          Bs. {item.saldoPendiente.toFixed(2)}
-                        </td>
-
-                        <td className="py-3.5 px-4">
+                        {/* Botones de Acción Móviles */}
+                        <div className="flex flex-wrap items-center justify-end gap-1.5 pt-1">
                           <button
-                            type="button"
                             onClick={() => setSelectedExpensaParaMora(item)}
-                            className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-extrabold cursor-pointer transition-transform hover:scale-105 ${
-                              item.estado === 'Pagado'
-                                ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-400'
-                                : item.estado === 'Pendiente'
-                                  ? 'bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-400'
-                                  : 'bg-red-100 text-red-800 dark:bg-red-950/60 dark:text-red-400'
-                            }`}
-                            title="Click para ver el cálculo y desglose de mora acumulada"
+                            className="p-1.5 rounded-lg bg-rose-100 text-rose-800 hover:bg-rose-200 dark:bg-rose-950/60 dark:text-rose-300"
+                            title="Ver desglose de mora"
                           >
-                            {item.estado}
+                            <TrendingUp className="w-4 h-4" />
                           </button>
-                        </td>
-
-                        <td className="py-3.5 px-3 text-right">
-                          <div className="flex items-center justify-end gap-1">
-                            {/* Botón Ver Desglose y Acumulación de Mora */}
+                          <button
+                            onClick={() => {
+                              setExpensaParaQr(item)
+                              setIsQrSimuladorOpen(true)
+                            }}
+                            className="px-2.5 py-1.5 rounded-lg bg-emerald-700 hover:bg-emerald-600 text-white text-xs font-bold flex items-center gap-1 shadow-xs"
+                          >
+                            <QrCode className="w-3.5 h-3.5" />
+                            <span>QR</span>
+                          </button>
+                          <button
+                            onClick={() => {
+                              setExpensaParaExtra(item)
+                              setIsExtraModalOpen(true)
+                            }}
+                            className="p-1.5 rounded-lg bg-indigo-100 text-indigo-800 hover:bg-indigo-200 dark:bg-indigo-950/60 dark:text-indigo-300"
+                            title="Registrar extra"
+                          >
+                            <PlusCircle className="w-4 h-4" />
+                          </button>
+                          <button
+                            onClick={() => setSelectedExtracto(item)}
+                            className="px-2 py-1.5 rounded-lg bg-blue-100 text-blue-800 hover:bg-blue-200 dark:bg-blue-950/50 dark:text-blue-300 text-xs font-bold flex items-center gap-1"
+                          >
+                            <FileText className="w-3.5 h-3.5" />
+                            <span>Extracto</span>
+                          </button>
+                          {item.estado === 'Pagado' ? (
                             <button
-                              onClick={() => setSelectedExpensaParaMora(item)}
-                              className="p-1 rounded-lg bg-rose-100 text-rose-800 hover:bg-rose-200 dark:bg-rose-950/60 dark:text-rose-300 transition-all cursor-pointer"
-                              title="Ver cómo se calculó y acumuló la mora mes a mes (Requerimiento C 3)"
+                              onClick={() => setSelectedReceipt(item)}
+                              className="px-2.5 py-1.5 rounded-lg bg-emerald-100 text-emerald-800 hover:bg-emerald-200 dark:bg-emerald-950/50 dark:text-emerald-300 text-xs font-bold"
                             >
-                              <TrendingUp className="w-3.5 h-3.5" />
+                              Recibo
                             </button>
-
-                            {/* Botón QR Inteligente con Simulación de Mora */}
+                          ) : (
                             <button
                               onClick={() => {
-                                setExpensaParaQr(item)
-                                setIsQrSimuladorOpen(true)
+                                setExpensaAPagar(item)
+                                setMontoPagoInput(item.saldoPendiente)
+                                const propId = item.departamento?.propietario?.idPersona
+                                if (propId) {
+                                  setIdPersonaPagadorInput(propId)
+                                } else if (personasList.length > 0) {
+                                  setIdPersonaPagadorInput(personasList[0].idPersona)
+                                } else {
+                                  setIdPersonaPagadorInput('')
+                                }
+                                setMetodoPagoInput('Transferencia')
+                                setComprobanteUrlInput('')
+                                setEsAnticipadoInput(false)
+                                setModalError(null)
+                                setIsPagarModalOpen(true)
                               }}
-                              className="px-2 py-1 rounded-lg bg-emerald-700 hover:bg-emerald-600 text-white text-xs font-bold transition-all cursor-pointer flex items-center gap-1 shadow-xs"
-                              title="Simulador de Cobro QR (Requerimiento C 4.1, 4.2, 4.3)"
+                              className="px-2.5 py-1.5 rounded-lg bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold"
                             >
-                              <QrCode className="w-3.5 h-3.5" />
-                              <span>QR</span>
+                              Cobrar
                             </button>
-
-                            {/* Botón Agregar / Editar Extra */}
-                            <button
-                              onClick={() => {
-                                setExpensaParaExtra(item)
-                                setIsExtraModalOpen(true)
-                              }}
-                              className="p-1 rounded-lg bg-indigo-100 text-indigo-800 hover:bg-indigo-200 dark:bg-indigo-950/60 dark:text-indigo-300 transition-all cursor-pointer"
-                              title="Registrar monto extra individual (ej. Extra Pintura Edificio)"
-                            >
-                              <PlusCircle className="w-3.5 h-3.5" />
-                            </button>
-
-                            <button
-                              onClick={() => setSelectedExtracto(item)}
-                              className="px-2.5 py-1 rounded-lg bg-blue-100 text-blue-800 hover:bg-blue-200 dark:bg-blue-950/50 dark:text-blue-300 text-xs font-bold transition-all cursor-pointer flex items-center gap-1"
-                              title="Ver extracto y desglose analítico de lo que se cobra"
-                            >
-                              <FileText className="w-3.5 h-3.5" />
-                              Extracto
-                            </button>
-
-                            {item.estado === 'Pagado' ? (
-                              <button
-                                onClick={() => setSelectedReceipt(item)}
-                                className="px-2.5 py-1 rounded-lg bg-emerald-100 text-emerald-800 hover:bg-emerald-200 dark:bg-emerald-950/50 dark:text-emerald-300 text-xs font-bold transition-all cursor-pointer"
-                                title="Ver Recibo Oficial de Caja"
-                              >
-                                Recibo
-                              </button>
-                            ) : (
-                              <button
-                                onClick={() => {
-                                  setExpensaAPagar(item)
-                                  setMontoPagoInput(item.saldoPendiente)
-                                  const propId = item.departamento?.propietario?.idPersona
-                                  if (propId) {
-                                    setIdPersonaPagadorInput(propId)
-                                  } else if (personasList.length > 0) {
-                                    setIdPersonaPagadorInput(personasList[0].idPersona)
-                                  } else {
-                                    setIdPersonaPagadorInput('')
-                                  }
-                                  setMetodoPagoInput('Transferencia')
-                                  setComprobanteUrlInput('')
-                                  setEsAnticipadoInput(false)
-                                  setModalError(null)
-                                  setIsPagarModalOpen(true)
-                                }}
-                                className="px-2.5 py-1 rounded-lg bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold cursor-pointer"
-                              >
-                                Cobrar
-                              </button>
-                            )}
-
-                            <button
-                              onClick={() => handleVerEstadoCuenta(item.idDepartamento)}
-                              className="p-1 rounded-lg text-[#5c5750] hover:text-[#262422] hover:bg-[#ded8cc] dark:hover:bg-slate-800"
-                              title="Ver Estado de Cuenta"
-                            >
-                              <History className="w-4 h-4" />
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
+                          )}
+                          <button
+                            onClick={() => handleVerEstadoCuenta(item.idDepartamento)}
+                            className="p-1.5 rounded-lg text-[#5c5750] hover:text-[#262422] hover:bg-[#ded8cc] dark:hover:bg-slate-800"
+                          >
+                            <History className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  )
+                })
+              )}
             </div>
           </div>
         </>
