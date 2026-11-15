@@ -187,8 +187,12 @@ model Expensa {
 
 model ReglaMora {
   idRegla           Int       @id @default(autoincrement()) @map("id_regla")
-  tasaInteres       Decimal   @map("tasa_interes") @db.Decimal(5, 2)
+  tasaInteres       Decimal   @default(0) @map("tasa_interes") @db.Decimal(5, 2)
   diasGracia        Int       @default(0) @map("dias_gracia")
+  tipoCalculo       String    @default("PORCENTAJE") @map("tipo_calculo") @db.VarChar(20)
+  montoFijo         Decimal?  @map("monto_fijo") @db.Decimal(10, 2)
+  diaVencimiento    Int?      @map("dia_vencimiento") @db.SmallInt
+  diaGeneracion     Int?      @map("dia_generacion") @db.SmallInt
   activa            Boolean   @default(true)
   fechaCreacion     DateTime  @default(now()) @map("fecha_creacion") @db.Timestamp(6)
   idUsuarioCreacion Int?      @map("id_usuario_creacion")

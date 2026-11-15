@@ -9,6 +9,7 @@ import { authorizeRoles } from '../middlewares/role.middleware';
 import { auditoriaService } from '../modules/auditoria';
 import {
   calcularCapitalPendiente,
+  calcularFechaVencimientoPeriodo,
   configurarReglaMora,
   obtenerReglasMora,
   ejecutarCalculoMora,
@@ -54,12 +55,12 @@ const expensaSchema = z.object({
   montoBase: z.number().positive().optional(),
   montoAgua: z.number().min(0).optional(),
   tasaInteresMora: z.number().min(0).max(100).optional(),
-  fechaVencimiento: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Formato: YYYY-MM-DD'),
+  fechaVencimiento: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Formato: YYYY-MM-DD').optional(),
 });
 
 const generarMasivoSchema = z.object({
   periodo: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Formato: YYYY-MM-DD'),
-  fechaVencimiento: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Formato: YYYY-MM-DD'),
+  fechaVencimiento: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Formato: YYYY-MM-DD').optional(),
   montoBase: z.number().positive().optional().default(500),
   tasaInteresMora: z.number().min(0).max(100).optional(),
   excluirDepartamentos: z.array(z.number().int()).optional().default([]),
@@ -90,10 +91,107 @@ const corregirPagoSchema = pagoSchema.extend({
   motivo: z.string().min(1, 'El motivo de corrección es obligatorio'),
 });
 
-const reglaMoraSchema = z.object({
-  tasaInteres: z.number().min(0, 'La tasa de interés debe ser mayor o igual a 0').max(100, 'La tasa de interés no puede exceder 100'),
-  diasGracia: z.number().int().min(0, 'Los días de gracia no pueden ser negativos').optional().default(0),
-});
+export const reglaMoraSchema = z
+  .object({
+    tipoCalculo: z
+      .preprocess((val) => (typeof val === 'string' ? val.toUpperCase() : val), z.enum(['PORCENTAJE', 'FIJO']))
+      .optional(),
+    tipo_calculo: z
+      .preprocess((val) => (typeof val === 'string' ? val.toUpperCase() : val), z.enum(['PORCENTAJE', 'FIJO']))
+      .optional(),
+    tasaInteres: z
+      .number()
+      .min(0, 'La tasa de interés no puede ser negativa')
+      .max(100, 'La tasa no puede exceder 100')
+      .optional(),
+    tasa_interes: z
+      .number()
+      .min(0, 'La tasa de interés no puede ser negativa')
+      .max(100, 'La tasa no puede exceder 100')
+      .optional(),
+    montoFijo: z.number().min(0, 'El monto fijo no puede ser negativo').nullable().optional(),
+    monto_fijo: z.number().min(0, 'El monto fijo no puede ser negativo').nullable().optional(),
+    diaVencimiento: z
+      .number()
+      .int('Día inválido')
+      .min(1, 'El día de vencimiento debe estar entre 1 y 31')
+      .max(31, 'El día de vencimiento debe estar entre 1 y 31')
+      .nullable()
+      .optional(),
+    dia_vencimiento: z
+      .number()
+      .int('Día inválido')
+      .min(1, 'El día de vencimiento debe estar entre 1 y 31')
+      .max(31, 'El día de vencimiento debe estar entre 1 y 31')
+      .nullable()
+      .optional(),
+    diaGeneracion: z
+      .number()
+      .int('Día inválido')
+      .min(1, 'El día de generación debe estar entre 1 y 31')
+      .max(31, 'El día de generación debe estar entre 1 y 31')
+      .nullable()
+      .optional(),
+    dia_generacion: z
+      .number()
+      .int('Día inválido')
+      .min(1, 'El día de generación debe estar entre 1 y 31')
+      .max(31, 'El día de generación debe estar entre 1 y 31')
+      .nullable()
+      .optional(),
+    diasGracia: z.number().int().min(0, 'Los días de gracia no pueden ser negativos').optional().default(0),
+    dias_gracia: z.number().int().min(0, 'Los días de gracia no pueden ser negativos').optional(),
+  })
+  .transform((val) => {
+    const tipoCalculo = (val.tipoCalculo || val.tipo_calculo || 'PORCENTAJE') as 'PORCENTAJE' | 'FIJO';
+    const tasaInteres = val.tasaInteres !== undefined ? val.tasaInteres : val.tasa_interes;
+    const montoFijo = val.montoFijo !== undefined ? val.montoFijo : val.monto_fijo;
+    const diaVencimiento = val.diaVencimiento !== undefined ? val.diaVencimiento : val.dia_vencimiento;
+    const diaGeneracion = val.diaGeneracion !== undefined ? val.diaGeneracion : val.dia_generacion;
+    const diasGracia = val.diasGracia !== undefined ? val.diasGracia : (val.dias_gracia ?? 0);
+    return {
+      tipoCalculo,
+      tasaInteres,
+      montoFijo: montoFijo !== undefined ? montoFijo : null,
+      diaVencimiento: diaVencimiento !== undefined ? diaVencimiento : null,
+      diaGeneracion: diaGeneracion !== undefined ? diaGeneracion : null,
+      diasGracia,
+    };
+  })
+  .superRefine((data, ctx) => {
+
+
+    if (
+      data.diaVencimiento !== null && data.diaVencimiento !== undefined &&
+      data.diaGeneracion !== null && data.diaGeneracion !== undefined &&
+      data.diaVencimiento < data.diaGeneracion
+    ) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['diaVencimiento'],
+        message: 'El día de vencimiento no puede ser anterior al día de generación',
+      });
+    }
+
+
+    if (data.tipoCalculo === 'FIJO') {
+      if (data.montoFijo === null || data.montoFijo === undefined || data.montoFijo <= 0) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['montoFijo'],
+          message: 'El tipo FIJO exige un monto_fijo mayor a cero',
+        });
+      }
+    } else {
+      if (data.tasaInteres === undefined || data.tasaInteres === null || data.tasaInteres <= 0) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['tasaInteres'],
+          message: 'El tipo PORCENTAJE exige una tasa de interés mayor a cero',
+        });
+      }
+    }
+  });
 
 // ── Helper FIFO para aplicación automática de anticipos ──────────────────────
 async function aplicarAnticiposFIFO(
@@ -524,8 +622,8 @@ expensasRouter.get(
           concepto: p.esAnticipado
             ? 'Pago Anticipado a Favor'
             : p.anulado
-            ? `Pago Anulado: ${p.motivoAnulacion || 'Sin motivo'}`
-            : `Pago de Expensa (${p.metodoPago || 'Efectivo'})`,
+              ? `Pago Anulado: ${p.motivoAnulacion || 'Sin motivo'}`
+              : `Pago de Expensa (${p.metodoPago || 'Efectivo'})`,
           monto: Number(p.montoPagado),
           debe: 0,
           haber: p.anulado ? 0 : Number(p.montoPagado),
@@ -544,20 +642,20 @@ expensasRouter.get(
         ...departamento,
         ocupanteActual: ocupacionActiva
           ? {
-              idOcupacion: ocupacionActiva.idOcupacion,
-              tipoOcupante: ocupacionActiva.tipoOcupante,
-              fechaInicio: ocupacionActiva.fechaInicio,
-              persona: ocupacionActiva.persona
-                ? {
-                    idPersona: ocupacionActiva.persona.idPersona,
-                    nombres: ocupacionActiva.persona.nombres,
-                    apellidos: ocupacionActiva.persona.apellidos,
-                    ciNit: ocupacionActiva.persona.ciNit,
-                    telefono: ocupacionActiva.persona.telefono,
-                    correo: ocupacionActiva.persona.correo,
-                  }
-                : null,
-            }
+            idOcupacion: ocupacionActiva.idOcupacion,
+            tipoOcupante: ocupacionActiva.tipoOcupante,
+            fechaInicio: ocupacionActiva.fechaInicio,
+            persona: ocupacionActiva.persona
+              ? {
+                idPersona: ocupacionActiva.persona.idPersona,
+                nombres: ocupacionActiva.persona.nombres,
+                apellidos: ocupacionActiva.persona.apellidos,
+                ciNit: ocupacionActiva.persona.ciNit,
+                telefono: ocupacionActiva.persona.telefono,
+                correo: ocupacionActiva.persona.correo,
+              }
+              : null,
+          }
           : null,
       };
 
@@ -627,9 +725,13 @@ expensasRouter.post(
         return;
       }
 
-      const { tasaInteres, diasGracia } = parsed.data;
+      const { tipoCalculo, tasaInteres, montoFijo, diaVencimiento, diaGeneracion, diasGracia } = parsed.data;
       const nuevaRegla = await configurarReglaMora({
+        tipoCalculo,
         tasaInteres,
+        montoFijo,
+        diaVencimiento,
+        diaGeneracion,
         diasGracia,
         idUsuario: req.user?.idUsuario || null,
       });
@@ -927,6 +1029,13 @@ expensasRouter.post(
         });
         const tasaAplicar = tasaInteresMora !== undefined ? tasaInteresMora : (reglaActiva ? Number(reglaActiva.tasaInteres) : 0);
 
+        // CA4: fecha de vencimiento = dia_vencimiento del período (tope: último día del mes); sin regla, comportamiento actual
+        const vencimientoDateFinal = calcularFechaVencimientoPeriodo(
+          periodo,
+          reglaActiva?.diaVencimiento,
+          fechaVencimiento
+        );
+
         const generadasArr: any[] = [];
         const excepcionesArr: any[] = [];
         const advertenciasArr: any[] = [];
@@ -977,7 +1086,7 @@ expensasRouter.post(
               monto: montoTotal,
               saldoPendiente: montoTotal,
               tasaInteresMora: tasaAplicar,
-              fechaVencimiento: vencimientoDate,
+              fechaVencimiento: vencimientoDateFinal,
               estado: 'Pendiente',
             },
           });
@@ -1105,6 +1214,11 @@ expensasRouter.post(
           orderBy: { fechaCreacion: 'desc' },
         });
         const tasaAplicar = tasaInteresMora !== undefined ? tasaInteresMora : (reglaActiva ? Number(reglaActiva.tasaInteres) : 0);
+        const vencimientoDateFinal = calcularFechaVencimientoPeriodo(
+          periodo,
+          reglaActiva?.diaVencimiento,
+          fechaVencimiento
+        );
 
         // Obtener departamento y su tipo
         const depto = await tx.departamento.findUnique({
@@ -1153,7 +1267,7 @@ expensasRouter.post(
             montoAgua,
             monto: montoTotal,
             tasaInteresMora: tasaAplicar,
-            fechaVencimiento: vencimientoDate,
+            fechaVencimiento: vencimientoDateFinal,
             saldoPendiente: montoTotal,
             estado: 'Pendiente',
           },
