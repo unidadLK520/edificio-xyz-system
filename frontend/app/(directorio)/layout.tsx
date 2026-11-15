@@ -1,6 +1,9 @@
+// frontend/app/(directorio)/layout.tsx
+// Layout para vistas de Directorio y Consulta (Reportes, Auditoría)
+
 'use client'
 
-import React, { useState } from 'react'
+import React, { useState, useMemo } from 'react'
 import Link from 'next/link'
 import Image from 'next/image'
 import { usePathname } from 'next/navigation'
@@ -25,6 +28,12 @@ import {
 } from 'lucide-react'
 
 const DIRECTORIO_LINKS = [
+  { href: '/reportes', label: 'Reportes y Finanzas', icon: FileBarChart },
+  { href: '/auditoria', label: 'Auditoría y Trazabilidad', icon: ShieldAlert },
+  { href: '/comunicados', label: 'Comunicados Oficiales', icon: Megaphone }
+]
+
+const CONSULTA_LINKS = [
   { href: '/reportes', label: 'Reportes y Finanzas', icon: FileBarChart },
   { href: '/auditoria', label: 'Auditoría y Trazabilidad', icon: ShieldAlert },
   { href: '/comunicados', label: 'Comunicados Oficiales', icon: Megaphone }
@@ -55,8 +64,70 @@ export default function DirectorioLayout({ children }: { children: React.ReactNo
     } catch {}
   }, [])
 
-  const currentLinks = userRole === 'ADMINISTRADOR' ? ADMIN_LINKS : DIRECTORIO_LINKS
-  const isAdmin = userRole === 'ADMINISTRADOR'
+  const roleUpper = userRole.toUpperCase()
+  const isAdmin = roleUpper === 'ADMINISTRADOR'
+  const isConsulta = roleUpper === 'CONSULTA'
+
+  const currentLinks = useMemo(() => {
+    if (isAdmin) return ADMIN_LINKS
+    if (isConsulta) return CONSULTA_LINKS
+    return DIRECTORIO_LINKS
+  }, [isAdmin, isConsulta])
+
+  const roleConfig = useMemo(() => {
+    if (isAdmin) {
+      return {
+        title: 'Panel Administrador',
+        icon: Building2,
+        iconBg: 'bg-blue-700 dark:bg-indigo-600 shadow-blue-800/20',
+        textColor: 'text-blue-700 dark:text-indigo-400',
+        badgeColor: 'text-blue-900 dark:text-blue-300',
+        activeBg:
+          'bg-[#ded8cc] text-blue-900 border border-blue-600/30 dark:bg-indigo-600/20 dark:text-white dark:border-indigo-500/40 shadow-xs',
+        activeIcon: 'text-blue-700 dark:text-indigo-400'
+      }
+    }
+    if (isConsulta) {
+      return {
+        title: 'Panel Consulta / Auditoría',
+        icon: ShieldAlert,
+        iconBg: 'bg-indigo-700 dark:bg-indigo-600 shadow-indigo-800/20',
+        textColor: 'text-indigo-700 dark:text-indigo-400',
+        badgeColor: 'text-indigo-900 dark:text-indigo-300',
+        activeBg:
+          'bg-[#ded8cc] text-indigo-900 border border-indigo-600/30 dark:bg-indigo-600/20 dark:text-white dark:border-indigo-500/40 shadow-xs',
+        activeIcon: 'text-indigo-700 dark:text-indigo-400'
+      }
+    }
+    return {
+      title: 'Panel Directorio',
+      icon: Briefcase,
+      iconBg: 'bg-purple-700 dark:bg-purple-600 shadow-purple-800/20',
+      textColor: 'text-purple-700 dark:text-purple-400',
+      badgeColor: 'text-purple-900 dark:text-purple-300',
+      activeBg:
+        'bg-[#ded8cc] text-purple-900 border border-purple-600/30 dark:bg-purple-600/20 dark:text-white dark:border-purple-500/40 shadow-xs',
+      activeIcon: 'text-purple-700 dark:text-purple-400'
+    }
+  }, [isAdmin, isConsulta])
+
+  const IconHeader = roleConfig.icon
+
+  const handleLogout = async () => {
+    try {
+      await fetch('/api/auth/logout', { method: 'POST' })
+    } catch {
+      // Continuar con limpieza local
+    }
+    if (typeof window !== 'undefined') {
+      document.cookie = 'auth_token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT'
+      localStorage.removeItem('auth_token')
+      localStorage.removeItem('user_role')
+      localStorage.removeItem('user_profile')
+      localStorage.removeItem('last_user_role')
+    }
+    window.location.href = '/login'
+  }
 
   return (
     <div className="flex h-screen bg-[#e6e2da] dark:bg-slate-950 text-[#262422] dark:text-slate-100 font-sans overflow-hidden transition-colors duration-300 selection:bg-blue-600 selection:text-white">
@@ -77,27 +148,18 @@ export default function DirectorioLayout({ children }: { children: React.ReactNo
         <div className="p-5 border-b border-[#cec8bc] dark:border-slate-800 flex justify-between items-center bg-[#e3ded4] dark:bg-slate-950">
           <div className="flex items-center gap-2.5">
             <div
-              className={`w-8 h-8 rounded-xl text-white flex items-center justify-center shadow-md ${
-                isAdmin
-                  ? 'bg-blue-700 dark:bg-indigo-600 shadow-blue-800/20'
-                  : 'bg-purple-700 dark:bg-purple-600 shadow-purple-800/20'
-              }`}
+              className={`w-8 h-8 rounded-xl text-white flex items-center justify-center shadow-md ${roleConfig.iconBg}`}
             >
-              {isAdmin ? <Building2 className="w-4 h-4" /> : <Briefcase className="w-4 h-4" />}
+              <IconHeader className="w-4 h-4" />
             </div>
             <div>
               <h2 className="font-extrabold text-base text-[#262422] dark:text-white leading-tight">
-                Edificio{' '}
-                <span className={isAdmin ? 'text-blue-700 dark:text-indigo-400' : 'text-purple-700 dark:text-purple-400'}>
-                  XYZ
-                </span>
+                Edificio <span className={roleConfig.textColor}>XYZ</span>
               </h2>
               <span
-                className={`text-[10px] uppercase font-bold tracking-wider block ${
-                  isAdmin ? 'text-blue-900 dark:text-blue-300' : 'text-purple-900 dark:text-purple-300'
-                }`}
+                className={`text-[10px] uppercase font-bold tracking-wider block ${roleConfig.badgeColor}`}
               >
-                {isAdmin ? 'Panel Administrador' : 'Panel Directorio'}
+                {roleConfig.title}
               </span>
             </div>
           </div>
@@ -120,20 +182,12 @@ export default function DirectorioLayout({ children }: { children: React.ReactNo
                 onClick={() => setIsMobileMenuOpen(false)}
                 className={`flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-semibold transition-all ${
                   isActive
-                    ? isAdmin
-                      ? 'bg-[#ded8cc] text-blue-900 border border-blue-600/30 dark:bg-indigo-600/20 dark:text-white dark:border-indigo-500/40 shadow-xs'
-                      : 'bg-[#ded8cc] text-purple-900 border border-purple-600/30 dark:bg-purple-600/20 dark:text-white dark:border-purple-500/40 shadow-xs'
+                    ? roleConfig.activeBg
                     : 'text-[#5c5750] hover:text-[#262422] hover:bg-[#e4dfd5] dark:text-slate-400 dark:hover:text-white dark:hover:bg-slate-800/60'
                 }`}
               >
                 <IconComp
-                  className={`w-4 h-4 ${
-                    isActive
-                      ? isAdmin
-                        ? 'text-blue-700 dark:text-indigo-400'
-                        : 'text-purple-700 dark:text-purple-400'
-                      : 'text-[#7d776f]'
-                  }`}
+                  className={`w-4 h-4 ${isActive ? roleConfig.activeIcon : 'text-[#7d776f]'}`}
                 />
                 <span>{link.label}</span>
               </Link>
@@ -146,13 +200,14 @@ export default function DirectorioLayout({ children }: { children: React.ReactNo
             <span>Tema visual</span>
             <ThemeToggle />
           </div>
-          <a
-            href="/api/auth/logout"
+          <button
+            type="button"
+            onClick={handleLogout}
             className="flex items-center justify-center gap-2 w-full text-center py-2.5 px-4 bg-rose-100/70 text-rose-800 hover:bg-rose-100 dark:bg-rose-950/30 dark:text-rose-400 dark:hover:bg-rose-900/40 border border-rose-300 dark:border-rose-900/50 rounded-xl text-xs font-bold transition-colors cursor-pointer"
           >
             <LogOut className="w-3.5 h-3.5" />
             Cerrar Sesión
-          </a>
+          </button>
         </div>
       </aside>
 
@@ -166,7 +221,7 @@ export default function DirectorioLayout({ children }: { children: React.ReactNo
             <Menu className="w-5 h-5" />
           </button>
           <span className="font-bold text-sm text-[#262422] dark:text-white">
-            Edificio <span className="text-purple-700 dark:text-purple-400">XYZ</span>
+            Edificio <span className={roleConfig.textColor}>XYZ</span>
           </span>
           <ThemeToggle />
         </header>
