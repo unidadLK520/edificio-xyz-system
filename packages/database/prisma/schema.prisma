@@ -50,6 +50,7 @@ model Usuario {
   tarifasAguaCreadas  TarifaAgua[]
   lecturasAguaRegistradas LecturaAgua[]
   montosAguaRegistrados MontoAgua[]
+  expensaExtrasRegistrados ExpensaExtra[]
   sesiones            Sesion[]
 
   @@map("usuarios")
@@ -177,11 +178,30 @@ model Expensa {
   departamento          Departamento         @relation(fields: [idDepartamento], references: [idDepartamento])
   pagos                 Pago[]
   aplicacionesAnticipos AplicacionAnticipo[]
+  extras                ExpensaExtra[]
 
   @@unique([idDepartamento, periodo])
   @@index([idDepartamento], map: "idx_expensas_departamento")
   @@index([estado], map: "idx_expensas_estado")
   @@map("expensas")
+  @@schema("edificio")
+}
+
+model ExpensaExtra {
+  idExtra       Int       @id @default(autoincrement()) @map("id_extra")
+  idExpensa     Int       @map("id_expensa")
+  concepto      String    @db.VarChar(100)
+  descripcion   String?   @db.VarChar(200)
+  monto         Decimal   @db.Decimal(10, 2)
+  anulado       Boolean   @default(false)
+  idUsuario     Int?      @map("id_usuario")
+  fechaRegistro DateTime  @default(now()) @map("fecha_registro") @db.Timestamp(6)
+
+  expensa       Expensa   @relation(fields: [idExpensa], references: [idExpensa], onDelete: Restrict)
+  usuario       Usuario?  @relation(fields: [idUsuario], references: [idUsuario])
+
+  @@index([idExpensa], map: "idx_expensa_extras_id_expensa")
+  @@map("expensa_extras")
   @@schema("edificio")
 }
 
@@ -244,6 +264,7 @@ model MontoAgua {
   idDepartamento    Int          @map("id_departamento")
   periodo           DateTime     @db.Date
   montoAgua         Decimal      @map("monto_agua") @db.Decimal(10, 2)
+  descripcion       String?      @db.VarChar(200)
   idUsuarioRegistro Int?         @map("id_usuario_registro")
   fechaRegistro     DateTime     @default(now()) @map("fecha_registro") @db.Timestamp(6)
 

@@ -14,6 +14,11 @@ import {
   obtenerReglasMora,
   ejecutarCalculoMora,
   formatearExpensaConConcepto,
+  crearExtraExpensa,
+  obtenerExtrasExpensa,
+  anularExtraExpensa,
+  sumarExtrasVigentes,
+  calcularMontoTotalExpensa,
 } from '../modules/expensas';
 
 export const expensasRouter: IRouter = Router();
@@ -48,6 +53,12 @@ async function registrarAuditoria(
 }
 
 // ── Validation Schemas ────────────────────────────────────────────────────────
+export const extraExpensaSchema = z.object({
+  concepto: z.string().trim().min(1, 'El concepto es obligatorio').max(100, 'El concepto no puede exceder 100 caracteres'),
+  descripcion: z.string().trim().max(200, 'La descripción no puede exceder 200 caracteres').nullable().optional(),
+  monto: z.number({ invalid_type_error: 'El monto debe ser un número' }).positive('El monto debe ser mayor a cero'),
+});
+
 const expensaSchema = z.object({
   idDepartamento: z.number().int().positive(),
   periodo: z.string().regex(/^\d{4}-\d{2}(-\d{2})?$/, 'Formato: YYYY-MM o YYYY-MM-DD'),
@@ -273,7 +284,7 @@ expensasRouter.get(
   authorizeRoles('Administrador', 'Directorio'),
   async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
     try {
-      const { estado, idDepartamento, periodo, vencida, page = '1', limit = '50' } = req.query;
+      const { estado, idDepartamento, periodo, vencida, tipo, page = '1', limit = '50' } = req.query;
       const ahora = new Date();
 
       const where: Record<string, unknown> = {};
@@ -284,17 +295,29 @@ expensasRouter.get(
         where.fechaVencimiento = { lt: ahora };
         where.saldoPendiente = { gt: 0 };
       }
+      if (tipo && typeof tipo === 'string' && tipo.trim() !== '') {
+        where.departamento = {
+          tipo: {
+            nombre: { equals: tipo.trim(), mode: 'insensitive' },
+          },
+        };
+      }
 
       const pageNum = Math.max(1, parseInt(String(page)) || 1);
       const limitNum = Math.max(1, parseInt(String(limit)) || 50);
       const skip = (pageNum - 1) * limitNum;
+
+      const orderBy: any =
+        tipo && typeof tipo === 'string' && tipo.trim() !== ''
+          ? [{ departamento: { tipo: { nombre: 'asc' } } }, { departamento: { numero: 'asc' } }]
+          : [{ periodo: 'desc' }, { idDepartamento: 'asc' }];
 
       const [expensas, total] = await Promise.all([
         prisma.expensa.findMany({
           where,
           skip,
           take: limitNum,
-          orderBy: [{ periodo: 'desc' }, { idDepartamento: 'asc' }],
+          orderBy,
           include: {
             departamento: {
               include: {
@@ -306,6 +329,16 @@ expensasRouter.get(
               orderBy: { fechaPago: 'desc' },
               include: { usuarioRegistro: { select: { nombreUsuario: true } } },
             },
+            extras: {
+              where: { anulado: false },
+              orderBy: { fechaRegistro: 'asc' },
+              select: {
+                idExtra: true,
+                concepto: true,
+                descripcion: true,
+                monto: true,
+              },
+            },
             _count: { select: { pagos: true } },
           },
         }),
@@ -314,8 +347,18 @@ expensasRouter.get(
 
       const expensasConVencida = expensas.map((e) => {
         const formateada = formatearExpensaConConcepto(e, e.departamento?.tipo?.nombre);
+        const extrasVigentes = (e.extras || []).map((x: any) => ({
+          idExtra: x.idExtra,
+          concepto: x.concepto,
+          descripcion: x.descripcion ?? null,
+          monto: Number(x.monto),
+        }));
+        const montoExtras = Math.round(extrasVigentes.reduce((acc: number, x: any) => acc + x.monto, 0) * 100) / 100;
+
         return {
           ...formateada,
+          montoExtras,
+          extras: extrasVigentes,
           vencida: new Date(e.fechaVencimiento) < ahora && Number(e.saldoPendiente) > 0,
         };
       });
@@ -962,6 +1005,109 @@ expensasRouter.get(
   }
 );
 
+// ── POST /api/v1/expensas/:id/extras ─────────────────────────────────────────
+// Registrar cargo extra en una expensa con recálculo de total/saldo y auditoría
+expensasRouter.post(
+  '/:id/extras',
+  authorizeRoles('Administrador'),
+  async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const id = parseInt(req.params.id);
+      if (isNaN(id) || id <= 0) {
+        res.status(400).json({ error: 'Bad Request', message: 'ID de expensa inválido' });
+        return;
+      }
+
+      const parsed = extraExpensaSchema.safeParse(req.body);
+      if (!parsed.success) {
+        res.status(400).json({
+          error: 'Validation Error',
+          message: 'Parámetros del cargo extra inválidos',
+          details: parsed.error.flatten().fieldErrors,
+        });
+        return;
+      }
+
+      const { concepto, descripcion, monto } = parsed.data;
+      const resultado = await crearExtraExpensa({
+        idExpensa: id,
+        concepto,
+        descripcion,
+        monto,
+        idUsuario: req.user?.idUsuario || null,
+      });
+
+      res.status(201).json(resultado);
+    } catch (err: any) {
+      if (err.statusCode) {
+        res.status(err.statusCode).json({
+          error: err.code || 'Error',
+          message: err.message,
+        });
+        return;
+      }
+      next(err);
+    }
+  }
+);
+
+// ── GET /api/v1/expensas/:id/extras ──────────────────────────────────────────
+// Consultar todos los cargos extras (vigentes y anulados) de una expensa
+expensasRouter.get(
+  '/:id/extras',
+  authorizeRoles('Administrador', 'Directorio'),
+  async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const id = parseInt(req.params.id);
+      if (isNaN(id) || id <= 0) {
+        res.status(400).json({ error: 'Bad Request', message: 'ID de expensa inválido' });
+        return;
+      }
+
+      const resultado = await obtenerExtrasExpensa(id);
+      res.status(200).json(resultado);
+    } catch (err: any) {
+      if (err.statusCode) {
+        res.status(err.statusCode).json({
+          error: err.code || 'Error',
+          message: err.message,
+        });
+        return;
+      }
+      next(err);
+    }
+  }
+);
+
+// ── DELETE /api/v1/expensas/:id/extras/:idExtra ──────────────────────────────
+// Anular un cargo extra (soft-delete anulado=true) con recálculo de total/saldo y auditoría
+expensasRouter.delete(
+  '/:id/extras/:idExtra',
+  authorizeRoles('Administrador'),
+  async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const id = parseInt(req.params.id);
+      const idExtra = parseInt(req.params.idExtra);
+      if (isNaN(id) || id <= 0 || isNaN(idExtra) || idExtra <= 0) {
+        res.status(400).json({ error: 'Bad Request', message: 'IDs de expensa o extra inválidos' });
+        return;
+      }
+
+      const resultado = await anularExtraExpensa(id, idExtra, req.user?.idUsuario || null);
+      res.status(200).json(resultado);
+    } catch (err: any) {
+      if (err.statusCode) {
+        res.status(err.statusCode).json({
+          error: err.code || 'Error',
+          message: err.message,
+        });
+        return;
+      }
+      next(err);
+    }
+  }
+);
+
 // ── POST /api/v1/expensas/generar-masivo ─────────────────────────────────────
 // CA1, CA2, CA10: Generación masiva de expensas con reglas de exclusión y auditoría
 expensasRouter.post(
@@ -1075,7 +1221,7 @@ expensasRouter.post(
             });
           }
 
-          const montoTotal = Math.round((montoBase + montoAgua) * 100) / 100;
+          const montoTotal = calcularMontoTotalExpensa(montoBase, montoAgua, []);
 
           const nuevaExpensa = await tx.expensa.create({
             data: {
@@ -1249,14 +1395,14 @@ expensasRouter.post(
           montoBase = Number(monto);
         }
 
-        // Monto total = monto_base + monto_agua
+        // Monto total = monto_base + monto_agua (+ extras)
         let montoTotal: number;
         if (depto?.tipo || inputMontoBase !== undefined) {
-          montoTotal = Math.round((montoBase + montoAgua) * 100) / 100;
+          montoTotal = calcularMontoTotalExpensa(montoBase, montoAgua, []);
         } else if (monto !== undefined) {
-          montoTotal = montoReg ? Math.round((monto + montoAgua) * 100) / 100 : Number(monto);
+          montoTotal = montoReg ? calcularMontoTotalExpensa(monto, montoAgua, []) : Number(monto);
         } else {
-          montoTotal = Math.round((montoBase + montoAgua) * 100) / 100;
+          montoTotal = calcularMontoTotalExpensa(montoBase, montoAgua, []);
         }
 
         const expensaCreada = await tx.expensa.create({

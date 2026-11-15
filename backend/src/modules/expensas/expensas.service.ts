@@ -67,6 +67,32 @@ export function calcularCapitalPendiente(expensa: ExpensaConPagosYAnticipos): nu
   return Math.round(capital * 100) / 100;
 }
 
+/**
+ * Suma los montos de extras vigentes (no anulados) con redondeo a 2 decimales.
+ */
+export function sumarExtrasVigentes(
+  extras?: Array<{ monto: number | string | Prisma.Decimal; anulado?: boolean | null }> | null
+): number {
+  if (!extras || !Array.isArray(extras)) return 0;
+  const suma = extras
+    .filter((e) => !e.anulado)
+    .reduce((acc, e) => acc + Number(e.monto || 0), 0);
+  return Math.round(suma * 100) / 100;
+}
+
+/**
+ * Calcula el monto total oficial de una expensa:
+ * Monto Total = montoBase + montoAgua + suma de extras no anulados
+ */
+export function calcularMontoTotalExpensa(
+  montoBase: number | string | Prisma.Decimal,
+  montoAgua: number | string | Prisma.Decimal,
+  extras?: Array<{ monto: number | string | Prisma.Decimal; anulado?: boolean | null }> | null
+): number {
+  const montoExtras = sumarExtrasVigentes(extras);
+  return Math.round((Number(montoBase || 0) + Number(montoAgua || 0) + montoExtras) * 100) / 100;
+}
+
 export interface DeterminarEstadoYSaldoParams {
   montoTotal: number;
   capitalPendiente: number;
@@ -558,5 +584,351 @@ export function formatearExpensaConConcepto(
     tasaInteresMora: Number(expensa.tasaInteresMora || 0),
     concepto,
   };
+}
+
+export interface CrearExtraExpensaInput {
+  idExpensa: number;
+  concepto: string;
+  descripcion?: string | null;
+  monto: number;
+  idUsuario?: number | null;
+}
+
+/**
+ * Registra un cargo extra en una expensa en una sola $transaction con FINANZAS_TX_OPTIONS y auditoría.
+ * Recalcula monto_total y saldo_pendiente.
+ */
+export async function crearExtraExpensa(input: CrearExtraExpensaInput) {
+  const { idExpensa, concepto, descripcion, monto, idUsuario } = input;
+  const ahora = new Date();
+
+  return await prisma.$transaction(async (tx) => {
+    const expensa = await tx.expensa.findUnique({
+      where: { idExpensa },
+      include: {
+        pagos: { where: { anulado: false } },
+        aplicacionesAnticipos: { include: { pago: true } },
+        extras: true,
+      },
+    });
+
+    if (!expensa) {
+      const err: any = new Error('Expensa no encontrada');
+      err.statusCode = 404;
+      err.code = 'NOT_FOUND';
+      throw err;
+    }
+
+    const estadoLower = String(expensa.estado || '').toLowerCase();
+    if (['pagado', 'anulada', 'anulado', 'cancelada'].includes(estadoLower) || Number(expensa.saldoPendiente) <= 0) {
+      const err: any = new Error('No se pueden registrar cargos extras en una expensa pagada o anulada');
+      err.statusCode = 422;
+      err.code = 'UNPROCESSABLE_ENTITY';
+      throw err;
+    }
+
+    const nuevoExtra = await tx.expensaExtra.create({
+      data: {
+        idExpensa,
+        concepto: concepto.trim(),
+        descripcion: descripcion ? descripcion.trim() : null,
+        monto: Math.round(monto * 100) / 100,
+        anulado: false,
+        idUsuario: idUsuario || null,
+      },
+    });
+
+    // Recalcular montoTotal y saldo
+    const extrasVigentes = await tx.expensaExtra.findMany({
+      where: { idExpensa, anulado: false },
+    });
+    const montoExtras = sumarExtrasVigentes(extrasVigentes);
+    const montoAgua = Number(expensa.montoAgua || 0);
+    const montoBase = Number(
+      expensa.montoBase !== null && expensa.montoBase !== undefined
+        ? expensa.montoBase
+        : (Number(expensa.monto) - montoAgua > 0
+            ? Math.round((Number(expensa.monto) - montoAgua) * 100) / 100
+            : Number(expensa.monto))
+    );
+
+    const montoTotalAnterior = Number(expensa.monto);
+    const montoTotalNuevo = Math.round((montoBase + montoAgua + montoExtras) * 100) / 100;
+
+    const capitalPendiente = calcularCapitalPendiente({
+      monto: montoTotalNuevo,
+      pagos: expensa.pagos,
+      aplicacionesAnticipos: expensa.aplicacionesAnticipos,
+    });
+
+    const tasaExpensa = Number(expensa.tasaInteresMora || 0);
+    const moraPrevia = Number(expensa.montoMora || 0);
+    const estaVencida = new Date(expensa.fechaVencimiento) < ahora;
+    let nuevoMontoMora = 0;
+    if (estaVencida || moraPrevia > 0) {
+      if (tasaExpensa > 0) {
+        nuevoMontoMora = Math.round((capitalPendiente * (tasaExpensa / 100)) * 100) / 100;
+      } else {
+        nuevoMontoMora = moraPrevia;
+      }
+    }
+
+    const { saldoPendiente: nuevoSaldo, estado: nuevoEstado } = determinarEstadoYSaldoExpensa({
+      montoTotal: montoTotalNuevo,
+      capitalPendiente,
+      montoMora: nuevoMontoMora,
+      fechaVencimiento: expensa.fechaVencimiento,
+      fechaReferencia: ahora,
+    });
+
+    const expensaActualizada = await tx.expensa.update({
+      where: { idExpensa },
+      data: {
+        montoBase,
+        monto: montoTotalNuevo,
+        montoMora: nuevoMontoMora,
+        saldoPendiente: nuevoSaldo,
+        estado: nuevoEstado,
+      },
+    });
+
+    // Auditoría oficial CREAR_EXTRA_EXPENSA
+    await auditoriaService.registrarEvento({
+      tablaAfectada: 'expensa_extras',
+      idRegistro: String(nuevoExtra.idExtra),
+      accion: 'CREAR_EXTRA_EXPENSA',
+      resultado: 'EXITO',
+      datosNuevos: {
+        idExtra: nuevoExtra.idExtra,
+        idExpensa,
+        concepto: nuevoExtra.concepto,
+        descripcion: nuevoExtra.descripcion ?? null,
+        monto: Number(nuevoExtra.monto),
+        montoTotalAnterior,
+        montoTotalNuevo,
+        saldoNuevo: nuevoSaldo,
+      },
+      idUsuario: idUsuario || null,
+      tx,
+    });
+
+    return {
+      extra: {
+        idExtra: nuevoExtra.idExtra,
+        idExpensa: nuevoExtra.idExpensa,
+        concepto: nuevoExtra.concepto,
+        descripcion: nuevoExtra.descripcion,
+        monto: Number(nuevoExtra.monto),
+        anulado: nuevoExtra.anulado,
+        idUsuario: nuevoExtra.idUsuario,
+        fechaRegistro: nuevoExtra.fechaRegistro,
+      },
+      expensa: {
+        idExpensa: expensaActualizada.idExpensa,
+        montoTotal: Number(expensaActualizada.monto),
+        saldoPendiente: Number(expensaActualizada.saldoPendiente),
+        estado: expensaActualizada.estado,
+      },
+    };
+  }, FINANZAS_TX_OPTIONS);
+}
+
+/**
+ * Consulta todos los extras (vigentes y anulados) de una expensa.
+ */
+export async function obtenerExtrasExpensa(idExpensa: number) {
+  const expensa = await prisma.expensa.findUnique({
+    where: { idExpensa },
+  });
+
+  if (!expensa) {
+    const err: any = new Error('Expensa no encontrada');
+    err.statusCode = 404;
+    err.code = 'NOT_FOUND';
+    throw err;
+  }
+
+  const extras = await prisma.expensaExtra.findMany({
+    where: { idExpensa },
+    orderBy: { fechaRegistro: 'asc' },
+  });
+
+  return {
+    extras: extras.map((e) => ({
+      idExtra: e.idExtra,
+      idExpensa: e.idExpensa,
+      concepto: e.concepto,
+      descripcion: e.descripcion,
+      monto: Number(e.monto),
+      anulado: e.anulado,
+      idUsuario: e.idUsuario,
+      fechaRegistro: e.fechaRegistro,
+    })),
+  };
+}
+
+/**
+ * Anula un cargo extra (anulado = true) en una sola $transaction con FINANZAS_TX_OPTIONS y auditoría.
+ * Recalcula monto_total y saldo_pendiente.
+ */
+export async function anularExtraExpensa(idExpensa: number, idExtra: number, idUsuario?: number | null) {
+  const ahora = new Date();
+
+  return await prisma.$transaction(async (tx) => {
+    const expensa = await tx.expensa.findUnique({
+      where: { idExpensa },
+      include: {
+        pagos: { where: { anulado: false } },
+        aplicacionesAnticipos: { include: { pago: true } },
+      },
+    });
+
+    if (!expensa) {
+      const err: any = new Error('Expensa no encontrada');
+      err.statusCode = 404;
+      err.code = 'NOT_FOUND';
+      throw err;
+    }
+
+    const extra = await tx.expensaExtra.findUnique({
+      where: { idExtra },
+    });
+
+    if (!extra || extra.idExpensa !== idExpensa) {
+      const err: any = new Error('Cargo extra no encontrado');
+      err.statusCode = 404;
+      err.code = 'NOT_FOUND';
+      throw err;
+    }
+
+    if (extra.anulado) {
+      const err: any = new Error('El cargo extra ya se encuentra anulado');
+      err.statusCode = 409;
+      err.code = 'CONFLICT';
+      throw err;
+    }
+
+    const estadoLower = String(expensa.estado || '').toLowerCase();
+    if (['pagado', 'anulada', 'anulado', 'cancelada'].includes(estadoLower) || Number(expensa.saldoPendiente) <= 0) {
+      const err: any = new Error('No se pueden anular cargos extras en una expensa pagada o anulada');
+      err.statusCode = 422;
+      err.code = 'UNPROCESSABLE_ENTITY';
+      throw err;
+    }
+
+    const extraAnulado = await tx.expensaExtra.update({
+      where: { idExtra },
+      data: { anulado: true },
+    });
+
+    // Recalcular montoTotal y saldo sin este extra
+    const extrasVigentes = await tx.expensaExtra.findMany({
+      where: { idExpensa, anulado: false },
+    });
+    const montoExtras = sumarExtrasVigentes(extrasVigentes);
+    const montoAgua = Number(expensa.montoAgua || 0);
+    const montoBase = Number(
+      expensa.montoBase !== null && expensa.montoBase !== undefined
+        ? expensa.montoBase
+        : (Number(expensa.monto) - montoAgua > 0
+            ? Math.round((Number(expensa.monto) - montoAgua) * 100) / 100
+            : Number(expensa.monto))
+    );
+
+    const montoTotalAnterior = Number(expensa.monto);
+    const montoTotalNuevo = Math.round((montoBase + montoAgua + montoExtras) * 100) / 100;
+
+    // Validar que el nuevo monto total no sea inferior a lo ya pagado
+    const pagosValidos = expensa.pagos.filter((p) => !p.anulado);
+    const totalPagos = pagosValidos.reduce((acc, p) => acc + Number(p.montoPagado || 0), 0);
+    const anticValidos = expensa.aplicacionesAnticipos.filter((a) => !a.pago || !a.pago.anulado);
+    const totalAntic = anticValidos.reduce((acc, a) => acc + Number(a.monto || 0), 0);
+    const totalPagado = Math.round((totalPagos + totalAntic) * 100) / 100;
+
+    if (montoTotalNuevo < totalPagado) {
+      const err: any = new Error(
+        `El nuevo monto total de expensa (${montoTotalNuevo}) queda por debajo de lo ya pagado (${totalPagado})`
+      );
+      err.statusCode = 422;
+      err.code = 'UNPROCESSABLE_ENTITY';
+      throw err;
+    }
+
+    const capitalPendiente = calcularCapitalPendiente({
+      monto: montoTotalNuevo,
+      pagos: expensa.pagos,
+      aplicacionesAnticipos: expensa.aplicacionesAnticipos,
+    });
+
+    const tasaExpensa = Number(expensa.tasaInteresMora || 0);
+    const moraPrevia = Number(expensa.montoMora || 0);
+    const estaVencida = new Date(expensa.fechaVencimiento) < ahora;
+    let nuevoMontoMora = 0;
+    if (estaVencida || moraPrevia > 0) {
+      if (tasaExpensa > 0) {
+        nuevoMontoMora = Math.round((capitalPendiente * (tasaExpensa / 100)) * 100) / 100;
+      } else {
+        nuevoMontoMora = moraPrevia;
+      }
+    }
+
+    const { saldoPendiente: nuevoSaldo, estado: nuevoEstado } = determinarEstadoYSaldoExpensa({
+      montoTotal: montoTotalNuevo,
+      capitalPendiente,
+      montoMora: nuevoMontoMora,
+      fechaVencimiento: expensa.fechaVencimiento,
+      fechaReferencia: ahora,
+    });
+
+    const expensaActualizada = await tx.expensa.update({
+      where: { idExpensa },
+      data: {
+        montoBase,
+        monto: montoTotalNuevo,
+        montoMora: nuevoMontoMora,
+        saldoPendiente: nuevoSaldo,
+        estado: nuevoEstado,
+      },
+    });
+
+    // Auditoría oficial ANULAR_EXTRA_EXPENSA
+    await auditoriaService.registrarEvento({
+      tablaAfectada: 'expensa_extras',
+      idRegistro: String(extraAnulado.idExtra),
+      accion: 'ANULAR_EXTRA_EXPENSA',
+      resultado: 'EXITO',
+      datosNuevos: {
+        idExtra: extraAnulado.idExtra,
+        idExpensa,
+        concepto: extraAnulado.concepto,
+        descripcion: extraAnulado.descripcion ?? null,
+        monto: Number(extraAnulado.monto),
+        montoTotalAnterior,
+        montoTotalNuevo,
+        saldoNuevo: nuevoSaldo,
+      },
+      idUsuario: idUsuario || null,
+      tx,
+    });
+
+    return {
+      extra: {
+        idExtra: extraAnulado.idExtra,
+        idExpensa: extraAnulado.idExpensa,
+        concepto: extraAnulado.concepto,
+        descripcion: extraAnulado.descripcion,
+        monto: Number(extraAnulado.monto),
+        anulado: extraAnulado.anulado,
+        idUsuario: extraAnulado.idUsuario,
+        fechaRegistro: extraAnulado.fechaRegistro,
+      },
+      expensa: {
+        idExpensa: expensaActualizada.idExpensa,
+        montoTotal: Number(expensaActualizada.monto),
+        saldoPendiente: Number(expensaActualizada.saldoPendiente),
+        estado: expensaActualizada.estado,
+      },
+    };
+  }, FINANZAS_TX_OPTIONS);
 }
 
