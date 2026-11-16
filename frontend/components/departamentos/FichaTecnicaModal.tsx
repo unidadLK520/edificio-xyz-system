@@ -104,6 +104,17 @@ export default function FichaTecnicaModal({ isOpen, depto, totalAreaConstruida, 
                 <div className="text-[#5c5750] dark:text-slate-400 font-mono">
                   CI: {depto.propietario.ci} • Tel: {depto.propietario.telefono}
                 </div>
+                {depto.propietario.estadoCivil && (
+                  <div className="text-xs text-blue-900 dark:text-blue-300 font-semibold">
+                    Estado Civil: <span className="font-normal">{depto.propietario.estadoCivil}</span>
+                  </div>
+                )}
+                {depto.propietario.ocupantes && (
+                  <div className="text-xs text-slate-800 dark:text-slate-200 font-semibold">
+                    Composición Familiar / Habitantes:{' '}
+                    <span className="font-normal">{depto.propietario.ocupantes}</span>
+                  </div>
+                )}
                 <div className="text-[#5c5750] dark:text-slate-400">
                   Correo: {depto.propietario.correo}
                 </div>

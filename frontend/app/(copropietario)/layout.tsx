@@ -1,6 +1,10 @@
+// frontend/app/(copropietario)/layout.tsx
+// Layout adaptativo para vistas compartidas (Comunicados, Mi Cuenta, Reservas)
+// Detecta dinámicamente el rol (ADMINISTRADOR, DIRECTORIO, CONSULTA, COPROPIETARIO) para no atrapar al usuario
+
 'use client'
 
-import React, { useState } from 'react'
+import React, { useState, useMemo } from 'react'
 import Link from 'next/link'
 import Image from 'next/image'
 import { usePathname } from 'next/navigation'
@@ -20,7 +24,10 @@ import {
   Users2,
   UserCog,
   LineChart,
-  Landmark
+  Landmark,
+  FileBarChart,
+  Briefcase,
+  ShieldAlert
 } from 'lucide-react'
 
 const ADMIN_NAV_LINKS = [
@@ -32,7 +39,20 @@ const ADMIN_NAV_LINKS = [
   { href: '/flujo-caja', label: 'Flujo de Caja', icon: LineChart },
   { href: '/conciliacion-bancaria', label: 'Conciliación Bancaria', icon: Landmark },
   { href: '/personal', label: 'Personal', icon: Users2 },
+  { href: '/reportes', label: 'Reportes Financieros', icon: FileBarChart },
   { href: '/comunicados', label: 'Comunicados', icon: Megaphone }
+]
+
+const DIRECTORIO_NAV_LINKS = [
+  { href: '/reportes', label: 'Reportes y Finanzas', icon: FileBarChart },
+  { href: '/auditoria', label: 'Auditoría y Trazabilidad', icon: ShieldAlert },
+  { href: '/comunicados', label: 'Comunicados Oficiales', icon: Megaphone }
+]
+
+const CONSULTA_NAV_LINKS = [
+  { href: '/reportes', label: 'Reportes y Finanzas', icon: FileBarChart },
+  { href: '/auditoria', label: 'Auditoría y Trazabilidad', icon: ShieldAlert },
+  { href: '/comunicados', label: 'Comunicados Oficiales', icon: Megaphone }
 ]
 
 const COPROPIETARIO_LINKS = [
@@ -52,6 +72,83 @@ export default function CopropietarioLayout({ children }: { children: React.Reac
     } catch {}
   }, [])
 
+  const roleUpper = userRole.toUpperCase()
+
+  const navLinks = useMemo(() => {
+    if (roleUpper === 'ADMINISTRADOR') return ADMIN_NAV_LINKS
+    if (roleUpper === 'DIRECTORIO') return DIRECTORIO_NAV_LINKS
+    if (roleUpper === 'CONSULTA') return CONSULTA_NAV_LINKS
+    return COPROPIETARIO_LINKS
+  }, [roleUpper])
+
+  const roleConfig = useMemo(() => {
+    switch (roleUpper) {
+      case 'ADMINISTRADOR':
+        return {
+          title: 'Panel Administrador',
+          icon: Building2,
+          iconBg: 'bg-blue-700 dark:bg-indigo-600 shadow-blue-800/20',
+          textColor: 'text-blue-700 dark:text-indigo-400',
+          badgeColor: 'text-blue-900 dark:text-blue-300',
+          activeBg:
+            'bg-[#ded8cc] text-blue-900 border border-blue-600/30 dark:bg-blue-600/20 dark:text-white dark:border-blue-500/40 shadow-xs',
+          activeIcon: 'text-blue-700 dark:text-blue-400'
+        }
+      case 'DIRECTORIO':
+        return {
+          title: 'Panel Directorio',
+          icon: Briefcase,
+          iconBg: 'bg-purple-700 dark:bg-purple-600 shadow-purple-800/20',
+          textColor: 'text-purple-700 dark:text-purple-400',
+          badgeColor: 'text-purple-900 dark:text-purple-300',
+          activeBg:
+            'bg-[#ded8cc] text-purple-900 border border-purple-600/30 dark:bg-purple-600/20 dark:text-white dark:border-purple-500/40 shadow-xs',
+          activeIcon: 'text-purple-700 dark:text-purple-400'
+        }
+      case 'CONSULTA':
+        return {
+          title: 'Panel Consulta / Auditoría',
+          icon: ShieldAlert,
+          iconBg: 'bg-indigo-700 dark:bg-indigo-600 shadow-indigo-800/20',
+          textColor: 'text-indigo-700 dark:text-indigo-400',
+          badgeColor: 'text-indigo-900 dark:text-indigo-300',
+          activeBg:
+            'bg-[#ded8cc] text-indigo-900 border border-indigo-600/30 dark:bg-indigo-600/20 dark:text-white dark:border-indigo-500/40 shadow-xs',
+          activeIcon: 'text-indigo-700 dark:text-indigo-400'
+        }
+      case 'COPROPIETARIO':
+      default:
+        return {
+          title: 'Portal Copropietario',
+          icon: KeyRound,
+          iconBg: 'bg-emerald-700 dark:bg-emerald-600 shadow-emerald-800/20',
+          textColor: 'text-emerald-700 dark:text-emerald-400',
+          badgeColor: 'text-emerald-900 dark:text-emerald-300',
+          activeBg:
+            'bg-[#ded8cc] text-emerald-900 border border-emerald-600/30 dark:bg-emerald-600/20 dark:text-white dark:border-emerald-500/40 shadow-xs',
+          activeIcon: 'text-emerald-700 dark:text-emerald-400'
+        }
+    }
+  }, [roleUpper])
+
+  const IconHeader = roleConfig.icon
+
+  const handleLogout = async () => {
+    try {
+      await fetch('/api/auth/logout', { method: 'POST' })
+    } catch {
+      // Continuar con limpieza local
+    }
+    if (typeof window !== 'undefined') {
+      document.cookie = 'auth_token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT'
+      localStorage.removeItem('auth_token')
+      localStorage.removeItem('user_role')
+      localStorage.removeItem('user_profile')
+      localStorage.removeItem('last_user_role')
+    }
+    window.location.href = '/login'
+  }
+
   return (
     <div className="flex h-screen bg-[#e6e2da] dark:bg-slate-950 text-[#262422] dark:text-slate-100 font-sans overflow-hidden transition-colors duration-300 selection:bg-blue-600 selection:text-white">
       {/* Overlay para móvil */}
@@ -70,15 +167,19 @@ export default function CopropietarioLayout({ children }: { children: React.Reac
       >
         <div className="p-5 border-b border-[#cec8bc] dark:border-slate-800 flex justify-between items-center bg-[#e3ded4] dark:bg-slate-950">
           <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-xl bg-emerald-700 dark:bg-emerald-600 text-white flex items-center justify-center shadow-md shadow-emerald-800/20">
-              <KeyRound className="w-4 h-4" />
+            <div
+              className={`w-8 h-8 rounded-xl text-white flex items-center justify-center shadow-md ${roleConfig.iconBg}`}
+            >
+              <IconHeader className="w-4 h-4" />
             </div>
             <div>
               <h2 className="font-extrabold text-base text-[#262422] dark:text-white leading-tight">
-                Edificio <span className="text-emerald-700 dark:text-emerald-400">XYZ</span>
+                Edificio <span className={roleConfig.textColor}>XYZ</span>
               </h2>
-              <span className="text-[10px] text-emerald-900 dark:text-emerald-300 uppercase font-bold tracking-wider block">
-                {userRole === 'ADMINISTRADOR' ? 'Panel Administrador' : 'Portal Copropietario'}
+              <span
+                className={`text-[10px] uppercase font-bold tracking-wider block ${roleConfig.badgeColor}`}
+              >
+                {roleConfig.title}
               </span>
             </div>
           </div>
@@ -91,7 +192,7 @@ export default function CopropietarioLayout({ children }: { children: React.Reac
         </div>
 
         <nav className="flex-1 p-3 space-y-1.5 overflow-y-auto">
-          {(userRole === "ADMINISTRADOR" ? ADMIN_NAV_LINKS : COPROPIETARIO_LINKS).map((link) => {
+          {navLinks.map((link) => {
             const IconComp = link.icon
             const isActive = pathname === link.href || pathname.startsWith(link.href + '/')
             return (
@@ -101,12 +202,12 @@ export default function CopropietarioLayout({ children }: { children: React.Reac
                 onClick={() => setIsMobileMenuOpen(false)}
                 className={`flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-semibold transition-all ${
                   isActive
-                    ? 'bg-[#ded8cc] text-emerald-900 border border-emerald-600/30 dark:bg-emerald-600/20 dark:text-white dark:border-emerald-500/40 shadow-xs'
+                    ? roleConfig.activeBg
                     : 'text-[#5c5750] hover:text-[#262422] hover:bg-[#e4dfd5] dark:text-slate-400 dark:hover:text-white dark:hover:bg-slate-800/60'
                 }`}
               >
                 <IconComp
-                  className={`w-4 h-4 ${isActive ? 'text-emerald-700 dark:text-emerald-400' : 'text-[#7d776f]'}`}
+                  className={`w-4 h-4 ${isActive ? roleConfig.activeIcon : 'text-[#7d776f]'}`}
                 />
                 <span>{link.label}</span>
               </Link>
@@ -119,13 +220,14 @@ export default function CopropietarioLayout({ children }: { children: React.Reac
             <span>Tema visual</span>
             <ThemeToggle />
           </div>
-          <a
-            href="/api/auth/logout"
+          <button
+            type="button"
+            onClick={handleLogout}
             className="flex items-center justify-center gap-2 w-full text-center py-2.5 px-4 bg-rose-100/70 text-rose-800 hover:bg-rose-100 dark:bg-rose-950/30 dark:text-rose-400 dark:hover:bg-rose-900/40 border border-rose-300 dark:border-rose-900/50 rounded-xl text-xs font-bold transition-colors cursor-pointer"
           >
             <LogOut className="w-3.5 h-3.5" />
             Cerrar Sesión
-          </a>
+          </button>
         </div>
       </aside>
 
@@ -139,7 +241,7 @@ export default function CopropietarioLayout({ children }: { children: React.Reac
             <Menu className="w-5 h-5" />
           </button>
           <span className="font-bold text-sm text-[#262422] dark:text-white">
-            Edificio <span className="text-emerald-700 dark:text-emerald-400">XYZ</span>
+            Edificio <span className={roleConfig.textColor}>XYZ</span>
           </span>
           <ThemeToggle />
         </header>
