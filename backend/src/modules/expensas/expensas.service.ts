@@ -932,3 +932,81 @@ export async function anularExtraExpensa(idExpensa: number, idExtra: number, idU
   }, FINANZAS_TX_OPTIONS);
 }
 
+/**
+ * Helper FIFO para aplicación automática de anticipos disponibles a una expensa.
+ * Busca anticipos activos (idExpensa null, esAnticipado true, anulado false) del mismo departamento
+ * ordenados FIFO por fechaPago / idPago y reduce el saldo de la expensa.
+ */
+export async function aplicarAnticiposFIFO(
+  tx: Prisma.TransactionClient,
+  expensa: { idExpensa: number; idDepartamento: number; monto: any; saldoPendiente: any; estado?: string },
+  idUsuario?: number | null
+) {
+  let saldoPendiente = Number(expensa.saldoPendiente);
+  if (saldoPendiente <= 0) {
+    return expensa;
+  }
+
+  // Buscar anticipos activos (idExpensa null, esAnticipado true, anulado false) del mismo departamento ordenados FIFO por fechaPago / idPago
+  const anticipos = await tx.pago.findMany({
+    where: {
+      idDepartamento: expensa.idDepartamento,
+      idExpensa: null,
+      esAnticipado: true,
+      anulado: false,
+    },
+    include: {
+      aplicacionesAnticipo: true,
+    },
+    orderBy: [
+      { fechaPago: 'asc' },
+      { idPago: 'asc' },
+    ],
+  });
+
+  let aplicacionesRealizadas = 0;
+
+  for (const ant of anticipos) {
+    if (saldoPendiente <= 0) break;
+
+    const totalAplicado = ant.aplicacionesAnticipo.reduce(
+      (acc, a) => acc + Number(a.monto),
+      0
+    );
+    const saldoDisponible = Math.max(0, Number(ant.montoPagado) - totalAplicado);
+
+    if (saldoDisponible <= 0) continue;
+
+    const montoAAplicar = Math.min(saldoPendiente, saldoDisponible);
+    const montoRedondeado = Math.round(montoAAplicar * 100) / 100;
+
+    if (montoRedondeado <= 0) continue;
+
+    await tx.aplicacionAnticipo.create({
+      data: {
+        idPago: ant.idPago,
+        idExpensa: expensa.idExpensa,
+        monto: montoRedondeado,
+        idUsuarioRegistro: idUsuario || null,
+      },
+    });
+
+    saldoPendiente = Math.max(0, Math.round((saldoPendiente - montoRedondeado) * 100) / 100);
+    aplicacionesRealizadas++;
+  }
+
+  if (aplicacionesRealizadas > 0) {
+    const nuevoEstado = saldoPendiente === 0 ? 'Pagado' : 'Parcial';
+    return await tx.expensa.update({
+      where: { idExpensa: expensa.idExpensa },
+      data: {
+        saldoPendiente,
+        estado: nuevoEstado,
+      },
+    });
+  }
+
+  return expensa;
+}
+
+
