@@ -3,7 +3,7 @@
 
 'use client'
 
-import React, { useState, useMemo } from 'react'
+import React, { useState, useEffect, useMemo } from 'react'
 import {
   QrCode,
   Calendar,
@@ -38,19 +38,50 @@ export default function CobroQrSimuladorModal({
 }: CobroQrSimuladorModalProps) {
   const { fechaSistema, setFechaSistema, politicaMora, calcularMoraExpensa } = useFechaSistema()
 
-  const [idPersonaSeleccionada, setIdPersonaSeleccionada] = useState<number | ''>(() => {
-    return expensa?.departamento?.propietario?.idPersona || personasList[0]?.idPersona || ''
-  })
+  const [idPersonaSeleccionada, setIdPersonaSeleccionada] = useState<number | ''>('')
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const [pagoCompletado, setPagoCompletado] = useState<any | null>(null)
 
-  // Saldo base de la expensa
-  const saldoBase = Number(expensa?.saldoPendiente ?? expensa?.monto ?? 0)
+  // Sincronizar persona y fecha simulada al abrir o cambiar la expensa
+  useEffect(() => {
+    if (expensa) {
+      const propId =
+        expensa.departamento?.propietario?.idPersona ||
+        expensa.idPersona ||
+        personasList[0]?.idPersona ||
+        ''
+      if (propId) setIdPersonaSeleccionada(propId)
+      if (expensa.fechaSimulada) {
+        setFechaSistema(expensa.fechaSimulada)
+      }
+      setPagoCompletado(null)
+      setErrorMessage(null)
+    }
+  }, [expensa, personasList, setFechaSistema])
+
+  // Saldo base de la expensa:
+  // Si la expensa tiene saldoPendiente > 0, se usa ese saldo.
+  // Si saldoPendiente es 0 (expensa ya saldada previamente o simulación), se usa el monto nominal de la expensa para simular el cobro.
+  const montoNominal = useMemo(() => {
+    const m = Number(expensa?.monto || 0)
+    if (m > 0) return m
+    const b = Number(expensa?.montoBase || 300)
+    const a = Number(expensa?.montoAgua || 0)
+    return b + a
+  }, [expensa?.monto, expensa?.montoBase, expensa?.montoAgua])
+
+  const saldoBase = useMemo(() => {
+    if (expensa?.saldoPendiente !== undefined && Number(expensa.saldoPendiente) > 0) {
+      return Number(expensa.saldoPendiente)
+    }
+    return montoNominal
+  }, [expensa?.saldoPendiente, montoNominal])
 
   // Cálculo de mora dinámico f(fechaSistema, fechaVencimiento)
   const calculoMora = useMemo(() => {
-    return calcularMoraExpensa(expensa?.fechaVencimiento, saldoBase)
+    const fVenc = expensa?.fechaVencimiento || '2026-11-10'
+    return calcularMoraExpensa(fVenc, saldoBase)
   }, [calcularMoraExpensa, expensa?.fechaVencimiento, saldoBase])
 
   const totalConMora = useMemo(() => {
@@ -70,13 +101,34 @@ export default function CobroQrSimuladorModal({
     setErrorMessage(null)
 
     // Validar persona pagadora
-    const idPersona = Number(idPersonaSeleccionada)
-    if (!idPersona || isNaN(idPersona)) {
-      setErrorMessage('Debe seleccionar la persona que efectúa el pago.')
+    const idPersona = Number(idPersonaSeleccionada) || personasList[0]?.idPersona || 1
+
+    setIsSubmitting(true)
+
+    // Si la expensa no tiene idExpensa (simulación directa sobre unidad de muestra)
+    if (!expensa.idExpensa) {
+      setTimeout(() => {
+        setPagoCompletado({
+          message: 'Pago QR simulado con éxito',
+          expensaOriginal: expensa,
+          calculoMora,
+          totalPagado: totalConMora,
+          fechaSimulada: fechaSistema
+        })
+        if (onPaymentSuccess) {
+          onPaymentSuccess({
+            ...expensa,
+            saldoPendiente: 0,
+            estado: 'Pagado',
+            interesPagado: calculoMora.montoMora,
+            fechaPagoSimulada: fechaSistema
+          })
+        }
+        setIsSubmitting(false)
+      }, 300)
       return
     }
 
-    setIsSubmitting(true)
     try {
       const res = await apiFetch(`/api/v1/expensas/${expensa.idExpensa}/pagos`, {
         method: 'POST',
@@ -86,7 +138,9 @@ export default function CobroQrSimuladorModal({
           interesPagado: calculoMora.montoMora,
           metodoPago: 'QR',
           idPersonaPagador: idPersona,
-          comprobanteUrl: `QR-SIM-${Date.now().toString().slice(-6)}`
+          comprobanteUrl: `QR-SIM-${Date.now().toString().slice(-6)}`,
+          esSimulacion: true,
+          fechaPagoSimulada: fechaSistema
         })
       })
 
@@ -120,6 +174,8 @@ export default function CobroQrSimuladorModal({
     }
   }
 
+  const baseMostrar = Number(expensa?.montoBase || saldoBase - Number(expensa?.montoAgua || 0))
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in duration-200">
       <div className="bg-[#ede9e1] dark:bg-slate-900 border border-[#cec8bc] dark:border-slate-800 w-full max-w-xl rounded-3xl shadow-2xl p-5 sm:p-6 space-y-4 max-h-[92vh] overflow-y-auto">
@@ -135,7 +191,7 @@ export default function CobroQrSimuladorModal({
               </h3>
               <p className="text-xs text-[#7d776f]">
                 Dpto. {expensa.departamento?.numero || expensa.idDepartamento} • Período:{' '}
-                {expensa.periodo}
+                {expensa.periodo || '2026-11-01'}
               </p>
             </div>
           </div>
@@ -146,6 +202,18 @@ export default function CobroQrSimuladorModal({
             <X className="w-5 h-5" />
           </button>
         </div>
+
+        {/* Notificación informativa si ya estaba saldada */}
+        {expensa?.estado === 'Pagado' && (
+          <div className="p-2.5 rounded-2xl bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-800 text-[11px] text-blue-900 dark:text-blue-300 flex items-center gap-2">
+            <Info className="w-4 h-4 shrink-0 text-blue-600 dark:text-blue-400" />
+            <span>
+              Esta expensa figura previamente saldada (Saldo Bs. 0.00). El simulador utiliza su
+              cuota nominal de <b>Bs. {montoNominal.toFixed(2)}</b> para permitirte ensayar el pago
+              QR con o sin mora según la fecha que elijas.
+            </span>
+          </div>
+        )}
 
         {/* Mensaje de Error */}
         {errorMessage && (
@@ -166,23 +234,25 @@ export default function CobroQrSimuladorModal({
                 ¡Pago QR Simulado con Éxito!
               </h4>
               <p className="text-xs text-emerald-800 dark:text-emerald-300 mt-1">
-                La expensa ha sido marcada como <span className="font-bold">Pagada</span> en el
-                sistema con fecha simulada: <span className="font-mono font-bold">{pagoCompletado.fechaSimulada}</span>.
+                La expensa ha sido procesada mediante QR en el sistema con fecha simulada:{' '}
+                <span className="font-mono font-bold">{pagoCompletado.fechaSimulada}</span>.
               </p>
             </div>
 
             <div className="bg-white dark:bg-slate-900 p-3.5 rounded-xl border border-emerald-200 dark:border-emerald-800 text-xs text-left space-y-1.5 font-mono">
               <div className="flex justify-between">
-                <span className="text-[#7d776f]">Monto Expensa:</span>
+                <span className="text-[#7d776f]">Monto Expensa Base:</span>
                 <span className="font-bold">Bs. {saldoBase.toFixed(2)}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-[#7d776f]">Mora Pagada:</span>
-                <span className="font-bold text-rose-600">
+                <span
+                  className={`font-bold ${calculoMora.montoMora > 0 ? 'text-rose-600' : 'text-emerald-600'}`}
+                >
                   Bs. {calculoMora.montoMora.toFixed(2)}
                 </span>
               </div>
-              <div className="flex justify-between border-t pt-1 font-bold text-sm text-emerald-700">
+              <div className="flex justify-between border-t pt-1 font-bold text-sm text-emerald-700 dark:text-emerald-400">
                 <span>Total Cobrado:</span>
                 <span>Bs. {totalConMora.toFixed(2)}</span>
               </div>
@@ -205,7 +275,7 @@ export default function CobroQrSimuladorModal({
                   Fecha de Simulación del Pago:
                 </span>
                 <span className="text-[11px] text-[#7d776f] font-mono">
-                  Vence: {fechaSolo(expensa.fechaVencimiento) || '—'}
+                  Vence: {fechaSolo(expensa.fechaVencimiento || '2026-11-10')}
                 </span>
               </div>
 
@@ -248,7 +318,10 @@ export default function CobroQrSimuladorModal({
                 >
                   🔴 Con Mora (15/Nov)
                   <span className="block text-[9px] font-normal opacity-90">
-                    +{politicaMora.tipoPenalidad === 'fijo' ? `Bs ${politicaMora.montoFijo}` : `${politicaMora.porcentaje}%`}
+                    +
+                    {politicaMora.tipoPenalidad === 'fijo'
+                      ? `Bs ${politicaMora.montoFijo}`
+                      : `${politicaMora.porcentaje}%`}
                   </span>
                 </button>
               </div>
@@ -322,11 +395,11 @@ export default function CobroQrSimuladorModal({
                 <div className="flex justify-between py-1 border-b border-[#cec8bc] dark:border-slate-700 text-[#66615b] dark:text-slate-400">
                   <span>Monto Base Expensa:</span>
                   <span className="font-mono font-bold text-[#262422] dark:text-white">
-                    Bs. {(expensa.montoBase || saldoBase).toFixed(2)}
+                    Bs. {baseMostrar.toFixed(2)}
                   </span>
                 </div>
 
-                {Boolean(expensa.montoAgua && expensa.montoAgua > 0) && (
+                {Boolean(expensa.montoAgua && Number(expensa.montoAgua) > 0) && (
                   <div className="flex justify-between py-1 border-b border-[#cec8bc] dark:border-slate-700 text-[#66615b] dark:text-slate-400">
                     <span>Consumo de Agua:</span>
                     <span className="font-mono font-bold text-[#262422] dark:text-white">
@@ -364,13 +437,13 @@ export default function CobroQrSimuladorModal({
                 <select
                   value={idPersonaSeleccionada}
                   onChange={(e) => setIdPersonaSeleccionada(Number(e.target.value))}
-                  className="w-full px-3 py-2 rounded-xl bg-[#dfd9ce] dark:bg-slate-800 border border-[#cec8bc] dark:border-slate-700 text-xs text-[#262422] dark:text-white font-medium"
+                  className="w-full px-3 py-2 rounded-xl bg-[#dfd9ce] dark:bg-slate-800 border border-[#cec8bc] dark:border-slate-700 text-xs text-[#262422] dark:text-white font-medium cursor-pointer"
                 >
                   {personasList.length === 0 ? (
                     <option value="1">Copropietario Titular</option>
                   ) : (
-                    personasList.map((p) => (
-                      <option key={p.idPersona} value={p.idPersona}>
+                    personasList.map((p, idx) => (
+                      <option key={`pago-persona-${p.idPersona}-${idx}`} value={p.idPersona}>
                         {p.nombres} {p.apellidos} {p.ciNit ? `(CI: ${p.ciNit})` : ''}
                       </option>
                     ))
@@ -406,4 +479,3 @@ export default function CobroQrSimuladorModal({
     </div>
   )
 }
-

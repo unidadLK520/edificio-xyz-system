@@ -25,6 +25,27 @@ export const POLITICA_MORA_DEFAULT: PoliticaMoraLocal = {
   diaGeneracion: 1
 }
 
+export interface DetalleMesMora {
+  mesNumero: number
+  concepto: string
+  penalidadMes: number
+  moraAcumulada: number
+  saldoTotalConMora: number
+}
+
+export interface ResultadoCalculoMora {
+  aplicaMora: boolean
+  estadoMora: 'ANTES_VENCIMIENTO' | 'EN_VENCIMIENTO' | 'EN_GRACIA' | 'CON_MORA'
+  montoMora: number
+  montoMoraMensual?: number
+  mesesMora?: number
+  descripcionMora: string
+  diasExceso: number
+  tipoPenalidad?: 'fijo' | 'porcentaje'
+  tasaOValor?: number
+  historialMensual?: DetalleMesMora[]
+}
+
 interface FechaSistemaContextType {
   fechaSistema: string // YYYY-MM-DD
   setFechaSistema: (fecha: string) => void
@@ -35,13 +56,7 @@ interface FechaSistemaContextType {
   calcularMoraExpensa: (
     fechaVencimiento: string,
     saldoBase: number
-  ) => {
-    aplicaMora: boolean
-    estadoMora: 'ANTES_VENCIMIENTO' | 'EN_VENCIMIENTO' | 'EN_GRACIA' | 'CON_MORA'
-    montoMora: number
-    descripcionMora: string
-    diasExceso: number
-  }
+  ) => ResultadoCalculoMora
 }
 
 const FechaSistemaContext = createContext<FechaSistemaContextType | undefined>(undefined)
@@ -107,8 +122,13 @@ export function FechaSistemaProvider({ children }: { children: React.ReactNode }
           aplicaMora: false,
           estadoMora: 'ANTES_VENCIMIENTO' as const,
           montoMora: 0,
+          montoMoraMensual: 0,
+          mesesMora: 0,
           descripcionMora: 'Sin fecha de vencimiento',
-          diasExceso: 0
+          diasExceso: 0,
+          tipoPenalidad: politicaMora.tipoPenalidad || 'fijo',
+          tasaOValor: 0,
+          historialMensual: []
         }
       }
 
@@ -121,13 +141,21 @@ export function FechaSistemaProvider({ children }: { children: React.ReactNode }
 
       const diasGracia = politicaMora.diasGracia || 0
 
+      const tipoPenalidad = politicaMora.tipoPenalidad || 'fijo'
+      const tasaOValor = tipoPenalidad === 'fijo' ? Number(politicaMora.montoFijo || 50) : Number(politicaMora.porcentaje || 10)
+
       if (diffDias < 0) {
         return {
           aplicaMora: false,
           estadoMora: 'ANTES_VENCIMIENTO' as const,
           montoMora: 0,
+          montoMoraMensual: 0,
+          mesesMora: 0,
           descripcionMora: `A tiempo (${Math.abs(diffDias)} días antes del vencimiento)`,
-          diasExceso: 0
+          diasExceso: 0,
+          tipoPenalidad,
+          tasaOValor,
+          historialMensual: []
         }
       }
 
@@ -136,8 +164,13 @@ export function FechaSistemaProvider({ children }: { children: React.ReactNode }
           aplicaMora: false,
           estadoMora: 'EN_VENCIMIENTO' as const,
           montoMora: 0,
+          montoMoraMensual: 0,
+          mesesMora: 0,
           descripcionMora: 'Día exacto de vencimiento (Sin mora)',
-          diasExceso: 0
+          diasExceso: 0,
+          tipoPenalidad,
+          tasaOValor,
+          historialMensual: []
         }
       }
 
@@ -146,30 +179,64 @@ export function FechaSistemaProvider({ children }: { children: React.ReactNode }
           aplicaMora: false,
           estadoMora: 'EN_GRACIA' as const,
           montoMora: 0,
+          montoMoraMensual: 0,
+          mesesMora: 0,
           descripcionMora: `Dentro del período de gracia (+${diffDias}d de ${diasGracia}d permitidos - Sin mora)`,
-          diasExceso: 0
+          diasExceso: 0,
+          tipoPenalidad,
+          tasaOValor,
+          historialMensual: []
         }
       }
 
       // Aplica mora porque superó el vencimiento y los días de gracia
-      let montoMora = 0
-      let descripcionMora = ''
+      // Se calcula cuántos meses de retraso han transcurrido (1 mes por cada bloque de 30 días o fracción)
+      const mesesMora = Math.max(1, Math.ceil(diffDias / 30))
 
-      if (politicaMora.tipoPenalidad === 'fijo') {
-        montoMora = Number(politicaMora.montoFijo || 50)
-        descripcionMora = `Mora fija de Bs ${montoMora} aplicada (+${diffDias} días de mora)`
+      let montoMoraMensual = 0
+      if (tipoPenalidad === 'fijo') {
+        montoMoraMensual = Number(politicaMora.montoFijo || 50)
       } else {
         const pct = Number(politicaMora.porcentaje || 10)
-        montoMora = Math.round(((saldoBase * pct) / 100) * 100) / 100
-        descripcionMora = `Mora del ${pct}% (Bs ${montoMora.toFixed(2)}) aplicada (+${diffDias} días de mora)`
+        montoMoraMensual = Math.round(((saldoBase * pct) / 100) * 100) / 100
+      }
+
+      const montoMoraTotal = Math.round((montoMoraMensual * mesesMora) * 100) / 100
+
+      // Generar desglose cronológico mes a mes de la acumulación
+      const historialMensual: DetalleMesMora[] = []
+      let acumulado = 0
+      for (let i = 1; i <= mesesMora; i++) {
+        acumulado = Math.round((acumulado + montoMoraMensual) * 100) / 100
+        const diasRangoDesde = (i - 1) * 30 + 1
+        const diasRangoHasta = i * 30
+        historialMensual.push({
+          mesNumero: i,
+          concepto: `Mes ${i} de retraso (Día +${diasRangoDesde} a +${diasRangoHasta})`,
+          penalidadMes: montoMoraMensual,
+          moraAcumulada: acumulado,
+          saldoTotalConMora: Math.round((saldoBase + acumulado) * 100) / 100
+        })
+      }
+
+      let descripcionMora = ''
+      if (tipoPenalidad === 'fijo') {
+        descripcionMora = `Mora fija de Bs. ${montoMoraMensual}/mes acumulada por ${mesesMora} mes${mesesMora > 1 ? 'es' : ''} (+${diffDias} días) = Total mora Bs. ${montoMoraTotal}`
+      } else {
+        descripcionMora = `Mora del ${tasaOValor}% mensual (Bs. ${montoMoraMensual}/mes) acumulada por ${mesesMora} mes${mesesMora > 1 ? 'es' : ''} (+${diffDias} días) = Total mora Bs. ${montoMoraTotal.toFixed(2)}`
       }
 
       return {
         aplicaMora: true,
         estadoMora: 'CON_MORA' as const,
-        montoMora,
+        montoMora: montoMoraTotal,
+        montoMoraMensual,
+        mesesMora,
         descripcionMora,
-        diasExceso: diffDias
+        diasExceso: diffDias,
+        tipoPenalidad,
+        tasaOValor,
+        historialMensual
       }
     },
     [fechaSistema, politicaMora]

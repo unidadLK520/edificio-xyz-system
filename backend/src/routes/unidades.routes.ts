@@ -118,13 +118,13 @@ unidadesRouter.get(
           where: whereDept,
           include: {
             propietario: {
-              select: { idPersona: true, nombres: true, apellidos: true, ciNit: true, telefono: true, correo: true },
+              select: { idPersona: true, nombres: true, apellidos: true, ciNit: true, telefono: true, correo: true, direccion: true },
             },
             ocupantes: {
               where: { fechaFin: null },
               include: {
                 persona: {
-                  select: { idPersona: true, nombres: true, apellidos: true, ciNit: true, telefono: true, correo: true },
+                  select: { idPersona: true, nombres: true, apellidos: true, ciNit: true, telefono: true, correo: true, direccion: true },
                 },
               },
             },

@@ -270,18 +270,31 @@ export default function DepartamentosPage() {
                   ? 'Tipo C (100 m²)'
                   : undefined),
           estado: item.estado || 'Desocupado',
-          parqueo: item.parqueos?.[0]?.numero || item.parqueo || 'Sin parqueo',
-          baulera: item.bauleras?.[0]?.numero || item.baulera || 'Sin baulera',
+          parqueo:
+            Array.isArray(item.parqueos) && item.parqueos.length > 0
+              ? item.parqueos.map((p: any) => p.numero).join(', ')
+              : item.parqueo || 'Sin parqueo',
+          baulera:
+            Array.isArray(item.bauleras) && item.bauleras.length > 0
+              ? item.bauleras.map((b: any) => b.numero).join(', ')
+              : item.baulera || 'Sin baulera',
           propietario: item.propietario
-            ? {
-                id: item.propietario.idPersona,
-                nombre:
-                  `${item.propietario.nombres || ''} ${item.propietario.apellidos || ''}`.trim() ||
-                  item.propietario.nombre,
-                ci: item.propietario.ciNit || item.propietario.ci,
-                telefono: item.propietario.telefono,
-                correo: item.propietario.correo
-              }
+            ? (() => {
+                const dirRaw = item.propietario.direccion || ''
+                const matchEc = dirRaw.match(/\[Estado Civil: ([^|]+) \| Ocupantes: ([^\]]+)\]/)
+                return {
+                  id: item.propietario.idPersona,
+                  nombre:
+                    `${item.propietario.nombres || ''} ${item.propietario.apellidos || ''}`.trim() ||
+                    item.propietario.nombre,
+                  ci: item.propietario.ciNit || item.propietario.ci,
+                  telefono: item.propietario.telefono,
+                  correo: item.propietario.correo,
+                  direccion: dirRaw,
+                  estadoCivil: matchEc ? matchEc[1].trim() : undefined,
+                  ocupantes: matchEc ? matchEc[2].trim() : undefined
+                }
+              })()
             : null,
           inquilinoActual: item.inquilinoActual || null,
           persona: item.persona,
@@ -661,7 +674,17 @@ export default function DepartamentosPage() {
                               </div>
                               <div className="text-[11px] text-[#7d776f] dark:text-slate-400">
                                 CI: {unidad.propietario.ci}
+                                {unidad.propietario.estadoCivil && (
+                                  <span className="font-medium text-slate-800 dark:text-slate-200">
+                                    {' '}• {unidad.propietario.estadoCivil}
+                                  </span>
+                                )}
                               </div>
+                              {unidad.propietario.ocupantes && (
+                                <div className="text-[10px] text-blue-800 dark:text-blue-300 font-semibold mt-0.5">
+                                  {unidad.propietario.ocupantes}
+                                </div>
+                              )}
                             </div>
                           ) : (
                             <span className="text-amber-700 dark:text-amber-400 italic text-xs">
