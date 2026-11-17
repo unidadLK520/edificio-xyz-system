@@ -56,7 +56,7 @@ auditoriaRouter.get(
 
 /**
  * POST /api/v1/auditoria/export-prune
- * Exporta los 150 registros más antiguos a Excel y los elimina.
+ * Exporta los 500 registros más antiguos a Excel y los elimina.
  * Sólo accesible por Administrador y Directorio.
  */
 auditoriaRouter.post(
