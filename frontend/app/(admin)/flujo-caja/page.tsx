@@ -442,6 +442,168 @@ export default function CajaYBancosPage() {
     document.body.removeChild(link)
   }
 
+  // ---------------------------------------------------------------------------
+  // CÁLCULOS REACTIVOS PARA GRÁFICOS INFERIORES
+  // ---------------------------------------------------------------------------
+  // 1. Distribución reactiva de egresos por rubro (Caja + Bancos)
+  const categoriasGastoReactivo = useMemo(() => {
+    const baseServicios = datosFiltradosFlujo.reduce((acc, m) => acc + m.egresosOperativos, 0)
+    const baseMantenimiento = datosFiltradosFlujo.reduce((acc, m) => acc + m.egresosMantenimiento, 0)
+    const baseAdministracion = datosFiltradosFlujo.reduce((acc, m) => acc + m.egresosAdministrativos, 0)
+
+    let extraServicios = 0
+    let extraMantenimiento = 0
+    let extraAdministracion = 0
+
+    // Clasificar egresos de caja física
+    const egresosCaja = movimientosCaja.filter((m) => !m.anulado && m.tipo === 'Egreso')
+    for (const ec of egresosCaja) {
+      const conc = (ec.concepto || '').toLowerCase()
+      const val = Number(ec.monto || 0)
+      if (
+        conc.includes('mant') ||
+        conc.includes('ascensor') ||
+        conc.includes('bomba') ||
+        conc.includes('repar') ||
+        conc.includes('pint')
+      ) {
+        extraMantenimiento += val
+      } else if (
+        conc.includes('serv') ||
+        conc.includes('agua') ||
+        conc.includes('luz') ||
+        conc.includes('limp') ||
+        conc.includes('segur') ||
+        conc.includes('gas')
+      ) {
+        extraServicios += val
+      } else {
+        extraAdministracion += val
+      }
+    }
+
+    // Clasificar retiros de cuentas bancarias
+    const retirosBanco = movimientosBanco.filter((mb) => mb.tipo === 'Retiro')
+    for (const rb of retirosBanco) {
+      const conc = (rb.concepto || '').toLowerCase()
+      const val = Number(rb.monto || 0)
+      if (
+        conc.includes('mant') ||
+        conc.includes('ascensor') ||
+        conc.includes('bomba') ||
+        conc.includes('repar') ||
+        conc.includes('pint')
+      ) {
+        extraMantenimiento += val
+      } else if (
+        conc.includes('serv') ||
+        conc.includes('agua') ||
+        conc.includes('luz') ||
+        conc.includes('limp') ||
+        conc.includes('segur') ||
+        conc.includes('gas')
+      ) {
+        extraServicios += val
+      } else {
+        extraAdministracion += val
+      }
+    }
+
+    const montoServicios = Math.round(baseServicios + extraServicios)
+    const montoMantenimiento = Math.round(baseMantenimiento + extraMantenimiento)
+    const montoAdministracion = Math.round(baseAdministracion + extraAdministracion)
+    const total = montoServicios + montoMantenimiento + montoAdministracion
+
+    const pServicios = total > 0 ? Number(((montoServicios / total) * 100).toFixed(1)) : 33.3
+    const pMantenimiento = total > 0 ? Number(((montoMantenimiento / total) * 100).toFixed(1)) : 33.3
+    const pAdministracion = total > 0 ? Number((100 - pServicios - pMantenimiento).toFixed(1)) : 33.4
+
+    // Circunferencia: 2 * PI * 38 ≈ 238.76
+    const C = 238.76
+    const len1 = (pServicios / 100) * C
+    const len2 = (pMantenimiento / 100) * C
+    const len3 = (pAdministracion / 100) * C
+
+    const offset1 = 0
+    const offset2 = -len1
+    const offset3 = -(len1 + len2)
+
+    return {
+      total,
+      rubros: [
+        {
+          nombre: 'Servicios Básicos & Limpieza',
+          monto: montoServicios,
+          porcentaje: pServicios,
+          color: '#2563eb',
+          darkColor: '#60a5fa',
+          strokeDasharray: `${len1.toFixed(2)} ${C.toFixed(2)}`,
+          strokeDashoffset: `${offset1.toFixed(2)}`
+        },
+        {
+          nombre: 'Mantenimiento & Ascensores',
+          monto: montoMantenimiento,
+          porcentaje: pMantenimiento,
+          color: '#f59e0b',
+          darkColor: '#fbbf24',
+          strokeDasharray: `${len2.toFixed(2)} ${C.toFixed(2)}`,
+          strokeDashoffset: `${offset2.toFixed(2)}`
+        },
+        {
+          nombre: 'Administración & Suministros',
+          monto: montoAdministracion,
+          porcentaje: pAdministracion,
+          color: '#8b5cf6',
+          darkColor: '#a78bfa',
+          strokeDasharray: `${len3.toFixed(2)} ${C.toFixed(2)}`,
+          strokeDashoffset: `${offset3.toFixed(2)}`
+        }
+      ]
+    }
+  }, [datosFiltradosFlujo, movimientosCaja, movimientosBanco])
+
+  // 2. Curva reactiva de proyección de liquidez y reserva
+  const curvaLiquidezReactiva = useMemo(() => {
+    const meses = datosFiltradosFlujo
+    if (meses.length === 0) {
+      return {
+        pathLine: 'M 0 120 L 500 20',
+        pathArea: 'M 0 120 L 500 20 L 500 160 L 0 160 Z',
+        inicio: { x: 0, y: 120, saldo: 0, mes: 'Inicio', mesCorto: 'Ini' },
+        medio: { x: 250, y: 70, saldo: 0, mes: 'Medio', mesCorto: 'Med' },
+        fin: { x: 500, y: 20, saldo: 0, mes: 'Final', mesCorto: 'Fin' }
+      }
+    }
+
+    const saldos = meses.map((m) => m.saldoFinal)
+    const minSaldo = Math.min(...saldos, 10000)
+    const maxSaldo = Math.max(...saldos, minSaldo + 1000)
+    const rango = maxSaldo - minSaldo || 1
+
+    const N = meses.length
+    const coords = meses.map((m, idx) => {
+      const x = Math.round((idx / Math.max(1, N - 1)) * 500)
+      const norm = (m.saldoFinal - minSaldo) / rango
+      const y = Math.round(135 - norm * 115)
+      return { x, y, saldo: m.saldoFinal, mes: m.mes, mesCorto: m.mesCorto }
+    })
+
+    const pathLine = coords.map((c, idx) => `${idx === 0 ? 'M' : 'L'} ${c.x} ${c.y}`).join(' ')
+    const pathArea = `${pathLine} L 500 160 L 0 160 Z`
+
+    const inicio = coords[0]
+    const medio = coords[Math.floor(coords.length / 2)]
+    const fin = coords[coords.length - 1]
+
+    return {
+      pathLine,
+      pathArea,
+      inicio,
+      medio,
+      fin
+    }
+  }, [datosFiltradosFlujo])
+
   const showNotification = (type: 'success' | 'error', text: string) => {
     setFeedbackMsg({ type, text })
     setTimeout(() => setFeedbackMsg(null), 5000)
@@ -2068,50 +2230,31 @@ export default function CajaYBancosPage() {
                         <div className="relative w-40 h-40 shrink-0">
                           <svg className="w-full h-full transform -rotate-90" viewBox="0 0 100 100">
                             <circle cx="50" cy="50" r="38" fill="transparent" stroke="#cec8bc" strokeWidth="16" className="dark:stroke-slate-800" />
-                            <circle
-                              cx="50"
-                              cy="50"
-                              r="38"
-                              fill="transparent"
-                              stroke="#2563eb"
-                              strokeWidth="16"
-                              strokeDasharray="238.76"
-                              strokeDashoffset="95.5"
-                              strokeLinecap="round"
-                            />
-                            <circle
-                              cx="50"
-                              cy="50"
-                              r="38"
-                              fill="transparent"
-                              stroke="#f59e0b"
-                              strokeWidth="16"
-                              strokeDasharray="238.76"
-                              strokeDashoffset="173"
-                              strokeLinecap="round"
-                            />
-                            <circle
-                              cx="50"
-                              cy="50"
-                              r="38"
-                              fill="transparent"
-                              stroke="#8b5cf6"
-                              strokeWidth="16"
-                              strokeDasharray="238.76"
-                              strokeDashoffset="208"
-                              strokeLinecap="round"
-                            />
+                            {categoriasGastoReactivo.rubros.map((cat) => (
+                              <circle
+                                key={cat.nombre}
+                                cx="50"
+                                cy="50"
+                                r="38"
+                                fill="transparent"
+                                stroke={cat.color}
+                                strokeWidth="16"
+                                strokeDasharray={cat.strokeDasharray}
+                                strokeDashoffset={cat.strokeDashoffset}
+                                strokeLinecap="round"
+                              />
+                            ))}
                           </svg>
                           <div className="absolute inset-0 flex flex-col items-center justify-center text-center">
                             <span className="text-[10px] text-[#7d776f] uppercase font-bold">Total Gastos</span>
                             <span className="font-extrabold text-sm text-[#262422] dark:text-white font-mono">
-                              Bs. 79.0k
+                              Bs. {(categoriasGastoReactivo.total / 1000).toFixed(1)}k
                             </span>
                           </div>
                         </div>
 
                         <div className="space-y-3 flex-1">
-                          {CATEGORIAS_GASTO.map((cat) => (
+                          {categoriasGastoReactivo.rubros.map((cat) => (
                             <div key={cat.nombre} className="text-xs">
                               <div className="flex items-center justify-between font-bold mb-1">
                                 <span className="flex items-center gap-1.5 text-[#262422] dark:text-white">
@@ -2159,34 +2302,34 @@ export default function CajaYBancosPage() {
                           </defs>
 
                           <path
-                            d="M 0 120 Q 125 100 250 65 T 500 15 L 500 160 L 0 160 Z"
+                            d={curvaLiquidezReactiva.pathArea}
                             fill="url(#liquidezGrad)"
                           />
                           <path
-                            d="M 0 120 Q 125 100 250 65 T 500 15"
+                            d={curvaLiquidezReactiva.pathLine}
                             fill="transparent"
                             stroke="#8b5cf6"
                             strokeWidth="3.5"
                             strokeLinecap="round"
                           />
-                          <circle cx="0" cy="120" r="5" fill="#8b5cf6" stroke="#fff" strokeWidth="2" />
-                          <circle cx="250" cy="65" r="5" fill="#8b5cf6" stroke="#fff" strokeWidth="2" />
-                          <circle cx="500" cy="15" r="6" fill="#10b981" stroke="#fff" strokeWidth="2" />
+                          <circle cx={curvaLiquidezReactiva.inicio.x} cy={curvaLiquidezReactiva.inicio.y} r="5" fill="#8b5cf6" stroke="#fff" strokeWidth="2" />
+                          <circle cx={curvaLiquidezReactiva.medio.x} cy={curvaLiquidezReactiva.medio.y} r="5" fill="#8b5cf6" stroke="#fff" strokeWidth="2" />
+                          <circle cx={curvaLiquidezReactiva.fin.x} cy={curvaLiquidezReactiva.fin.y} r="6" fill="#10b981" stroke="#fff" strokeWidth="2" />
                         </svg>
                       </div>
 
                       <div className="flex items-center justify-between text-xs text-[#7d776f] font-mono pt-2 border-t border-[#cec8bc] dark:border-slate-800">
                         <div>
-                          <span className="block text-[10px] uppercase font-sans">Ene 2026</span>
-                          <span className="font-bold text-[#262422] dark:text-white">Bs. 15.000</span>
+                          <span className="block text-[10px] uppercase font-sans">{curvaLiquidezReactiva.inicio.mesCorto || 'Inicio'} 2026</span>
+                          <span className="font-bold text-[#262422] dark:text-white">Bs. {curvaLiquidezReactiva.inicio.saldo.toLocaleString('es-BO')}</span>
                         </div>
                         <div>
-                          <span className="block text-[10px] uppercase font-sans">Jun 2026</span>
-                          <span className="font-bold text-[#262422] dark:text-white">Bs. 26.760</span>
+                          <span className="block text-[10px] uppercase font-sans">{curvaLiquidezReactiva.medio.mesCorto || 'Medio'} 2026</span>
+                          <span className="font-bold text-[#262422] dark:text-white">Bs. {curvaLiquidezReactiva.medio.saldo.toLocaleString('es-BO')}</span>
                         </div>
                         <div className="text-right">
-                          <span className="block text-[10px] uppercase font-sans">Dic 2026</span>
-                          <span className="font-extrabold text-emerald-700 dark:text-emerald-400">Bs. 41.830</span>
+                          <span className="block text-[10px] uppercase font-sans">{curvaLiquidezReactiva.fin.mesCorto || 'Fin'} 2026</span>
+                          <span className="font-extrabold text-emerald-700 dark:text-emerald-400">Bs. {curvaLiquidezReactiva.fin.saldo.toLocaleString('es-BO')}</span>
                         </div>
                       </div>
                     </div>
