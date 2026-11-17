@@ -21,6 +21,8 @@ export const config = {
   moraCron: process.env.MORA_CRON || '0 1 * * *',
   moraCronEnabled: process.env.MORA_CRON_ENABLED === 'true',
   moraCronTimezone: 'America/La_Paz',
+  expensasAutogenCron: process.env.EXPENSAS_AUTOGEN_CRON || '0 1 * * *',
+  expensasAutogenEnabled: process.env.EXPENSAS_AUTOGEN_ENABLED === 'true',
   storageUploadDir: process.env.STORAGE_UPLOAD_DIR || './uploads',
   storageMaxFileSizeMb: parseFloat(process.env.STORAGE_MAX_FILE_SIZE_MB || '10'),
   storagePublicUrl: process.env.STORAGE_PUBLIC_URL || 'http://localhost:4000/uploads',

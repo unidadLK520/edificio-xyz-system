@@ -20,6 +20,7 @@ const crearUnidadSchema = z.object({
   areaM2: z.number().positive().optional(),
   estado: z.string().optional(),
   idTipo: z.number().int().positive().nullable().optional(),
+  cantidadHabitantes: z.number().int('La cantidad de habitantes debe ser un número entero').min(0, 'La cantidad de habitantes debe ser mayor o igual a 0').optional().nullable(),
 });
 
 const editarUnidadSchema = z.object({
@@ -28,6 +29,7 @@ const editarUnidadSchema = z.object({
   areaM2: z.number().positive().optional(),
   estado: z.string().optional(),
   idTipo: z.number().int().positive().nullable().optional(),
+  cantidadHabitantes: z.number().int('La cantidad de habitantes debe ser un número entero').min(0, 'La cantidad de habitantes debe ser mayor o igual a 0').optional().nullable(),
 });
 
 const asignacionSchema = z.object({
@@ -158,6 +160,7 @@ unidadesRouter.get(
             areaM2: d.areaM2 ? Number(d.areaM2) : null,
             estado: estadoFinal,
             idTipo: d.idTipo ?? null,
+            cantidadHabitantes: d.cantidadHabitantes ?? null,
             tipo: d.tipo ? d.tipo.nombre : null,
             monto: d.tipo ? Number(d.tipo.montoExpensa) : null,
             tipoDepartamento: d.tipo
@@ -544,6 +547,7 @@ unidadesRouter.post(
             areaM2: areaM2 ? areaM2 : null,
             estado: estadoFinal,
             idTipo: idTipo ?? null,
+            cantidadHabitantes: parsed.data.cantidadHabitantes ?? null,
           },
           include: {
             tipo: true,
@@ -694,6 +698,7 @@ unidadesRouter.put(
             ...(areaM2 !== undefined ? { areaM2 } : {}),
             ...(estado ? { estado } : {}),
             ...(idTipo !== undefined ? { idTipo } : {}),
+            ...(parsed.data.cantidadHabitantes !== undefined ? { cantidadHabitantes: parsed.data.cantidadHabitantes } : {}),
           },
           include: {
             tipo: true,
