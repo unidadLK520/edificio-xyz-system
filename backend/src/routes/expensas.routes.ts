@@ -20,6 +20,8 @@ import {
   sumarExtrasVigentes,
   calcularMontoTotalExpensa,
   consultarMoraExpensa,
+  calcularMoraExpensa,
+  fechaYMDLaPaz,
 } from '../modules/expensas';
 
 export const expensasRouter: IRouter = Router();
@@ -288,8 +290,25 @@ expensasRouter.get(
   authorizeRoles('Administrador', 'Directorio'),
   async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
     try {
-      const { estado, idDepartamento, periodo, vencida, tipo, page = '1', limit = '50' } = req.query;
+      const { estado, idDepartamento, periodo, vencida, tipo, fecha, page = '1', limit = '50' } = req.query;
       const ahora = new Date();
+
+      let fechaReferenciaStr = fechaYMDLaPaz(ahora);
+      if (fecha !== undefined) {
+        if (typeof fecha !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(fecha.trim())) {
+          res.status(400).json({
+            error: 'Bad Request',
+            message: 'Parámetro fecha inválido. Formato esperado: YYYY-MM-DD',
+          });
+          return;
+        }
+        const d = new Date(fecha.trim());
+        if (isNaN(d.getTime())) {
+          res.status(400).json({ error: 'Bad Request', message: 'Fecha inválida' });
+          return;
+        }
+        fechaReferenciaStr = fecha.trim();
+      }
 
       const where: Record<string, unknown> = {};
       if (estado && estado !== 'Todos') where.estado = String(estado);
@@ -316,7 +335,7 @@ expensasRouter.get(
           ? [{ departamento: { tipo: { nombre: 'asc' } } }, { departamento: { numero: 'asc' } }]
           : [{ periodo: 'desc' }, { idDepartamento: 'asc' }];
 
-      const [expensas, total] = await Promise.all([
+      const [expensas, total, reglaActiva] = await Promise.all([
         prisma.expensa.findMany({
           where,
           skip,
@@ -330,8 +349,12 @@ expensasRouter.get(
               },
             },
             pagos: {
+              where: { anulado: false },
               orderBy: { fechaPago: 'desc' },
               include: { usuarioRegistro: { select: { nombreUsuario: true } } },
+            },
+            aplicacionesAnticipos: {
+              include: { pago: true },
             },
             extras: {
               where: { anulado: false },
@@ -347,6 +370,10 @@ expensasRouter.get(
           },
         }),
         prisma.expensa.count({ where }),
+        prisma.reglaMora.findFirst({
+          where: { activa: true },
+          orderBy: { fechaCreacion: 'desc' },
+        }),
       ]);
 
       const expensasConVencida = expensas.map((e) => {
@@ -359,10 +386,35 @@ expensasRouter.get(
         }));
         const montoExtras = Math.round(extrasVigentes.reduce((acc: number, x: any) => acc + x.monto, 0) * 100) / 100;
 
+        const capitalPendiente = calcularCapitalPendiente(e);
+        let moraCalculada = 0;
+        let mesesMora = 0;
+        let totalAdeudado = capitalPendiente;
+
+        if (reglaActiva || Number(e.tasaInteresMora || 0) > 0) {
+          const resultadoMora = calcularMoraExpensa({
+            capitalPendiente,
+            fechaVencimiento: e.fechaVencimiento,
+            fechaReferencia: fechaReferenciaStr,
+            regla: reglaActiva || {
+              tipoCalculo: 'PORCENTAJE',
+              tasaInteres: Number(e.tasaInteresMora || 0),
+            },
+            tasaInteresMora: Number(e.tasaInteresMora || 0),
+          });
+          moraCalculada = resultadoMora.moraAcumulada;
+          mesesMora = resultadoMora.mesesMora;
+          totalAdeudado = resultadoMora.totalAdeudado;
+        }
+
         return {
           ...formateada,
           montoExtras,
           extras: extrasVigentes,
+          capitalPendiente,
+          moraCalculada,
+          mesesMora,
+          totalAdeudado,
           vencida: new Date(e.fechaVencimiento) < ahora && Number(e.saldoPendiente) > 0,
         };
       });
