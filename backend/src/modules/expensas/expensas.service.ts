@@ -928,19 +928,29 @@ export async function crearExtraExpensa(input: CrearExtraExpensaInput) {
       aplicacionesAnticipos: expensa.aplicacionesAnticipos,
     });
 
-    const tasaExpensa = Number(expensa.tasaInteresMora || 0);
-    const moraPrevia = Number(expensa.montoMora || 0);
-    const estaVencida = new Date(expensa.fechaVencimiento) < ahora;
-    let nuevoMontoMora = 0;
-    if (estaVencida || moraPrevia > 0) {
-      if (tasaExpensa > 0) {
-        nuevoMontoMora = Math.round((capitalPendiente * (tasaExpensa / 100)) * 100) / 100;
-      } else {
-        nuevoMontoMora = moraPrevia;
-      }
-    }
+    const reglaActiva = await tx.reglaMora.findFirst({
+      where: { activa: true },
+      orderBy: { fechaCreacion: 'desc' },
+    });
 
-    const { saldoPendiente: nuevoSaldo, estado: nuevoEstado } = determinarEstadoYSaldoExpensa({
+    const resultadoMora = calcularMoraExpensa({
+      capitalPendiente,
+      fechaVencimiento: expensa.fechaVencimiento,
+      fechaReferencia: ahora,
+      regla: reglaActiva || {
+        tipoCalculo: 'PORCENTAJE',
+        tasaInteres: Number(expensa.tasaInteresMora || 0),
+      },
+      tasaInteresMora: Number(expensa.tasaInteresMora || 0),
+    });
+
+    const moraPrevia = Number(expensa.montoMora || 0);
+    const estaVencida = resultadoMora.diasAtraso > 0;
+    // Conserva la mora vigente: si estaba vencida o tenía mora previa, aplicar la mora acumulada recalculada; de lo contrario 0
+    const nuevoMontoMora = (estaVencida || moraPrevia > 0) ? resultadoMora.moraAcumulada : 0;
+    const nuevoSaldo = Math.max(0, Math.round((capitalPendiente + nuevoMontoMora) * 100) / 100);
+
+    const { estado: nuevoEstado } = determinarEstadoYSaldoExpensa({
       montoTotal: montoTotalNuevo,
       capitalPendiente,
       montoMora: nuevoMontoMora,
@@ -1127,19 +1137,29 @@ export async function anularExtraExpensa(idExpensa: number, idExtra: number, idU
       aplicacionesAnticipos: expensa.aplicacionesAnticipos,
     });
 
-    const tasaExpensa = Number(expensa.tasaInteresMora || 0);
-    const moraPrevia = Number(expensa.montoMora || 0);
-    const estaVencida = new Date(expensa.fechaVencimiento) < ahora;
-    let nuevoMontoMora = 0;
-    if (estaVencida || moraPrevia > 0) {
-      if (tasaExpensa > 0) {
-        nuevoMontoMora = Math.round((capitalPendiente * (tasaExpensa / 100)) * 100) / 100;
-      } else {
-        nuevoMontoMora = moraPrevia;
-      }
-    }
+    const reglaActiva = await tx.reglaMora.findFirst({
+      where: { activa: true },
+      orderBy: { fechaCreacion: 'desc' },
+    });
 
-    const { saldoPendiente: nuevoSaldo, estado: nuevoEstado } = determinarEstadoYSaldoExpensa({
+    const resultadoMora = calcularMoraExpensa({
+      capitalPendiente,
+      fechaVencimiento: expensa.fechaVencimiento,
+      fechaReferencia: ahora,
+      regla: reglaActiva || {
+        tipoCalculo: 'PORCENTAJE',
+        tasaInteres: Number(expensa.tasaInteresMora || 0),
+      },
+      tasaInteresMora: Number(expensa.tasaInteresMora || 0),
+    });
+
+    const moraPrevia = Number(expensa.montoMora || 0);
+    const estaVencida = resultadoMora.diasAtraso > 0;
+    // Conserva la mora vigente: si estaba vencida o tenía mora previa, aplicar la mora acumulada recalculada; de lo contrario 0
+    const nuevoMontoMora = (estaVencida || moraPrevia > 0) ? resultadoMora.moraAcumulada : 0;
+    const nuevoSaldo = Math.max(0, Math.round((capitalPendiente + nuevoMontoMora) * 100) / 100);
+
+    const { estado: nuevoEstado } = determinarEstadoYSaldoExpensa({
       montoTotal: montoTotalNuevo,
       capitalPendiente,
       montoMora: nuevoMontoMora,
