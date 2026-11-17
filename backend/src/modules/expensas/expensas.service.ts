@@ -5,6 +5,187 @@ import { Prisma, prisma } from '@edificio-xyz/database';
 import { auditoriaService } from '../auditoria';
 import { FINANZAS_TX_OPTIONS } from '../../middlewares/finanzas-permissions.middleware';
 
+/**
+ * Convierte una fecha (Date o string) a formato YYYY-MM-DD en la zona horaria America/La_Paz.
+ * Trata las fechas Date con medianoche UTC (como @db.Date de Prisma) conservando su fecha calendario.
+ */
+export function fechaYMDLaPaz(fecha: string | Date): string {
+  if (typeof fecha === 'string') {
+    const trimmed = fecha.trim();
+    if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) {
+      return trimmed;
+    }
+    const d = new Date(trimmed);
+    if (isNaN(d.getTime())) {
+      throw new Error(`Fecha inválida: ${fecha}`);
+    }
+    return new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'America/La_Paz',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    }).format(d);
+  }
+  if (fecha instanceof Date) {
+    if (isNaN(fecha.getTime())) {
+      throw new Error('Fecha inválida');
+    }
+    if (
+      fecha.getUTCHours() === 0 &&
+      fecha.getUTCMinutes() === 0 &&
+      fecha.getUTCSeconds() === 0 &&
+      fecha.getUTCMilliseconds() === 0
+    ) {
+      const y = fecha.getUTCFullYear();
+      const m = String(fecha.getUTCMonth() + 1).padStart(2, '0');
+      const d = String(fecha.getUTCDate()).padStart(2, '0');
+      return `${y}-${m}-${d}`;
+    }
+    return new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'America/La_Paz',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    }).format(fecha);
+  }
+  throw new Error('Tipo de fecha no soportado');
+}
+
+/**
+ * Calcula la diferencia en días calendario enteros entre fechaVencimiento y fechaReferencia en America/La_Paz.
+ * Resultado > 0: vencida (días de atraso).
+ * Resultado <= 0: al día o antes del vencimiento.
+ */
+export function diferenciaDiasLaPaz(fechaVencimiento: string | Date, fechaReferencia: string | Date): number {
+  const fVencStr = fechaYMDLaPaz(fechaVencimiento);
+  const fRefStr = fechaYMDLaPaz(fechaReferencia);
+  const [y1, m1, d1] = fVencStr.split('-').map(Number);
+  const [y2, m2, d2] = fRefStr.split('-').map(Number);
+  const utc1 = Date.UTC(y1, m1 - 1, d1);
+  const utc2 = Date.UTC(y2, m2 - 1, d2);
+  return Math.round((utc2 - utc1) / (1000 * 60 * 60 * 24));
+}
+
+export interface ReglaMoraCalculo {
+  tipoCalculo?: 'PORCENTAJE' | 'FIJO' | string;
+  tasaInteres?: number | Prisma.Decimal | null;
+  montoFijo?: number | Prisma.Decimal | null;
+  diaVencimiento?: number | null;
+  diaGeneracion?: number | null;
+  tasaInteresMora?: number | Prisma.Decimal | null;
+}
+
+export interface CronogramaItem {
+  mes: number;
+  desdeDia: number;
+  hastaDia: number;
+  moraDelMes: number;
+  moraAcumulada: number;
+  totalDeuda: number;
+  estado: 'SinMora' | 'Devengado' | 'Proyeccion';
+}
+
+export interface ResultadoCalculoMoraExpensa {
+  diasAtraso: number;
+  mesesMora: number;
+  moraPorMes: number;
+  moraAcumulada: number;
+  totalAdeudado: number;
+  cronograma: CronogramaItem[];
+}
+
+export interface CalcularMoraExpensaParams {
+  capitalPendiente: number;
+  fechaVencimiento: string | Date;
+  fechaReferencia?: string | Date;
+  regla: ReglaMoraCalculo;
+  tasaInteresMora?: number;
+  meses?: number;
+}
+
+/**
+ * Función pura para calcular la mora mensual acumulativa simple, sin período de gracia.
+ * 
+ * Reglas de negocio:
+ * - diasAtraso = días entre fechaVencimiento y la fecha de referencia (America/La_Paz).
+ * - mesesMora = diasAtraso <= 0 ? 0 : Math.ceil(diasAtraso / 30).
+ * - moraPorMes = FIJO ? montoFijo : round(capitalPendiente * tasaInteres / 100, 2).
+ *   (Si regla es PORCENTAJE y la expensa tiene tasaInteresMora > 0, se respeta la tasa de la expensa).
+ * - moraAcumulada = mesesMora * moraPorMes.
+ * - totalAdeudado = capitalPendiente + moraAcumulada.
+ * - Siempre se recalcula desde el capital (idempotente). Si capitalPendiente <= 0, no aplica mora.
+ * - Cronograma proyectado de 0 a `meses` (default 6, máx 24).
+ */
+export function calcularMoraExpensa(params: CalcularMoraExpensaParams): ResultadoCalculoMoraExpensa {
+  const { capitalPendiente, fechaVencimiento, fechaReferencia, regla, tasaInteresMora, meses } = params;
+
+  const fRef = fechaReferencia || new Date();
+  const diasAtraso = diferenciaDiasLaPaz(fechaVencimiento, fRef);
+  const mesesMora = diasAtraso <= 0 ? 0 : Math.ceil(diasAtraso / 30);
+
+  const capital = Math.max(0, Math.round(Number(capitalPendiente || 0) * 100) / 100);
+  const esFijo = String(regla?.tipoCalculo || '').toUpperCase() === 'FIJO';
+
+  let moraPorMes = 0;
+  if (capital > 0) {
+    if (esFijo) {
+      moraPorMes = Math.round(Number(regla?.montoFijo || 0) * 100) / 100;
+    } else {
+      let tasa = 0;
+      if (tasaInteresMora !== undefined && Number(tasaInteresMora) > 0) {
+        tasa = Number(tasaInteresMora);
+      } else if ((regla as any)?.tasaInteresMora !== undefined && Number((regla as any).tasaInteresMora) > 0) {
+        tasa = Number((regla as any).tasaInteresMora);
+      } else {
+        tasa = Number(regla?.tasaInteres || 0);
+      }
+      moraPorMes = Math.round(((capital * tasa) / 100) * 100) / 100;
+    }
+  }
+
+  const moraAcumulada = capital <= 0 ? 0 : Math.round(mesesMora * moraPorMes * 100) / 100;
+  const totalAdeudado = Math.round((capital + moraAcumulada) * 100) / 100;
+
+  const limiteMeses = Math.min(24, Math.max(0, typeof meses === 'number' ? meses : 6));
+  const cronograma: CronogramaItem[] = [];
+
+  // Mes 0: situación al momento del vencimiento o sin retraso
+  cronograma.push({
+    mes: 0,
+    desdeDia: 0,
+    hastaDia: 0,
+    moraDelMes: 0,
+    moraAcumulada: 0,
+    totalDeuda: capital,
+    estado: 'SinMora',
+  });
+
+  for (let i = 1; i <= limiteMeses; i++) {
+    const moraMes = capital <= 0 ? 0 : moraPorMes;
+    const moraAcum = capital <= 0 ? 0 : Math.round(i * moraPorMes * 100) / 100;
+    const totalD = capital <= 0 ? 0 : Math.round((capital + moraAcum) * 100) / 100;
+
+    cronograma.push({
+      mes: i,
+      desdeDia: (i - 1) * 30 + 1,
+      hastaDia: i * 30,
+      moraDelMes: moraMes,
+      moraAcumulada: moraAcum,
+      totalDeuda: totalD,
+      estado: capital <= 0 ? 'SinMora' : (i <= mesesMora ? 'Devengado' : 'Proyeccion'),
+    });
+  }
+
+  return {
+    diasAtraso,
+    mesesMora,
+    moraPorMes,
+    moraAcumulada,
+    totalAdeudado,
+    cronograma,
+  };
+}
+
 export interface ExpensaConPagosYAnticipos {
   monto: number | string | Prisma.Decimal;
   pagos: Array<{
