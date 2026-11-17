@@ -19,6 +19,7 @@ import {
   anularExtraExpensa,
   sumarExtrasVigentes,
   calcularMontoTotalExpensa,
+  consultarMoraExpensa,
 } from '../modules/expensas';
 
 export const expensasRouter: IRouter = Router();
@@ -1041,6 +1042,71 @@ expensasRouter.post(
       });
 
       res.status(201).json(resultado);
+    } catch (err: any) {
+      if (err.statusCode) {
+        res.status(err.statusCode).json({
+          error: err.code || 'Error',
+          message: err.message,
+        });
+        return;
+      }
+      next(err);
+    }
+  }
+);
+
+// ── GET /api/v1/expensas/:id/mora ────────────────────────────────────────────
+// Consulta de cálculo y proyección analítica de mora en tiempo real para una expensa
+expensasRouter.get(
+  '/:id/mora',
+  authorizeRoles('Administrador', 'Directorio'),
+  async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const id = parseInt(req.params.id, 10);
+      if (isNaN(id) || id <= 0) {
+        res.status(400).json({ error: 'Bad Request', message: 'ID de expensa inválido' });
+        return;
+      }
+
+      const { fecha, meses } = req.query;
+
+      if (fecha !== undefined) {
+        if (typeof fecha !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(fecha.trim())) {
+          res.status(400).json({
+            error: 'Bad Request',
+            message: 'Parámetro fecha inválido. Formato esperado: YYYY-MM-DD',
+          });
+          return;
+        }
+        const d = new Date(fecha.trim());
+        if (isNaN(d.getTime())) {
+          res.status(400).json({ error: 'Bad Request', message: 'Fecha inválida' });
+          return;
+        }
+      }
+
+      let mesesNum: number | undefined = undefined;
+      if (meses !== undefined) {
+        mesesNum = parseInt(String(meses), 10);
+        if (isNaN(mesesNum) || mesesNum < 0 || String(meses).trim() !== String(mesesNum)) {
+          res.status(400).json({
+            error: 'Bad Request',
+            message: 'Parámetro meses inválido. Debe ser un entero positivo o cero.',
+          });
+          return;
+        }
+        if (mesesNum > 24) {
+          mesesNum = 24;
+        }
+      }
+
+      const resultado = await consultarMoraExpensa({
+        idExpensa: id,
+        fecha: typeof fecha === 'string' ? fecha.trim() : undefined,
+        meses: mesesNum,
+      });
+
+      res.status(200).json(resultado);
     } catch (err: any) {
       if (err.statusCode) {
         res.status(err.statusCode).json({

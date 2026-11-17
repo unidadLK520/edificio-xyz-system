@@ -186,6 +186,97 @@ export function calcularMoraExpensa(params: CalcularMoraExpensaParams): Resultad
   };
 }
 
+export interface ConsultarMoraExpensaParams {
+  idExpensa: number;
+  fecha?: string;
+  meses?: number;
+}
+
+/**
+ * Consulta de solo lectura para el cálculo y proyección de mora de una expensa específica.
+ * Lanza 422 si no existe regla activa y 404 si la expensa no existe.
+ */
+export async function consultarMoraExpensa(params: ConsultarMoraExpensaParams) {
+  const { idExpensa, fecha, meses } = params;
+
+  // 1. Obtener regla activa de mora
+  const reglaActiva = await prisma.reglaMora.findFirst({
+    where: { activa: true },
+    orderBy: { fechaCreacion: 'desc' },
+  });
+
+  if (!reglaActiva) {
+    const error: any = new Error('No existe una regla de mora activa configurada');
+    error.statusCode = 422;
+    error.code = 'UNPROCESSABLE_ENTITY';
+    throw error;
+  }
+
+  // 2. Obtener la expensa con pagos y anticipos para calcular capital pendiente
+  const expensa = await prisma.expensa.findUnique({
+    where: { idExpensa },
+    include: {
+      pagos: { where: { anulado: false } },
+      aplicacionesAnticipos: { include: { pago: true } },
+    },
+  });
+
+  if (!expensa) {
+    const error: any = new Error('Expensa no encontrada');
+    error.statusCode = 404;
+    error.code = 'NOT_FOUND';
+    throw error;
+  }
+
+  const hoyLaPaz = fechaYMDLaPaz(new Date());
+  const fechaRef = fecha && fecha.trim() ? fecha.trim() : hoyLaPaz;
+
+  const capitalPendiente = calcularCapitalPendiente(expensa);
+
+  const resultado = calcularMoraExpensa({
+    capitalPendiente,
+    fechaVencimiento: expensa.fechaVencimiento,
+    fechaReferencia: fechaRef,
+    regla: reglaActiva,
+    tasaInteresMora: Number(expensa.tasaInteresMora || 0),
+    meses,
+  });
+
+  const periodoStr = fechaYMDLaPaz(expensa.periodo);
+  const fechaVencStr = fechaYMDLaPaz(expensa.fechaVencimiento);
+
+  return {
+    idExpensa: expensa.idExpensa,
+    idDepartamento: expensa.idDepartamento,
+    periodo: periodoStr,
+    fechaVencimiento: fechaVencStr,
+    fechaReferencia: fechaRef,
+    regla: {
+      tipoCalculo: (reglaActiva as any).tipoCalculo || 'PORCENTAJE',
+      tasaInteres: Number(reglaActiva.tasaInteres || 0),
+      montoFijo:
+        (reglaActiva as any).montoFijo !== null && (reglaActiva as any).montoFijo !== undefined
+          ? Number((reglaActiva as any).montoFijo)
+          : null,
+      diaVencimiento:
+        (reglaActiva as any).diaVencimiento !== null && (reglaActiva as any).diaVencimiento !== undefined
+          ? Number((reglaActiva as any).diaVencimiento)
+          : null,
+      diaGeneracion:
+        (reglaActiva as any).diaGeneracion !== null && (reglaActiva as any).diaGeneracion !== undefined
+          ? Number((reglaActiva as any).diaGeneracion)
+          : null,
+    },
+    capitalPendiente,
+    diasAtraso: resultado.diasAtraso,
+    mesesMora: resultado.mesesMora,
+    moraPorMes: resultado.moraPorMes,
+    moraAcumulada: resultado.moraAcumulada,
+    totalAdeudado: resultado.totalAdeudado,
+    cronograma: resultado.cronograma,
+  };
+}
+
 export interface ExpensaConPagosYAnticipos {
   monto: number | string | Prisma.Decimal;
   pagos: Array<{
