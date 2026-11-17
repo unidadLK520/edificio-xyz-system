@@ -1,6 +1,6 @@
 // frontend/app/(admin)/departamentos/page.tsx
 // HU03: Módulo de Gestión de Unidades (Departamentos, Parqueos y Bauleras) y Catastro
-// Modelo Edificio XYZ: 20 Departamentos (Tipos A, B y C), 20 Parqueos, 10 Bauleras
+// Modelo Edificio XYZ: 20 Departamentos (Tipos A, B y C), 20 Parqueos, 10 Bauleras (50 unidades totales)
 
 'use client'
 
@@ -16,13 +16,13 @@ import {
   Car,
   Box,
   Layers,
-  Percent,
   CheckCircle2,
   UserCheck,
   KeyRound,
   AlertCircle,
   Sliders,
-  Gauge
+  LockOpen,
+  Link2
 } from 'lucide-react'
 import {
   UnidadItem,
@@ -32,7 +32,7 @@ import {
 } from '@/components/departamentos/types'
 import DepartamentosKpis from '@/components/departamentos/DepartamentosKpis'
 import CrearDepartamentoModal from '@/components/departamentos/CrearDepartamentoModal'
-import EditarDepartamentoModal from '@/components/departamentos/EditarDepartamentoModal'
+import EditarDepartamentoModal, { AssignmentsChangeData } from '@/components/departamentos/EditarDepartamentoModal'
 import FichaTecnicaModal from '@/components/departamentos/FichaTecnicaModal'
 import AsignarUnidadModal from '@/components/departamentos/AsignarUnidadModal'
 import ParametrosDepartamentosTab from '@/components/departamentos/ParametrosDepartamentosTab'
@@ -42,12 +42,12 @@ import { apiFetch } from '@/lib/api'
 
 export default function DepartamentosPage() {
   const [unidades, setUnidades] = useState<UnidadItem[]>([])
-  const [activeTab, setActiveTab] = useState<'catastro' | 'tipos' | 'parametros' | 'agua'>(
-    'catastro'
-  )
+  const [activeTab, setActiveTab] = useState<'catastro' | 'tipos' | 'parametros' | 'agua'>('catastro')
+  const [subTipoCatastro, setSubTipoCatastro] = useState<'Departamentos' | 'Parqueos' | 'Bauleras' | 'Todos'>('Departamentos')
+  
   const [tiposDepto, setTiposDepto] = useState<TipoDepartamentoItem[]>([])
+  const [personasList, setPersonasList] = useState<any[]>([])
   const [searchTerm, setSearchTerm] = useState('')
-  const [filtroTipo, setFiltroTipo] = useState<string>('Todos')
   const [filtroEstado, setFiltroEstado] = useState('Todos')
   const [filtroPiso, setFiltroPiso] = useState('Todos')
 
@@ -87,9 +87,23 @@ export default function DepartamentosPage() {
     } catch {}
   }, [])
 
+  // Cargar lista de personas para las asignaciones
+  const fetchPersonas = useCallback(async () => {
+    try {
+      const res = await apiFetch('/api/v1/personas?limit=100')
+      if (res.ok) {
+        const json = await res.json()
+        if (json.data && Array.isArray(json.data)) {
+          setPersonasList(json.data)
+        }
+      }
+    } catch {}
+  }, [])
+
   useEffect(() => {
     fetchTiposDepto()
-  }, [fetchTiposDepto])
+    fetchPersonas()
+  }, [fetchTiposDepto, fetchPersonas])
 
   // Manejadores para Tipos de Departamentos conectados a la API
   const handleSaveTipoDepto = async (
@@ -238,14 +252,12 @@ export default function DepartamentosPage() {
     setUnidades((prev) => prev.map((u) => updatedMap.get(u.id) || u))
   }
 
-  // Fetch unidades desde la API
+  // Fetch unidades desde la API (obtiene todas las 50 unidades del edificio: 20 deptos, 20 parqueos, 10 bauleras)
   const fetchUnidades = useCallback(async () => {
     setIsLoading(true)
     setApiError(null)
     try {
-      const res = await apiFetch(
-        `/api/v1/unidades?tipo=${filtroTipo}&estado=${filtroEstado}&search=${encodeURIComponent(searchTerm)}`
-      )
+      const res = await apiFetch('/api/v1/unidades?tipo=Todos&limit=100')
       if (!res.ok) {
         setApiError('Error al conectar con el servidor de unidades.')
         setUnidades([])
@@ -270,6 +282,8 @@ export default function DepartamentosPage() {
                   ? 'Tipo C (100 m²)'
                   : undefined),
           estado: item.estado || 'Desocupado',
+          parqueos: item.parqueos,
+          bauleras: item.bauleras,
           parqueo:
             Array.isArray(item.parqueos) && item.parqueos.length > 0
               ? item.parqueos.map((p: any) => p.numero).join(', ')
@@ -297,9 +311,12 @@ export default function DepartamentosPage() {
               })()
             : null,
           inquilinoActual: item.inquilinoActual || null,
-          persona: item.persona,
+          idDepartamento: item.idDepartamento,
           departamento: item.departamento,
-          fechaRegistro: item.fechaRegistro || '2023-01-01'
+          idPersona: item.idPersona,
+          persona: item.persona,
+          fechaAsignacion: item.fechaAsignacion || null,
+          fechaRegistro: item.fechaRegistro || item.fechaAsignacion || '2023-01-01'
         }))
         setUnidades(mapped)
       } else {
@@ -311,52 +328,109 @@ export default function DepartamentosPage() {
     } finally {
       setIsLoading(false)
     }
-  }, [filtroTipo, filtroEstado, searchTerm])
+  }, [])
 
   useEffect(() => {
     fetchUnidades()
   }, [fetchUnidades])
 
-  const totalAreaConstruida = useMemo(() => {
-    return unidades
-      .filter((u) => u.tipoUnidad === 'Departamento')
-      .reduce((acc, d) => acc + (d.areaM2 || 0), 0)
+  // Listas derivadas completas
+  const deptosDisponibles = useMemo(() => {
+    return unidades.filter((u) => u.tipoUnidad === 'Departamento')
   }, [unidades])
 
-  // Filtrado reactivo
+  const parqueosDisponibles = useMemo(() => {
+    return unidades.filter((u) => u.tipoUnidad === 'Parqueo')
+  }, [unidades])
+
+  const baulerasDisponibles = useMemo(() => {
+    return unidades.filter((u) => u.tipoUnidad === 'Baulera')
+  }, [unidades])
+
+  const totalAreaConstruida = useMemo(() => {
+    return deptosDisponibles.reduce((acc, d) => acc + (d.areaM2 || 0), 0)
+  }, [deptosDisponibles])
+
+  // Métricas de Parqueos y Bauleras
+  const parqueosAsignadosCount = useMemo(() => {
+    return parqueosDisponibles.filter((p) => p.estado === 'Asignado' || p.idDepartamento || p.departamento).length
+  }, [parqueosDisponibles])
+
+  const parqueosLibresCount = useMemo(() => {
+    return parqueosDisponibles.filter((p) => p.estado === 'Disponible').length
+  }, [parqueosDisponibles])
+
+  const baulerasAsignadasCount = useMemo(() => {
+    return baulerasDisponibles.filter((b) => b.estado === 'Asignado' || b.idDepartamento || b.departamento).length
+  }, [baulerasDisponibles])
+
+  const baulerasLibresCount = useMemo(() => {
+    return baulerasDisponibles.filter((b) => b.estado === 'Disponible').length
+  }, [baulerasDisponibles])
+
+  // Filtrado reactivo en memoria
   const unidadesFiltradas = useMemo(() => {
     return unidades.filter((u) => {
-      const searchLower = searchTerm.toLowerCase()
-      const matchSearch =
-        u.numero.toLowerCase().includes(searchLower) ||
-        (u.propietario &&
-          (u.propietario.nombre.toLowerCase().includes(searchLower) ||
-            u.propietario.ci.toLowerCase().includes(searchLower))) ||
-        (u.inquilinoActual && u.inquilinoActual.nombre.toLowerCase().includes(searchLower))
+      // 1. Filtro por categoría de unidad
+      if (subTipoCatastro === 'Departamentos' && u.tipoUnidad !== 'Departamento') return false
+      if (subTipoCatastro === 'Parqueos' && u.tipoUnidad !== 'Parqueo') return false
+      if (subTipoCatastro === 'Bauleras' && u.tipoUnidad !== 'Baulera') return false
 
-      const matchTipo = filtroTipo === 'Todos' || u.tipoUnidad === filtroTipo
-      const matchEstado = filtroEstado === 'Todos' || u.estado === filtroEstado
-      const matchPiso = filtroPiso === 'Todos' || u.piso === Number(filtroPiso)
+      // 2. Búsqueda por texto libre
+      const searchLower = searchTerm.toLowerCase().trim()
+      if (searchLower) {
+        const matchNumero = u.numero.toLowerCase().includes(searchLower)
+        const matchProp = u.propietario && (
+          u.propietario.nombre.toLowerCase().includes(searchLower) ||
+          u.propietario.ci.toLowerCase().includes(searchLower)
+        )
+        const matchInq = u.inquilinoActual && u.inquilinoActual.nombre.toLowerCase().includes(searchLower)
+        const matchDeptoVinculado = u.departamento && u.departamento.numero && u.departamento.numero.toLowerCase().includes(searchLower)
+        const matchPersonaVinculada = u.persona && (
+          (u.persona.nombres || '').toLowerCase().includes(searchLower) ||
+          (u.persona.apellidos || '').toLowerCase().includes(searchLower) ||
+          (u.persona.ciNit || '').toLowerCase().includes(searchLower)
+        )
+        if (!matchNumero && !matchProp && !matchInq && !matchDeptoVinculado && !matchPersonaVinculada) {
+          return false
+        }
+      }
 
-      return matchSearch && matchTipo && matchEstado && matchPiso
+      // 3. Filtro por estado
+      if (filtroEstado !== 'Todos') {
+        const estadoNorm = u.estado.toLowerCase()
+        const filtroNorm = filtroEstado.toLowerCase()
+        if (filtroNorm === 'disponible' && estadoNorm !== 'disponible' && estadoNorm !== 'desocupado') return false
+        if (filtroNorm === 'desocupado' && estadoNorm !== 'desocupado' && estadoNorm !== 'disponible') return false
+        if (filtroNorm === 'asignado' && estadoNorm !== 'asignado') return false
+        if (filtroNorm === 'ocupado por propietario' && estadoNorm !== 'ocupado por propietario') return false
+        if (filtroNorm === 'alquilado' && estadoNorm !== 'alquilado') return false
+      }
+
+      // 4. Filtro por piso (aplica a departamentos)
+      if (filtroPiso !== 'Todos' && u.tipoUnidad === 'Departamento') {
+        if (u.piso !== Number(filtroPiso)) return false
+      }
+
+      return true
     })
-  }, [unidades, searchTerm, filtroTipo, filtroEstado, filtroPiso])
+  }, [unidades, subTipoCatastro, searchTerm, filtroEstado, filtroPiso])
 
-  // KPIs reales del modelo (20 unidades)
-  const deptos = unidades.filter((u) => u.tipoUnidad === 'Departamento')
-  const totalDeptos = deptos.length
-  const ocupadosPropietario = deptos.filter((u) => u.estado === 'Ocupado por Propietario').length
-  const alquilados = deptos.filter((u) => u.estado === 'Alquilado').length
-  const desocupados = deptos.filter(
+  // KPIs reales de ocupación de departamentos
+  const totalDeptos = deptosDisponibles.length
+  const ocupadosPropietario = deptosDisponibles.filter((u) => u.estado === 'Ocupado por Propietario').length
+  const alquilados = deptosDisponibles.filter((u) => u.estado === 'Alquilado').length
+  const desocupados = deptosDisponibles.filter(
     (u) => u.estado === 'Desocupado' || u.estado === 'Disponible'
   ).length
-  const conParqueo = deptos.filter((u) => u.parqueo !== 'Sin parqueo').length
+  const conParqueo = deptosDisponibles.filter((u) => u.parqueo !== 'Sin parqueo').length
 
   const showToast = (msg: string) => {
     setSuccessToast(msg)
     setTimeout(() => setSuccessToast(null), 4000)
   }
 
+  // Registrar nueva unidad (Departamento, Parqueo o Baulera)
   const handleCreateSubmit = async (formData: DepartamentoFormData) => {
     setCreateErrorMessage(null)
 
@@ -393,61 +467,234 @@ export default function DepartamentosPage() {
     }
   }
 
-  const handleEditSubmit = async (formData: DepartamentoFormData) => {
+  // Actualizar unidad y gestionar asignaciones de Parqueo y Baulera
+  const handleEditSubmit = async (
+    formData: DepartamentoFormData,
+    assignments?: AssignmentsChangeData
+  ) => {
     if (!unidadToEdit) return
 
-    // Actualizar estado local y parámetros inmediatamente
-    const updatedUnidad: UnidadItem = {
-      ...unidadToEdit,
-      numero: formData.numero,
-      piso: formData.piso,
-      areaM2: formData.areaM2,
-      tipologia: formData.tipologia || unidadToEdit.tipologia,
-      expensaBase: formData.expensaBase ?? unidadToEdit.expensaBase,
-      estado: formData.estado
-    }
-    handleUpdateUnidadParametros(updatedUnidad)
+    const tipoUnidadParam = unidadToEdit.tipoUnidad || 'Departamento'
+    const isDepto = tipoUnidadParam === 'Departamento'
 
-    // Si es departamento y cambió tipología, asignar tipo en backend (PUT /api/v1/departamentos/:id/tipo)
-    if (unidadToEdit.tipoUnidad === 'Departamento' && formData.tipologia) {
-      const tipoSel = tiposDepto.find((t) => t.nombre === formData.tipologia)
-      const idTipoNum = tipoSel?.idTipo || (tipoSel ? Number(tipoSel.id) : null)
-      if (idTipoNum && !isNaN(idTipoNum)) {
-        try {
-          const resTipo = await apiFetch(`/api/v1/departamentos/${unidadToEdit.id}/tipo`, {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ idTipo: idTipoNum })
-          })
-          if (!resTipo.ok) {
-            const errJson = await resTipo.json().catch(() => ({}))
-            showToast(errJson.message || `Error 422: No se pudo asignar el tipo al departamento`)
-          }
-        } catch {}
+    try {
+      // 1. Si es departamento y cambió tipología, asignar tipo
+      if (isDepto && formData.tipologia) {
+        const tipoSel = tiposDepto.find((t) => t.nombre === formData.tipologia)
+        const idTipoNum = tipoSel?.idTipo || (tipoSel ? Number(tipoSel.id) : null)
+        if (idTipoNum && !isNaN(idTipoNum)) {
+          try {
+            await apiFetch(`/api/v1/departamentos/${unidadToEdit.id}/tipo`, {
+              method: 'PUT',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ idTipo: idTipoNum })
+            })
+          } catch {}
+        }
       }
+
+      // 2. Actualizar datos base de la unidad
+      const updatePayload: any = {
+        numero: formData.numero,
+        estado: formData.estado
+      }
+      if (isDepto) {
+        updatePayload.piso = formData.piso !== undefined ? Number(formData.piso) : undefined
+        updatePayload.areaM2 = formData.areaM2 !== undefined ? Number(formData.areaM2) : undefined
+      }
+
+      const resBase = await apiFetch(`/api/v1/unidades/${tipoUnidadParam}/${unidadToEdit.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updatePayload)
+      })
+
+      if (!resBase.ok) {
+        const errJson = await resBase.json().catch(() => ({}))
+        showToast(errJson.message || `Error al actualizar unidad ${formData.numero}`)
+        return
+      }
+
+      // 3. Manejo de Parqueo y Baulera si se editó un Departamento
+      if (isDepto && assignments) {
+        // Encontrar parqueo anterior asignado a este departamento
+        const oldParqueo = parqueosDisponibles.find(
+          (p) =>
+            p.idDepartamento === unidadToEdit.id ||
+            p.departamento?.idDepartamento === unidadToEdit.id ||
+            (p.numero === unidadToEdit.parqueo && unidadToEdit.parqueo !== 'Sin parqueo')
+        )
+
+        // Asignación / Desvinculación de Parqueo
+        if (assignments.parqueoId !== undefined) {
+          if (assignments.parqueoId === null) {
+            // Desvincular parqueo
+            if (oldParqueo) {
+              await apiFetch('/api/v1/unidades/asignaciones/finalizar', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  tipoUnidad: 'Parqueo',
+                  idUnidad: oldParqueo.id,
+                  notas: `Desvinculado desde edición de Dpto ${formData.numero}`
+                })
+              })
+            }
+          } else if (!oldParqueo || oldParqueo.id !== assignments.parqueoId) {
+            // Finalizar parqueo previo si era distinto
+            if (oldParqueo && oldParqueo.id !== assignments.parqueoId) {
+              await apiFetch('/api/v1/unidades/asignaciones/finalizar', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  tipoUnidad: 'Parqueo',
+                  idUnidad: oldParqueo.id,
+                  notas: `Reasignado para Dpto ${formData.numero}`
+                })
+              })
+            }
+            // Asignar nuevo parqueo al departamento
+            await apiFetch('/api/v1/unidades/asignaciones', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                tipoUnidad: 'Parqueo',
+                idUnidad: assignments.parqueoId,
+                idDepartamento: unidadToEdit.id,
+                idPersona: unidadToEdit.propietario?.id || undefined,
+                tipoRelacion: 'Asignado',
+                notas: `Asignado a Dpto ${formData.numero}`
+              })
+            })
+          }
+        }
+
+        // Encontrar baulera anterior asignada a este departamento
+        const oldBaulera = baulerasDisponibles.find(
+          (b) =>
+            b.idDepartamento === unidadToEdit.id ||
+            b.departamento?.idDepartamento === unidadToEdit.id ||
+            (b.numero === unidadToEdit.baulera && unidadToEdit.baulera !== 'Sin baulera')
+        )
+
+        // Asignación / Desvinculación de Baulera
+        if (assignments.bauleraId !== undefined) {
+          if (assignments.bauleraId === null) {
+            // Desvincular baulera
+            if (oldBaulera) {
+              await apiFetch('/api/v1/unidades/asignaciones/finalizar', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  tipoUnidad: 'Baulera',
+                  idUnidad: oldBaulera.id,
+                  notas: `Desvinculada desde edición de Dpto ${formData.numero}`
+                })
+              })
+            }
+          } else if (!oldBaulera || oldBaulera.id !== assignments.bauleraId) {
+            // Finalizar baulera previa si era distinta
+            if (oldBaulera && oldBaulera.id !== assignments.bauleraId) {
+              await apiFetch('/api/v1/unidades/asignaciones/finalizar', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  tipoUnidad: 'Baulera',
+                  idUnidad: oldBaulera.id,
+                  notas: `Reasignada para Dpto ${formData.numero}`
+                })
+              })
+            }
+            // Asignar nueva baulera al departamento
+            await apiFetch('/api/v1/unidades/asignaciones', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                tipoUnidad: 'Baulera',
+                idUnidad: assignments.bauleraId,
+                idDepartamento: unidadToEdit.id,
+                idPersona: unidadToEdit.propietario?.id || undefined,
+                tipoRelacion: 'Asignado',
+                notas: `Asignada a Dpto ${formData.numero}`
+              })
+            })
+          }
+        }
+      }
+
+      // 4. Si se editó directamente un Parqueo o Baulera
+      if (!isDepto && assignments) {
+        if (!assignments.departamentoId && !assignments.personaId) {
+          // Desvincular si estaba asignado o se marcó Disponible
+          if (unidadToEdit.estado === 'Asignado' || unidadToEdit.idDepartamento || unidadToEdit.idPersona) {
+            await apiFetch('/api/v1/unidades/asignaciones/finalizar', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                tipoUnidad: tipoUnidadParam,
+                idUnidad: unidadToEdit.id,
+                notas: 'Desasignado desde panel de edición'
+              })
+            })
+          }
+        } else {
+          // Asignar al departamento o persona seleccionada
+          await apiFetch('/api/v1/unidades/asignaciones', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              tipoUnidad: tipoUnidadParam,
+              idUnidad: unidadToEdit.id,
+              idDepartamento: assignments.departamentoId || undefined,
+              idPersona: assignments.personaId || undefined,
+              tipoRelacion: 'Asignado',
+              notas: `Asignación actualizada desde edición`
+            })
+          })
+        }
+      }
+
+      await fetchUnidades()
+      showToast(`¡${tipoUnidadParam} ${formData.numero} actualizado correctamente!`)
+    } catch {
+      showToast(`Error al actualizar datos de ${tipoUnidadParam} ${formData.numero}`)
+    } finally {
+      setIsEditModalOpen(false)
+      setUnidadToEdit(null)
+    }
+  }
+
+  // Acción rápida: Liberar / Desvincular unidad (Parqueo o Baulera)
+  const handleLiberarUnidad = async (unidad: UnidadItem) => {
+    if (
+      !confirm(
+        `¿Está seguro de desvincular y liberar ${unidad.tipoUnidad} ${unidad.numero}? Quedará en estado Disponible y sin departamento vinculado.`
+      )
+    ) {
+      return
     }
 
     try {
-      const tipoUnidadParam = unidadToEdit.tipoUnidad || 'Departamento'
-      const res = await apiFetch(`/api/v1/unidades/${tipoUnidadParam}/${unidadToEdit.id}`, {
-        method: 'PUT',
+      const res = await apiFetch('/api/v1/unidades/asignaciones/finalizar', {
+        method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          numero: formData.numero,
-          piso: formData.piso !== undefined ? Number(formData.piso) : undefined,
-          areaM2: formData.areaM2 !== undefined ? Number(formData.areaM2) : undefined,
-          estado: formData.estado
+          tipoUnidad: unidad.tipoUnidad,
+          idUnidad: unidad.id,
+          notas: 'Liberado rápidamente desde panel de catastro'
         })
       })
 
       if (res.ok) {
         await fetchUnidades()
+        showToast(`¡${unidad.tipoUnidad} ${unidad.numero} liberado y disponible!`)
+      } else {
+        const json = await res.json().catch(() => ({}))
+        showToast(json.message || 'Error al liberar unidad')
       }
-    } catch {}
-
-    setIsEditModalOpen(false)
-    setUnidadToEdit(null)
-    showToast(`¡Unidad ${formData.numero} actualizada correctamente!`)
+    } catch {
+      showToast('Error de conexión al liberar unidad')
+    }
   }
 
   return (
@@ -476,19 +723,18 @@ export default function DepartamentosPage() {
         </div>
       )}
 
-      {/* HEADER */}
+      {/* HEADER PRINCIPAL */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-[#cec8bc] dark:border-slate-800">
         <div>
           <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-blue-500/10 border border-blue-500/20 text-blue-800 dark:text-blue-400 text-xs font-semibold mb-2">
             <Building2 className="w-3.5 h-3.5" />
-            Catastro de Departamentos & Unidades
+            Catastro de Departamentos, Parqueos y Bauleras
           </div>
           <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-[#262422] dark:text-white">
             Unidades, Propietarios e Inquilinos
           </h1>
           <p className="text-xs sm:text-sm text-[#66615b] dark:text-slate-400 mt-1">
-            Catastro del Edificio XYZ ({totalDeptos} departamentos). Todas las unidades generan
-            expensas sin importar si están ocupadas o vacías.
+            Catastro integral del Edificio XYZ: {totalDeptos} Departamentos, {parqueosDisponibles.length} Parqueos y {baulerasDisponibles.length} Bauleras ({unidades.length} unidades totales).
           </p>
         </div>
 
@@ -501,28 +747,28 @@ export default function DepartamentosPage() {
         </button>
       </div>
 
-      {/* PESTAÑAS PRINCIPALES: CATASTRO VS PARÁMETROS Y MEDIDORES */}
-      <div className="flex items-center gap-2 border-b border-[#cec8bc] dark:border-slate-800 pb-2">
+      {/* PESTAÑAS PRINCIPALES DEL MÓDULO */}
+      <div className="flex items-center gap-2 border-b border-[#cec8bc] dark:border-slate-800 pb-2 overflow-x-auto">
         <button
           type="button"
           onClick={() => setActiveTab('catastro')}
-          className={`inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition-all cursor-pointer ${
+          className={`inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition-all cursor-pointer shrink-0 ${
             activeTab === 'catastro'
               ? 'bg-rose-700 text-white shadow-md shadow-rose-900/20'
               : 'bg-[#ede9e1] dark:bg-slate-900 text-[#66615b] dark:text-slate-400 hover:text-[#262422] dark:hover:text-white border border-[#cec8bc] dark:border-slate-800'
           }`}
         >
           <Building2 className="w-4 h-4" />
-          <span>Catastro de Unidades</span>
+          <span>Catastro Inmobiliario</span>
           <span className="ml-1 px-1.5 py-0.5 rounded-md text-[10px] font-bold bg-white/20 dark:bg-white/10">
-            {totalDeptos}
+            {unidades.length}
           </span>
         </button>
 
         <button
           type="button"
           onClick={() => setActiveTab('tipos')}
-          className={`inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition-all cursor-pointer ${
+          className={`inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition-all cursor-pointer shrink-0 ${
             activeTab === 'tipos'
               ? 'bg-rose-700 text-white shadow-md shadow-rose-900/20'
               : 'bg-[#ede9e1] dark:bg-slate-900 text-[#66615b] dark:text-slate-400 hover:text-[#262422] dark:hover:text-white border border-[#cec8bc] dark:border-slate-800'
@@ -535,7 +781,7 @@ export default function DepartamentosPage() {
         <button
           type="button"
           onClick={() => setActiveTab('agua')}
-          className={`inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition-all cursor-pointer ${
+          className={`inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition-all cursor-pointer shrink-0 ${
             activeTab === 'agua'
               ? 'bg-rose-700 text-white shadow-md shadow-rose-900/20'
               : 'bg-[#ede9e1] dark:bg-slate-900 text-[#66615b] dark:text-slate-400 hover:text-[#262422] dark:hover:text-white border border-[#cec8bc] dark:border-slate-800'
@@ -548,7 +794,7 @@ export default function DepartamentosPage() {
         <button
           type="button"
           onClick={() => setActiveTab('parametros')}
-          className={`inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition-all cursor-pointer ${
+          className={`inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition-all cursor-pointer shrink-0 ${
             activeTab === 'parametros'
               ? 'bg-rose-700 text-white shadow-md shadow-rose-900/20'
               : 'bg-[#ede9e1] dark:bg-slate-900 text-[#66615b] dark:text-slate-400 hover:text-[#262422] dark:hover:text-white border border-[#cec8bc] dark:border-slate-800'
@@ -561,7 +807,7 @@ export default function DepartamentosPage() {
 
       {activeTab === 'catastro' ? (
         <>
-          {/* KPIS DE OCUPACIÓN REAL */}
+          {/* KPIS DEPARTAMENTOS */}
           <DepartamentosKpis
             totalDeptos={totalDeptos}
             ocupadosPropietario={ocupadosPropietario}
@@ -571,66 +817,191 @@ export default function DepartamentosPage() {
             totalAreaConstruida={totalAreaConstruida}
           />
 
+          {/* SUB-CONTROL SEGMENTADO DE UNIDADES: DEPARTAMENTOS, PARQUEOS, BAULERAS */}
+          <div className="flex flex-wrap items-center justify-between gap-3 p-2 bg-[#dfd9ce]/60 dark:bg-slate-900/90 rounded-2xl border border-[#cec8bc] dark:border-slate-800">
+            <div className="flex flex-wrap items-center gap-1.5">
+              <button
+                type="button"
+                onClick={() => setSubTipoCatastro('Departamentos')}
+                className={`inline-flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-extrabold transition-all cursor-pointer ${
+                  subTipoCatastro === 'Departamentos'
+                    ? 'bg-blue-700 text-white shadow-sm'
+                    : 'bg-[#ede9e1] dark:bg-slate-800 text-[#5c5750] dark:text-slate-300 hover:bg-[#ded8cc] dark:hover:bg-slate-700'
+                }`}
+              >
+                <Building2 className="w-3.5 h-3.5" />
+                <span>Departamentos ({totalDeptos})</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setSubTipoCatastro('Parqueos')}
+                className={`inline-flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-extrabold transition-all cursor-pointer ${
+                  subTipoCatastro === 'Parqueos'
+                    ? 'bg-amber-600 text-white shadow-sm'
+                    : 'bg-[#ede9e1] dark:bg-slate-800 text-[#5c5750] dark:text-slate-300 hover:bg-[#ded8cc] dark:hover:bg-slate-700'
+                }`}
+              >
+                <Car className="w-3.5 h-3.5" />
+                <span>Parqueos ({parqueosDisponibles.length})</span>
+                <span className="text-[10px] px-1.5 py-0.2 rounded-md bg-white/20">
+                  {parqueosLibresCount} libres
+                </span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setSubTipoCatastro('Bauleras')}
+                className={`inline-flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-extrabold transition-all cursor-pointer ${
+                  subTipoCatastro === 'Bauleras'
+                    ? 'bg-emerald-700 text-white shadow-sm'
+                    : 'bg-[#ede9e1] dark:bg-slate-800 text-[#5c5750] dark:text-slate-300 hover:bg-[#ded8cc] dark:hover:bg-slate-700'
+                }`}
+              >
+                <Box className="w-3.5 h-3.5" />
+                <span>Bauleras ({baulerasDisponibles.length})</span>
+                <span className="text-[10px] px-1.5 py-0.2 rounded-md bg-white/20">
+                  {baulerasLibresCount} libres
+                </span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setSubTipoCatastro('Todos')}
+                className={`inline-flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-extrabold transition-all cursor-pointer ${
+                  subTipoCatastro === 'Todos'
+                    ? 'bg-slate-700 text-white shadow-sm'
+                    : 'bg-[#ede9e1] dark:bg-slate-800 text-[#5c5750] dark:text-slate-300 hover:bg-[#ded8cc] dark:hover:bg-slate-700'
+                }`}
+              >
+                <Layers className="w-3.5 h-3.5" />
+                <span>Todas las Unidades ({unidades.length})</span>
+              </button>
+            </div>
+
+            <div className="text-[11px] text-[#7d776f] dark:text-slate-400 font-medium px-2">
+              Mostrando <strong className="text-[#262422] dark:text-white">{unidadesFiltradas.length}</strong> unidades
+            </div>
+          </div>
+
           {/* BUSCADOR Y FILTROS */}
-          <div className="p-4 rounded-2xl bg-[#ede9e1] dark:bg-slate-900 border border-[#cec8bc] dark:border-slate-800 flex flex-col md:flex-row gap-3 items-stretch md:items-center justify-between shadow-sm">
+          <div className="p-4 rounded-2xl bg-[#ede9e1] dark:bg-slate-900 border border-[#cec8bc] dark:border-slate-800 flex flex-col md:flex-row gap-3 items-stretch md:items-center justify-between shadow-xs">
             <div className="relative flex-1">
               <Search className="w-4 h-4 text-[#7d776f] dark:text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
               <input
                 type="text"
-                placeholder="Buscar por número, propietario o inquilino..."
+                placeholder={
+                  subTipoCatastro === 'Departamentos'
+                    ? 'Buscar departamento por número, propietario o inquilino...'
+                    : subTipoCatastro === 'Parqueos'
+                      ? 'Buscar parqueo (ej. P-01, Dpto 101, o titular)...'
+                      : subTipoCatastro === 'Bauleras'
+                        ? 'Buscar baulera (ej. B-01, Dpto 101, o titular)...'
+                        : 'Buscar por número, código, propietario o inquilino...'
+                }
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full pl-10 pr-4 py-2 bg-[#dfd9ce] dark:bg-slate-950 border border-[#cec8bc] dark:border-slate-700 rounded-xl text-xs sm:text-sm text-[#1c1917] dark:text-white placeholder-[#857f76] focus:outline-none focus:ring-2 focus:ring-rose-600"
+                className="w-full pl-10 pr-4 py-2 bg-[#dfd9ce] dark:bg-slate-950 border border-[#cec8bc] dark:border-slate-700 rounded-xl text-xs sm:text-sm text-[#1c1917] dark:text-white placeholder-[#857f76] focus:outline-none focus:ring-2 focus:ring-rose-600 font-medium"
               />
             </div>
 
             <div className="flex flex-wrap items-center gap-2">
-              {/* Filtro Estado de Ocupación */}
+              {/* Filtro Estado */}
               <div className="flex items-center gap-1.5 bg-[#dfd9ce] dark:bg-slate-950 px-3 py-2 rounded-xl border border-[#cec8bc] dark:border-slate-700 text-xs">
                 <Filter className="w-3.5 h-3.5 text-[#7d776f]" />
                 <select
                   value={filtroEstado}
                   onChange={(e) => setFiltroEstado(e.target.value)}
-                  className="bg-transparent text-[#262422] dark:text-white focus:outline-none cursor-pointer font-medium"
+                  className="bg-transparent text-[#262422] dark:text-white focus:outline-none cursor-pointer font-bold"
                 >
-                  <option value="Todos">Ocupación: Todas</option>
-                  <option value="Ocupado por Propietario">Ocupado por Dueño</option>
-                  <option value="Alquilado">Alquilado a Inquilino</option>
-                  <option value="Desocupado">Desocupado / Vacío</option>
+                  <option value="Todos">Estado: Todos</option>
+                  {subTipoCatastro === 'Departamentos' ? (
+                    <>
+                      <option value="Ocupado por Propietario">Ocupado por Dueño</option>
+                      <option value="Alquilado">Alquilado a Inquilino</option>
+                      <option value="Desocupado">Desocupado / Vacío</option>
+                    </>
+                  ) : subTipoCatastro === 'Parqueos' || subTipoCatastro === 'Bauleras' ? (
+                    <>
+                      <option value="Disponible">Disponible (Libre)</option>
+                      <option value="Asignado">Asignado</option>
+                      <option value="Mantenimiento">Mantenimiento</option>
+                    </>
+                  ) : (
+                    <>
+                      <option value="Disponible">Disponible / Desocupado</option>
+                      <option value="Asignado">Asignado</option>
+                      <option value="Ocupado por Propietario">Ocupado por Dueño</option>
+                      <option value="Alquilado">Alquilado</option>
+                    </>
+                  )}
                 </select>
               </div>
 
-              {/* Filtro Piso */}
-              <div className="flex items-center gap-1.5 bg-[#dfd9ce] dark:bg-slate-950 px-3 py-2 rounded-xl border border-[#cec8bc] dark:border-slate-700 text-xs">
-                <Layers className="w-3.5 h-3.5 text-[#7d776f]" />
-                <select
-                  value={filtroPiso}
-                  onChange={(e) => setFiltroPiso(e.target.value)}
-                  className="bg-transparent text-[#262422] dark:text-white focus:outline-none cursor-pointer font-medium"
-                >
-                  <option value="Todos">Piso: Todos</option>
-                  <option value="1">Piso 1</option>
-                  <option value="2">Piso 2</option>
-                  <option value="3">Piso 3</option>
-                  <option value="4">Piso 4</option>
-                </select>
-              </div>
+              {/* Filtro Piso (exclusivo para Departamentos) */}
+              {(subTipoCatastro === 'Departamentos' || subTipoCatastro === 'Todos') && (
+                <div className="flex items-center gap-1.5 bg-[#dfd9ce] dark:bg-slate-950 px-3 py-2 rounded-xl border border-[#cec8bc] dark:border-slate-700 text-xs">
+                  <Layers className="w-3.5 h-3.5 text-[#7d776f]" />
+                  <select
+                    value={filtroPiso}
+                    onChange={(e) => setFiltroPiso(e.target.value)}
+                    className="bg-transparent text-[#262422] dark:text-white focus:outline-none cursor-pointer font-bold"
+                  >
+                    <option value="Todos">Piso: Todos</option>
+                    <option value="1">Piso 1</option>
+                    <option value="2">Piso 2</option>
+                    <option value="3">Piso 3</option>
+                    <option value="4">Piso 4</option>
+                  </select>
+                </div>
+              )}
             </div>
           </div>
 
           {/* TABLA CATASTRAL DE UNIDADES */}
-          <div className="rounded-2xl bg-[#ede9e1] dark:bg-slate-900 border border-[#cec8bc] dark:border-slate-800 overflow-hidden shadow-sm">
+          <div className="rounded-2xl bg-[#ede9e1] dark:bg-slate-900 border border-[#cec8bc] dark:border-slate-800 overflow-hidden shadow-xs">
             <div className="overflow-x-auto">
               <table className="w-full text-left border-collapse text-xs sm:text-sm">
                 <thead>
                   <tr className="border-b border-[#cec8bc] dark:border-slate-800 bg-[#dfd9ce]/60 dark:bg-slate-950/60 text-[#7d776f] dark:text-slate-400 uppercase text-[11px] font-bold">
-                    <th className="py-3 px-4">Unidad / Tipología</th>
-                    <th className="py-3 px-4">Propietario Responsable</th>
-                    <th className="py-3 px-4">Ocupante / Inquilino</th>
-                    <th className="py-3 px-4">Superficie</th>
-                    <th className="py-3 px-4">Parqueo / Baulera</th>
-                    <th className="py-3 px-4">Estado Ocupación</th>
-                    <th className="py-3 px-4 text-right">Acciones</th>
+                    {subTipoCatastro === 'Departamentos' ? (
+                      <>
+                        <th className="py-3 px-4">Departamento / Tipo</th>
+                        <th className="py-3 px-4">Propietario Responsable</th>
+                        <th className="py-3 px-4">Ocupante / Inquilino</th>
+                        <th className="py-3 px-4">Superficie</th>
+                        <th className="py-3 px-4">Parqueo / Baulera</th>
+                        <th className="py-3 px-4">Estado Ocupación</th>
+                        <th className="py-3 px-4 text-right">Acciones</th>
+                      </>
+                    ) : subTipoCatastro === 'Parqueos' ? (
+                      <>
+                        <th className="py-3 px-4">Código Parqueo</th>
+                        <th className="py-3 px-4">Estado</th>
+                        <th className="py-3 px-4">Departamento Vinculado</th>
+                        <th className="py-3 px-4">Titular Asignado</th>
+                        <th className="py-3 px-4">Fecha Asignación</th>
+                        <th className="py-3 px-4 text-right">Acciones (Editar / Vincular)</th>
+                      </>
+                    ) : subTipoCatastro === 'Bauleras' ? (
+                      <>
+                        <th className="py-3 px-4">Código Baulera</th>
+                        <th className="py-3 px-4">Estado</th>
+                        <th className="py-3 px-4">Departamento Vinculado</th>
+                        <th className="py-3 px-4">Titular Asignado</th>
+                        <th className="py-3 px-4">Fecha Asignación</th>
+                        <th className="py-3 px-4 text-right">Acciones (Editar / Vincular)</th>
+                      </>
+                    ) : (
+                      <>
+                        <th className="py-3 px-4">Unidad & Tipo</th>
+                        <th className="py-3 px-4">Estado</th>
+                        <th className="py-3 px-4">Vinculación Inmobiliaria</th>
+                        <th className="py-3 px-4">Titular / Responsable</th>
+                        <th className="py-3 px-4">Detalle / Superficie</th>
+                        <th className="py-3 px-4 text-right">Acciones</th>
+                      </>
+                    )}
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-[#cec8bc] dark:divide-slate-800">
@@ -638,143 +1009,454 @@ export default function DepartamentosPage() {
                     <tr>
                       <td
                         colSpan={7}
-                        className="py-8 text-center text-[#7d776f] dark:text-slate-500"
+                        className="py-8 text-center text-[#7d776f] dark:text-slate-500 font-medium"
                       >
-                        No se encontraron departamentos con los filtros aplicados.
+                        No se encontraron unidades con los filtros aplicados.
                       </td>
                     </tr>
                   ) : (
-                    unidadesFiltradas.map((unidad) => (
-                      <tr
-                        key={`${unidad.tipoUnidad || 'unidad'}-${unidad.id}`}
-                        className="hover:bg-[#dfd9ce]/40 dark:hover:bg-slate-800/40 transition-colors"
-                      >
-                        <td className="py-3 px-4">
-                          <div className="font-extrabold text-[#262422] dark:text-white flex items-center gap-1.5">
-                            <Building2 className="w-4 h-4 text-rose-700 dark:text-rose-400 shrink-0" />
-                            <span>Dpto. {unidad.numero}</span>
-                          </div>
-                          <div className="text-[11px] text-[#7d776f] dark:text-slate-400">
-                            {unidad.tipologia ||
-                              (unidad.areaM2 === 60
-                                ? 'Tipo A (60 m²)'
-                                : unidad.areaM2 === 80
-                                  ? 'Tipo B (80 m²)'
-                                  : 'Tipo C (100 m²)')}{' '}
-                            • Piso {unidad.piso || '-'}
-                          </div>
-                        </td>
+                    unidadesFiltradas.map((unidad) => {
+                      const isUnidadDepto = unidad.tipoUnidad === 'Departamento'
+                      const isUnidadParqueo = unidad.tipoUnidad === 'Parqueo'
+                      const isUnidadBaulera = unidad.tipoUnidad === 'Baulera'
 
-                        <td className="py-3 px-4">
-                          {unidad.propietario ? (
-                            <div>
-                              <div className="font-bold text-[#262422] dark:text-white flex items-center gap-1">
-                                <UserCheck className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-                                {unidad.propietario.nombre}
+                      // ============================================
+                      // RENDERIZADO: VISTA ESPECÍFICA DE DEPARTAMENTOS
+                      // ============================================
+                      if (subTipoCatastro === 'Departamentos') {
+                        return (
+                          <tr
+                            key={`depto-${unidad.id}`}
+                            className="hover:bg-[#dfd9ce]/40 dark:hover:bg-slate-800/40 transition-colors"
+                          >
+                            <td className="py-3 px-4">
+                              <div className="font-extrabold text-[#262422] dark:text-white flex items-center gap-1.5">
+                                <Building2 className="w-4 h-4 text-blue-700 dark:text-indigo-400 shrink-0" />
+                                <span>Dpto. {unidad.numero}</span>
                               </div>
                               <div className="text-[11px] text-[#7d776f] dark:text-slate-400">
-                                CI: {unidad.propietario.ci}
-                                {unidad.propietario.estadoCivil && (
-                                  <span className="font-medium text-slate-800 dark:text-slate-200">
-                                    {' '}• {unidad.propietario.estadoCivil}
+                                {unidad.tipologia || 'Tipo Estándar'} • Piso {unidad.piso || '-'}
+                              </div>
+                            </td>
+
+                            <td className="py-3 px-4">
+                              {unidad.propietario ? (
+                                <div>
+                                  <div className="font-bold text-[#262422] dark:text-white flex items-center gap-1">
+                                    <UserCheck className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                                    {unidad.propietario.nombre}
+                                  </div>
+                                  <div className="text-[11px] text-[#7d776f] dark:text-slate-400">
+                                    CI: {unidad.propietario.ci}
+                                    {unidad.propietario.estadoCivil && (
+                                      <span className="font-medium text-slate-800 dark:text-slate-200">
+                                        {' '}• {unidad.propietario.estadoCivil}
+                                      </span>
+                                    )}
+                                  </div>
+                                </div>
+                              ) : (
+                                <span className="text-amber-700 dark:text-amber-400 italic text-xs">
+                                  Sin Propietario Asignado
+                                </span>
+                              )}
+                            </td>
+
+                            <td className="py-3 px-4">
+                              {unidad.estado === 'Alquilado' && unidad.inquilinoActual ? (
+                                <div>
+                                  <div className="font-bold text-[#262422] dark:text-white flex items-center gap-1">
+                                    <KeyRound className="w-3.5 h-3.5 text-purple-600 shrink-0" />
+                                    {unidad.inquilinoActual.nombre}
+                                  </div>
+                                  <span className="text-[10px] px-2 py-0.2 rounded-md bg-purple-100 text-purple-800 dark:bg-purple-900/60 dark:text-purple-300 font-bold">
+                                    Inquilino (Contrato)
                                   </span>
+                                </div>
+                              ) : unidad.estado === 'Ocupado por Propietario' ? (
+                                <span className="text-[11px] text-emerald-700 dark:text-emerald-400 font-semibold">
+                                  Vive el Propietario
+                                </span>
+                              ) : (
+                                <span className="text-[11px] text-[#7d776f] dark:text-slate-400 italic">
+                                  Desocupado / Vacío
+                                </span>
+                              )}
+                            </td>
+
+                            <td className="py-3 px-4">
+                              <div className="font-bold text-[#262422] dark:text-white font-mono">
+                                {unidad.areaM2 ? `${unidad.areaM2} m²` : '—'}
+                              </div>
+                            </td>
+
+                            <td className="py-3 px-4">
+                              <div className="text-xs font-semibold text-[#262422] dark:text-white flex items-center gap-1">
+                                <Car className="w-3.5 h-3.5 text-amber-700 dark:text-amber-400" />
+                                <span>{unidad.parqueo || 'Sin parqueo'}</span>
+                              </div>
+                              <div className="text-[11px] font-semibold text-[#7d776f] dark:text-slate-400 flex items-center gap-1 mt-0.5">
+                                <Box className="w-3.5 h-3.5 text-emerald-700 dark:text-emerald-400" />
+                                <span>{unidad.baulera || 'Sin baulera'}</span>
+                              </div>
+                            </td>
+
+                            <td className="py-3 px-4">
+                              <span
+                                className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-extrabold ${
+                                  unidad.estado === 'Ocupado por Propietario'
+                                    ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-400 border border-emerald-300'
+                                    : unidad.estado === 'Alquilado'
+                                      ? 'bg-purple-100 text-purple-800 dark:bg-purple-950/60 dark:text-purple-400 border border-purple-300'
+                                      : 'bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-400 border border-amber-300'
+                                }`}
+                              >
+                                {unidad.estado}
+                              </span>
+                            </td>
+
+                            <td className="py-3 px-4 text-right">
+                              <div className="flex items-center justify-end gap-1.5">
+                                <button
+                                  onClick={() => setSelectedUnidad(unidad)}
+                                  className="px-2 py-1 rounded-lg bg-blue-100 text-blue-800 hover:bg-blue-200 dark:bg-blue-950/60 dark:text-blue-300 text-xs font-bold transition-all cursor-pointer flex items-center gap-1"
+                                  title="Ver Ficha y Extracto de Expensa"
+                                >
+                                  <Eye className="w-3.5 h-3.5" />
+                                  Extracto
+                                </button>
+                                <button
+                                  onClick={() => {
+                                    setUnidadToAssign(unidad)
+                                    setIsAssignModalOpen(true)
+                                  }}
+                                  className="p-1.5 rounded-lg text-emerald-700 hover:bg-emerald-100 dark:text-emerald-400 dark:hover:bg-slate-800 transition-colors"
+                                  title="Gestionar Asignación de Propietario / Inquilino"
+                                >
+                                  <UserCheck className="w-4 h-4" />
+                                </button>
+                                <button
+                                  onClick={() => {
+                                    setUnidadToEdit(unidad)
+                                    setIsEditModalOpen(true)
+                                  }}
+                                  className="p-1.5 rounded-lg text-blue-700 hover:text-blue-900 hover:bg-blue-100 dark:text-blue-400 dark:hover:bg-slate-800 transition-colors"
+                                  title="Editar Departamento, Parqueo y Baulera"
+                                >
+                                  <Edit className="w-4 h-4" />
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        )
+                      }
+
+                      // ============================================
+                      // RENDERIZADO: VISTA ESPECÍFICA DE PARQUEOS
+                      // ============================================
+                      if (subTipoCatastro === 'Parqueos') {
+                        const deptoVinculado = unidad.departamento?.numero
+                        const titular = unidad.persona
+                          ? `${unidad.persona.nombres || ''} ${unidad.persona.apellidos || ''}`.trim()
+                          : null
+
+                        return (
+                          <tr
+                            key={`parqueo-${unidad.id}`}
+                            className="hover:bg-[#dfd9ce]/40 dark:hover:bg-slate-800/40 transition-colors"
+                          >
+                            <td className="py-3 px-4">
+                              <div className="font-extrabold text-[#262422] dark:text-white flex items-center gap-2">
+                                <Car className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0" />
+                                <span className="font-mono text-sm">Parqueo {unidad.numero}</span>
+                              </div>
+                              <span className="text-[10px] text-[#7d776f] dark:text-slate-400">
+                                ID Unidad: #{unidad.id}
+                              </span>
+                            </td>
+
+                            <td className="py-3 px-4">
+                              <span
+                                className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-extrabold ${
+                                  unidad.estado === 'Disponible'
+                                    ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-400 border border-emerald-300'
+                                    : unidad.estado === 'Asignado'
+                                      ? 'bg-blue-100 text-blue-800 dark:bg-blue-950/60 dark:text-blue-400 border border-blue-300'
+                                      : 'bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-400 border border-amber-300'
+                                }`}
+                              >
+                                {unidad.estado}
+                              </span>
+                            </td>
+
+                            <td className="py-3 px-4">
+                              {deptoVinculado ? (
+                                <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-blue-50 dark:bg-slate-800 border border-blue-200 dark:border-slate-700 font-bold text-xs text-blue-900 dark:text-blue-300">
+                                  <Building2 className="w-3.5 h-3.5 text-blue-600 shrink-0" />
+                                  <span>Departamento {deptoVinculado}</span>
+                                </div>
+                              ) : (
+                                <span className="text-xs text-slate-500 italic">
+                                  Sin departamento vinculado (Libre)
+                                </span>
+                              )}
+                            </td>
+
+                            <td className="py-3 px-4">
+                              {titular ? (
+                                <div className="text-xs font-bold text-[#262422] dark:text-white flex items-center gap-1">
+                                  <UserCheck className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                                  <span>{titular}</span>
+                                </div>
+                              ) : (
+                                <span className="text-xs text-slate-500 italic">
+                                  Sin titular asignado
+                                </span>
+                              )}
+                            </td>
+
+                            <td className="py-3 px-4 text-xs font-mono text-[#7d776f] dark:text-slate-400">
+                              {unidad.fechaAsignacion
+                                ? new Date(unidad.fechaAsignacion).toLocaleDateString()
+                                : '—'}
+                            </td>
+
+                            <td className="py-3 px-4 text-right">
+                              <div className="flex items-center justify-end gap-1.5">
+                                <button
+                                  onClick={() => {
+                                    setUnidadToAssign(unidad)
+                                    setIsAssignModalOpen(true)
+                                  }}
+                                  className="px-2 py-1 rounded-lg bg-emerald-100 text-emerald-800 hover:bg-emerald-200 dark:bg-emerald-950/60 dark:text-emerald-300 text-xs font-bold transition-all cursor-pointer flex items-center gap-1"
+                                  title="Asignar o Transferir Parqueo"
+                                >
+                                  <KeyRound className="w-3.5 h-3.5" />
+                                  Asignar
+                                </button>
+                                <button
+                                  onClick={() => {
+                                    setUnidadToEdit(unidad)
+                                    setIsEditModalOpen(true)
+                                  }}
+                                  className="p-1.5 rounded-lg text-blue-700 hover:bg-blue-100 dark:text-blue-400 dark:hover:bg-slate-800 transition-colors"
+                                  title="Editar Parqueo"
+                                >
+                                  <Edit className="w-4 h-4" />
+                                </button>
+                                {(unidad.estado === 'Asignado' || deptoVinculado || titular) && (
+                                  <button
+                                    onClick={() => handleLiberarUnidad(unidad)}
+                                    className="p-1.5 rounded-lg text-amber-700 hover:bg-amber-100 dark:text-amber-400 dark:hover:bg-slate-800 transition-colors"
+                                    title="Liberar y Desvincular Parqueo"
+                                  >
+                                    <LockOpen className="w-4 h-4" />
+                                  </button>
                                 )}
                               </div>
-                              {unidad.propietario.ocupantes && (
-                                <div className="text-[10px] text-blue-800 dark:text-blue-300 font-semibold mt-0.5">
-                                  {unidad.propietario.ocupantes}
-                                </div>
-                              )}
-                            </div>
-                          ) : (
-                            <span className="text-amber-700 dark:text-amber-400 italic text-xs">
-                              Sin Propietario Asignado
-                            </span>
-                          )}
-                        </td>
+                            </td>
+                          </tr>
+                        )
+                      }
 
-                        <td className="py-3 px-4">
-                          {unidad.estado === 'Alquilado' && unidad.inquilinoActual ? (
-                            <div>
-                              <div className="font-bold text-[#262422] dark:text-white flex items-center gap-1">
-                                <KeyRound className="w-3.5 h-3.5 text-purple-600 shrink-0" />
-                                {unidad.inquilinoActual.nombre}
+                      // ============================================
+                      // RENDERIZADO: VISTA ESPECÍFICA DE BAULERAS
+                      // ============================================
+                      if (subTipoCatastro === 'Bauleras') {
+                        const deptoVinculado = unidad.departamento?.numero
+                        const titular = unidad.persona
+                          ? `${unidad.persona.nombres || ''} ${unidad.persona.apellidos || ''}`.trim()
+                          : null
+
+                        return (
+                          <tr
+                            key={`baulera-${unidad.id}`}
+                            className="hover:bg-[#dfd9ce]/40 dark:hover:bg-slate-800/40 transition-colors"
+                          >
+                            <td className="py-3 px-4">
+                              <div className="font-extrabold text-[#262422] dark:text-white flex items-center gap-2">
+                                <Box className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                                <span className="font-mono text-sm">Baulera {unidad.numero}</span>
                               </div>
-                              <span className="text-[10px] px-2 py-0.2 rounded-md bg-purple-100 text-purple-800 font-bold">
-                                Inquilino (Contrato Privado)
+                              <span className="text-[10px] text-[#7d776f] dark:text-slate-400">
+                                ID Unidad: #{unidad.id}
+                              </span>
+                            </td>
+
+                            <td className="py-3 px-4">
+                              <span
+                                className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-extrabold ${
+                                  unidad.estado === 'Disponible'
+                                    ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-400 border border-emerald-300'
+                                    : unidad.estado === 'Asignado'
+                                      ? 'bg-blue-100 text-blue-800 dark:bg-blue-950/60 dark:text-blue-400 border border-blue-300'
+                                      : 'bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-400 border border-amber-300'
+                                }`}
+                              >
+                                {unidad.estado}
+                              </span>
+                            </td>
+
+                            <td className="py-3 px-4">
+                              {deptoVinculado ? (
+                                <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-blue-50 dark:bg-slate-800 border border-blue-200 dark:border-slate-700 font-bold text-xs text-blue-900 dark:text-blue-300">
+                                  <Building2 className="w-3.5 h-3.5 text-blue-600 shrink-0" />
+                                  <span>Departamento {deptoVinculado}</span>
+                                </div>
+                              ) : (
+                                <span className="text-xs text-slate-500 italic">
+                                  Sin departamento vinculado (Libre)
+                                </span>
+                              )}
+                            </td>
+
+                            <td className="py-3 px-4">
+                              {titular ? (
+                                <div className="text-xs font-bold text-[#262422] dark:text-white flex items-center gap-1">
+                                  <UserCheck className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                                  <span>{titular}</span>
+                                </div>
+                              ) : (
+                                <span className="text-xs text-slate-500 italic">
+                                  Sin titular asignado
+                                </span>
+                              )}
+                            </td>
+
+                            <td className="py-3 px-4 text-xs font-mono text-[#7d776f] dark:text-slate-400">
+                              {unidad.fechaAsignacion
+                                ? new Date(unidad.fechaAsignacion).toLocaleDateString()
+                                : '—'}
+                            </td>
+
+                            <td className="py-3 px-4 text-right">
+                              <div className="flex items-center justify-end gap-1.5">
+                                <button
+                                  onClick={() => {
+                                    setUnidadToAssign(unidad)
+                                    setIsAssignModalOpen(true)
+                                  }}
+                                  className="px-2 py-1 rounded-lg bg-emerald-100 text-emerald-800 hover:bg-emerald-200 dark:bg-emerald-950/60 dark:text-emerald-300 text-xs font-bold transition-all cursor-pointer flex items-center gap-1"
+                                  title="Asignar o Transferir Baulera"
+                                >
+                                  <KeyRound className="w-3.5 h-3.5" />
+                                  Asignar
+                                </button>
+                                <button
+                                  onClick={() => {
+                                    setUnidadToEdit(unidad)
+                                    setIsEditModalOpen(true)
+                                  }}
+                                  className="p-1.5 rounded-lg text-blue-700 hover:bg-blue-100 dark:text-blue-400 dark:hover:bg-slate-800 transition-colors"
+                                  title="Editar Baulera"
+                                >
+                                  <Edit className="w-4 h-4" />
+                                </button>
+                                {(unidad.estado === 'Asignado' || deptoVinculado || titular) && (
+                                  <button
+                                    onClick={() => handleLiberarUnidad(unidad)}
+                                    className="p-1.5 rounded-lg text-amber-700 hover:bg-amber-100 dark:text-amber-400 dark:hover:bg-slate-800 transition-colors"
+                                    title="Liberar y Desvincular Baulera"
+                                  >
+                                    <LockOpen className="w-4 h-4" />
+                                  </button>
+                                )}
+                              </div>
+                            </td>
+                          </tr>
+                        )
+                      }
+
+                      // ============================================
+                      // RENDERIZADO: VISTA "TODAS LAS UNIDADES" (50)
+                      // ============================================
+                      return (
+                        <tr
+                          key={`unidad-${unidad.tipoUnidad}-${unidad.id}`}
+                          className="hover:bg-[#dfd9ce]/40 dark:hover:bg-slate-800/40 transition-colors"
+                        >
+                          <td className="py-3 px-4">
+                            <div className="font-extrabold text-[#262422] dark:text-white flex items-center gap-2">
+                              {isUnidadDepto && <Building2 className="w-4 h-4 text-blue-700 shrink-0" />}
+                              {isUnidadParqueo && <Car className="w-4 h-4 text-amber-600 shrink-0" />}
+                              {isUnidadBaulera && <Box className="w-4 h-4 text-emerald-600 shrink-0" />}
+                              <span>
+                                {unidad.tipoUnidad} {unidad.numero}
                               </span>
                             </div>
-                          ) : unidad.estado === 'Ocupado por Propietario' ? (
-                            <span className="text-[11px] text-emerald-700 dark:text-emerald-400 font-semibold">
-                              Vive el Propietario
+                            <span className="text-[10px] text-[#7d776f] dark:text-slate-400">
+                              {unidad.tipoUnidad} #{unidad.id}
                             </span>
-                          ) : (
-                            <span className="text-[11px] text-[#7d776f] dark:text-slate-400 italic">
-                              Desocupado / Vacío
-                            </span>
-                          )}
-                        </td>
+                          </td>
 
-                        <td className="py-3 px-4">
-                          <div className="font-bold text-[#262422] dark:text-white font-mono">
-                            {unidad.areaM2 ? `${unidad.areaM2} m²` : '—'}
-                          </div>
-                          {unidad.tipologia && (
-                            <div className="text-[11px] text-[#7d776f] dark:text-slate-400">
-                              {unidad.tipologia}
+                          <td className="py-3 px-4">
+                            <span
+                              className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-extrabold ${
+                                unidad.estado === 'Disponible'
+                                  ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-400 border border-emerald-300'
+                                  : unidad.estado === 'Asignado'
+                                    ? 'bg-blue-100 text-blue-800 dark:bg-blue-950/60 dark:text-blue-400 border border-blue-300'
+                                    : 'bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-400 border border-amber-300'
+                              }`}
+                            >
+                              {unidad.estado}
+                            </span>
+                          </td>
+
+                          <td className="py-3 px-4">
+                            {isUnidadDepto ? (
+                              <div className="text-xs">
+                                <div>Parqueo: <strong className="text-[#262422] dark:text-white">{unidad.parqueo || 'Sin parqueo'}</strong></div>
+                                <div>Baulera: <strong className="text-[#262422] dark:text-white">{unidad.baulera || 'Sin baulera'}</strong></div>
+                              </div>
+                            ) : unidad.departamento ? (
+                              <span className="font-bold text-xs text-blue-800 dark:text-blue-300">
+                                Asignado a Dpto {unidad.departamento.numero}
+                              </span>
+                            ) : (
+                              <span className="text-xs text-slate-500 italic">Libre</span>
+                            )}
+                          </td>
+
+                          <td className="py-3 px-4">
+                            {isUnidadDepto && unidad.propietario ? (
+                              <span className="font-bold text-xs text-[#262422] dark:text-white">
+                                {unidad.propietario.nombre}
+                              </span>
+                            ) : unidad.persona ? (
+                              <span className="font-bold text-xs text-[#262422] dark:text-white">
+                                {unidad.persona.nombres} {unidad.persona.apellidos}
+                              </span>
+                            ) : (
+                              <span className="text-xs text-slate-500 italic">Sin titular</span>
+                            )}
+                          </td>
+
+                          <td className="py-3 px-4">
+                            {isUnidadDepto && unidad.areaM2 ? (
+                              <span className="font-mono text-xs font-bold">{unidad.areaM2} m²</span>
+                            ) : (
+                              <span className="text-xs text-slate-500">—</span>
+                            )}
+                          </td>
+
+                          <td className="py-3 px-4 text-right">
+                            <div className="flex items-center justify-end gap-1.5">
+                              <button
+                                onClick={() => {
+                                  setUnidadToEdit(unidad)
+                                  setIsEditModalOpen(true)
+                                }}
+                                className="p-1.5 rounded-lg text-blue-700 hover:bg-blue-100 dark:text-blue-400 dark:hover:bg-slate-800 transition-colors"
+                                title="Editar Unidad"
+                              >
+                                <Edit className="w-4 h-4" />
+                              </button>
                             </div>
-                          )}
-                        </td>
-
-                        <td className="py-3 px-4">
-                          <div className="text-xs text-[#262422] dark:text-white flex items-center gap-1">
-                            <Car className="w-3.5 h-3.5 text-[#7d776f]" />
-                            <span>{unidad.parqueo || 'Sin parqueo'}</span>
-                          </div>
-                          <div className="text-[11px] text-[#7d776f] dark:text-slate-400 flex items-center gap-1">
-                            <Box className="w-3.5 h-3.5 text-[#7d776f]" />
-                            <span>{unidad.baulera || 'Sin baulera'}</span>
-                          </div>
-                        </td>
-
-                        <td className="py-3 px-4">
-                          <span
-                            className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-extrabold ${
-                              unidad.estado === 'Ocupado por Propietario'
-                                ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-400 border border-emerald-300'
-                                : unidad.estado === 'Alquilado'
-                                  ? 'bg-purple-100 text-purple-800 dark:bg-purple-950/60 dark:text-purple-400 border border-purple-300'
-                                  : 'bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-400 border border-amber-300'
-                            }`}
-                          >
-                            {unidad.estado}
-                          </span>
-                        </td>
-
-                        <td className="py-3 px-4 text-right">
-                          <div className="flex items-center justify-end gap-1.5">
-                            <button
-                              onClick={() => setSelectedUnidad(unidad)}
-                              className="px-2 py-1 rounded-lg bg-blue-100 text-blue-800 hover:bg-blue-200 dark:bg-blue-950/60 dark:text-blue-300 text-xs font-bold transition-all cursor-pointer flex items-center gap-1"
-                              title="Ver Ficha y Extracto de Expensa"
-                            >
-                              <Eye className="w-3.5 h-3.5" />
-                              Extracto
-                            </button>
-                            <button
-                              onClick={() => {
-                                setUnidadToEdit(unidad)
-                                setIsEditModalOpen(true)
-                              }}
-                              className="p-1.5 rounded-lg text-[#5c5750] hover:text-[#262422] hover:bg-[#ded8cc] dark:text-slate-400 dark:hover:text-white dark:hover:bg-slate-800 transition-colors"
-                              title="Editar Unidad"
-                            >
-                              <Edit className="w-4 h-4" />
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    ))
+                          </td>
+                        </tr>
+                      )
+                    })
                   )}
                 </tbody>
               </table>
@@ -802,7 +1484,7 @@ export default function DepartamentosPage() {
         />
       )}
 
-      {/* MODAL CREAR DEPARTAMENTO */}
+      {/* MODAL CREAR DEPARTAMENTO / PARQUEO / BAULERA */}
       <CrearDepartamentoModal
         isOpen={isCreateModalOpen}
         onClose={() => setIsCreateModalOpen(false)}
@@ -812,7 +1494,7 @@ export default function DepartamentosPage() {
         tiposDisponibles={tiposDepto}
       />
 
-      {/* MODAL EDITAR DEPARTAMENTO */}
+      {/* MODAL EDITAR DEPARTAMENTO, PARQUEO O BAULERA */}
       {unidadToEdit && (
         <EditarDepartamentoModal
           isOpen={isEditModalOpen}
@@ -823,17 +1505,25 @@ export default function DepartamentosPage() {
           depto={unidadToEdit}
           onChange={(updated) => setUnidadToEdit(updated)}
           tiposDisponibles={tiposDepto}
-          onUpdate={async (updated) => {
-            await handleEditSubmit({
-              numero: updated.numero,
-              piso: updated.piso || 1,
-              areaM2: updated.areaM2 || 0,
-              tipologia: updated.tipologia,
-              expensaBase: updated.expensaBase,
-              estado: updated.estado,
-              parqueo: updated.parqueo,
-              baulera: updated.baulera
-            })
+          parqueosDisponibles={parqueosDisponibles}
+          baulerasDisponibles={baulerasDisponibles}
+          deptosDisponibles={deptosDisponibles}
+          personasList={personasList}
+          onUpdate={async (updated, assignments) => {
+            await handleEditSubmit(
+              {
+                tipoUnidad: updated.tipoUnidad,
+                numero: updated.numero,
+                piso: updated.piso || 1,
+                areaM2: updated.areaM2 || 0,
+                tipologia: updated.tipologia,
+                expensaBase: updated.expensaBase,
+                estado: updated.estado,
+                parqueo: updated.parqueo,
+                baulera: updated.baulera
+              },
+              assignments
+            )
           }}
         />
       )}
