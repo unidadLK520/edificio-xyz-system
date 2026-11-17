@@ -21,32 +21,22 @@ import {
   DollarSign,
   AlertTriangle,
   Calendar,
-  Filter,
-  CheckCircle2,
   Clock,
   ArrowUpRight,
   ArrowDownRight,
   PieChart,
   Building,
   Printer,
-  FileSpreadsheet,
   X,
   Search,
-  ChevronRight,
   ShieldCheck,
-  Send,
   MessageCircle,
   RefreshCw,
   Wallet,
   Landmark,
-  Layers,
-  User,
   Phone,
-  Mail,
   FileText,
   AlertCircle,
-  ArrowDownLeft,
-  ExternalLink,
   ChevronDown
 } from 'lucide-react'
 import { apiFetch } from '@/lib/api'
@@ -60,6 +50,7 @@ export interface MesFinanciero {
   mes: string
   mesCorto: string
   anio: number
+  claveMes: string // YYYY-MM
   ingresos: number
   egresos: number
   balance: number
@@ -120,6 +111,35 @@ export interface MovimientoOperativo {
   nroFactura?: string | null
 }
 
+export interface ExpensaResumen {
+  idExpensa: number
+  idDepartamento: number
+  periodo: string
+  monto: number
+  montoAgua?: number
+  montoExtras?: number
+  montoTotal?: number
+  saldoPendiente: number
+  estado: string
+  fechaVencimiento: string
+  vencida?: boolean
+  moraCalculada?: number
+  mesesMora?: number
+  totalAdeudado?: number
+}
+
+export interface CuentaBancariaItem {
+  idCuenta: number
+  banco: string
+  numeroCuenta: string
+  tipoCuenta?: string | null
+  saldoInicial?: number
+  saldoCalculado: number
+  saldoActual: number
+  totalDepositos?: number
+  totalRetiros?: number
+}
+
 export interface DepartamentoSimple {
   idDepartamento: number
   numero: string
@@ -157,7 +177,7 @@ export interface EstadoCuentaDpto {
   movimientos: Array<{
     id: string
     idReferencia: number
-    tipo: 'OBLIGACION' | 'PAGO'
+    tipo: 'OBLIGACION' | 'PAGO' | 'ANTICIPO'
     fecha: string
     periodo?: string
     concepto: string
@@ -171,113 +191,55 @@ export interface EstadoCuentaDpto {
   }>
 }
 
-// ── Datos Base Resilientes (Edificio XYZ - 20 Dptos Modelo) ────────────────────
+// ── Helpers de Fechas y Meses ─────────────────────────────────────────────────
 
-const MESES_HISTORICOS_DEFAULT: MesFinanciero[] = [
-  { mes: 'Enero 2026', mesCorto: 'Ene', anio: 2026, ingresos: 12500, egresos: 9200, balance: 3300, tasaMorosidad: 8.3 },
-  { mes: 'Febrero 2026', mesCorto: 'Feb', anio: 2026, ingresos: 12100, egresos: 10400, balance: 1700, tasaMorosidad: 12.5 },
-  { mes: 'Marzo 2026', mesCorto: 'Mar', anio: 2026, ingresos: 12800, egresos: 8900, balance: 3900, tasaMorosidad: 4.1 },
-  { mes: 'Abril 2026', mesCorto: 'Abr', anio: 2026, ingresos: 11900, egresos: 9800, balance: 2100, tasaMorosidad: 16.6 },
-  { mes: 'Mayo 2026', mesCorto: 'May', anio: 2026, ingresos: 13200, egresos: 11200, balance: 2000, tasaMorosidad: 4.1 },
-  { mes: 'Junio 2026', mesCorto: 'Jun', anio: 2026, ingresos: 12600, egresos: 9100, balance: 3500, tasaMorosidad: 8.3 },
-  { mes: 'Julio 2026', mesCorto: 'Jul', anio: 2026, ingresos: 12900, egresos: 8600, balance: 4300, tasaMorosidad: 4.1 },
-  { mes: 'Agosto 2026', mesCorto: 'Ago', anio: 2026, ingresos: 12480, egresos: 9750, balance: 2730, tasaMorosidad: 8.3 },
-  { mes: 'Septiembre 2026', mesCorto: 'Sep', anio: 2026, ingresos: 13520, egresos: 8400, balance: 5120, tasaMorosidad: 4.2 },
-  { mes: 'Octubre 2026', mesCorto: 'Oct', anio: 2026, ingresos: 12700, egresos: 9300, balance: 3400, tasaMorosidad: 8.1 },
-  { mes: 'Noviembre 2026', mesCorto: 'Nov', anio: 2026, ingresos: 13100, egresos: 8950, balance: 4150, tasaMorosidad: 5.0 },
-  { mes: 'Diciembre 2026', mesCorto: 'Dic', anio: 2026, ingresos: 14200, egresos: 10100, balance: 4100, tasaMorosidad: 3.8 }
+const NOMBRES_MESES = [
+  { mesNumero: '01', nombre: 'Enero', corto: 'Ene' },
+  { mesNumero: '02', nombre: 'Febrero', corto: 'Feb' },
+  { mesNumero: '03', nombre: 'Marzo', corto: 'Mar' },
+  { mesNumero: '04', nombre: 'Abril', corto: 'Abr' },
+  { mesNumero: '05', nombre: 'Mayo', corto: 'May' },
+  { mesNumero: '06', nombre: 'Junio', corto: 'Jun' },
+  { mesNumero: '07', nombre: 'Julio', corto: 'Jul' },
+  { mesNumero: '08', nombre: 'Agosto', corto: 'Ago' },
+  { mesNumero: '09', nombre: 'Septiembre', corto: 'Sep' },
+  { mesNumero: '10', nombre: 'Octubre', corto: 'Oct' },
+  { mesNumero: '11', nombre: 'Noviembre', corto: 'Nov' },
+  { mesNumero: '12', nombre: 'Diciembre', corto: 'Dic' },
 ]
 
-const CATEGORIAS_GASTO_DEFAULT: CategoriaGasto[] = [
-  { nombre: 'Mantenimiento & Ascensores', monto: 3500, porcentaje: 38.5, color: 'bg-indigo-600', textClass: 'text-indigo-600' },
-  { nombre: 'Servicios Básicos (Luz/Agua común)', monto: 2100, porcentaje: 23.1, color: 'bg-blue-600', textClass: 'text-blue-600' },
-  { nombre: 'Seguridad & Vigilancia 24/7', monto: 1600, porcentaje: 17.6, color: 'bg-emerald-600', textClass: 'text-emerald-600' },
-  { nombre: 'Limpieza e Insumos', monto: 800, porcentaje: 8.8, color: 'bg-amber-600', textClass: 'text-amber-600' },
-  { nombre: 'Personal & Nómina Conserjería', monto: 700, porcentaje: 7.7, color: 'bg-teal-600', textClass: 'text-teal-600' },
-  { nombre: 'Administración & Fondo de Reserva', monto: 400, porcentaje: 4.3, color: 'bg-purple-600', textClass: 'text-purple-600' }
-]
-
-const CATEGORIAS_INGRESO_DEFAULT: CategoriaIngreso[] = [
-  { nombre: 'Expensas Comunes Ordinarias', monto: 11200, porcentaje: 85.5, color: 'bg-emerald-600' },
-  { nombre: 'Consumo Agua Potable (Medición)', monto: 1150, porcentaje: 8.8, color: 'bg-blue-600' },
-  { nombre: 'Alquiler Salón de Copropietarios', monto: 500, porcentaje: 3.8, color: 'bg-indigo-600' },
-  { nombre: 'Multas y Rendimientos Bancarios', monto: 250, porcentaje: 1.9, color: 'bg-purple-600' }
-]
-
-const MOROSOS_DEFAULT: MorosoItem[] = [
-  {
-    idDepartamento: 103,
-    numero: '103',
-    piso: 1,
-    propietario: {
-      nombres: 'Hernán',
-      apellidos: 'Siles Zuazo',
-      ciNit: '4392810 CB',
-      telefono: '71928374',
-      correo: 'hernan.siles@gmail.com'
-    },
-    totalDeuda: 1560,
-    expensasMoraCount: 3,
-    detalleExpensas: [
-      { idExpensa: 101, periodo: '2026-07', montoTotal: 520, capitalPendiente: 520, saldoPendiente: 520, fechaVencimiento: '2026-08-10' },
-      { idExpensa: 121, periodo: '2026-08', montoTotal: 520, capitalPendiente: 520, saldoPendiente: 520, fechaVencimiento: '2026-09-10' },
-      { idExpensa: 141, periodo: '2026-09', montoTotal: 520, capitalPendiente: 520, saldoPendiente: 520, fechaVencimiento: '2026-10-10' }
-    ]
-  },
-  {
-    idDepartamento: 202,
-    numero: '202',
-    piso: 2,
-    propietario: {
-      nombres: 'Claudia',
-      apellidos: 'Villarroel Méndez',
-      ciNit: '5192843 CB',
-      telefono: '76543219',
-      correo: 'claudia.villarroel@hotmail.com'
-    },
-    totalDeuda: 1040,
-    expensasMoraCount: 2,
-    detalleExpensas: [
-      { idExpensa: 122, periodo: '2026-08', montoTotal: 520, capitalPendiente: 520, saldoPendiente: 520, fechaVencimiento: '2026-09-10' },
-      { idExpensa: 142, periodo: '2026-09', montoTotal: 520, capitalPendiente: 520, saldoPendiente: 520, fechaVencimiento: '2026-10-10' }
-    ]
-  },
-  {
-    idDepartamento: 401,
-    numero: '401',
-    piso: 4,
-    propietario: {
-      nombres: 'Gonzalo',
-      apellidos: 'Peñaranda Rojas',
-      ciNit: '6102948 CB',
-      telefono: '70192834',
-      correo: 'gonzalo.penaranda@gmail.com'
-    },
-    totalDeuda: 520,
-    expensasMoraCount: 1,
-    detalleExpensas: [
-      { idExpensa: 143, periodo: '2026-09', montoTotal: 520, capitalPendiente: 520, saldoPendiente: 520, fechaVencimiento: '2026-10-10' }
-    ]
+function extraerClaveMes(fechaStr?: string | Date | null): string | null {
+  if (!fechaStr) return null
+  const str = String(fechaStr).trim()
+  if (/^\d{4}-\d{2}$/.test(str.substring(0, 7))) {
+    return str.substring(0, 7)
   }
-]
+  const d = new Date(str)
+  if (isNaN(d.getTime())) return null
+  const y = d.getUTCFullYear()
+  const m = String(d.getUTCMonth() + 1).padStart(2, '0')
+  return `${y}-${m}`
+}
 
 // ── Componente Principal ───────────────────────────────────────────────────────
 
 export default function ReportesPage() {
   const [activeTab, setActiveTab] = useState<TabVisor>('balance')
-  const [selectedPeriod, setSelectedPeriod] = useState<string>('Septiembre 2026')
   const [selectedYear, setSelectedYear] = useState<number>(2026)
+  const [selectedPeriod, setSelectedPeriod] = useState<string>('Septiembre 2026')
   const [isExportModalOpen, setIsExportModalOpen] = useState<boolean>(false)
   const [isNotificationSent, setIsNotificationSent] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState<boolean>(false)
   const [lastSyncTime, setLastSyncTime] = useState<string>('')
   const [isRealData, setIsRealData] = useState<boolean>(false)
 
-  // Datos financieros dinámicos
-  const [mesesData, setMesesData] = useState<MesFinanciero[]>(MESES_HISTORICOS_DEFAULT)
-  const [morososList, setMorososList] = useState<MorosoItem[]>(MOROSOS_DEFAULT)
+  // Datos financieros dinámicos provistos por la API del Backend
+  const [morososList, setMorososList] = useState<MorosoItem[]>([])
   const [movimientosList, setMovimientosList] = useState<MovimientoOperativo[]>([])
+  const [expensasList, setExpensasList] = useState<ExpensaResumen[]>([])
+  const [cuentasBancarias, setCuentasBancarias] = useState<CuentaBancariaItem[]>([])
   const [departamentos, setDepartamentos] = useState<DepartamentoSimple[]>([])
+  const [saldoCajaChica, setSaldoCajaChica] = useState<number>(0)
 
   // Filtros de tabla morosos
   const [searchMoroso, setSearchMoroso] = useState<string>('')
@@ -292,18 +254,14 @@ export default function ReportesPage() {
   const [estadoCuentaDpto, setEstadoCuentaDpto] = useState<EstadoCuentaDpto | null>(null)
   const [isLoadingDpto, setIsLoadingDpto] = useState<boolean>(false)
 
-  // Posición de liquidez
-  const [saldoCajaChica, setSaldoCajaChica] = useState<number>(1450.0)
-  const [saldoBancoBNB, setSaldoBancoBNB] = useState<number>(45820.5)
-
-  // ── Carga de Datos desde la API Real con Respaldo Amigable ──────────────────
+  // ── Carga Dinámica desde las APIs Reales del Backend ──────────────────────────
 
   const cargarDatos = useCallback(async () => {
     setIsLoading(true)
     let sincronizadoExitoso = false
 
     try {
-      // 1. Cargar Lista de Morosos desde /api/v1/expensas/morosos
+      // 1. Cargar Lista Real de Morosos desde /api/v1/expensas/morosos
       const resMorosos = await apiFetch('/api/v1/expensas/morosos')
       if (resMorosos.ok) {
         const jsonMorosos = await resMorosos.json()
@@ -313,8 +271,8 @@ export default function ReportesPage() {
         }
       }
 
-      // 2. Cargar Movimientos Operativos desde /api/v1/movimientos
-      const resMovs = await apiFetch('/api/v1/movimientos?limit=50')
+      // 2. Cargar Movimientos Operativos Reales desde /api/v1/movimientos
+      const resMovs = await apiFetch('/api/v1/movimientos?limit=1000')
       if (resMovs.ok) {
         const jsonMovs = await resMovs.json()
         if (jsonMovs.data && Array.isArray(jsonMovs.data)) {
@@ -323,7 +281,17 @@ export default function ReportesPage() {
         }
       }
 
-      // 3. Cargar Departamentos para el Visor 8.6 desde /api/v1/departamentos
+      // 3. Cargar Expensas Emitidas Reales para cálculo de morosidad
+      const resExp = await apiFetch('/api/v1/expensas?limit=1000')
+      if (resExp.ok) {
+        const jsonExp = await resExp.json()
+        if (jsonExp.data && Array.isArray(jsonExp.data)) {
+          setExpensasList(jsonExp.data)
+          sincronizadoExitoso = true
+        }
+      }
+
+      // 4. Cargar Departamentos para el Visor 8.6 desde /api/v1/departamentos
       const resDptos = await apiFetch('/api/v1/departamentos?limit=100')
       if (resDptos.ok) {
         const jsonDptos = await resDptos.json()
@@ -336,25 +304,30 @@ export default function ReportesPage() {
         }
       }
 
-      // 4. Cargar Resumen de Movimientos para actualizar Balance
-      const resResumen = await apiFetch('/api/v1/movimientos/resumen')
-      if (resResumen.ok) {
-        const jsonRes = await resResumen.json()
-        if (jsonRes.totalIngresos !== undefined) {
-          sincronizadoExitoso = true
-        }
-      }
-
-      // 5. Cargar Saldo de Caja Chica
+      // 5. Cargar Saldo Real de Caja Chica desde /api/v1/caja/saldo
       const resCaja = await apiFetch('/api/v1/caja/saldo')
       if (resCaja.ok) {
         const jsonCaja = await resCaja.json()
-        if (jsonCaja.saldoDisponible !== undefined) {
-          setSaldoCajaChica(Number(jsonCaja.saldoDisponible))
+        const disp =
+          jsonCaja.data?.saldoDisponibleActual ??
+          jsonCaja.data?.saldoFinal ??
+          jsonCaja.saldoDisponible ??
+          0
+        setSaldoCajaChica(Number(disp) || 0)
+        sincronizadoExitoso = true
+      }
+
+      // 6. Cargar Cuentas Bancarias Reales desde /api/v1/cuentas-bancarias
+      const resBancos = await apiFetch('/api/v1/cuentas-bancarias')
+      if (resBancos.ok) {
+        const jsonBancos = await resBancos.json()
+        if (jsonBancos.data && Array.isArray(jsonBancos.data)) {
+          setCuentasBancarias(jsonBancos.data)
+          sincronizadoExitoso = true
         }
       }
-    } catch {
-      // En caso de corte de red, los datos base mantienen la vista 100% utilizable
+    } catch (err) {
+      console.error('Error cargando reportes financieros:', err)
     } finally {
       setIsRealData(sincronizadoExitoso)
       setLastSyncTime(new Date().toLocaleTimeString('es-BO', { hour: '2-digit', minute: '2-digit', second: '2-digit' }))
@@ -366,7 +339,7 @@ export default function ReportesPage() {
     cargarDatos()
   }, [cargarDatos])
 
-  // Cargar estado de cuenta al cambiar de departamento en el Visor 8.6
+  // Cargar estado de cuenta real al cambiar de departamento en el Visor 8.6
   useEffect(() => {
     if (!selectedDptoId) return
 
@@ -378,97 +351,12 @@ export default function ReportesPage() {
         if (res.ok && isMounted) {
           const json = await res.json()
           setEstadoCuentaDpto(json)
+        } else if (isMounted) {
+          setEstadoCuentaDpto(null)
         }
       } catch {
-        // Fallback local si falla la conexión
         if (isMounted) {
-          const dptoEncontrado = departamentos.find((d) => d.idDepartamento === selectedDptoId)
-          const morosoEncontrado = morososList.find((m) => m.idDepartamento === selectedDptoId)
-          setEstadoCuentaDpto({
-            departamento: {
-              idDepartamento: selectedDptoId,
-              numero: dptoEncontrado?.numero || `${selectedDptoId}`,
-              piso: dptoEncontrado?.piso || 1,
-              areaM2: dptoEncontrado?.areaM2 || 85,
-              tipo: dptoEncontrado?.tipo || { nombre: 'Tipo A (Residencial)' },
-              propietario: dptoEncontrado?.propietario || morosoEncontrado?.propietario || {
-                nombres: 'Propietario',
-                apellidos: 'Responsable',
-                telefono: '70000000'
-              }
-            },
-            resumen: {
-              totalObligaciones: 4680,
-              totalPagado: morosoEncontrado ? 4680 - morosoEncontrado.totalDeuda : 4680,
-              saldoPendienteTotal: morosoEncontrado ? morosoEncontrado.totalDeuda : 0,
-              totalAnticiposDisponibles: 0
-            },
-            movimientos: [
-              {
-                id: 'EXP-1',
-                idReferencia: 1,
-                tipo: 'OBLIGACION',
-                fecha: '2026-07-01',
-                periodo: '2026-07',
-                concepto: 'Expensa Ordinaria Julio 2026',
-                monto: 520,
-                debe: 520,
-                haber: 0,
-                saldoProgresivo: 520,
-                estado: 'Pagado'
-              },
-              {
-                id: 'PAG-1',
-                idReferencia: 101,
-                tipo: 'PAGO',
-                fecha: '2026-07-08',
-                concepto: 'Pago Recibido Expensa Julio (QR Banco)',
-                monto: 520,
-                debe: 0,
-                haber: 520,
-                saldoProgresivo: 0,
-                metodoPago: 'QR'
-              },
-              {
-                id: 'EXP-2',
-                idReferencia: 2,
-                tipo: 'OBLIGACION',
-                fecha: '2026-08-01',
-                periodo: '2026-08',
-                concepto: 'Expensa Ordinaria Agosto 2026',
-                monto: 520,
-                debe: 520,
-                haber: 0,
-                saldoProgresivo: 520,
-                estado: 'Pagado'
-              },
-              {
-                id: 'PAG-2',
-                idReferencia: 102,
-                tipo: 'PAGO',
-                fecha: '2026-08-05',
-                concepto: 'Pago Recibido Expensa Agosto (Transferencia)',
-                monto: 520,
-                debe: 0,
-                haber: 520,
-                saldoProgresivo: 0,
-                metodoPago: 'Transferencia'
-              },
-              {
-                id: 'EXP-3',
-                idReferencia: 3,
-                tipo: 'OBLIGACION',
-                fecha: '2026-09-01',
-                periodo: '2026-09',
-                concepto: 'Expensa Ordinaria Septiembre 2026',
-                monto: 520,
-                debe: 520,
-                haber: 0,
-                saldoProgresivo: morosoEncontrado ? morosoEncontrado.totalDeuda : 0,
-                estado: morosoEncontrado ? 'Moroso' : 'Pagado'
-              }
-            ]
-          })
+          setEstadoCuentaDpto(null)
         }
       } finally {
         if (isMounted) setIsLoadingDpto(false)
@@ -479,19 +367,160 @@ export default function ReportesPage() {
     return () => {
       isMounted = false
     }
-  }, [selectedDptoId, departamentos, morososList])
+  }, [selectedDptoId])
 
-  // Datos del período seleccionado
-  const currentPeriodData = useMemo(() => {
-    return mesesData.find((d) => d.mes === selectedPeriod) || mesesData[mesesData.length - 1]
+  // ── Cálculo Reactivo de Balance Mensual (12 Meses del Año) ────────────────────
+
+  const mesesData = useMemo<MesFinanciero[]>(() => {
+    return NOMBRES_MESES.map((info) => {
+      const claveMes = `${selectedYear}-${info.mesNumero}`
+
+      // Suma reactiva de ingresos del mes
+      const ingresosMes = movimientosList
+        .filter((m) => m.tipo === 'Ingreso' && extraerClaveMes(m.fecha) === claveMes)
+        .reduce((acc, m) => acc + (Number(m.monto) || 0), 0)
+
+      // Suma reactiva de egresos del mes
+      const egresosMes = movimientosList
+        .filter((m) => m.tipo === 'Egreso' && extraerClaveMes(m.fecha) === claveMes)
+        .reduce((acc, m) => acc + (Number(m.monto) || 0), 0)
+
+      // Tasa de morosidad real desde expensas del período
+      const expensasDelMes = expensasList.filter((e) => extraerClaveMes(e.periodo) === claveMes)
+      const totalExp = expensasDelMes.length
+      const enMora = expensasDelMes.filter(
+        (e) =>
+          e.estado === 'Vencida' ||
+          (e.moraCalculada !== undefined && Number(e.moraCalculada) > 0) ||
+          (Number(e.saldoPendiente) > 0 && e.vencida)
+      ).length
+
+      const tasaMorosidad = totalExp > 0 ? Math.round((enMora / totalExp) * 1000) / 10 : 0
+
+      return {
+        mes: `${info.nombre} ${selectedYear}`,
+        mesCorto: info.corto,
+        anio: selectedYear,
+        claveMes,
+        ingresos: ingresosMes,
+        egresos: egresosMes,
+        balance: ingresosMes - egresosMes,
+        tasaMorosidad,
+      }
+    })
+  }, [movimientosList, expensasList, selectedYear])
+
+  // Clave YYYY-MM del período seleccionado actualmente
+  const clavePeriodoSeleccionado = useMemo(() => {
+    const encontrado = mesesData.find((d) => d.mes === selectedPeriod)
+    return encontrado?.claveMes || null
   }, [mesesData, selectedPeriod])
 
+  // Datos del período seleccionado
+  const currentPeriodData = useMemo<MesFinanciero>(() => {
+    return (
+      mesesData.find((d) => d.mes === selectedPeriod) ||
+      mesesData[mesesData.length - 1] || {
+        mes: selectedPeriod,
+        mesCorto: selectedPeriod.slice(0, 3),
+        anio: selectedYear,
+        claveMes: `${selectedYear}-01`,
+        ingresos: 0,
+        egresos: 0,
+        balance: 0,
+        tasaMorosidad: 0,
+      }
+    )
+  }, [mesesData, selectedPeriod, selectedYear])
+
+  // Totales anuales reactivos
   const totalIngresosAnual = useMemo(() => mesesData.reduce((acc, curr) => acc + curr.ingresos, 0), [mesesData])
   const totalEgresosAnual = useMemo(() => mesesData.reduce((acc, curr) => acc + curr.egresos, 0), [mesesData])
   const superavitAnual = totalIngresosAnual - totalEgresosAnual
   const fondoReservaAcumulado = Math.round(totalIngresosAnual * 0.05)
 
-  // Morosos filtrados
+  // ── Cálculo Reactivo de Categorías de Ingreso y Gasto del Período ─────────────
+
+  const categoriasGasto = useMemo<CategoriaGasto[]>(() => {
+    const egresosPeriodo = movimientosList.filter(
+      (m) =>
+        m.tipo === 'Egreso' &&
+        (clavePeriodoSeleccionado ? extraerClaveMes(m.fecha) === clavePeriodoSeleccionado : true)
+    )
+    const totalEgresos = egresosPeriodo.reduce((acc, m) => acc + (Number(m.monto) || 0), 0)
+
+    const agrupado: Record<string, number> = {}
+    for (const m of egresosPeriodo) {
+      const nombre = m.categoria?.nombre || m.descripcion || 'Gastos Operativos Varios'
+      agrupado[nombre] = (agrupado[nombre] || 0) + (Number(m.monto) || 0)
+    }
+
+    const estilos = [
+      { color: 'bg-indigo-600', textClass: 'text-indigo-600' },
+      { color: 'bg-blue-600', textClass: 'text-blue-600' },
+      { color: 'bg-emerald-600', textClass: 'text-emerald-600' },
+      { color: 'bg-amber-600', textClass: 'text-amber-600' },
+      { color: 'bg-teal-600', textClass: 'text-teal-600' },
+      { color: 'bg-purple-600', textClass: 'text-purple-600' },
+      { color: 'bg-rose-600', textClass: 'text-rose-600' },
+    ]
+
+    const entries = Object.entries(agrupado).sort((a, b) => b[1] - a[1])
+    return entries.map(([nombre, monto], idx) => {
+      const estilo = estilos[idx % estilos.length]
+      const porcentaje = totalEgresos > 0 ? Math.round((monto / totalEgresos) * 1000) / 10 : 0
+      return {
+        nombre,
+        monto,
+        porcentaje,
+        color: estilo.color,
+        textClass: estilo.textClass,
+      }
+    })
+  }, [movimientosList, clavePeriodoSeleccionado])
+
+  const categoriasIngreso = useMemo<CategoriaIngreso[]>(() => {
+    const ingresosPeriodo = movimientosList.filter(
+      (m) =>
+        m.tipo === 'Ingreso' &&
+        (clavePeriodoSeleccionado ? extraerClaveMes(m.fecha) === clavePeriodoSeleccionado : true)
+    )
+    const totalIngresos = ingresosPeriodo.reduce((acc, m) => acc + (Number(m.monto) || 0), 0)
+
+    const agrupado: Record<string, number> = {}
+    for (const m of ingresosPeriodo) {
+      const nombre = m.categoria?.nombre || m.descripcion || 'Ingresos por Expensas Comunes'
+      agrupado[nombre] = (agrupado[nombre] || 0) + (Number(m.monto) || 0)
+    }
+
+    const colores = ['bg-emerald-600', 'bg-blue-600', 'bg-indigo-600', 'bg-purple-600', 'bg-teal-600', 'bg-amber-600']
+    const entries = Object.entries(agrupado).sort((a, b) => b[1] - a[1])
+
+    return entries.map(([nombre, monto], idx) => {
+      const color = colores[idx % colores.length]
+      const porcentaje = totalIngresos > 0 ? Math.round((monto / totalIngresos) * 1000) / 10 : 0
+      return {
+        nombre,
+        monto,
+        porcentaje,
+        color,
+      }
+    })
+  }, [movimientosList, clavePeriodoSeleccionado])
+
+  // ── Saldos de Bancos y Liquidez ──────────────────────────────────────────────
+
+  const saldoBancoTotal = useMemo(() => {
+    return cuentasBancarias.reduce(
+      (acc, c) => acc + (Number(c.saldoCalculado) || Number(c.saldoActual) || 0),
+      0
+    )
+  }, [cuentasBancarias])
+
+  const liquidezTotal = saldoBancoTotal + saldoCajaChica
+
+  // ── Morosos Filtrados ────────────────────────────────────────────────────────
+
   const morososFiltrados = useMemo(() => {
     return morososList.filter((m) => {
       const cumpleFiltroSeveridad =
@@ -514,10 +543,11 @@ export default function ReportesPage() {
   }, [morososList, searchMoroso, filtroSeveridad])
 
   const totalDeudaMorosos = useMemo(() => {
-    return morososList.reduce((acc, m) => acc + m.totalDeuda, 0)
+    return morososList.reduce((acc, m) => acc + (Number(m.totalDeuda) || 0), 0)
   }, [morososList])
 
-  // Movimientos filtrados para el Visor 8.3
+  // ── Movimientos Filtrados para el Visor 8.3 ───────────────────────────────────
+
   const movimientosFiltrados = useMemo(() => {
     return movimientosList.filter((mov) => {
       if (filtroTipoMov !== 'TODOS' && mov.tipo !== filtroTipoMov) return false
@@ -531,6 +561,12 @@ export default function ReportesPage() {
       )
     })
   }, [movimientosList, filtroTipoMov, searchMovimiento])
+
+  // Escala máxima del gráfico de barras mes a mes
+  const maxValGrafico = useMemo(() => {
+    const vals = mesesData.map((m) => Math.max(m.ingresos, m.egresos))
+    return Math.max(1000, ...vals)
+  }, [mesesData])
 
   // Notificación por WhatsApp oficial a deudor
   const handleNotificarWhatsApp = (m: MorosoItem) => {
@@ -587,6 +623,27 @@ export default function ReportesPage() {
             <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin text-purple-600' : ''}`} />
           </button>
 
+          {/* Selector de Gestión / Año */}
+          <div className="relative">
+            <select
+              value={selectedYear}
+              onChange={(e) => {
+                const anio = Number(e.target.value)
+                setSelectedYear(anio)
+                const mesActualTexto = selectedPeriod.split(' ')[0]
+                setSelectedPeriod(`${mesActualTexto} ${anio}`)
+              }}
+              className="bg-[#ded8cc] dark:bg-slate-800 border border-[#cec8bc] dark:border-slate-700 text-[#262422] dark:text-slate-100 rounded-xl px-3 py-2 text-xs font-bold focus:outline-none focus:ring-2 focus:ring-purple-600 appearance-none pr-7 cursor-pointer shadow-xs"
+            >
+              {[2024, 2025, 2026, 2027].map((y) => (
+                <option key={y} value={y}>
+                  Gestión {y}
+                </option>
+              ))}
+            </select>
+            <ChevronDown className="w-3.5 h-3.5 absolute right-2 top-1/2 -translate-y-1/2 text-[#7d776f] pointer-events-none" />
+          </div>
+
           {/* Selector de Mes */}
           <div className="relative">
             <select
@@ -614,13 +671,13 @@ export default function ReportesPage() {
         </div>
       </div>
 
-      {/* ── TARJETAS KPI SUPERIORES (EJECUTIVAS) ──────────────────────────────── */}
+      {/* ── TARJETAS KPI SUPERIORES (EJECUTIVAS REACTIVAS) ───────────────────── */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {/* Total Ingresos */}
         <div className="bg-[#ede9e1] dark:bg-slate-900 p-5 rounded-2xl border border-[#cec8bc] dark:border-slate-800 shadow-xs">
           <div className="flex items-center justify-between">
             <span className="text-xs font-bold text-[#7d776f] dark:text-slate-400 uppercase tracking-wider">
-              Ingresos Recaudados
+              Ingresos Recaudados ({currentPeriodData.mesCorto})
             </span>
             <div className="p-2 rounded-xl bg-emerald-100 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-400">
               <TrendingUp className="w-4 h-4" />
@@ -632,7 +689,7 @@ export default function ReportesPage() {
             </div>
             <div className="flex items-center gap-1.5 mt-1 text-xs text-emerald-700 dark:text-emerald-400 font-semibold">
               <ArrowUpRight className="w-3.5 h-3.5" />
-              <span>Expensas comunes y áreas del edificio</span>
+              <span>Expensas comunes y recaudación</span>
             </div>
           </div>
         </div>
@@ -641,7 +698,7 @@ export default function ReportesPage() {
         <div className="bg-[#ede9e1] dark:bg-slate-900 p-5 rounded-2xl border border-[#cec8bc] dark:border-slate-800 shadow-xs">
           <div className="flex items-center justify-between">
             <span className="text-xs font-bold text-[#7d776f] dark:text-slate-400 uppercase tracking-wider">
-              Egresos Ejecutados
+              Egresos Ejecutados ({currentPeriodData.mesCorto})
             </span>
             <div className="p-2 rounded-xl bg-rose-100 dark:bg-rose-950/50 text-rose-700 dark:text-rose-400">
               <TrendingDown className="w-4 h-4" />
@@ -837,9 +894,8 @@ export default function ReportesPage() {
               {/* Lista interactiva de barras mes a mes */}
               <div className="space-y-2.5 pt-1">
                 {mesesData.map((item) => {
-                  const maxVal = 16000
-                  const ingresosPercent = Math.min((item.ingresos / maxVal) * 100, 100)
-                  const egresosPercent = Math.min((item.egresos / maxVal) * 100, 100)
+                  const ingresosPercent = Math.min((item.ingresos / maxValGrafico) * 100, 100)
+                  const egresosPercent = Math.min((item.egresos / maxValGrafico) * 100, 100)
                   const isSelected = item.mes === selectedPeriod
 
                   return (
@@ -860,8 +916,12 @@ export default function ReportesPage() {
                         <div className="flex items-center gap-3 font-mono">
                           <span className="text-xs text-[#7d776f] dark:text-slate-400">
                             Superávit:{' '}
-                            <span className="text-purple-700 dark:text-purple-400 font-bold">
-                              +Bs. {item.balance.toLocaleString('es-BO')}
+                            <span
+                              className={`font-bold ${
+                                item.balance >= 0 ? 'text-purple-700 dark:text-purple-400' : 'text-rose-700 dark:text-rose-400'
+                              }`}
+                            >
+                              {item.balance >= 0 ? '+' : ''}Bs. {item.balance.toLocaleString('es-BO', { minimumFractionDigits: 2 })}
                             </span>
                           </span>
                         </div>
@@ -879,8 +939,8 @@ export default function ReportesPage() {
                               style={{ width: `${ingresosPercent}%` }}
                             />
                           </div>
-                          <span className="text-[10px] font-mono text-emerald-800 dark:text-emerald-400 font-bold w-20 text-right">
-                            Bs. {item.ingresos.toLocaleString('es-BO')}
+                          <span className="text-[10px] font-mono text-emerald-800 dark:text-emerald-400 font-bold w-24 text-right">
+                            Bs. {item.ingresos.toLocaleString('es-BO', { minimumFractionDigits: 2 })}
                           </span>
                         </div>
 
@@ -895,8 +955,8 @@ export default function ReportesPage() {
                               style={{ width: `${egresosPercent}%` }}
                             />
                           </div>
-                          <span className="text-[10px] font-mono text-rose-800 dark:text-rose-400 font-bold w-20 text-right">
-                            Bs. {item.egresos.toLocaleString('es-BO')}
+                          <span className="text-[10px] font-mono text-rose-800 dark:text-rose-400 font-bold w-24 text-right">
+                            Bs. {item.egresos.toLocaleString('es-BO', { minimumFractionDigits: 2 })}
                           </span>
                         </div>
                       </div>
@@ -910,13 +970,13 @@ export default function ReportesPage() {
                 <span>Total Consolidado Gestión {selectedYear}:</span>
                 <div className="flex flex-wrap gap-4 font-mono">
                   <span className="text-emerald-700 dark:text-emerald-400">
-                    Ingresos: Bs. {totalIngresosAnual.toLocaleString('es-BO')}
+                    Ingresos: Bs. {totalIngresosAnual.toLocaleString('es-BO', { minimumFractionDigits: 2 })}
                   </span>
                   <span className="text-rose-700 dark:text-rose-400">
-                    Egresos: Bs. {totalEgresosAnual.toLocaleString('es-BO')}
+                    Egresos: Bs. {totalEgresosAnual.toLocaleString('es-BO', { minimumFractionDigits: 2 })}
                   </span>
                   <span className="text-purple-700 dark:text-purple-400 font-black">
-                    Superávit Neto: Bs. {superavitAnual.toLocaleString('es-BO')}
+                    Superávit Neto: {superavitAnual >= 0 ? '+' : ''}Bs. {superavitAnual.toLocaleString('es-BO', { minimumFractionDigits: 2 })}
                   </span>
                 </div>
               </div>
@@ -937,21 +997,27 @@ export default function ReportesPage() {
                 </div>
 
                 <div className="space-y-3.5">
-                  {CATEGORIAS_GASTO_DEFAULT.map((cat) => (
-                    <div key={cat.nombre} className="space-y-1">
-                      <div className="flex justify-between text-xs">
-                        <span className="font-bold text-[#262422] dark:text-slate-200 truncate pr-2">
-                          {cat.nombre}
-                        </span>
-                        <span className="font-mono font-bold text-[#5c5750] dark:text-slate-300">
-                          Bs. {cat.monto.toLocaleString('es-BO')} ({cat.porcentaje}%)
-                        </span>
-                      </div>
-                      <div className="w-full bg-[#d5cfc2] dark:bg-slate-800 h-2 rounded-full overflow-hidden">
-                        <div className={`${cat.color} h-full rounded-full`} style={{ width: `${cat.porcentaje}%` }} />
-                      </div>
+                  {categoriasGasto.length === 0 ? (
+                    <div className="py-6 text-center text-xs text-[#7d776f] dark:text-slate-400 font-semibold">
+                      No se registraron egresos en este período.
                     </div>
-                  ))}
+                  ) : (
+                    categoriasGasto.map((cat) => (
+                      <div key={cat.nombre} className="space-y-1">
+                        <div className="flex justify-between text-xs">
+                          <span className="font-bold text-[#262422] dark:text-slate-200 truncate pr-2">
+                            {cat.nombre}
+                          </span>
+                          <span className="font-mono font-bold text-[#5c5750] dark:text-slate-300">
+                            Bs. {cat.monto.toLocaleString('es-BO', { minimumFractionDigits: 2 })} ({cat.porcentaje}%)
+                          </span>
+                        </div>
+                        <div className="w-full bg-[#d5cfc2] dark:bg-slate-800 h-2 rounded-full overflow-hidden">
+                          <div className={`${cat.color} h-full rounded-full transition-all duration-500`} style={{ width: `${cat.porcentaje}%` }} />
+                        </div>
+                      </div>
+                    ))
+                  )}
                 </div>
               </div>
 
@@ -968,21 +1034,27 @@ export default function ReportesPage() {
                 </div>
 
                 <div className="space-y-3.5">
-                  {CATEGORIAS_INGRESO_DEFAULT.map((cat) => (
-                    <div key={cat.nombre} className="space-y-1">
-                      <div className="flex justify-between text-xs">
-                        <span className="font-bold text-[#262422] dark:text-slate-200 truncate pr-2">
-                          {cat.nombre}
-                        </span>
-                        <span className="font-mono font-bold text-[#5c5750] dark:text-slate-300">
-                          Bs. {cat.monto.toLocaleString('es-BO')} ({cat.porcentaje}%)
-                        </span>
-                      </div>
-                      <div className="w-full bg-[#d5cfc2] dark:bg-slate-800 h-2 rounded-full overflow-hidden">
-                        <div className={`${cat.color} h-full rounded-full`} style={{ width: `${cat.porcentaje}%` }} />
-                      </div>
+                  {categoriasIngreso.length === 0 ? (
+                    <div className="py-6 text-center text-xs text-[#7d776f] dark:text-slate-400 font-semibold">
+                      No se registraron ingresos en este período.
                     </div>
-                  ))}
+                  ) : (
+                    categoriasIngreso.map((cat) => (
+                      <div key={cat.nombre} className="space-y-1">
+                        <div className="flex justify-between text-xs">
+                          <span className="font-bold text-[#262422] dark:text-slate-200 truncate pr-2">
+                            {cat.nombre}
+                          </span>
+                          <span className="font-mono font-bold text-[#5c5750] dark:text-slate-300">
+                            Bs. {cat.monto.toLocaleString('es-BO', { minimumFractionDigits: 2 })} ({cat.porcentaje}%)
+                          </span>
+                        </div>
+                        <div className="w-full bg-[#d5cfc2] dark:bg-slate-800 h-2 rounded-full overflow-hidden">
+                          <div className={`${cat.color} h-full rounded-full transition-all duration-500`} style={{ width: `${cat.porcentaje}%` }} />
+                        </div>
+                      </div>
+                    ))
+                  )}
                 </div>
 
                 <div className="p-3.5 rounded-2xl bg-purple-100/60 dark:bg-purple-950/40 border border-purple-200 dark:border-purple-800/40 text-xs text-purple-900 dark:text-purple-300">
@@ -1025,7 +1097,7 @@ export default function ReportesPage() {
                 <button
                   type="button"
                   onClick={() => setFiltroSeveridad('TODOS')}
-                  className={`px-3 py-1 rounded-lg transition-all ${
+                  className={`px-3 py-1 rounded-lg transition-all cursor-pointer ${
                     filtroSeveridad === 'TODOS'
                       ? 'bg-purple-700 text-white shadow-xs'
                       : 'text-[#5c5750] dark:text-slate-300 hover:text-[#262422]'
@@ -1036,7 +1108,7 @@ export default function ReportesPage() {
                 <button
                   type="button"
                   onClick={() => setFiltroSeveridad('AVISO')}
-                  className={`px-3 py-1 rounded-lg transition-all ${
+                  className={`px-3 py-1 rounded-lg transition-all cursor-pointer ${
                     filtroSeveridad === 'AVISO'
                       ? 'bg-purple-700 text-white shadow-xs'
                       : 'text-[#5c5750] dark:text-slate-300 hover:text-[#262422]'
@@ -1047,7 +1119,7 @@ export default function ReportesPage() {
                 <button
                   type="button"
                   onClick={() => setFiltroSeveridad('MORA')}
-                  className={`px-3 py-1 rounded-lg transition-all ${
+                  className={`px-3 py-1 rounded-lg transition-all cursor-pointer ${
                     filtroSeveridad === 'MORA'
                       ? 'bg-purple-700 text-white shadow-xs'
                       : 'text-[#5c5750] dark:text-slate-300 hover:text-[#262422]'
@@ -1058,7 +1130,7 @@ export default function ReportesPage() {
                 <button
                   type="button"
                   onClick={() => setFiltroSeveridad('CRITICO')}
-                  className={`px-3 py-1 rounded-lg transition-all ${
+                  className={`px-3 py-1 rounded-lg transition-all cursor-pointer ${
                     filtroSeveridad === 'CRITICO'
                       ? 'bg-purple-700 text-white shadow-xs'
                       : 'text-[#5c5750] dark:text-slate-300 hover:text-[#262422]'
@@ -1199,7 +1271,7 @@ export default function ReportesPage() {
             <div className="bg-[#ede9e1] dark:bg-slate-900 p-5 rounded-2xl border border-[#cec8bc] dark:border-slate-800 shadow-xs">
               <div className="flex items-center justify-between">
                 <span className="text-xs font-bold text-[#7d776f] dark:text-slate-400 uppercase">
-                  Cuenta Corriente Banco BNB
+                  {cuentasBancarias.length > 0 ? cuentasBancarias[0].banco : 'Cuentas Bancarias'}
                 </span>
                 <div className="p-2 rounded-xl bg-blue-100 dark:bg-blue-950/50 text-blue-700 dark:text-blue-400">
                   <Landmark className="w-4 h-4" />
@@ -1207,10 +1279,12 @@ export default function ReportesPage() {
               </div>
               <div className="mt-3">
                 <div className="text-2xl font-black text-[#262422] dark:text-white">
-                  Bs. {saldoBancoBNB.toLocaleString('es-BO', { minimumFractionDigits: 2 })}
+                  Bs. {saldoBancoTotal.toLocaleString('es-BO', { minimumFractionDigits: 2 })}
                 </div>
-                <div className="text-[11px] text-[#7d776f] dark:text-slate-400 mt-1 font-semibold">
-                  Cta: 2501984201 · Recaudación Expensas y Pagos QR
+                <div className="text-[11px] text-[#7d776f] dark:text-slate-400 mt-1 font-semibold truncate">
+                  {cuentasBancarias.length > 0
+                    ? `Cta: ${cuentasBancarias[0].numeroCuenta}${cuentasBancarias.length > 1 ? ` (+${cuentasBancarias.length - 1} más)` : ''}`
+                    : 'Sin cuentas bancarias registradas'}
                 </div>
               </div>
             </div>
@@ -1245,7 +1319,7 @@ export default function ReportesPage() {
               </div>
               <div className="mt-3">
                 <div className="text-2xl font-black text-purple-700 dark:text-purple-400">
-                  Bs. {(saldoBancoBNB + saldoCajaChica).toLocaleString('es-BO', { minimumFractionDigits: 2 })}
+                  Bs. {liquidezTotal.toLocaleString('es-BO', { minimumFractionDigits: 2 })}
                 </div>
                 <div className="text-[11px] text-[#7d776f] dark:text-slate-400 mt-1 font-semibold">
                   Fondos activos conciliados al 100%
@@ -1272,7 +1346,7 @@ export default function ReportesPage() {
                   <button
                     type="button"
                     onClick={() => setFiltroTipoMov('TODOS')}
-                    className={`px-3 py-1 rounded-lg transition-all ${
+                    className={`px-3 py-1 rounded-lg transition-all cursor-pointer ${
                       filtroTipoMov === 'TODOS'
                         ? 'bg-purple-700 text-white shadow-xs'
                         : 'text-[#5c5750] dark:text-slate-300'
@@ -1283,7 +1357,7 @@ export default function ReportesPage() {
                   <button
                     type="button"
                     onClick={() => setFiltroTipoMov('Ingreso')}
-                    className={`px-3 py-1 rounded-lg transition-all ${
+                    className={`px-3 py-1 rounded-lg transition-all cursor-pointer ${
                       filtroTipoMov === 'Ingreso'
                         ? 'bg-purple-700 text-white shadow-xs'
                         : 'text-[#5c5750] dark:text-slate-300'
@@ -1294,7 +1368,7 @@ export default function ReportesPage() {
                   <button
                     type="button"
                     onClick={() => setFiltroTipoMov('Egreso')}
-                    className={`px-3 py-1 rounded-lg transition-all ${
+                    className={`px-3 py-1 rounded-lg transition-all cursor-pointer ${
                       filtroTipoMov === 'Egreso'
                         ? 'bg-purple-700 text-white shadow-xs'
                         : 'text-[#5c5750] dark:text-slate-300'
@@ -1408,15 +1482,9 @@ export default function ReportesPage() {
                     </option>
                   ))
                 ) : (
-                  <>
-                    <option value={101}>Departamento 101</option>
-                    <option value={102}>Departamento 102</option>
-                    <option value={103}>Departamento 103</option>
-                    <option value={201}>Departamento 201</option>
-                    <option value={202}>Departamento 202</option>
-                    <option value={301}>Departamento 301</option>
-                    <option value={401}>Departamento 401</option>
-                  </>
+                  <option value="" disabled>
+                    Cargando departamentos...
+                  </option>
                 )}
               </select>
               <ChevronDown className="w-4 h-4 absolute right-3 top-1/2 -translate-y-1/2 text-[#7d776f] pointer-events-none" />
@@ -1424,7 +1492,7 @@ export default function ReportesPage() {
           </div>
 
           {/* Ficha Resumen del Departamento Seleccionado */}
-          {estadoCuentaDpto && (
+          {estadoCuentaDpto ? (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
               <div className="bg-[#ede9e1] dark:bg-slate-900 p-5 rounded-2xl border border-[#cec8bc] dark:border-slate-800 shadow-xs">
                 <span className="text-[11px] font-bold text-[#7d776f] dark:text-slate-400 uppercase">
@@ -1461,7 +1529,7 @@ export default function ReportesPage() {
                   Bs. {estadoCuentaDpto.resumen.totalPagado.toLocaleString('es-BO', { minimumFractionDigits: 2 })}
                 </div>
                 <div className="text-xs text-[#7d776f] dark:text-slate-400 mt-0.5">
-                  Obligaciones: Bs. {estadoCuentaDpto.resumen.totalObligaciones.toLocaleString('es-BO')}
+                  Obligaciones: Bs. {estadoCuentaDpto.resumen.totalObligaciones.toLocaleString('es-BO', { minimumFractionDigits: 2 })}
                 </div>
               </div>
 
@@ -1487,88 +1555,108 @@ export default function ReportesPage() {
                 </div>
               </div>
             </div>
+          ) : (
+            <div className="bg-[#ede9e1] dark:bg-slate-900 p-8 rounded-3xl border border-[#cec8bc] dark:border-slate-800 text-center text-[#7d776f] dark:text-slate-400">
+              <Building className="w-10 h-10 mx-auto mb-2 opacity-40 text-purple-600" />
+              <div className="font-extrabold text-sm text-[#262422] dark:text-slate-200">
+                Sin movimientos registrados para esta unidad
+              </div>
+              <div className="text-xs mt-1">
+                Este departamento aún no cuenta con obligaciones emitidas o pagos registrados en el sistema.
+              </div>
+            </div>
           )}
 
           {/* Tabla Cronológica de Movimientos del Departamento */}
-          <div className="bg-[#ede9e1] dark:bg-slate-900 p-5 sm:p-6 rounded-3xl border border-[#cec8bc] dark:border-slate-800 shadow-xs space-y-4">
-            <div className="flex items-center justify-between border-b border-[#cec8bc] dark:border-slate-800 pb-3">
-              <div>
-                <h3 className="text-sm font-extrabold text-[#262422] dark:text-white">
-                  Línea de Tiempo Financiera: Expensas Emitidas y Pagos Registrados
-                </h3>
-                <p className="text-xs text-[#7d776f] dark:text-slate-400">
-                  Trazabilidad de cada obligación y abono con saldo progresivo.
-                </p>
+          {estadoCuentaDpto && (
+            <div className="bg-[#ede9e1] dark:bg-slate-900 p-5 sm:p-6 rounded-3xl border border-[#cec8bc] dark:border-slate-800 shadow-xs space-y-4">
+              <div className="flex items-center justify-between border-b border-[#cec8bc] dark:border-slate-800 pb-3">
+                <div>
+                  <h3 className="text-sm font-extrabold text-[#262422] dark:text-white">
+                    Línea de Tiempo Financiera: Expensas Emitidas y Pagos Registrados
+                  </h3>
+                  <p className="text-xs text-[#7d776f] dark:text-slate-400">
+                    Trazabilidad de cada obligación y abono con saldo progresivo.
+                  </p>
+                </div>
+
+                <button
+                  onClick={() => window.print()}
+                  className="px-3 py-1.5 rounded-xl bg-[#dfd9ce] hover:bg-[#d5cfc2] dark:bg-slate-800 dark:hover:bg-slate-700 text-[#5c5750] dark:text-slate-300 text-xs font-bold inline-flex items-center gap-1.5 transition-all cursor-pointer"
+                >
+                  <Printer className="w-3.5 h-3.5" />
+                  <span>Imprimir Extracto</span>
+                </button>
               </div>
 
-              <button
-                onClick={() => window.print()}
-                className="px-3 py-1.5 rounded-xl bg-[#dfd9ce] hover:bg-[#d5cfc2] dark:bg-slate-800 dark:hover:bg-slate-700 text-[#5c5750] dark:text-slate-300 text-xs font-bold inline-flex items-center gap-1.5 transition-all cursor-pointer"
-              >
-                <Printer className="w-3.5 h-3.5" />
-                <span>Imprimir Extracto</span>
-              </button>
-            </div>
-
-            {isLoadingDpto ? (
-              <div className="py-12 text-center text-[#7d776f] dark:text-slate-400">
-                <RefreshCw className="w-6 h-6 animate-spin mx-auto mb-2 text-purple-600" />
-                <span>Cargando extracto de la unidad...</span>
-              </div>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full text-left text-xs">
-                  <thead>
-                    <tr className="border-b border-[#cec8bc] dark:border-slate-800 text-[#7d776f] dark:text-slate-400 font-bold uppercase tracking-wider">
-                      <th className="pb-3 px-3">Fecha</th>
-                      <th className="pb-3 px-3">Concepto / Obligación</th>
-                      <th className="pb-3 px-3">Medio de Pago</th>
-                      <th className="pb-3 px-3 text-right">Cargo (Debe)</th>
-                      <th className="pb-3 px-3 text-right">Abono (Haber)</th>
-                      <th className="pb-3 px-3 text-right">Saldo Progresivo</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-[#cec8bc]/50 dark:divide-slate-800/60 font-mono">
-                    {estadoCuentaDpto?.movimientos.map((m) => (
-                      <tr key={m.id} className="hover:bg-[#e4ded4]/60 dark:hover:bg-slate-800/40 transition-colors">
-                        <td className="py-3 px-3 text-[#5c5750] dark:text-slate-300">
-                          {fechaSolo(m.fecha)}
-                        </td>
-                        <td className="py-3 px-3 font-sans">
-                          <div className="font-extrabold text-[#262422] dark:text-slate-200">
-                            {m.concepto}
-                          </div>
-                          {m.periodo && (
-                            <span className="text-[10px] text-[#7d776f] dark:text-slate-400">
-                              Período fiscal: {m.periodo}
-                            </span>
-                          )}
-                        </td>
-                        <td className="py-3 px-3 font-sans">
-                          {m.metodoPago ? (
-                            <span className="px-2 py-0.5 rounded-md bg-emerald-100 text-emerald-800 dark:bg-emerald-950/70 dark:text-emerald-300 text-[10px] font-black">
-                              {m.metodoPago}
-                            </span>
-                          ) : (
-                            <span className="text-[#7d776f] dark:text-slate-400 text-[11px]">—</span>
-                          )}
-                        </td>
-                        <td className="py-3 px-3 text-right text-rose-700 dark:text-rose-400 font-bold">
-                          {m.debe > 0 ? `Bs. ${m.debe.toFixed(2)}` : '—'}
-                        </td>
-                        <td className="py-3 px-3 text-right text-emerald-700 dark:text-emerald-400 font-bold">
-                          {m.haber > 0 ? `Bs. ${m.haber.toFixed(2)}` : '—'}
-                        </td>
-                        <td className="py-3 px-3 text-right font-black text-[#262422] dark:text-white">
-                          Bs. {m.saldoProgresivo.toFixed(2)}
-                        </td>
+              {isLoadingDpto ? (
+                <div className="py-12 text-center text-[#7d776f] dark:text-slate-400">
+                  <RefreshCw className="w-6 h-6 animate-spin mx-auto mb-2 text-purple-600" />
+                  <span>Cargando extracto de la unidad...</span>
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-xs">
+                    <thead>
+                      <tr className="border-b border-[#cec8bc] dark:border-slate-800 text-[#7d776f] dark:text-slate-400 font-bold uppercase tracking-wider">
+                        <th className="pb-3 px-3">Fecha</th>
+                        <th className="pb-3 px-3">Concepto / Obligación</th>
+                        <th className="pb-3 px-3">Medio de Pago</th>
+                        <th className="pb-3 px-3 text-right">Cargo (Debe)</th>
+                        <th className="pb-3 px-3 text-right">Abono (Haber)</th>
+                        <th className="pb-3 px-3 text-right">Saldo Progresivo</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </div>
+                    </thead>
+                    <tbody className="divide-y divide-[#cec8bc]/50 dark:divide-slate-800/60 font-mono">
+                      {estadoCuentaDpto.movimientos.length === 0 ? (
+                        <tr>
+                          <td colSpan={6} className="py-6 text-center text-[#7d776f] font-sans">
+                            No se registran movimientos en la cuenta de este departamento.
+                          </td>
+                        </tr>
+                      ) : (
+                        estadoCuentaDpto.movimientos.map((m) => (
+                          <tr key={m.id} className="hover:bg-[#e4ded4]/60 dark:hover:bg-slate-800/40 transition-colors">
+                            <td className="py-3 px-3 text-[#5c5750] dark:text-slate-300">
+                              {fechaSolo(m.fecha)}
+                            </td>
+                            <td className="py-3 px-3 font-sans">
+                              <div className="font-extrabold text-[#262422] dark:text-slate-200">
+                                {m.concepto}
+                              </div>
+                              {m.periodo && (
+                                <span className="text-[10px] text-[#7d776f] dark:text-slate-400">
+                                  Período fiscal: {m.periodo}
+                                </span>
+                              )}
+                            </td>
+                            <td className="py-3 px-3 font-sans">
+                              {m.metodoPago ? (
+                                <span className="px-2 py-0.5 rounded-md bg-emerald-100 text-emerald-800 dark:bg-emerald-950/70 dark:text-emerald-300 text-[10px] font-black">
+                                  {m.metodoPago}
+                                </span>
+                              ) : (
+                                <span className="text-[#7d776f] dark:text-slate-400 text-[11px]">—</span>
+                              )}
+                            </td>
+                            <td className="py-3 px-3 text-right text-rose-700 dark:text-rose-400 font-bold">
+                              {m.debe > 0 ? `Bs. ${Number(m.debe).toFixed(2)}` : '—'}
+                            </td>
+                            <td className="py-3 px-3 text-right text-emerald-700 dark:text-emerald-400 font-bold">
+                              {m.haber > 0 ? `Bs. ${Number(m.haber).toFixed(2)}` : '—'}
+                            </td>
+                            <td className="py-3 px-3 text-right font-black text-[#262422] dark:text-white">
+                              Bs. {Number(m.saldoProgresivo).toFixed(2)}
+                            </td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          )}
         </div>
       )}
 
@@ -1640,7 +1728,7 @@ export default function ReportesPage() {
                 <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-900 border">
                   <div className="text-[10px] font-bold uppercase text-[#7d776f]">Superávit Operativo</div>
                   <div className="text-base font-black text-purple-700 font-mono mt-0.5">
-                    +Bs. {superavitAnual.toLocaleString('es-BO', { minimumFractionDigits: 2 })}
+                    {superavitAnual >= 0 ? '+' : ''}Bs. {superavitAnual.toLocaleString('es-BO', { minimumFractionDigits: 2 })}
                   </div>
                 </div>
               </div>
@@ -1651,27 +1739,41 @@ export default function ReportesPage() {
                   1. Desglose de Egresos por Rubro ({selectedPeriod}):
                 </h4>
                 <div className="space-y-1.5 text-xs">
-                  {CATEGORIAS_GASTO_DEFAULT.map((c) => (
-                    <div key={c.nombre} className="flex justify-between py-1 border-b border-slate-100 dark:border-slate-800">
-                      <span>{c.nombre}</span>
-                      <span className="font-mono font-bold">Bs. {c.monto.toLocaleString('es-BO')} ({c.porcentaje}%)</span>
-                    </div>
-                  ))}
+                  {categoriasGasto.length === 0 ? (
+                    <div className="text-xs text-[#7d776f] py-2">Sin egresos registrados en este período.</div>
+                  ) : (
+                    categoriasGasto.map((c) => (
+                      <div key={c.nombre} className="flex justify-between py-1 border-b border-slate-100 dark:border-slate-800">
+                        <span>{c.nombre}</span>
+                        <span className="font-mono font-bold">
+                          Bs. {c.monto.toLocaleString('es-BO', { minimumFractionDigits: 2 })} ({c.porcentaje}%)
+                        </span>
+                      </div>
+                    ))
+                  )}
                 </div>
               </div>
 
               {/* Resumen de Cartera Morosa */}
               <div>
                 <h4 className="text-xs font-black uppercase tracking-wider text-[#5c5750] dark:text-slate-300 mb-2">
-                  2. Cartera Vencida y Morosidad (Total: Bs. {totalDeudaMorosos.toLocaleString('es-BO')}):
+                  2. Cartera Vencida y Morosidad (Total: Bs. {totalDeudaMorosos.toLocaleString('es-BO', { minimumFractionDigits: 2 })}):
                 </h4>
                 <div className="space-y-1.5 text-xs">
-                  {morososList.slice(0, 3).map((m) => (
-                    <div key={m.idDepartamento} className="flex justify-between py-1 border-b border-slate-100 dark:border-slate-800">
-                      <span>Dpto {m.numero} ({m.propietario?.nombres} {m.propietario?.apellidos})</span>
-                      <span className="font-mono font-bold text-rose-700">Bs. {m.totalDeuda.toLocaleString('es-BO')} ({m.expensasMoraCount} meses)</span>
+                  {morososList.length === 0 ? (
+                    <div className="text-xs text-emerald-700 font-semibold py-1">
+                      No existen departamentos en mora en este período.
                     </div>
-                  ))}
+                  ) : (
+                    morososList.slice(0, 5).map((m) => (
+                      <div key={m.idDepartamento} className="flex justify-between py-1 border-b border-slate-100 dark:border-slate-800">
+                        <span>Dpto {m.numero} ({m.propietario?.nombres || ''} {m.propietario?.apellidos || ''})</span>
+                        <span className="font-mono font-bold text-rose-700">
+                          Bs. {Number(m.totalDeuda).toLocaleString('es-BO', { minimumFractionDigits: 2 })} ({m.expensasMoraCount} {m.expensasMoraCount === 1 ? 'mes' : 'meses'})
+                        </span>
+                      </div>
+                    ))
+                  )}
                 </div>
               </div>
 

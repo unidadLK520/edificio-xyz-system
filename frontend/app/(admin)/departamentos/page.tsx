@@ -253,54 +253,181 @@ export default function DepartamentosPage() {
       }
       const json = await res.json()
       if (json.data && Array.isArray(json.data)) {
-        const mapped: UnidadItem[] = json.data.map((item: any) => ({
-          id: item.id,
-          tipoUnidad: item.tipoUnidad,
-          numero: item.numero,
-          piso: item.piso,
-          areaM2: item.areaM2,
-          tipologia:
-            item.tipologia ||
-            item.departamento?.tipo?.nombre ||
-            (item.areaM2 === 60
-              ? 'Tipo A (60 m²)'
-              : item.areaM2 === 80
-                ? 'Tipo B (80 m²)'
-                : item.areaM2 === 100
-                  ? 'Tipo C (100 m²)'
-                  : undefined),
-          estado: item.estado || 'Desocupado',
-          parqueo:
-            Array.isArray(item.parqueos) && item.parqueos.length > 0
-              ? item.parqueos.map((p: any) => p.numero).join(', ')
-              : item.parqueo || 'Sin parqueo',
-          baulera:
-            Array.isArray(item.bauleras) && item.bauleras.length > 0
-              ? item.bauleras.map((b: any) => b.numero).join(', ')
-              : item.baulera || 'Sin baulera',
-          propietario: item.propietario
-            ? (() => {
-                const dirRaw = item.propietario.direccion || ''
-                const matchEc = dirRaw.match(/\[Estado Civil: ([^|]+) \| Ocupantes: ([^\]]+)\]/)
-                return {
-                  id: item.propietario.idPersona,
-                  nombre:
-                    `${item.propietario.nombres || ''} ${item.propietario.apellidos || ''}`.trim() ||
-                    item.propietario.nombre,
-                  ci: item.propietario.ciNit || item.propietario.ci,
-                  telefono: item.propietario.telefono,
-                  correo: item.propietario.correo,
-                  direccion: dirRaw,
-                  estadoCivil: matchEc ? matchEc[1].trim() : undefined,
-                  ocupantes: matchEc ? matchEc[2].trim() : undefined
+        // Mapas auxiliares para parqueos y bauleras asignados por idDepartamento
+        const parqueosPorDeptoId = new Map<number, string[]>()
+        const baulerasPorDeptoId = new Map<number, string[]>()
+
+        json.data.forEach((item: any) => {
+          if (item.tipoUnidad === 'Parqueo' && item.idDepartamento) {
+            const list = parqueosPorDeptoId.get(item.idDepartamento) || []
+            if (item.numero && !list.includes(item.numero)) {
+              list.push(item.numero)
+            }
+            parqueosPorDeptoId.set(item.idDepartamento, list)
+          } else if (item.tipoUnidad === 'Baulera' && item.idDepartamento) {
+            const list = baulerasPorDeptoId.get(item.idDepartamento) || []
+            if (item.numero && !list.includes(item.numero)) {
+              list.push(item.numero)
+            }
+            baulerasPorDeptoId.set(item.idDepartamento, list)
+          }
+        })
+
+        const mapped: UnidadItem[] = json.data.map((item: any) => {
+          const isDepto = item.tipoUnidad === 'Departamento'
+
+          // 1. Parqueos fidedignos
+          let parqueoStr = 'Sin parqueo'
+          if (isDepto) {
+            const deptoParqueos: string[] = []
+            if (Array.isArray(item.parqueos)) {
+              item.parqueos.forEach((p: any) => {
+                if (p?.numero && !deptoParqueos.includes(p.numero)) {
+                  deptoParqueos.push(p.numero)
                 }
-              })()
-            : null,
-          inquilinoActual: item.inquilinoActual || null,
-          persona: item.persona,
-          departamento: item.departamento,
-          fechaRegistro: item.fechaRegistro || '2023-01-01'
-        }))
+              })
+            }
+            const desdeMapa = parqueosPorDeptoId.get(item.id) || []
+            desdeMapa.forEach((num) => {
+              if (!deptoParqueos.includes(num)) deptoParqueos.push(num)
+            })
+            if (deptoParqueos.length > 0) {
+              parqueoStr = deptoParqueos.join(', ')
+            } else if (item.parqueo && item.parqueo !== 'Sin parqueo') {
+              parqueoStr = item.parqueo
+            }
+          } else if (item.tipoUnidad === 'Parqueo') {
+            parqueoStr = item.numero
+          }
+
+          // 2. Bauleras fidedignas
+          let bauleraStr = 'Sin baulera'
+          if (isDepto) {
+            const deptoBauleras: string[] = []
+            if (Array.isArray(item.bauleras)) {
+              item.bauleras.forEach((b: any) => {
+                if (b?.numero && !deptoBauleras.includes(b.numero)) {
+                  deptoBauleras.push(b.numero)
+                }
+              })
+            }
+            const desdeMapaB = baulerasPorDeptoId.get(item.id) || []
+            desdeMapaB.forEach((num) => {
+              if (!deptoBauleras.includes(num)) deptoBauleras.push(num)
+            })
+            if (deptoBauleras.length > 0) {
+              bauleraStr = deptoBauleras.join(', ')
+            } else if (item.baulera && item.baulera !== 'Sin baulera') {
+              bauleraStr = item.baulera
+            }
+          } else if (item.tipoUnidad === 'Baulera') {
+            bauleraStr = item.numero
+          }
+
+          // 3. Propietario independiente
+          let propietarioObj = null
+          if (item.propietario) {
+            const dirRaw = item.propietario.direccion || ''
+            const matchEc = dirRaw.match(/\[Estado Civil: ([^|]+) \| Ocupantes: ([^\]]+)\]/)
+            propietarioObj = {
+              id: item.propietario.idPersona,
+              nombre:
+                `${item.propietario.nombres || ''} ${item.propietario.apellidos || ''}`.trim() ||
+                item.propietario.nombre,
+              ci: item.propietario.ciNit || item.propietario.ci,
+              telefono: item.propietario.telefono,
+              correo: item.propietario.correo,
+              direccion: dirRaw,
+              estadoCivil: matchEc ? matchEc[1].trim() : undefined,
+              ocupantes: matchEc ? matchEc[2].trim() : undefined
+            }
+          }
+
+          // 4. Inquilino / Ocupante independiente
+          let inquilinoObj = null
+          const ocupanteRaw = item.ocupanteActual
+          const tipoOcup = item.tipoOcupante || ''
+          const esInquilino =
+            tipoOcup.toLowerCase().includes('inquilino') ||
+            (ocupanteRaw && (!item.propietario || ocupanteRaw.idPersona !== item.propietario.idPersona))
+
+          if (ocupanteRaw && esInquilino) {
+            const dirInqRaw = ocupanteRaw.direccion || ''
+            const matchInqEc = dirInqRaw.match(/\[Estado Civil: ([^|]+) \| Ocupantes: ([^\]]+)\]/)
+            inquilinoObj = {
+              id: ocupanteRaw.idPersona,
+              nombre:
+                `${ocupanteRaw.nombres || ''} ${ocupanteRaw.apellidos || ''}`.trim() ||
+                ocupanteRaw.nombre,
+              ci: ocupanteRaw.ciNit || ocupanteRaw.ci,
+              telefono: ocupanteRaw.telefono || 'Sin teléfono',
+              correo: ocupanteRaw.correo,
+              direccion: dirInqRaw,
+              estadoCivil: matchInqEc ? matchInqEc[1].trim() : undefined,
+              ocupantes: matchInqEc ? matchInqEc[2].trim() : undefined
+            }
+          } else if (item.inquilinoActual) {
+            inquilinoObj = item.inquilinoActual
+          }
+
+          // 5. Estado de Ocupación Fidedigno
+          let estadoCalculado = item.estado || 'Desocupado'
+          if (isDepto) {
+            if (inquilinoObj) {
+              estadoCalculado = 'Alquilado'
+            } else if (propietarioObj) {
+              estadoCalculado = 'Ocupado por Propietario'
+            } else {
+              estadoCalculado = 'Desocupado'
+            }
+          } else {
+            if (item.departamento || item.idDepartamento || item.persona || item.idPersona) {
+              estadoCalculado = 'Asignado'
+            } else {
+              estadoCalculado = item.estado || 'Disponible'
+            }
+          }
+
+          return {
+            id: item.id,
+            tipoUnidad: item.tipoUnidad,
+            numero: item.numero,
+            piso: item.piso,
+            areaM2: item.areaM2,
+            tipologia:
+              item.tipologia ||
+              item.tipo ||
+              item.departamento?.tipo?.nombre ||
+              (item.areaM2 === 60
+                ? 'Tipo A (60 m²)'
+                : item.areaM2 === 80
+                  ? 'Tipo B (80 m²)'
+                  : item.areaM2 === 100
+                    ? 'Tipo C (100 m²)'
+                    : undefined),
+            estado: estadoCalculado,
+            parqueo: parqueoStr,
+            baulera: bauleraStr,
+            propietario: propietarioObj,
+            ocupanteActual: ocupanteRaw
+              ? {
+                  id: ocupanteRaw.idPersona,
+                  nombre:
+                    `${ocupanteRaw.nombres || ''} ${ocupanteRaw.apellidos || ''}`.trim() ||
+                    ocupanteRaw.nombre,
+                  ci: ocupanteRaw.ciNit || ocupanteRaw.ci,
+                  telefono: ocupanteRaw.telefono,
+                  correo: ocupanteRaw.correo,
+                  direccion: ocupanteRaw.direccion
+                }
+              : null,
+            tipoOcupante: item.tipoOcupante,
+            inquilinoActual: inquilinoObj,
+            persona: item.persona,
+            departamento: item.departamento,
+            fechaRegistro: item.fechaRegistro || '2023-01-01'
+          }
+        })
         setUnidades(mapped)
       } else {
         setUnidades([])
@@ -332,10 +459,15 @@ export default function DepartamentosPage() {
         (u.propietario &&
           (u.propietario.nombre.toLowerCase().includes(searchLower) ||
             u.propietario.ci.toLowerCase().includes(searchLower))) ||
-        (u.inquilinoActual && u.inquilinoActual.nombre.toLowerCase().includes(searchLower))
+        (u.inquilinoActual && u.inquilinoActual.nombre.toLowerCase().includes(searchLower)) ||
+        (u.parqueo && u.parqueo.toLowerCase().includes(searchLower)) ||
+        (u.baulera && u.baulera.toLowerCase().includes(searchLower))
 
       const matchTipo = filtroTipo === 'Todos' || u.tipoUnidad === filtroTipo
-      const matchEstado = filtroEstado === 'Todos' || u.estado === filtroEstado
+      const matchEstado =
+        filtroEstado === 'Todos' ||
+        u.estado === filtroEstado ||
+        (filtroEstado === 'Desocupado' && (u.estado === 'Desocupado' || u.estado === 'Disponible'))
       const matchPiso = filtroPiso === 'Todos' || u.piso === Number(filtroPiso)
 
       return matchSearch && matchTipo && matchEstado && matchPiso
@@ -585,6 +717,21 @@ export default function DepartamentosPage() {
             </div>
 
             <div className="flex flex-wrap items-center gap-2">
+              {/* Filtro Tipo de Unidad */}
+              <div className="flex items-center gap-1.5 bg-[#dfd9ce] dark:bg-slate-950 px-3 py-2 rounded-xl border border-[#cec8bc] dark:border-slate-700 text-xs">
+                <Building2 className="w-3.5 h-3.5 text-[#7d776f]" />
+                <select
+                  value={filtroTipo}
+                  onChange={(e) => setFiltroTipo(e.target.value)}
+                  className="bg-transparent text-[#262422] dark:text-white focus:outline-none cursor-pointer font-medium"
+                >
+                  <option value="Todos">Tipo: Todos</option>
+                  <option value="Departamento">Departamentos</option>
+                  <option value="Parqueo">Parqueos</option>
+                  <option value="Baulera">Bauleras</option>
+                </select>
+              </div>
+
               {/* Filtro Estado de Ocupación */}
               <div className="flex items-center gap-1.5 bg-[#dfd9ce] dark:bg-slate-950 px-3 py-2 rounded-xl border border-[#cec8bc] dark:border-slate-700 text-xs">
                 <Filter className="w-3.5 h-3.5 text-[#7d776f]" />
@@ -597,6 +744,7 @@ export default function DepartamentosPage() {
                   <option value="Ocupado por Propietario">Ocupado por Dueño</option>
                   <option value="Alquilado">Alquilado a Inquilino</option>
                   <option value="Desocupado">Desocupado / Vacío</option>
+                  <option value="Asignado">Asignado</option>
                 </select>
               </div>
 
@@ -640,116 +788,211 @@ export default function DepartamentosPage() {
                         colSpan={7}
                         className="py-8 text-center text-[#7d776f] dark:text-slate-500"
                       >
-                        No se encontraron departamentos con los filtros aplicados.
+                        No se encontraron unidades con los filtros aplicados.
                       </td>
                     </tr>
                   ) : (
-                    unidadesFiltradas.map((unidad) => (
-                      <tr
-                        key={`${unidad.tipoUnidad || 'unidad'}-${unidad.id}`}
-                        className="hover:bg-[#dfd9ce]/40 dark:hover:bg-slate-800/40 transition-colors"
-                      >
-                        <td className="py-3 px-4">
-                          <div className="font-extrabold text-[#262422] dark:text-white flex items-center gap-1.5">
-                            <Building2 className="w-4 h-4 text-rose-700 dark:text-rose-400 shrink-0" />
-                            <span>Dpto. {unidad.numero}</span>
-                          </div>
-                          <div className="text-[11px] text-[#7d776f] dark:text-slate-400">
-                            {unidad.tipologia ||
-                              (unidad.areaM2 === 60
-                                ? 'Tipo A (60 m²)'
-                                : unidad.areaM2 === 80
-                                  ? 'Tipo B (80 m²)'
-                                  : 'Tipo C (100 m²)')}{' '}
-                            • Piso {unidad.piso || '-'}
-                          </div>
-                        </td>
+                    unidadesFiltradas.map((unidad) => {
+                      const isDepto = unidad.tipoUnidad === 'Departamento'
+                      const isParqueo = unidad.tipoUnidad === 'Parqueo'
+                      const isBaulera = unidad.tipoUnidad === 'Baulera'
 
-                        <td className="py-3 px-4">
-                          {unidad.propietario ? (
-                            <div>
-                              <div className="font-bold text-[#262422] dark:text-white flex items-center gap-1">
-                                <UserCheck className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-                                {unidad.propietario.nombre}
-                              </div>
-                              <div className="text-[11px] text-[#7d776f] dark:text-slate-400">
-                                CI: {unidad.propietario.ci}
-                                {unidad.propietario.estadoCivil && (
-                                  <span className="font-medium text-slate-800 dark:text-slate-200">
-                                    {' '}• {unidad.propietario.estadoCivil}
-                                  </span>
-                                )}
-                              </div>
-                              {unidad.propietario.ocupantes && (
-                                <div className="text-[10px] text-blue-800 dark:text-blue-300 font-semibold mt-0.5">
-                                  {unidad.propietario.ocupantes}
-                                </div>
+                      return (
+                        <tr
+                          key={`${unidad.tipoUnidad || 'unidad'}-${unidad.id}`}
+                          className="hover:bg-[#dfd9ce]/40 dark:hover:bg-slate-800/40 transition-colors"
+                        >
+                          <td className="py-3 px-4">
+                            <div className="font-extrabold text-[#262422] dark:text-white flex items-center gap-1.5">
+                              {isDepto && (
+                                <Building2 className="w-4 h-4 text-rose-700 dark:text-rose-400 shrink-0" />
                               )}
-                            </div>
-                          ) : (
-                            <span className="text-amber-700 dark:text-amber-400 italic text-xs">
-                              Sin Propietario Asignado
-                            </span>
-                          )}
-                        </td>
-
-                        <td className="py-3 px-4">
-                          {unidad.estado === 'Alquilado' && unidad.inquilinoActual ? (
-                            <div>
-                              <div className="font-bold text-[#262422] dark:text-white flex items-center gap-1">
-                                <KeyRound className="w-3.5 h-3.5 text-purple-600 shrink-0" />
-                                {unidad.inquilinoActual.nombre}
-                              </div>
-                              <span className="text-[10px] px-2 py-0.2 rounded-md bg-purple-100 text-purple-800 font-bold">
-                                Inquilino (Contrato Privado)
+                              {isParqueo && (
+                                <Car className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0" />
+                              )}
+                              {isBaulera && (
+                                <Box className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                              )}
+                              <span>
+                                {isDepto
+                                  ? `Dpto. ${unidad.numero}`
+                                  : isParqueo
+                                    ? `Parqueo ${unidad.numero}`
+                                    : `Baulera ${unidad.numero}`}
                               </span>
                             </div>
-                          ) : unidad.estado === 'Ocupado por Propietario' ? (
-                            <span className="text-[11px] text-emerald-700 dark:text-emerald-400 font-semibold">
-                              Vive el Propietario
-                            </span>
-                          ) : (
-                            <span className="text-[11px] text-[#7d776f] dark:text-slate-400 italic">
-                              Desocupado / Vacío
-                            </span>
-                          )}
-                        </td>
-
-                        <td className="py-3 px-4">
-                          <div className="font-bold text-[#262422] dark:text-white font-mono">
-                            {unidad.areaM2 ? `${unidad.areaM2} m²` : '—'}
-                          </div>
-                          {unidad.tipologia && (
                             <div className="text-[11px] text-[#7d776f] dark:text-slate-400">
-                              {unidad.tipologia}
+                              {isDepto ? (
+                                <>
+                                  {unidad.tipologia ||
+                                    (unidad.areaM2 === 60
+                                      ? 'Tipo A (60 m²)'
+                                      : unidad.areaM2 === 80
+                                        ? 'Tipo B (80 m²)'
+                                        : 'Tipo C (100 m²)')}{' '}
+                                  • Piso {unidad.piso || '-'}
+                                </>
+                              ) : isParqueo ? (
+                                'Estacionamiento'
+                              ) : (
+                                'Depósito / Baulera'
+                              )}
                             </div>
-                          )}
-                        </td>
+                          </td>
 
-                        <td className="py-3 px-4">
-                          <div className="text-xs text-[#262422] dark:text-white flex items-center gap-1">
-                            <Car className="w-3.5 h-3.5 text-[#7d776f]" />
-                            <span>{unidad.parqueo || 'Sin parqueo'}</span>
-                          </div>
-                          <div className="text-[11px] text-[#7d776f] dark:text-slate-400 flex items-center gap-1">
-                            <Box className="w-3.5 h-3.5 text-[#7d776f]" />
-                            <span>{unidad.baulera || 'Sin baulera'}</span>
-                          </div>
-                        </td>
+                          <td className="py-3 px-4">
+                            {isDepto ? (
+                              unidad.propietario ? (
+                                <div>
+                                  <div className="font-bold text-[#262422] dark:text-white flex items-center gap-1">
+                                    <UserCheck className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                                    {unidad.propietario.nombre}
+                                  </div>
+                                  <div className="text-[11px] text-[#7d776f] dark:text-slate-400">
+                                    CI: {unidad.propietario.ci}
+                                    {unidad.propietario.estadoCivil && (
+                                      <span className="font-medium text-slate-800 dark:text-slate-200">
+                                        {' '}• {unidad.propietario.estadoCivil}
+                                      </span>
+                                    )}
+                                  </div>
+                                  {unidad.propietario.ocupantes && (
+                                    <div className="text-[10px] text-blue-800 dark:text-blue-300 font-semibold mt-0.5">
+                                      {unidad.propietario.ocupantes}
+                                    </div>
+                                  )}
+                                </div>
+                              ) : (
+                                <span className="text-amber-700 dark:text-amber-400 italic text-xs">
+                                  Sin Propietario Asignado
+                                </span>
+                              )
+                            ) : unidad.departamento ? (
+                              <div className="text-xs">
+                                <span className="font-bold text-[#262422] dark:text-white">
+                                  Dpto. {unidad.departamento.numero}
+                                </span>
+                                <span className="text-[11px] text-[#7d776f] block">
+                                  Departamento Asociado
+                                </span>
+                              </div>
+                            ) : unidad.persona ? (
+                              <div className="text-xs">
+                                <span className="font-bold text-[#262422] dark:text-white">
+                                  {unidad.persona.nombres} {unidad.persona.apellidos}
+                                </span>
+                                <span className="text-[11px] text-[#7d776f] block">
+                                  CI: {unidad.persona.ciNit || '-'}
+                                </span>
+                              </div>
+                            ) : (
+                              <span className="text-[#7d776f] dark:text-slate-400 italic text-xs">
+                                Libre / Sin Titular
+                              </span>
+                            )}
+                          </td>
 
-                        <td className="py-3 px-4">
-                          <span
-                            className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-extrabold ${
-                              unidad.estado === 'Ocupado por Propietario'
-                                ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-400 border border-emerald-300'
-                                : unidad.estado === 'Alquilado'
-                                  ? 'bg-purple-100 text-purple-800 dark:bg-purple-950/60 dark:text-purple-400 border border-purple-300'
-                                  : 'bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-400 border border-amber-300'
-                            }`}
-                          >
-                            {unidad.estado}
-                          </span>
-                        </td>
+                          <td className="py-3 px-4">
+                            {isDepto ? (
+                              unidad.inquilinoActual ? (
+                                <div>
+                                  <div className="font-bold text-[#262422] dark:text-white flex items-center gap-1">
+                                    <KeyRound className="w-3.5 h-3.5 text-purple-600 shrink-0" />
+                                    {unidad.inquilinoActual.nombre}
+                                  </div>
+                                  <div className="flex items-center gap-1.5 mt-0.5">
+                                    <span className="text-[10px] px-2 py-0.5 rounded-md bg-purple-100 text-purple-800 dark:bg-purple-950/60 dark:text-purple-300 font-bold">
+                                      Inquilino (Vigente)
+                                    </span>
+                                    {unidad.inquilinoActual.telefono && (
+                                      <span className="text-[10px] text-[#7d776f] dark:text-slate-400 font-mono">
+                                        Tel: {unidad.inquilinoActual.telefono}
+                                      </span>
+                                    )}
+                                  </div>
+                                </div>
+                              ) : unidad.propietario ? (
+                                <div className="flex items-center gap-1 text-[11px] text-emerald-700 dark:text-emerald-400 font-semibold">
+                                  <UserCheck className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                                  <span>Vive el Propietario</span>
+                                </div>
+                              ) : (
+                                <span className="text-[11px] text-[#7d776f] dark:text-slate-400 italic">
+                                  Desocupado / Vacío
+                                </span>
+                              )
+                            ) : unidad.departamento ? (
+                              <span className="text-[11px] text-blue-700 dark:text-blue-400 font-medium">
+                                En uso por Dpto. {unidad.departamento.numero}
+                              </span>
+                            ) : (
+                              <span className="text-[11px] text-[#7d776f] italic">
+                                Sin ocupante
+                              </span>
+                            )}
+                          </td>
+
+                          <td className="py-3 px-4">
+                            <div className="font-bold text-[#262422] dark:text-white font-mono">
+                              {unidad.areaM2 ? `${unidad.areaM2} m²` : '—'}
+                            </div>
+                            {unidad.tipologia && isDepto && (
+                              <div className="text-[11px] text-[#7d776f] dark:text-slate-400">
+                                {unidad.tipologia}
+                              </div>
+                            )}
+                          </td>
+
+                          <td className="py-3 px-4">
+                            {isDepto ? (
+                              <>
+                                <div className="text-xs text-[#262422] dark:text-white flex items-center gap-1">
+                                  <Car className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400 shrink-0" />
+                                  <span className="font-semibold">{unidad.parqueo || 'Sin parqueo'}</span>
+                                </div>
+                                <div className="text-[11px] text-[#7d776f] dark:text-slate-400 flex items-center gap-1 mt-0.5">
+                                  <Box className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                                  <span>{unidad.baulera || 'Sin baulera'}</span>
+                                </div>
+                              </>
+                            ) : isParqueo ? (
+                              <div className="text-xs">
+                                <span className="font-bold text-amber-800 dark:text-amber-400 flex items-center gap-1">
+                                  <Car className="w-3.5 h-3.5 shrink-0" />
+                                  {unidad.numero}
+                                </span>
+                                <span className="text-[11px] text-[#7d776f] block">
+                                  {unidad.departamento ? `Asignado a Dpto. ${unidad.departamento.numero}` : 'Libre'}
+                                </span>
+                              </div>
+                            ) : (
+                              <div className="text-xs">
+                                <span className="font-bold text-emerald-800 dark:text-emerald-400 flex items-center gap-1">
+                                  <Box className="w-3.5 h-3.5 shrink-0" />
+                                  {unidad.numero}
+                                </span>
+                                <span className="text-[11px] text-[#7d776f] block">
+                                  {unidad.departamento ? `Asignada a Dpto. ${unidad.departamento.numero}` : 'Libre'}
+                                </span>
+                              </div>
+                            )}
+                          </td>
+
+                          <td className="py-3 px-4">
+                            <span
+                              className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-extrabold ${
+                                unidad.estado === 'Ocupado por Propietario'
+                                  ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-400 border border-emerald-300'
+                                  : unidad.estado === 'Alquilado'
+                                    ? 'bg-purple-100 text-purple-800 dark:bg-purple-950/60 dark:text-purple-400 border border-purple-300'
+                                    : unidad.estado === 'Asignado'
+                                      ? 'bg-blue-100 text-blue-800 dark:bg-blue-950/60 dark:text-blue-400 border border-blue-300'
+                                      : 'bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-400 border border-amber-300'
+                              }`}
+                            >
+                              {unidad.estado}
+                            </span>
+                          </td>
 
                         <td className="py-3 px-4 text-right">
                           <div className="flex items-center justify-end gap-1.5">
@@ -774,8 +1017,8 @@ export default function DepartamentosPage() {
                           </div>
                         </td>
                       </tr>
-                    ))
-                  )}
+                    )
+                  }))}
                 </tbody>
               </table>
             </div>

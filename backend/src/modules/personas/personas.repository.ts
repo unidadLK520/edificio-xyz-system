@@ -29,6 +29,7 @@ export class PersonasRepository {
             piso: true,
             areaM2: true,
             estado: true,
+            cantidadHabitantes: true,
             parqueos: { select: { idParqueo: true, numero: true } },
             bauleras: { select: { idBaulera: true, numero: true } },
           },
@@ -42,6 +43,7 @@ export class PersonasRepository {
                 numero: true,
                 piso: true,
                 estado: true,
+                cantidadHabitantes: true,
               },
             },
           },
@@ -92,14 +94,14 @@ export class PersonasRepository {
       orderBy: [{ apellidos: 'asc' }, { nombres: 'asc' }],
       include: {
         departamentosPropios: {
-          select: { idDepartamento: true, numero: true },
+          select: { idDepartamento: true, numero: true, cantidadHabitantes: true },
         },
         ocupaciones: {
           where: { fechaFin: null },
           select: {
             idOcupacion: true,
             tipoOcupante: true,
-            departamento: { select: { idDepartamento: true, numero: true } },
+            departamento: { select: { idDepartamento: true, numero: true, cantidadHabitantes: true } },
           },
         },
         _count: {
@@ -128,6 +130,8 @@ export class PersonasRepository {
         telefono: data.telefono || null,
         correo: data.correo || null,
         direccion: data.direccion || null,
+        estadoCivil: data.estadoCivil ?? null,
+        cantidadHijos: data.cantidadHijos ?? null,
       },
     });
   }
@@ -145,6 +149,8 @@ export class PersonasRepository {
         ...(data.telefono !== undefined && { telefono: data.telefono || null }),
         ...(data.correo !== undefined && { correo: data.correo || null }),
         ...(data.direccion !== undefined && { direccion: data.direccion || null }),
+        ...(data.estadoCivil !== undefined && { estadoCivil: data.estadoCivil }),
+        ...(data.cantidadHijos !== undefined && { cantidadHijos: data.cantidadHijos }),
       },
     });
   }

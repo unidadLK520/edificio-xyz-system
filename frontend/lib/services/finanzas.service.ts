@@ -455,6 +455,7 @@ export interface CotejoData {
 }
 
 export interface ResumenConciliacionData {
+  totalMovimientos?: number
   cantConciliados: number
   montoConciliados: number
   cantPendientes: number
@@ -517,13 +518,16 @@ export const conciliacionService = {
     const json = await res.json()
     const d = json.data || {}
     return {
-      cantConciliados: Number(d.cantConciliados || 0),
-      montoConciliados: Number(d.montoConciliados || 0),
-      cantPendientes: Number(d.cantPendientes || 0),
-      montoPendientes: Number(d.montoPendientes || 0),
-      cantDiscrepancias: Number(d.cantDiscrepancias || 0),
-      montoDiscrepancias: Number(d.montoDiscrepancias || 0),
-      sumaDiferenciaDiscrepancias: Number(d.sumaDiferenciaDiscrepancias || 0)
+      totalMovimientos: Number(d.totalMovimientos || 0),
+      cantConciliados: Number(d.conciliados?.cantidad ?? d.cantConciliados ?? 0),
+      montoConciliados: Number(d.conciliados?.totalMonto ?? d.montoConciliados ?? 0),
+      cantPendientes: Number(d.pendientes?.cantidad ?? d.cantPendientes ?? 0),
+      montoPendientes: Number(d.pendientes?.totalMonto ?? d.montoPendientes ?? 0),
+      cantDiscrepancias: Number(d.discrepancias?.cantidad ?? d.cantDiscrepancias ?? 0),
+      montoDiscrepancias: Number(d.discrepancias?.totalMonto ?? d.montoDiscrepancias ?? 0),
+      sumaDiferenciaDiscrepancias: Number(
+        d.discrepancias?.totalDiferencia ?? d.sumaDiferenciaDiscrepancias ?? 0
+      )
     }
   },
 

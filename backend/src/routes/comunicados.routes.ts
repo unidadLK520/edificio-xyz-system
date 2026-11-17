@@ -82,8 +82,12 @@ async function despacharCorreosComunicado(
               fechaEnvio: new Date(),
             },
           });
-        } else if (!sendResult.skipped) {
-          // Fallo en validación previa de correo o en el transporte SMTP
+        } else if (sendResult.skipped) {
+          console.warn(
+            `[COMUNICADOS] Envío omitido para idEnvio ${envio.idEnvio}: ${sendResult.motivo || 'Sin motivo especificado'}`
+          );
+        } else {
+          // Fallo en validación previa de correo o en el transporte (SMTP / Brevo)
           await prisma.comunicadoEnvio.update({
             where: { idEnvio: envio.idEnvio },
             data: {

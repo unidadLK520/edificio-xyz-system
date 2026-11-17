@@ -286,6 +286,128 @@ export function isTemporarySmtpError(err: any): boolean {
   return false;
 }
 
+// ── Constantes y tipos para la API HTTPS de Brevo (US3.2 / US3.3) ────────────
+
+// Constantes para la API HTTPS de Brevo (verificar contra la documentación de Brevo)
+export const BREVO_API_URL = 'https://api.brevo.com/v3/smtp/email'; // verificar contra la documentación de Brevo
+export const BREVO_HEADER_API_KEY = 'api-key'; // verificar contra la documentación de Brevo
+export const BREVO_FIELD_SENDER = 'sender'; // verificar contra la documentación de Brevo
+export const BREVO_FIELD_NAME = 'name'; // verificar contra la documentación de Brevo
+export const BREVO_FIELD_EMAIL = 'email'; // verificar contra la documentación de Brevo
+export const BREVO_FIELD_TO = 'to'; // verificar contra la documentación de Brevo
+export const BREVO_FIELD_SUBJECT = 'subject'; // verificar contra la documentación de Brevo
+export const BREVO_FIELD_HTML_CONTENT = 'htmlContent'; // verificar contra la documentación de Brevo
+export const BREVO_FIELD_TEXT_CONTENT = 'textContent'; // verificar contra la documentación de Brevo
+
+/**
+ * Parsea el remitente en formato "Nombre <correo>" o correo simple para la API de Brevo.
+ */
+export function parseSenderFrom(fromRaw?: string): { name: string; email: string } {
+  const raw = (fromRaw || '').trim();
+  if (!raw) {
+    return {
+      name: 'Edificio XYZ',
+      email: 'noreply@edificioxyz.com',
+    };
+  }
+
+  const match = raw.match(/^(.*?)\s*<([^>]+)>\s*$/);
+  if (match) {
+    const namePart = match[1].replace(/^["']|["']$/g, '').trim();
+    const emailPart = match[2].trim();
+    return {
+      name: namePart || 'Edificio XYZ',
+      email: emailPart || 'noreply@edificioxyz.com',
+    };
+  }
+
+  return {
+    name: 'Edificio XYZ',
+    email: raw,
+  };
+}
+
+/**
+ * Error estructurado para respuestas HTTP no exitosas de la API de Brevo.
+ */
+export class BrevoApiError extends Error {
+  public status: number;
+  public shortMessage: string;
+
+  constructor(status: number, shortMessage: string) {
+    super(`Brevo HTTP ${status}: ${shortMessage}`);
+    this.name = 'BrevoApiError';
+    this.status = status;
+    this.shortMessage = shortMessage;
+  }
+}
+
+/**
+ * Determina si un error de la API HTTPS de Brevo es temporal:
+ * - Errores de red a nivel de socket / DNS (ECONNRESET, ETIMEDOUT, ECONNREFUSED, ENOTFOUND, fetch failed, etc.)
+ * - Timeout (AbortSignal.timeout)
+ * - Códigos HTTP 429 (Rate Limit) y 5xx (500 a 599).
+ *
+ * Otros códigos HTTP 4xx (400, 401, 403, 404, etc.) son definitivos (devuelven false, sin reintento).
+ */
+export function isTemporaryBrevoError(err: any): boolean {
+  if (!err) return false;
+
+  // 1. Códigos de estado HTTP
+  const status = typeof err.status === 'number' ? err.status : Number(err.statusCode);
+  if (!isNaN(status) && status > 0) {
+    if (status === 429) {
+      return true;
+    }
+    if (status >= 500 && status < 600) {
+      return true;
+    }
+    // Otros 4xx son definitivos: NO se reintentan
+    if (status >= 400 && status < 500) {
+      return false;
+    }
+  }
+
+  // 2. Timeout (AbortSignal.timeout / AbortError)
+  const errName = String(err.name || '');
+  if (errName === 'TimeoutError' || errName === 'AbortError') {
+    return true;
+  }
+
+  const message = String(err.message || '');
+  if (/\btimeout\b/i.test(message) || /\baborted\b/i.test(message)) {
+    return true;
+  }
+
+  // 3. Errores de red a nivel de sockets / DNS
+  const code = String(err.code || err.cause?.code || err.errno || '').toUpperCase();
+  if (
+    code === 'ETIMEDOUT' ||
+    code === 'ECONNRESET' ||
+    code === 'ECONNREFUSED' ||
+    code === 'ENOTFOUND' ||
+    code === 'EAI_AGAIN' ||
+    code.startsWith('UND_ERR_')
+  ) {
+    return true;
+  }
+
+  // 4. Fallos generales de red capturados por fetch nativo (undici)
+  if (err instanceof TypeError && /fetch failed/i.test(message)) {
+    return true;
+  }
+
+  return false;
+}
+
+interface DispatchInternalOptions {
+  finalTo: string;
+  finalSubject: string;
+  textContent: string;
+  htmlContent: string;
+  from: string;
+}
+
 export class MailerService {
   private transporter: Transporter | null = null;
 
@@ -316,12 +438,211 @@ export class MailerService {
   }
 
   /**
+   * Despacho mediante API HTTPS de Brevo (POST https://api.brevo.com/v3/smtp/email).
+   * Timeout de 15 s por intento mediante AbortSignal.timeout.
+   * Reintenta hasta 2 veces (pausas de 5 s y 15 s) únicamente ante errores temporales:
+   * fallos de red, timeout, HTTP 429 y HTTP 5xx. Errores 4xx son definitivos.
+   * Nunca registra BREVO_API_KEY ni direcciones completas en logs.
+   */
+  private async sendMailViaBrevo(options: DispatchInternalOptions): Promise<SendMailResult> {
+    const apiKey = process.env.BREVO_API_KEY?.trim();
+    if (!apiKey) {
+      const errorMsg = '[MAILER] Falta BREVO_API_KEY';
+      console.error(errorMsg);
+      return {
+        success: false,
+        error: errorMsg,
+      };
+    }
+
+    const sender = parseSenderFrom(options.from);
+
+    const payload = {
+      [BREVO_FIELD_SENDER]: {
+        [BREVO_FIELD_NAME]: sender.name,
+        [BREVO_FIELD_EMAIL]: sender.email,
+      },
+      [BREVO_FIELD_TO]: [
+        {
+          [BREVO_FIELD_EMAIL]: options.finalTo,
+        },
+      ],
+      [BREVO_FIELD_SUBJECT]: options.finalSubject,
+      [BREVO_FIELD_HTML_CONTENT]: options.htmlContent,
+      [BREVO_FIELD_TEXT_CONTENT]: options.textContent,
+    };
+
+    const retryDelaysMs = [5000, 15000];
+    let lastError: any = null;
+
+    for (let attempt = 0; attempt <= retryDelaysMs.length; attempt++) {
+      try {
+        const response = await fetch(BREVO_API_URL, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            accept: 'application/json',
+            [BREVO_HEADER_API_KEY]: apiKey,
+          },
+          body: JSON.stringify(payload),
+          signal: AbortSignal.timeout(15000),
+        });
+
+        if (response.ok) {
+          let messageId: string | undefined;
+          try {
+            const data = (await response.json()) as any;
+            messageId = data?.messageId;
+          } catch {
+            // Ignorar si la respuesta no incluye JSON con messageId
+          }
+
+          return {
+            success: true,
+            messageId,
+          };
+        }
+
+        // Respuesta HTTP con código de error (4xx o 5xx)
+        let shortMessage = response.statusText || 'Error en respuesta de Brevo';
+        try {
+          const errorData = (await response.json()) as any;
+          if (errorData?.message) {
+            shortMessage = String(errorData.message);
+          } else if (errorData?.code) {
+            shortMessage = String(errorData.code);
+          }
+        } catch {
+          try {
+            const rawText = await response.text();
+            if (rawText) {
+              shortMessage = rawText.slice(0, 150);
+            }
+          } catch {
+            // Mantener statusText
+          }
+        }
+
+        if (shortMessage.length > 150) {
+          shortMessage = shortMessage.slice(0, 150) + '...';
+        }
+
+        const brevoErr = new BrevoApiError(response.status, shortMessage);
+        lastError = brevoErr;
+
+        // Reintentar solo si es error temporal (HTTP 429 o 5xx) y quedan intentos
+        if (isTemporaryBrevoError(brevoErr) && attempt < retryDelaysMs.length) {
+          const waitMs = retryDelaysMs[attempt];
+          console.warn(
+            `[MAILER] Error temporal de Brevo (status ${response.status}) en intento ${attempt + 1}: ${maskEmails(
+              shortMessage
+            )}. Reintentando en ${waitMs / 1000} s...`
+          );
+          await sleep(waitMs);
+          continue;
+        }
+
+        // Error definitivo (p. ej. HTTP 4xx distinto de 429) o reintentos agotados
+        break;
+      } catch (fetchErr: any) {
+        lastError = fetchErr;
+
+        // Reintentar solo ante errores temporales de red o timeout
+        if (isTemporaryBrevoError(fetchErr) && attempt < retryDelaysMs.length) {
+          const waitMs = retryDelaysMs[attempt];
+          const errMessage = fetchErr?.message || 'Error de red o timeout';
+          console.warn(
+            `[MAILER] Error temporal de conexión a Brevo en intento ${attempt + 1}: ${maskEmails(
+              errMessage
+            )}. Reintentando en ${waitMs / 1000} s...`
+          );
+          await sleep(waitMs);
+          continue;
+        }
+
+        break;
+      }
+    }
+
+    // Registrar exclusivamente status y mensaje corto con correos enmascarados y sin API key
+    const statusLabel = lastError?.status ? `status: ${lastError.status}` : 'status: N/A';
+    const messageLabel = lastError?.shortMessage || lastError?.message || 'Fallo en transporte Brevo';
+
+    console.error(
+      '[MAILER] Error al enviar correo vía Brevo:',
+      `${statusLabel}, mensaje: ${maskEmails(messageLabel)}`
+    );
+
+    return {
+      success: false,
+      error: `[Brevo ${statusLabel}] ${maskEmails(messageLabel)}`,
+    };
+  }
+
+  /**
+   * Despacho mediante protocolo SMTP tradicional con Nodemailer.
+   */
+  private async sendMailViaSmtp(options: DispatchInternalOptions): Promise<SendMailResult> {
+    const transporter = this.getTransporter();
+    const retryDelaysMs = [5000, 15000];
+    let lastError: any = null;
+
+    for (let attempt = 0; attempt <= retryDelaysMs.length; attempt++) {
+      try {
+        const info = await transporter.sendMail({
+          from: options.from,
+          to: options.finalTo,
+          subject: options.finalSubject,
+          text: options.textContent,
+          html: options.htmlContent,
+        });
+
+        return {
+          success: true,
+          messageId: info.messageId,
+        };
+      } catch (err: any) {
+        lastError = err;
+
+        // Si es error SMTP temporal y aún quedan reintentos disponibles (hasta 2)
+        if (isTemporarySmtpError(err) && attempt < retryDelaysMs.length) {
+          const waitMs = retryDelaysMs[attempt];
+          console.warn(
+            `[MAILER] Error SMTP temporal en intento ${attempt + 1}: ${maskEmails(
+              err?.message || 'Error temporal'
+            )}. Reintentando en ${waitMs / 1000} s...`
+          );
+          await sleep(waitMs);
+          continue;
+        }
+
+        // Si no es temporal (p. ej. error 5xx) o ya se agotaron los reintentos, no reintentar
+        break;
+      }
+    }
+
+    // Registrar únicamente el mensaje del error sin imprimir contraseñas, configuraciones ni direcciones completas
+    console.error(
+      '[MAILER] Error al enviar correo:',
+      maskEmails(lastError?.message || 'Fallo desconocido en transporte SMTP')
+    );
+    return {
+      success: false,
+      error: lastError?.message || 'Error en envío SMTP',
+    };
+  }
+
+  /**
    * Envía un correo con política de control de destino según MAIL_MODE ('test' o 'real'):
    * - En 'test' (o si falta/otro valor), todo se redirige a MAIL_TEST_TO con asunto "[PRUEBA] ...".
    *   Si MAIL_TEST_TO no está configurado, la operación se omite de forma segura (skipped: true).
    * - En 'real', se envía directamente a la dirección de correo original de la persona.
    * En ambos modos se valida previamente el correo ORIGINAL (formato, dominio no reservado, MX o A).
    * Si no supera la validación previa, no se envía y se retorna error (para quedar 'Fallido').
+   *
+   * El transporte utilizado depende de MAIL_PROVIDER:
+   * - 'brevo': usa la API HTTPS nativa de Brevo.
+   * - ausente u otro valor: usa el transporte SMTP actual sin cambios.
    */
   async sendMail(options: SendMailOptions): Promise<SendMailResult> {
     const originalTo = options.to?.trim();
@@ -381,55 +702,25 @@ export class MailerService {
     }
 
     const from = process.env.MAIL_FROM || 'Edificio XYZ <noreply@edificioxyz.com>';
-    const transporter = this.getTransporter();
 
-    // Reintentos para errores SMTP temporales: hasta 2 reintentos con 5 s y 15 s
-    const retryDelaysMs = [5000, 15000];
-    let lastError: any = null;
-
-    for (let attempt = 0; attempt <= retryDelaysMs.length; attempt++) {
-      try {
-        const info = await transporter.sendMail({
-          from,
-          to: finalTo,
-          subject: finalSubject,
-          text: textContent,
-          html: htmlContent,
-        });
-
-        return {
-          success: true,
-          messageId: info.messageId,
-        };
-      } catch (err: any) {
-        lastError = err;
-
-        // Si es error SMTP temporal y aún quedan reintentos disponibles (hasta 2)
-        if (isTemporarySmtpError(err) && attempt < retryDelaysMs.length) {
-          const waitMs = retryDelaysMs[attempt];
-          console.warn(
-            `[MAILER] Error SMTP temporal en intento ${attempt + 1}: ${maskEmails(
-              err?.message || 'Error temporal'
-            )}. Reintentando en ${waitMs / 1000} s...`
-          );
-          await sleep(waitMs);
-          continue;
-        }
-
-        // Si no es temporal (p. ej. error 5xx) o ya se agotaron los reintentos, no reintentar
-        break;
-      }
+    const provider = (process.env.MAIL_PROVIDER || '').trim().toLowerCase();
+    if (provider === 'brevo') {
+      return this.sendMailViaBrevo({
+        finalTo,
+        finalSubject,
+        textContent,
+        htmlContent,
+        from,
+      });
     }
 
-    // Registrar únicamente el mensaje del error sin imprimir contraseñas, configuraciones ni direcciones completas
-    console.error(
-      '[MAILER] Error al enviar correo:',
-      maskEmails(lastError?.message || 'Fallo desconocido en transporte SMTP')
-    );
-    return {
-      success: false,
-      error: lastError?.message || 'Error en envío SMTP',
-    };
+    return this.sendMailViaSmtp({
+      finalTo,
+      finalSubject,
+      textContent,
+      htmlContent,
+      from,
+    });
   }
 }
 
