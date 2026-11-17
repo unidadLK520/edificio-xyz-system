@@ -22,31 +22,32 @@ export async function exportAndPruneOldest(): Promise<Buffer> {
   const sheet = workbook.addWorksheet('Auditoria');
 
   if (records.length > 0) {
-    // Convert Prisma records to plain objects with proper type handling
-    const safeRecords = records.map((rec) => {
-      const plain: Record<string, any> = {};
-      for (const [key, value] of Object.entries(rec as any)) {
-        if (value === null || value === undefined) {
-          plain[key] = '';
-        } else if (typeof value === 'bigint') {
-          plain[key] = value.toString();
-        } else if (value instanceof Date) {
-          plain[key] = value.toISOString();
-        } else if (typeof value === 'object') {
-          plain[key] = JSON.stringify(value);
-        } else {
-          plain[key] = value;
-        }
-      }
-      return plain;
-    });
+    // Define columnas explícitamente para evitar problemas
+    sheet.columns = [
+      { header: 'idAuditoria', key: 'idAuditoria', width: 15 },
+      { header: 'tablaAfectada', key: 'tablaAfectada', width: 20 },
+      { header: 'idRegistro', key: 'idRegistro', width: 15 },
+      { header: 'accion', key: 'accion', width: 20 },
+      { header: 'resultado', key: 'resultado', width: 20 },
+      { header: 'fechaHora', key: 'fechaHora', width: 25 },
+      { header: 'idUsuario', key: 'idUsuario', width: 15 },
+      { header: 'datosAnteriores', key: 'datosAnteriores', width: 50 },
+      { header: 'datosNuevos', key: 'datosNuevos', width: 50 },
+    ];
 
-    const headers = Object.keys(safeRecords[0]);
-    sheet.addRow(headers);
-
-    safeRecords.forEach((rec) => {
-      const row = headers.map((h) => rec[h]);
-      sheet.addRow(row);
+    // Agregar filas con conversión segura de tipos
+    records.forEach((rec) => {
+      sheet.addRow({
+        idAuditoria: String(rec.idAuditoria),
+        tablaAfectada: rec.tablaAfectada || '',
+        idRegistro: rec.idRegistro || '',
+        accion: rec.accion || '',
+        resultado: rec.resultado || '',
+        fechaHora: rec.fechaHora ? rec.fechaHora.toISOString() : '',
+        idUsuario: rec.idUsuario ? String(rec.idUsuario) : '',
+        datosAnteriores: rec.datosAnteriores ? JSON.stringify(rec.datosAnteriores) : '',
+        datosNuevos: rec.datosNuevos ? JSON.stringify(rec.datosNuevos) : '',
+      });
     });
 
     console.log('[AUDITORIA EXPORT] Excel generado con datos');
@@ -54,8 +55,8 @@ export async function exportAndPruneOldest(): Promise<Buffer> {
     console.log('[AUDITORIA EXPORT] No hay registros para exportar');
   }
 
-  const buffer = await workbook.xlsx.writeBuffer();
-  console.log('[AUDITORIA EXPORT] Buffer de Excel generado');
+  const buffer = await workbook.xlsx.writeBuffer() as Buffer;
+  console.log('[AUDITORIA EXPORT] Buffer de Excel generado, tamaño:', buffer.length);
 
   // Delete exported rows - convert BigInt to number for Prisma
   const ids = records.map((r) => Number(r.idAuditoria));
@@ -68,5 +69,5 @@ export async function exportAndPruneOldest(): Promise<Buffer> {
     console.log(`[AUDITORIA EXPORT] Registros eliminados: ${deleteResult.count}`);
   }
 
-  return Buffer.from(buffer as any);
+  return buffer;
 }
