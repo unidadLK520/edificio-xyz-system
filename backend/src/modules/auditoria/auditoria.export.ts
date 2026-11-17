@@ -43,8 +43,8 @@ export async function exportAndPruneOldest(): Promise<Buffer> {
     console.log('[AUDITORIA EXPORT] No hay registros para exportar');
   }
 
-  const buffer = await workbook.xlsx.writeBuffer();
-  console.log('[AUDITORIA EXPORT] Buffer de Excel generado');
+  const buffer = await workbook.xlsx.writeBuffer() as Buffer;
+  console.log('[AUDITORIA EXPORT] Buffer de Excel generado, tamaño:', buffer.length);
 
   // Delete exported rows - FIX: convert BigInt to number for Prisma
   const ids = records.map((r) => Number(r.idAuditoria));
@@ -57,5 +57,5 @@ export async function exportAndPruneOldest(): Promise<Buffer> {
     console.log(`[AUDITORIA EXPORT] Registros eliminados: ${deleteResult.count}`);
   }
 
-  return Buffer.from(buffer as any);
+  return buffer;
 }
