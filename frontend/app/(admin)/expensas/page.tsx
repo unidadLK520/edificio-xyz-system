@@ -112,7 +112,16 @@ export default function ExpensasPage() {
     }
   )
 
-  // Campos extendidos para política de mora de la pizarra y simulador
+// Removed static mora input states – now using context policy
+// const [moraTipoPenalidadInput, setMoraTipoPenalidadInput] = useState<'fijo' | 'porcentaje'>('fijo');
+// const [moraMontoFijoInput, setMoraMontoFijoInput] = useState<number | ''>(50);
+// const [moraDiaVencimientoInput, setMoraDiaVencimientoInput] = useState<number | ''>(10);
+// const [moraDiasGraciaInput, setMoraDiasGraciaInput] = useState<number | ''>(2);
+// const [moraDiaGeneracionInput, setMoraDiaGeneracionInput] = useState<number | ''>(1);
+
+// Removed static simulator inputs – will use defaults from backend or context where needed
+// const [simuladorMontoBaseInput, setSimuladorMontoBaseInput] = useState<number>(350);
+// const [simuladorFechaPruebaInput, setSimuladorFechaPruebaInput] = useState<string>('2026-11-15');
   const [moraTipoPenalidadInput, setMoraTipoPenalidadInput] = useState<'fijo' | 'porcentaje'>(
     'fijo'
   )
