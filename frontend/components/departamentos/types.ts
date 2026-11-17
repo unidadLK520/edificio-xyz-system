@@ -13,6 +13,9 @@ export interface PropietarioInfo {
   ci: string
   telefono: string
   correo: string
+  direccion?: string
+  estadoCivil?: string
+  ocupantes?: string
 }
 
 export interface InquilinoInfo {
@@ -21,6 +24,9 @@ export interface InquilinoInfo {
   ci?: string
   telefono: string
   correo?: string
+  direccion?: string
+  estadoCivil?: string
+  ocupantes?: string
 }
 
 export interface HistorialOcupanteItem {

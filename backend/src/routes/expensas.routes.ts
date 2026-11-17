@@ -67,6 +67,7 @@ const expensaSchema = z.object({
   montoAgua: z.number().min(0).optional(),
   tasaInteresMora: z.number().min(0).max(100).optional(),
   fechaVencimiento: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Formato: YYYY-MM-DD').optional(),
+  actualizarSiExiste: z.boolean().optional(),
 });
 
 const generarMasivoSchema = z.object({
@@ -88,6 +89,8 @@ const pagoSchema = z.object({
   esAnticipado: z.boolean().default(false),
   idCuenta: z.number().int().positive().optional(),
   comprobanteUrl: z.string().optional(),
+  esSimulacion: z.boolean().optional(),
+  fechaPagoSimulada: z.string().optional(),
 });
 
 const aplicarAnticipoSchema = z.object({
@@ -1331,11 +1334,20 @@ expensasRouter.post(
         return;
       }
 
-      const { idDepartamento, periodo, monto, montoBase: inputMontoBase, tasaInteresMora, fechaVencimiento } = result.data;
+      const {
+        idDepartamento,
+        periodo,
+        monto,
+        montoBase: inputMontoBase,
+        montoAgua: inputMontoAgua,
+        tasaInteresMora,
+        fechaVencimiento,
+        actualizarSiExiste,
+      } = result.data;
       const [pYear, pMonth] = periodo.split('-');
       const periodoNormalizado = `${pYear}-${pMonth}-01`;
       const periodoDate = new Date(`${periodoNormalizado}T00:00:00.000Z`);
-      const vencimientoDate = new Date(`${fechaVencimiento}T00:00:00.000Z`);
+      const vencimientoDate = fechaVencimiento ? new Date(`${fechaVencimiento}T00:00:00.000Z`) : undefined;
 
       // Verificar si ya existe expensa para este departamento en este período
       const existente = await prisma.expensa.findFirst({
@@ -1343,12 +1355,62 @@ expensasRouter.post(
           idDepartamento,
           periodo: periodoDate,
         },
+        include: {
+          departamento: { select: { numero: true } },
+          extras: true,
+        },
       });
 
       if (existente) {
+        if (actualizarSiExiste) {
+          const baseFinal =
+            inputMontoBase !== undefined ? Number(inputMontoBase) : Number(existente.montoBase || 0);
+          const aguaFinal =
+            inputMontoAgua !== undefined ? Number(inputMontoAgua) : Number(existente.montoAgua || 0);
+          // Nota de compatibilidad: se preserva la lógica de extras vigentes sumándolos al total
+          const totalFinal = calcularMontoTotalExpensa(baseFinal, aguaFinal, existente.extras);
+          const pagadoPrevio = Math.max(
+            0,
+            Number(existente.monto) - Number(existente.saldoPendiente)
+          );
+          const nuevoSaldo = Math.max(0, Math.round((totalFinal - pagadoPrevio) * 100) / 100);
+
+          const updated = await prisma.expensa.update({
+            where: { idExpensa: existente.idExpensa },
+            data: {
+              montoBase: baseFinal,
+              montoAgua: aguaFinal,
+              monto: totalFinal,
+              saldoPendiente: nuevoSaldo,
+              fechaVencimiento: vencimientoDate || existente.fechaVencimiento,
+              estado: nuevoSaldo === 0 ? 'Pagado' : existente.estado,
+            },
+            include: {
+              departamento: { select: { numero: true } },
+            },
+          });
+
+          await auditoriaService.registrarEvento({
+            tablaAfectada: 'expensas',
+            idRegistro: String(updated.idExpensa),
+            accion: 'ACTUALIZAR_EXPENSA_INDIVIDUAL',
+            resultado: 'EXITO',
+            datosAnteriores: existente,
+            datosNuevos: updated,
+            idUsuario: req.user?.idUsuario || null,
+          });
+
+          res.status(200).json({
+            ...formatearExpensaConConcepto(updated),
+            message: `Expensa individual de Dpto ${existente.departamento.numero} actualizada exitosamente (Base Bs. ${baseFinal}, Agua Bs. ${aguaFinal}, Total Bs. ${totalFinal}).`,
+          });
+          return;
+        }
+
         res.status(409).json({
           error: 'Conflict',
-          message: `Ya existe una expensa registrada para el departamento en el período ${pYear}-${pMonth}`,
+          message: `Ya existe una expensa registrada para el departamento en el período ${pYear}-${pMonth}. Active la opción "Actualizar expensa existente" para modificarla o seleccione otro período.`,
+          idExpensaExistente: existente.idExpensa,
         });
         return;
       }
@@ -1379,28 +1441,32 @@ expensasRouter.post(
 
         const advertenciasArr: string[] = [];
         let montoAgua = 0;
-        if (montoReg) {
+        if (inputMontoAgua !== undefined) {
+          montoAgua = Number(inputMontoAgua);
+        } else if (montoReg) {
           montoAgua = Number(montoReg.montoAgua);
         } else {
           advertenciasArr.push('Sin monto de agua registrado para el período; se emitió únicamente con monto base');
         }
 
-        // Monto base: del tipo si existe, o inputMontoBase, o monto proporcionado
+        // Monto base: del input si se proporciona, sino del tipo si existe, o monto directo
         let montoBase = 0;
-        if (depto?.tipo) {
-          montoBase = Number(depto.tipo.montoExpensa);
-        } else if (inputMontoBase !== undefined) {
+        if (inputMontoBase !== undefined) {
           montoBase = Number(inputMontoBase);
+        } else if (depto?.tipo) {
+          montoBase = Number(depto.tipo.montoExpensa);
         } else if (monto !== undefined) {
           montoBase = Number(monto);
         }
 
         // Monto total = monto_base + monto_agua (+ extras)
         let montoTotal: number;
-        if (depto?.tipo || inputMontoBase !== undefined) {
+        if (inputMontoBase !== undefined || depto?.tipo) {
           montoTotal = calcularMontoTotalExpensa(montoBase, montoAgua, []);
         } else if (monto !== undefined) {
-          montoTotal = montoReg ? calcularMontoTotalExpensa(monto, montoAgua, []) : Number(monto);
+          montoTotal = (montoReg || inputMontoAgua !== undefined)
+            ? calcularMontoTotalExpensa(monto, montoAgua, [])
+            : Number(monto);
         } else {
           montoTotal = calcularMontoTotalExpensa(montoBase, montoAgua, []);
         }
@@ -1577,6 +1643,71 @@ expensasRouter.post(
       const expensa = await prisma.expensa.findUnique({ where: { idExpensa: expensaId } });
       if (!expensa) {
         res.status(404).json({ error: 'Not Found', message: 'Expensa no encontrada' });
+        return;
+      }
+
+      // Soporte para Simulación de Pago QR (Requerimiento C 4)
+      if (result.data.esSimulacion) {
+        const montoEfectivo =
+          montoPagado > 0 ? montoPagado : Number(expensa.saldoPendiente || expensa.monto || 300);
+        const reciboSimulado = {
+          idPago: 900000 + (expensaId % 1000),
+          idExpensa: expensaId,
+          montoPagado: montoEfectivo,
+          interesPagado: Number(interesPagado || 0),
+          totalPagado: Math.round((montoEfectivo + Number(interesPagado || 0)) * 100) / 100,
+          metodoPago: metodoPago || 'QR',
+          fechaPago: result.data.fechaPagoSimulada || new Date().toISOString(),
+          comprobanteUrl: comprobanteUrl || `QR-SIM-${Date.now()}`,
+          esSimulacion: true,
+          estado: 'Pagado',
+        };
+
+        // Si la expensa está pendiente, registrar también el pago real en la base de datos
+        if (expensa.estado !== 'Pagado' && Number(expensa.saldoPendiente) > 0) {
+          const nuevoSaldo = Math.max(
+            0,
+            Math.round((Number(expensa.saldoPendiente) - montoEfectivo) * 100) / 100
+          );
+          await prisma.expensa.update({
+            where: { idExpensa: expensaId },
+            data: {
+              saldoPendiente: nuevoSaldo,
+              estado: nuevoSaldo === 0 ? 'Pagado' : 'Parcial',
+            },
+          });
+          await prisma.pago.create({
+            data: {
+              idExpensa: expensaId,
+              idDepartamento: expensa.idDepartamento,
+              idPersonaPagador,
+              montoPagado: montoEfectivo,
+              interesPagado: Number(interesPagado || 0),
+              metodoPago: 'QR',
+              comprobanteUrl: reciboSimulado.comprobanteUrl,
+              idUsuarioRegistro: req.user?.idUsuario || null,
+            },
+          });
+        }
+
+        await auditoriaService.registrarEvento({
+          tablaAfectada: 'pagos',
+          idRegistro: String(reciboSimulado.idPago),
+          accion: 'SIMULACION_PAGO_QR',
+          resultado: 'EXITO',
+          datosNuevos: reciboSimulado,
+          idUsuario: req.user?.idUsuario || null,
+        });
+
+        res.status(200).json({
+          message: 'Pago QR simulado con éxito',
+          pago: reciboSimulado,
+          expensa: {
+            ...expensa,
+            estado: 'Pagado',
+            saldoPendiente: 0,
+          },
+        });
         return;
       }
 
