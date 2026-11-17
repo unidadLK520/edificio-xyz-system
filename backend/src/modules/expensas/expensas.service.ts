@@ -607,20 +607,12 @@ export async function ejecutarCalculoMora(
     }> = [];
 
     for (const exp of expensasCandidatas) {
-      // Regla de mora: sin días de espera (vencida si hoy > fechaVencimiento)
-      const fechaVenc = new Date(exp.fechaVencimiento);
-      if (ahora.getTime() <= fechaVenc.getTime()) {
-        continue;
-      }
-
       const capitalPendiente = calcularCapitalPendiente(exp);
       if (capitalPendiente <= 0) {
         continue;
       }
 
-      let montoMora: number;
       const tipoCalculo = (reglaActiva as any)?.tipoCalculo || 'PORCENTAJE';
-
       if (tipoCalculo === 'FIJO') {
         const montoFijo = Number((reglaActiva as any)?.montoFijo || 0);
         if (montoFijo <= 0) {
@@ -631,18 +623,9 @@ export async function ejecutarCalculoMora(
           error.code = 'REGLA_MORA_NO_CONFIGURADA';
           throw error;
         }
-        // FIJO = monto_fijo una sola vez por cargo vencido con capital pendiente > 0 (saldo = capital + monto_fijo), sin acumular entre ejecuciones
-        montoMora = Math.round(montoFijo * 100) / 100;
       } else {
-        // Regla de tasa: tasa = tasaInteresMora de la expensa si > 0; si no, la regla activa
         const tasaExpensa = Number(exp.tasaInteresMora);
-        let tasaFinal: number;
-
-        if (tasaExpensa > 0) {
-          tasaFinal = tasaExpensa;
-        } else if (reglaActiva && Number(reglaActiva.tasaInteres) >= 0) {
-          tasaFinal = Number(reglaActiva.tasaInteres);
-        } else {
+        if (tasaExpensa <= 0 && (!reglaActiva || Number(reglaActiva.tasaInteres) < 0)) {
           const error: any = new Error(
             `No existe una regla de mora activa configurada ni tasa en la expensa ${exp.idExpensa} para calcular la mora.`
           );
@@ -650,14 +633,26 @@ export async function ejecutarCalculoMora(
           error.code = 'REGLA_MORA_NO_CONFIGURADA';
           throw error;
         }
-
-        montoMora = Math.round((capitalPendiente * (tasaFinal / 100)) * 100) / 100;
       }
 
-      const nuevoSaldo = Math.max(0, Math.round((capitalPendiente + montoMora) * 100) / 100);
-      const nuevoEstado = (nuevoSaldo > 0 && exp.fechaVencimiento < ahora)
-        ? 'Moroso'
-        : (nuevoSaldo === 0 ? 'Pagado' : 'Pendiente');
+      const resultadoMora = calcularMoraExpensa({
+        capitalPendiente,
+        fechaVencimiento: exp.fechaVencimiento,
+        fechaReferencia: ahora,
+        regla: reglaActiva || {
+          tipoCalculo: 'PORCENTAJE',
+          tasaInteres: Number(exp.tasaInteresMora || 0),
+        },
+        tasaInteresMora: Number(exp.tasaInteresMora || 0),
+      });
+
+      if (resultadoMora.diasAtraso <= 0) {
+        continue;
+      }
+
+      const montoMora = resultadoMora.moraAcumulada;
+      const nuevoSaldo = resultadoMora.totalAdeudado;
+      const nuevoEstado = nuevoSaldo > 0 ? 'Moroso' : 'Pagado';
 
       const moraAnterior = Number(exp.montoMora);
       const saldoAnterior = Number(exp.saldoPendiente);
