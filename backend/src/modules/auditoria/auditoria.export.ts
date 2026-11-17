@@ -5,13 +5,13 @@ import { prisma } from '@edificio-xyz/database';
 import ExcelJS from 'exceljs';
 
 /**
- * Exporta los 150 registros más antiguos de auditoría a un archivo Excel (Buffer)
+ * Exporta los 500 registros más antiguos de auditoría a un archivo Excel (Buffer)
  * y los elimina de la base de datos.
  */
 export async function exportAndPruneOldest(): Promise<Buffer> {
   const records = await prisma.auditoria.findMany({
     orderBy: { fechaHora: 'asc' },
-    take: 150,
+    take: 500,
   });
 
   const workbook = new ExcelJS.Workbook();
