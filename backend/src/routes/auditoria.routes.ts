@@ -66,10 +66,17 @@ auditoriaRouter.post(
     try {
       const buffer = await exportAndPruneOldest();
       const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+      // Set proper MIME type for Excel files
       res.setHeader(
         'Content-Type',
         'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
       );
+      res.setHeader(
+        'Content-Disposition',
+        `attachment; filename="auditoria_${timestamp}.xlsx"`
+      );
+      res.write(buffer);
+      res.end();
       res.setHeader(
         'Content-Disposition',
         `attachment; filename="auditoria_${timestamp}.xlsx"`

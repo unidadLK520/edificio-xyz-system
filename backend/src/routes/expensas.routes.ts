@@ -1200,6 +1200,70 @@ expensasRouter.get(
   }
 );
 
+// ── PUT /api/v1/expensas/:id ─────────────────────────────────────────────────
+// Edición directa de montos individuales de una expensa (montoBase, montoAgua, fechaVencimiento)
+expensasRouter.put(
+  '/:id',
+  authorizeRoles('Administrador', 'Directorio'),
+  async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const id = parseInt(req.params.id, 10);
+      if (isNaN(id) || id <= 0) {
+        res.status(400).json({ error: 'Bad Request', message: 'ID de expensa inválido' });
+        return;
+      }
+
+      const existente = await prisma.expensa.findUnique({
+        where: { idExpensa: id },
+        include: { extras: true, departamento: true },
+      });
+
+      if (!existente) {
+        res.status(404).json({ error: 'Not Found', message: 'Expensa no encontrada' });
+        return;
+      }
+
+      const { montoBase, montoAgua, fechaVencimiento } = req.body;
+
+      const baseFinal = montoBase !== undefined ? Number(montoBase) : Number(existente.montoBase || 0);
+      const aguaFinal = montoAgua !== undefined ? Number(montoAgua) : Number(existente.montoAgua || 0);
+      const totalFinal = calcularMontoTotalExpensa(baseFinal, aguaFinal, existente.extras);
+
+      const pagadoPrevio = Math.max(0, Number(existente.monto) - Number(existente.saldoPendiente));
+      const nuevoSaldo = Math.max(0, Math.round((totalFinal - pagadoPrevio) * 100) / 100);
+
+      const expensaActualizada = await prisma.expensa.update({
+        where: { idExpensa: id },
+        data: {
+          monto: totalFinal,
+          montoBase: baseFinal,
+          montoAgua: aguaFinal,
+          saldoPendiente: nuevoSaldo,
+          estado: nuevoSaldo === 0 ? 'Pagado' : existente.estado,
+          ...(fechaVencimiento ? { fechaVencimiento: new Date(fechaVencimiento) } : {}),
+        },
+        include: { departamento: true, extras: true },
+      });
+
+      await registrarAuditoria(
+        req,
+        'ACTUALIZAR_EXPENSA',
+        'expensas',
+        id.toString(),
+        existente,
+        expensaActualizada
+      );
+
+      res.status(200).json({
+        message: 'Expensa actualizada exitosamente',
+        data: expensaActualizada,
+      });
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
 // ── DELETE /api/v1/expensas/:id/extras/:idExtra ──────────────────────────────
 // Anular un cargo extra (soft-delete anulado=true) con recálculo de total/saldo y auditoría
 expensasRouter.delete(
