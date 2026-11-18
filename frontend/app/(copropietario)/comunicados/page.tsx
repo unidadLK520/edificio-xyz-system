@@ -21,6 +21,7 @@ import {
   Phone,
   Mail,
   Trash2,
+  Edit2,
   Printer,
   Share2,
   RotateCcw,
@@ -579,6 +580,10 @@ export default function ComunicadosAmigablesPage() {
   const [filtroCategoria, setFiltroCategoria] = useState<string>('TODOS')
   const [comunicadoALeer, setComunicadoALeer] = useState<ComunicadoItem | null>(null)
   const [comunicadoAEliminar, setComunicadoAEliminar] = useState<ComunicadoItem | null>(null)
+  const [comunicadoAEditar, setComunicadoAEditar] = useState<ComunicadoItem | null>(null)
+  const [editTitulo, setEditTitulo] = useState('')
+  const [editContenido, setEditContenido] = useState('')
+  const [isSubmittingEdit, setIsSubmittingEdit] = useState(false)
 
   const comunicadosFiltrados = useMemo(() => {
     return comunicados.filter((c) => {
@@ -591,6 +596,37 @@ export default function ComunicadosAmigablesPage() {
   }, [comunicados, searchTerm, filtroCategoria])
 
   // Eliminar comunicado con validación de rol (Requisito 4)
+  
+  const handleGuardarEdicionComunicado = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!comunicadoAEditar) return
+    try {
+      setIsSubmittingEdit(true)
+      const res = await apiFetch(`/api/v1/comunicados/${comunicadoAEditar.idComunicado}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          titulo: editTitulo.trim(),
+          contenido: editContenido.trim(),
+        }),
+      })
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}))
+        throw new Error(errData.message || 'Error al actualizar comunicado')
+      }
+      const actualizado = await res.json()
+      setComunicados((prev) =>
+        prev.map((c) => (c.idComunicado === comunicadoAEditar.idComunicado ? { ...c, titulo: editTitulo.trim(), contenido: editContenido.trim() } : c))
+      )
+      showToast('✅ Comunicado actualizado correctamente')
+      setComunicadoAEditar(null)
+    } catch (err: any) {
+      showToast('❌ ' + (err.message || 'Error al guardar cambios'))
+    } finally {
+      setIsSubmittingEdit(false)
+    }
+  }
+
   const handleConfirmarEliminar = async () => {
     if (!comunicadoAEliminar) return
     if (userRole !== 'ADMINISTRADOR') {
@@ -1650,6 +1686,81 @@ export default function ComunicadosAmigablesPage() {
                 Cerrar
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      
+      {/* MODAL DE EDICIÓN DE COMUNICADO */}
+      {comunicadoAEditar && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in duration-200">
+          <div className="bg-[#ede9e1] dark:bg-slate-900 border border-[#cec8bc] dark:border-slate-800 w-full max-w-lg rounded-3xl shadow-2xl p-6 space-y-4">
+            <div className="flex items-center justify-between border-b border-[#cec8bc] dark:border-slate-800 pb-3">
+              <div className="flex items-center gap-2">
+                <div className="w-9 h-9 rounded-xl bg-blue-600 text-white flex items-center justify-center shadow-md">
+                  <Edit2 className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="font-extrabold text-base text-[#262422] dark:text-white">
+                    Editar Comunicado Oficial
+                  </h3>
+                  <p className="text-xs text-[#7d776f]">Modifica el título o mensaje publicado</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setComunicadoAEditar(null)}
+                className="p-1 rounded-xl text-[#7d776f] hover:text-[#262422] dark:hover:text-white"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleGuardarEdicionComunicado} className="space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-[#5c5750] dark:text-slate-300 mb-1">
+                  Título del Comunicado *
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={editTitulo}
+                  onChange={(e) => setEditTitulo(e.target.value)}
+                  className="w-full px-3 py-2 rounded-xl bg-[#ded8cc] dark:bg-slate-800 border border-[#cec8bc] dark:border-slate-700 text-xs font-bold text-[#262422] dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-600"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-[#5c5750] dark:text-slate-300 mb-1">
+                  Contenido / Mensaje *
+                </label>
+                <textarea
+                  required
+                  rows={5}
+                  value={editContenido}
+                  onChange={(e) => setEditContenido(e.target.value)}
+                  className="w-full px-3 py-2 rounded-xl bg-[#ded8cc] dark:bg-slate-800 border border-[#cec8bc] dark:border-slate-700 text-xs text-[#262422] dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-600"
+                />
+              </div>
+
+              <div className="flex justify-end gap-2 pt-2 border-t border-[#cec8bc] dark:border-slate-800">
+                <button
+                  type="button"
+                  disabled={isSubmittingEdit}
+                  onClick={() => setComunicadoAEditar(null)}
+                  className="px-4 py-2 rounded-xl text-xs font-bold text-[#5c5750] dark:text-slate-400 hover:bg-[#ded8cc] dark:hover:bg-slate-800 transition-colors"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSubmittingEdit}
+                  className="px-4 py-2 rounded-xl bg-blue-700 hover:bg-blue-800 text-xs font-bold text-white shadow-md transition-all active:scale-95 cursor-pointer"
+                >
+                  {isSubmittingEdit ? 'Guardando...' : 'Guardar Cambios'}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

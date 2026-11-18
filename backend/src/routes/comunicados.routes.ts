@@ -457,3 +457,63 @@ comunicadosRouter.delete(
     }
   }
 );
+
+// ── PUT /comunicados/:id ─────────────────────────────────────────────────────
+// Permite al Administrador editar título, contenido o canal de un comunicado existente
+comunicadosRouter.put(
+  '/:id',
+  authorizeRoles('Administrador'),
+  async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const id = parseInt(req.params.id);
+      if (isNaN(id)) {
+        res.status(400).json({ error: 'Bad Request', message: 'ID inválido' });
+        return;
+      }
+
+      const existing = await prisma.comunicado.findUnique({
+        where: { idComunicado: id },
+      });
+
+      if (!existing) {
+        res.status(404).json({ error: 'Not Found', message: 'Comunicado no encontrado' });
+        return;
+      }
+
+      const { titulo, contenido, canalEnvio } = req.body;
+
+      if (!titulo && !contenido && !canalEnvio) {
+        res.status(400).json({ error: 'Bad Request', message: 'Debe proporcionar al menos un campo para actualizar' });
+        return;
+      }
+
+      const actualizado = await prisma.$transaction(async (tx) => {
+        const com = await tx.comunicado.update({
+          where: { idComunicado: id },
+          data: {
+            ...(titulo ? { titulo: String(titulo).trim() } : {}),
+            ...(contenido ? { contenido: String(contenido).trim() } : {}),
+            ...(canalEnvio ? { canalEnvio: String(canalEnvio) } : {}),
+          },
+        });
+
+        await auditoriaService.registrarEvento({
+          tablaAfectada: 'comunicados',
+          idRegistro: id.toString(),
+          accion: 'ACTUALIZAR_COMUNICADO',
+          resultado: 'EXITO',
+          datosAnteriores: existing,
+          datosNuevos: com,
+          idUsuario: req.user?.idUsuario ?? null,
+          tx,
+        });
+
+        return com;
+      }, FINANZAS_TX_OPTIONS);
+
+      res.status(200).json(actualizado);
+    } catch (err) {
+      next(err);
+    }
+  }
+);
