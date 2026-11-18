@@ -114,8 +114,8 @@ export default function EditarDepartamentoModal({
   }
 
   return (
-    <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 backdrop-blur-xs overflow-y-auto">
-      <div className="w-full max-w-lg bg-[#ede9e1] dark:bg-slate-900 rounded-2xl border border-[#cec8bc] dark:border-slate-800 shadow-2xl p-6 space-y-4 animate-in fade-in zoom-in-95 duration-200 max-h-[90vh] overflow-y-auto">
+    <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-3 sm:p-4 backdrop-blur-xs overflow-y-auto">
+      <div className="w-full max-w-lg bg-[#ede9e1] dark:bg-slate-900 rounded-2xl border border-[#cec8bc] dark:border-slate-800 shadow-2xl p-4 sm:p-6 space-y-4 animate-in fade-in zoom-in-95 duration-200 max-h-[90vh] overflow-y-auto">
         <div className="flex items-center justify-between border-b border-[#cec8bc] dark:border-slate-800 pb-3">
           <div className="flex items-center gap-2">
             {isDepto && <Building2 className="w-5 h-5 text-blue-700 dark:text-indigo-400" />}
@@ -136,7 +136,7 @@ export default function EditarDepartamentoModal({
 
         <form onSubmit={handleSubmit} className="space-y-4 text-xs">
           {/* Identificador / Número */}
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label className="block font-bold text-[#5c5750] dark:text-slate-300 mb-1">
                 {isDepto ? 'Número de Departamento *' : `Código de ${tipo} *`}
@@ -211,7 +211,7 @@ export default function EditarDepartamentoModal({
                 </div>
               )}
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block font-bold text-[#5c5750] dark:text-slate-300 mb-1">
                     Piso *
