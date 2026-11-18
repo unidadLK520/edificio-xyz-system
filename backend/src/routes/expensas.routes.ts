@@ -9,10 +9,19 @@ import { authorizeRoles } from '../middlewares/role.middleware';
 import { auditoriaService } from '../modules/auditoria';
 import {
   calcularCapitalPendiente,
+  calcularFechaVencimientoPeriodo,
   configurarReglaMora,
   obtenerReglasMora,
   ejecutarCalculoMora,
   formatearExpensaConConcepto,
+  crearExtraExpensa,
+  obtenerExtrasExpensa,
+  anularExtraExpensa,
+  sumarExtrasVigentes,
+  calcularMontoTotalExpensa,
+  consultarMoraExpensa,
+  calcularMoraExpensa,
+  fechaYMDLaPaz,
 } from '../modules/expensas';
 
 export const expensasRouter: IRouter = Router();
@@ -47,6 +56,12 @@ async function registrarAuditoria(
 }
 
 // ── Validation Schemas ────────────────────────────────────────────────────────
+export const extraExpensaSchema = z.object({
+  concepto: z.string().trim().min(1, 'El concepto es obligatorio').max(100, 'El concepto no puede exceder 100 caracteres'),
+  descripcion: z.string().trim().max(200, 'La descripción no puede exceder 200 caracteres').nullable().optional(),
+  monto: z.number({ invalid_type_error: 'El monto debe ser un número' }).positive('El monto debe ser mayor a cero'),
+});
+
 const expensaSchema = z.object({
   idDepartamento: z.number().int().positive(),
   periodo: z.string().regex(/^\d{4}-\d{2}(-\d{2})?$/, 'Formato: YYYY-MM o YYYY-MM-DD'),
@@ -54,12 +69,13 @@ const expensaSchema = z.object({
   montoBase: z.number().positive().optional(),
   montoAgua: z.number().min(0).optional(),
   tasaInteresMora: z.number().min(0).max(100).optional(),
-  fechaVencimiento: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Formato: YYYY-MM-DD'),
+  fechaVencimiento: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Formato: YYYY-MM-DD').optional(),
+  actualizarSiExiste: z.boolean().optional(),
 });
 
 const generarMasivoSchema = z.object({
   periodo: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Formato: YYYY-MM-DD'),
-  fechaVencimiento: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Formato: YYYY-MM-DD'),
+  fechaVencimiento: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Formato: YYYY-MM-DD').optional(),
   montoBase: z.number().positive().optional().default(500),
   tasaInteresMora: z.number().min(0).max(100).optional(),
   excluirDepartamentos: z.array(z.number().int()).optional().default([]),
@@ -76,6 +92,8 @@ const pagoSchema = z.object({
   esAnticipado: z.boolean().default(false),
   idCuenta: z.number().int().positive().optional(),
   comprobanteUrl: z.string().optional(),
+  esSimulacion: z.boolean().optional(),
+  fechaPagoSimulada: z.string().optional(),
 });
 
 const aplicarAnticipoSchema = z.object({
@@ -90,10 +108,107 @@ const corregirPagoSchema = pagoSchema.extend({
   motivo: z.string().min(1, 'El motivo de corrección es obligatorio'),
 });
 
-const reglaMoraSchema = z.object({
-  tasaInteres: z.number().min(0, 'La tasa de interés debe ser mayor o igual a 0').max(100, 'La tasa de interés no puede exceder 100'),
-  diasGracia: z.number().int().min(0, 'Los días de gracia no pueden ser negativos').optional().default(0),
-});
+export const reglaMoraSchema = z
+  .object({
+    tipoCalculo: z
+      .preprocess((val) => (typeof val === 'string' ? val.toUpperCase() : val), z.enum(['PORCENTAJE', 'FIJO']))
+      .optional(),
+    tipo_calculo: z
+      .preprocess((val) => (typeof val === 'string' ? val.toUpperCase() : val), z.enum(['PORCENTAJE', 'FIJO']))
+      .optional(),
+    tasaInteres: z
+      .number()
+      .min(0, 'La tasa de interés no puede ser negativa')
+      .max(100, 'La tasa no puede exceder 100')
+      .optional(),
+    tasa_interes: z
+      .number()
+      .min(0, 'La tasa de interés no puede ser negativa')
+      .max(100, 'La tasa no puede exceder 100')
+      .optional(),
+    montoFijo: z.number().min(0, 'El monto fijo no puede ser negativo').nullable().optional(),
+    monto_fijo: z.number().min(0, 'El monto fijo no puede ser negativo').nullable().optional(),
+    diaVencimiento: z
+      .number()
+      .int('Día inválido')
+      .min(1, 'El día de vencimiento debe estar entre 1 y 31')
+      .max(31, 'El día de vencimiento debe estar entre 1 y 31')
+      .nullable()
+      .optional(),
+    dia_vencimiento: z
+      .number()
+      .int('Día inválido')
+      .min(1, 'El día de vencimiento debe estar entre 1 y 31')
+      .max(31, 'El día de vencimiento debe estar entre 1 y 31')
+      .nullable()
+      .optional(),
+    diaGeneracion: z
+      .number()
+      .int('Día inválido')
+      .min(1, 'El día de generación debe estar entre 1 y 31')
+      .max(31, 'El día de generación debe estar entre 1 y 31')
+      .nullable()
+      .optional(),
+    dia_generacion: z
+      .number()
+      .int('Día inválido')
+      .min(1, 'El día de generación debe estar entre 1 y 31')
+      .max(31, 'El día de generación debe estar entre 1 y 31')
+      .nullable()
+      .optional(),
+    diasGracia: z.number().int().min(0, 'Los días de gracia no pueden ser negativos').optional().default(0),
+    dias_gracia: z.number().int().min(0, 'Los días de gracia no pueden ser negativos').optional(),
+  })
+  .transform((val) => {
+    const tipoCalculo = (val.tipoCalculo || val.tipo_calculo || 'PORCENTAJE') as 'PORCENTAJE' | 'FIJO';
+    const tasaInteres = val.tasaInteres !== undefined ? val.tasaInteres : val.tasa_interes;
+    const montoFijo = val.montoFijo !== undefined ? val.montoFijo : val.monto_fijo;
+    const diaVencimiento = val.diaVencimiento !== undefined ? val.diaVencimiento : val.dia_vencimiento;
+    const diaGeneracion = val.diaGeneracion !== undefined ? val.diaGeneracion : val.dia_generacion;
+    const diasGracia = val.diasGracia !== undefined ? val.diasGracia : (val.dias_gracia ?? 0);
+    return {
+      tipoCalculo,
+      tasaInteres,
+      montoFijo: montoFijo !== undefined ? montoFijo : null,
+      diaVencimiento: diaVencimiento !== undefined ? diaVencimiento : null,
+      diaGeneracion: diaGeneracion !== undefined ? diaGeneracion : null,
+      diasGracia,
+    };
+  })
+  .superRefine((data, ctx) => {
+
+
+    if (
+      data.diaVencimiento !== null && data.diaVencimiento !== undefined &&
+      data.diaGeneracion !== null && data.diaGeneracion !== undefined &&
+      data.diaVencimiento < data.diaGeneracion
+    ) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['diaVencimiento'],
+        message: 'El día de vencimiento no puede ser anterior al día de generación',
+      });
+    }
+
+
+    if (data.tipoCalculo === 'FIJO') {
+      if (data.montoFijo === null || data.montoFijo === undefined || data.montoFijo <= 0) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['montoFijo'],
+          message: 'El tipo FIJO exige un monto_fijo mayor a cero',
+        });
+      }
+    } else {
+      if (data.tasaInteres === undefined || data.tasaInteres === null || data.tasaInteres <= 0) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['tasaInteres'],
+          message: 'El tipo PORCENTAJE exige una tasa de interés mayor a cero',
+        });
+      }
+    }
+  });
 
 // ── Helper FIFO para aplicación automática de anticipos ──────────────────────
 async function aplicarAnticiposFIFO(
@@ -175,8 +290,25 @@ expensasRouter.get(
   authorizeRoles('Administrador', 'Directorio'),
   async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
     try {
-      const { estado, idDepartamento, periodo, vencida, page = '1', limit = '50' } = req.query;
+      const { estado, idDepartamento, periodo, vencida, tipo, fecha, page = '1', limit = '50' } = req.query;
       const ahora = new Date();
+
+      let fechaReferenciaStr = fechaYMDLaPaz(ahora);
+      if (fecha !== undefined) {
+        if (typeof fecha !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(fecha.trim())) {
+          res.status(400).json({
+            error: 'Bad Request',
+            message: 'Parámetro fecha inválido. Formato esperado: YYYY-MM-DD',
+          });
+          return;
+        }
+        const d = new Date(fecha.trim());
+        if (isNaN(d.getTime())) {
+          res.status(400).json({ error: 'Bad Request', message: 'Fecha inválida' });
+          return;
+        }
+        fechaReferenciaStr = fecha.trim();
+      }
 
       const where: Record<string, unknown> = {};
       if (estado && estado !== 'Todos') where.estado = String(estado);
@@ -186,17 +318,29 @@ expensasRouter.get(
         where.fechaVencimiento = { lt: ahora };
         where.saldoPendiente = { gt: 0 };
       }
+      if (tipo && typeof tipo === 'string' && tipo.trim() !== '') {
+        where.departamento = {
+          tipo: {
+            nombre: { equals: tipo.trim(), mode: 'insensitive' },
+          },
+        };
+      }
 
       const pageNum = Math.max(1, parseInt(String(page)) || 1);
       const limitNum = Math.max(1, parseInt(String(limit)) || 50);
       const skip = (pageNum - 1) * limitNum;
 
-      const [expensas, total] = await Promise.all([
+      const orderBy: any =
+        tipo && typeof tipo === 'string' && tipo.trim() !== ''
+          ? [{ departamento: { tipo: { nombre: 'asc' } } }, { departamento: { numero: 'asc' } }]
+          : [{ periodo: 'desc' }, { idDepartamento: 'asc' }];
+
+      const [expensas, total, reglaActiva] = await Promise.all([
         prisma.expensa.findMany({
           where,
           skip,
           take: limitNum,
-          orderBy: [{ periodo: 'desc' }, { idDepartamento: 'asc' }],
+          orderBy,
           include: {
             departamento: {
               include: {
@@ -205,19 +349,72 @@ expensasRouter.get(
               },
             },
             pagos: {
+              where: { anulado: false },
               orderBy: { fechaPago: 'desc' },
               include: { usuarioRegistro: { select: { nombreUsuario: true } } },
+            },
+            aplicacionesAnticipos: {
+              include: { pago: true },
+            },
+            extras: {
+              where: { anulado: false },
+              orderBy: { fechaRegistro: 'asc' },
+              select: {
+                idExtra: true,
+                concepto: true,
+                descripcion: true,
+                monto: true,
+              },
             },
             _count: { select: { pagos: true } },
           },
         }),
         prisma.expensa.count({ where }),
+        prisma.reglaMora.findFirst({
+          where: { activa: true },
+          orderBy: { fechaCreacion: 'desc' },
+        }),
       ]);
 
       const expensasConVencida = expensas.map((e) => {
         const formateada = formatearExpensaConConcepto(e, e.departamento?.tipo?.nombre);
+        const extrasVigentes = (e.extras || []).map((x: any) => ({
+          idExtra: x.idExtra,
+          concepto: x.concepto,
+          descripcion: x.descripcion ?? null,
+          monto: Number(x.monto),
+        }));
+        const montoExtras = Math.round(extrasVigentes.reduce((acc: number, x: any) => acc + x.monto, 0) * 100) / 100;
+
+        const capitalPendiente = calcularCapitalPendiente(e);
+        let moraCalculada = 0;
+        let mesesMora = 0;
+        let totalAdeudado = capitalPendiente;
+
+        if (reglaActiva || Number(e.tasaInteresMora || 0) > 0) {
+          const resultadoMora = calcularMoraExpensa({
+            capitalPendiente,
+            fechaVencimiento: e.fechaVencimiento,
+            fechaReferencia: fechaReferenciaStr,
+            regla: reglaActiva || {
+              tipoCalculo: 'PORCENTAJE',
+              tasaInteres: Number(e.tasaInteresMora || 0),
+            },
+            tasaInteresMora: Number(e.tasaInteresMora || 0),
+          });
+          moraCalculada = resultadoMora.moraAcumulada;
+          mesesMora = resultadoMora.mesesMora;
+          totalAdeudado = resultadoMora.totalAdeudado;
+        }
+
         return {
           ...formateada,
+          montoExtras,
+          extras: extrasVigentes,
+          capitalPendiente,
+          moraCalculada,
+          mesesMora,
+          totalAdeudado,
           vencida: new Date(e.fechaVencimiento) < ahora && Number(e.saldoPendiente) > 0,
         };
       });
@@ -524,8 +721,8 @@ expensasRouter.get(
           concepto: p.esAnticipado
             ? 'Pago Anticipado a Favor'
             : p.anulado
-            ? `Pago Anulado: ${p.motivoAnulacion || 'Sin motivo'}`
-            : `Pago de Expensa (${p.metodoPago || 'Efectivo'})`,
+              ? `Pago Anulado: ${p.motivoAnulacion || 'Sin motivo'}`
+              : `Pago de Expensa (${p.metodoPago || 'Efectivo'})`,
           monto: Number(p.montoPagado),
           debe: 0,
           haber: p.anulado ? 0 : Number(p.montoPagado),
@@ -544,20 +741,20 @@ expensasRouter.get(
         ...departamento,
         ocupanteActual: ocupacionActiva
           ? {
-              idOcupacion: ocupacionActiva.idOcupacion,
-              tipoOcupante: ocupacionActiva.tipoOcupante,
-              fechaInicio: ocupacionActiva.fechaInicio,
-              persona: ocupacionActiva.persona
-                ? {
-                    idPersona: ocupacionActiva.persona.idPersona,
-                    nombres: ocupacionActiva.persona.nombres,
-                    apellidos: ocupacionActiva.persona.apellidos,
-                    ciNit: ocupacionActiva.persona.ciNit,
-                    telefono: ocupacionActiva.persona.telefono,
-                    correo: ocupacionActiva.persona.correo,
-                  }
-                : null,
-            }
+            idOcupacion: ocupacionActiva.idOcupacion,
+            tipoOcupante: ocupacionActiva.tipoOcupante,
+            fechaInicio: ocupacionActiva.fechaInicio,
+            persona: ocupacionActiva.persona
+              ? {
+                idPersona: ocupacionActiva.persona.idPersona,
+                nombres: ocupacionActiva.persona.nombres,
+                apellidos: ocupacionActiva.persona.apellidos,
+                ciNit: ocupacionActiva.persona.ciNit,
+                telefono: ocupacionActiva.persona.telefono,
+                correo: ocupacionActiva.persona.correo,
+              }
+              : null,
+          }
           : null,
       };
 
@@ -627,9 +824,13 @@ expensasRouter.post(
         return;
       }
 
-      const { tasaInteres, diasGracia } = parsed.data;
+      const { tipoCalculo, tasaInteres, montoFijo, diaVencimiento, diaGeneracion, diasGracia } = parsed.data;
       const nuevaRegla = await configurarReglaMora({
+        tipoCalculo,
         tasaInteres,
+        montoFijo,
+        diaVencimiento,
+        diaGeneracion,
         diasGracia,
         idUsuario: req.user?.idUsuario || null,
       });
@@ -860,6 +1061,174 @@ expensasRouter.get(
   }
 );
 
+// ── POST /api/v1/expensas/:id/extras ─────────────────────────────────────────
+// Registrar cargo extra en una expensa con recálculo de total/saldo y auditoría
+expensasRouter.post(
+  '/:id/extras',
+  authorizeRoles('Administrador'),
+  async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const id = parseInt(req.params.id);
+      if (isNaN(id) || id <= 0) {
+        res.status(400).json({ error: 'Bad Request', message: 'ID de expensa inválido' });
+        return;
+      }
+
+      const parsed = extraExpensaSchema.safeParse(req.body);
+      if (!parsed.success) {
+        res.status(400).json({
+          error: 'Validation Error',
+          message: 'Parámetros del cargo extra inválidos',
+          details: parsed.error.flatten().fieldErrors,
+        });
+        return;
+      }
+
+      const { concepto, descripcion, monto } = parsed.data;
+      const resultado = await crearExtraExpensa({
+        idExpensa: id,
+        concepto,
+        descripcion,
+        monto,
+        idUsuario: req.user?.idUsuario || null,
+      });
+
+      res.status(201).json(resultado);
+    } catch (err: any) {
+      if (err.statusCode) {
+        res.status(err.statusCode).json({
+          error: err.code || 'Error',
+          message: err.message,
+        });
+        return;
+      }
+      next(err);
+    }
+  }
+);
+
+// ── GET /api/v1/expensas/:id/mora ────────────────────────────────────────────
+// Consulta de cálculo y proyección analítica de mora en tiempo real para una expensa
+expensasRouter.get(
+  '/:id/mora',
+  authorizeRoles('Administrador', 'Directorio'),
+  async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const id = parseInt(req.params.id, 10);
+      if (isNaN(id) || id <= 0) {
+        res.status(400).json({ error: 'Bad Request', message: 'ID de expensa inválido' });
+        return;
+      }
+
+      const { fecha, meses } = req.query;
+
+      if (fecha !== undefined) {
+        if (typeof fecha !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(fecha.trim())) {
+          res.status(400).json({
+            error: 'Bad Request',
+            message: 'Parámetro fecha inválido. Formato esperado: YYYY-MM-DD',
+          });
+          return;
+        }
+        const d = new Date(fecha.trim());
+        if (isNaN(d.getTime())) {
+          res.status(400).json({ error: 'Bad Request', message: 'Fecha inválida' });
+          return;
+        }
+      }
+
+      let mesesNum: number | undefined = undefined;
+      if (meses !== undefined) {
+        mesesNum = parseInt(String(meses), 10);
+        if (isNaN(mesesNum) || mesesNum < 0 || String(meses).trim() !== String(mesesNum)) {
+          res.status(400).json({
+            error: 'Bad Request',
+            message: 'Parámetro meses inválido. Debe ser un entero positivo o cero.',
+          });
+          return;
+        }
+        if (mesesNum > 24) {
+          mesesNum = 24;
+        }
+      }
+
+      const resultado = await consultarMoraExpensa({
+        idExpensa: id,
+        fecha: typeof fecha === 'string' ? fecha.trim() : undefined,
+        meses: mesesNum,
+      });
+
+      res.status(200).json(resultado);
+    } catch (err: any) {
+      if (err.statusCode) {
+        res.status(err.statusCode).json({
+          error: err.code || 'Error',
+          message: err.message,
+        });
+        return;
+      }
+      next(err);
+    }
+  }
+);
+
+// ── GET /api/v1/expensas/:id/extras ──────────────────────────────────────────
+// Consultar todos los cargos extras (vigentes y anulados) de una expensa
+expensasRouter.get(
+  '/:id/extras',
+  authorizeRoles('Administrador', 'Directorio'),
+  async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const id = parseInt(req.params.id);
+      if (isNaN(id) || id <= 0) {
+        res.status(400).json({ error: 'Bad Request', message: 'ID de expensa inválido' });
+        return;
+      }
+
+      const resultado = await obtenerExtrasExpensa(id);
+      res.status(200).json(resultado);
+    } catch (err: any) {
+      if (err.statusCode) {
+        res.status(err.statusCode).json({
+          error: err.code || 'Error',
+          message: err.message,
+        });
+        return;
+      }
+      next(err);
+    }
+  }
+);
+
+// ── DELETE /api/v1/expensas/:id/extras/:idExtra ──────────────────────────────
+// Anular un cargo extra (soft-delete anulado=true) con recálculo de total/saldo y auditoría
+expensasRouter.delete(
+  '/:id/extras/:idExtra',
+  authorizeRoles('Administrador'),
+  async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const id = parseInt(req.params.id);
+      const idExtra = parseInt(req.params.idExtra);
+      if (isNaN(id) || id <= 0 || isNaN(idExtra) || idExtra <= 0) {
+        res.status(400).json({ error: 'Bad Request', message: 'IDs de expensa o extra inválidos' });
+        return;
+      }
+
+      const resultado = await anularExtraExpensa(id, idExtra, req.user?.idUsuario || null);
+      res.status(200).json(resultado);
+    } catch (err: any) {
+      if (err.statusCode) {
+        res.status(err.statusCode).json({
+          error: err.code || 'Error',
+          message: err.message,
+        });
+        return;
+      }
+      next(err);
+    }
+  }
+);
+
 // ── POST /api/v1/expensas/generar-masivo ─────────────────────────────────────
 // CA1, CA2, CA10: Generación masiva de expensas con reglas de exclusión y auditoría
 expensasRouter.post(
@@ -927,6 +1296,13 @@ expensasRouter.post(
         });
         const tasaAplicar = tasaInteresMora !== undefined ? tasaInteresMora : (reglaActiva ? Number(reglaActiva.tasaInteres) : 0);
 
+        // CA4: fecha de vencimiento = dia_vencimiento del período (tope: último día del mes); sin regla, comportamiento actual
+        const vencimientoDateFinal = calcularFechaVencimientoPeriodo(
+          periodo,
+          reglaActiva?.diaVencimiento,
+          fechaVencimiento
+        );
+
         const generadasArr: any[] = [];
         const excepcionesArr: any[] = [];
         const advertenciasArr: any[] = [];
@@ -966,7 +1342,7 @@ expensasRouter.post(
             });
           }
 
-          const montoTotal = Math.round((montoBase + montoAgua) * 100) / 100;
+          const montoTotal = calcularMontoTotalExpensa(montoBase, montoAgua, []);
 
           const nuevaExpensa = await tx.expensa.create({
             data: {
@@ -977,7 +1353,7 @@ expensasRouter.post(
               monto: montoTotal,
               saldoPendiente: montoTotal,
               tasaInteresMora: tasaAplicar,
-              fechaVencimiento: vencimientoDate,
+              fechaVencimiento: vencimientoDateFinal,
               estado: 'Pendiente',
             },
           });
@@ -1076,11 +1452,20 @@ expensasRouter.post(
         return;
       }
 
-      const { idDepartamento, periodo, monto, montoBase: inputMontoBase, tasaInteresMora, fechaVencimiento } = result.data;
+      const {
+        idDepartamento,
+        periodo,
+        monto,
+        montoBase: inputMontoBase,
+        montoAgua: inputMontoAgua,
+        tasaInteresMora,
+        fechaVencimiento,
+        actualizarSiExiste,
+      } = result.data;
       const [pYear, pMonth] = periodo.split('-');
       const periodoNormalizado = `${pYear}-${pMonth}-01`;
       const periodoDate = new Date(`${periodoNormalizado}T00:00:00.000Z`);
-      const vencimientoDate = new Date(`${fechaVencimiento}T00:00:00.000Z`);
+      const vencimientoDate = fechaVencimiento ? new Date(`${fechaVencimiento}T00:00:00.000Z`) : undefined;
 
       // Verificar si ya existe expensa para este departamento en este período
       const existente = await prisma.expensa.findFirst({
@@ -1088,12 +1473,62 @@ expensasRouter.post(
           idDepartamento,
           periodo: periodoDate,
         },
+        include: {
+          departamento: { select: { numero: true } },
+          extras: true,
+        },
       });
 
       if (existente) {
+        if (actualizarSiExiste) {
+          const baseFinal =
+            inputMontoBase !== undefined ? Number(inputMontoBase) : Number(existente.montoBase || 0);
+          const aguaFinal =
+            inputMontoAgua !== undefined ? Number(inputMontoAgua) : Number(existente.montoAgua || 0);
+          // Nota de compatibilidad: se preserva la lógica de extras vigentes sumándolos al total
+          const totalFinal = calcularMontoTotalExpensa(baseFinal, aguaFinal, existente.extras);
+          const pagadoPrevio = Math.max(
+            0,
+            Number(existente.monto) - Number(existente.saldoPendiente)
+          );
+          const nuevoSaldo = Math.max(0, Math.round((totalFinal - pagadoPrevio) * 100) / 100);
+
+          const updated = await prisma.expensa.update({
+            where: { idExpensa: existente.idExpensa },
+            data: {
+              montoBase: baseFinal,
+              montoAgua: aguaFinal,
+              monto: totalFinal,
+              saldoPendiente: nuevoSaldo,
+              fechaVencimiento: vencimientoDate || existente.fechaVencimiento,
+              estado: nuevoSaldo === 0 ? 'Pagado' : existente.estado,
+            },
+            include: {
+              departamento: { select: { numero: true } },
+            },
+          });
+
+          await auditoriaService.registrarEvento({
+            tablaAfectada: 'expensas',
+            idRegistro: String(updated.idExpensa),
+            accion: 'ACTUALIZAR_EXPENSA_INDIVIDUAL',
+            resultado: 'EXITO',
+            datosAnteriores: existente,
+            datosNuevos: updated,
+            idUsuario: req.user?.idUsuario || null,
+          });
+
+          res.status(200).json({
+            ...formatearExpensaConConcepto(updated),
+            message: `Expensa individual de Dpto ${existente.departamento.numero} actualizada exitosamente (Base Bs. ${baseFinal}, Agua Bs. ${aguaFinal}, Total Bs. ${totalFinal}).`,
+          });
+          return;
+        }
+
         res.status(409).json({
           error: 'Conflict',
-          message: `Ya existe una expensa registrada para el departamento en el período ${pYear}-${pMonth}`,
+          message: `Ya existe una expensa registrada para el departamento en el período ${pYear}-${pMonth}. Active la opción "Actualizar expensa existente" para modificarla o seleccione otro período.`,
+          idExpensaExistente: existente.idExpensa,
         });
         return;
       }
@@ -1105,6 +1540,11 @@ expensasRouter.post(
           orderBy: { fechaCreacion: 'desc' },
         });
         const tasaAplicar = tasaInteresMora !== undefined ? tasaInteresMora : (reglaActiva ? Number(reglaActiva.tasaInteres) : 0);
+        const vencimientoDateFinal = calcularFechaVencimientoPeriodo(
+          periodo,
+          reglaActiva?.diaVencimiento,
+          fechaVencimiento
+        );
 
         // Obtener departamento y su tipo
         const depto = await tx.departamento.findUnique({
@@ -1119,30 +1559,34 @@ expensasRouter.post(
 
         const advertenciasArr: string[] = [];
         let montoAgua = 0;
-        if (montoReg) {
+        if (inputMontoAgua !== undefined) {
+          montoAgua = Number(inputMontoAgua);
+        } else if (montoReg) {
           montoAgua = Number(montoReg.montoAgua);
         } else {
           advertenciasArr.push('Sin monto de agua registrado para el período; se emitió únicamente con monto base');
         }
 
-        // Monto base: del tipo si existe, o inputMontoBase, o monto proporcionado
+        // Monto base: del input si se proporciona, sino del tipo si existe, o monto directo
         let montoBase = 0;
-        if (depto?.tipo) {
-          montoBase = Number(depto.tipo.montoExpensa);
-        } else if (inputMontoBase !== undefined) {
+        if (inputMontoBase !== undefined) {
           montoBase = Number(inputMontoBase);
+        } else if (depto?.tipo) {
+          montoBase = Number(depto.tipo.montoExpensa);
         } else if (monto !== undefined) {
           montoBase = Number(monto);
         }
 
-        // Monto total = monto_base + monto_agua
+        // Monto total = monto_base + monto_agua (+ extras)
         let montoTotal: number;
-        if (depto?.tipo || inputMontoBase !== undefined) {
-          montoTotal = Math.round((montoBase + montoAgua) * 100) / 100;
+        if (inputMontoBase !== undefined || depto?.tipo) {
+          montoTotal = calcularMontoTotalExpensa(montoBase, montoAgua, []);
         } else if (monto !== undefined) {
-          montoTotal = montoReg ? Math.round((monto + montoAgua) * 100) / 100 : Number(monto);
+          montoTotal = (montoReg || inputMontoAgua !== undefined)
+            ? calcularMontoTotalExpensa(monto, montoAgua, [])
+            : Number(monto);
         } else {
-          montoTotal = Math.round((montoBase + montoAgua) * 100) / 100;
+          montoTotal = calcularMontoTotalExpensa(montoBase, montoAgua, []);
         }
 
         const expensaCreada = await tx.expensa.create({
@@ -1153,7 +1597,7 @@ expensasRouter.post(
             montoAgua,
             monto: montoTotal,
             tasaInteresMora: tasaAplicar,
-            fechaVencimiento: vencimientoDate,
+            fechaVencimiento: vencimientoDateFinal,
             saldoPendiente: montoTotal,
             estado: 'Pendiente',
           },
@@ -1317,6 +1761,71 @@ expensasRouter.post(
       const expensa = await prisma.expensa.findUnique({ where: { idExpensa: expensaId } });
       if (!expensa) {
         res.status(404).json({ error: 'Not Found', message: 'Expensa no encontrada' });
+        return;
+      }
+
+      // Soporte para Simulación de Pago QR (Requerimiento C 4)
+      if (result.data.esSimulacion) {
+        const montoEfectivo =
+          montoPagado > 0 ? montoPagado : Number(expensa.saldoPendiente || expensa.monto || 300);
+        const reciboSimulado = {
+          idPago: 900000 + (expensaId % 1000),
+          idExpensa: expensaId,
+          montoPagado: montoEfectivo,
+          interesPagado: Number(interesPagado || 0),
+          totalPagado: Math.round((montoEfectivo + Number(interesPagado || 0)) * 100) / 100,
+          metodoPago: metodoPago || 'QR',
+          fechaPago: result.data.fechaPagoSimulada || new Date().toISOString(),
+          comprobanteUrl: comprobanteUrl || `QR-SIM-${Date.now()}`,
+          esSimulacion: true,
+          estado: 'Pagado',
+        };
+
+        // Si la expensa está pendiente, registrar también el pago real en la base de datos
+        if (expensa.estado !== 'Pagado' && Number(expensa.saldoPendiente) > 0) {
+          const nuevoSaldo = Math.max(
+            0,
+            Math.round((Number(expensa.saldoPendiente) - montoEfectivo) * 100) / 100
+          );
+          await prisma.expensa.update({
+            where: { idExpensa: expensaId },
+            data: {
+              saldoPendiente: nuevoSaldo,
+              estado: nuevoSaldo === 0 ? 'Pagado' : 'Parcial',
+            },
+          });
+          await prisma.pago.create({
+            data: {
+              idExpensa: expensaId,
+              idDepartamento: expensa.idDepartamento,
+              idPersonaPagador,
+              montoPagado: montoEfectivo,
+              interesPagado: Number(interesPagado || 0),
+              metodoPago: 'QR',
+              comprobanteUrl: reciboSimulado.comprobanteUrl,
+              idUsuarioRegistro: req.user?.idUsuario || null,
+            },
+          });
+        }
+
+        await auditoriaService.registrarEvento({
+          tablaAfectada: 'pagos',
+          idRegistro: String(reciboSimulado.idPago),
+          accion: 'SIMULACION_PAGO_QR',
+          resultado: 'EXITO',
+          datosNuevos: reciboSimulado,
+          idUsuario: req.user?.idUsuario || null,
+        });
+
+        res.status(200).json({
+          message: 'Pago QR simulado con éxito',
+          pago: reciboSimulado,
+          expensa: {
+            ...expensa,
+            estado: 'Pagado',
+            saldoPendiente: 0,
+          },
+        });
         return;
       }
 

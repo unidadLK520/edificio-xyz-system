@@ -7,7 +7,7 @@ import helmet from 'helmet';
 import { config } from './config';
 import { router } from './routes';
 import { errorMiddleware } from './middlewares/error.middleware';
-import { iniciarCronMora } from './modules/expensas';
+import { iniciarCronMora, iniciarCronAutogenExpensas } from './modules/expensas';
 
 const app: Application = express();
 
@@ -93,6 +93,9 @@ if (process.env.NODE_ENV !== 'test') {
 
   // Iniciar tarea programada de cálculo de mora automática (CA10)
   iniciarCronMora();
+
+  // Iniciar tarea programada de autogeneración de expensas
+  iniciarCronAutogenExpensas();
 }
 
 export { app };

@@ -110,7 +110,7 @@ export default function ConciliacionBancariaPage() {
   }, [])
 
   // Cargar datos reales de cotejo y resumen oficial por cuenta
-  const fetchConciliacionData = useCallback(async () => {
+  const fetchConciliacionData = useCallback(async (isManual = false) => {
     if (!cuentaSeleccionadaId) {
       setLoading(false)
       return
@@ -146,6 +146,8 @@ export default function ConciliacionBancariaPage() {
 
       if (errores.length > 0 && resCotejo.status === 'rejected') {
         setApiError(errores.join(' | '))
+      } else if (isManual) {
+        showNotification('success', 'Conciliación bancaria y cotejo sincronizados exitosamente con el backend.')
       }
     } catch (err: unknown) {
       setApiError(
@@ -303,12 +305,59 @@ export default function ConciliacionBancariaPage() {
     return movimientosInternos.filter((m) => !m.anulado && !m.vinculado && m.tipo === tipoRequerido)
   }, [itemParaVincular, movimientosInternos])
 
+  // Cálculo reactivo consolidado del resumen de conciliación
+  const resumenFinal = useMemo(() => {
+    // Si el backend /api/v1/conciliacion/estado ya devolvió totales, usarlos;
+    // si vienen en 0 y existen movimientos bancarios devueltos por /cotejo,
+    // calcular reactivamente desde movimientosBancarios para garantizar que los contadores
+    // reflejen los datos reales del backend en todo momento.
+    if (movimientosBancarios.length > 0) {
+      let conc = 0, mConc = 0
+      let pend = 0, mPend = 0
+      let disc = 0, mDisc = 0, difDisc = 0
+      for (const m of movimientosBancarios) {
+        const monto = Number(m.monto || 0)
+        if (m.estadoConciliacion === 'Conciliado') {
+          conc++
+          mConc += monto
+        } else if (m.estadoConciliacion === 'Discrepancia') {
+          disc++
+          mDisc += monto
+          difDisc += Number(m.diferencia || 0)
+        } else {
+          pend++
+          mPend += monto
+        }
+      }
+      return {
+        cantConciliados: resumenEstado?.cantConciliados || conc,
+        montoConciliados: resumenEstado?.montoConciliados || mConc,
+        cantPendientes: resumenEstado?.cantPendientes || pend,
+        montoPendientes: resumenEstado?.montoPendientes || mPend,
+        cantDiscrepancias: resumenEstado?.cantDiscrepancias || disc,
+        montoDiscrepancias: resumenEstado?.montoDiscrepancias || mDisc,
+        sumaDiferenciaDiscrepancias: resumenEstado?.sumaDiferenciaDiscrepancias || difDisc
+      }
+    }
+    return (
+      resumenEstado || {
+        cantConciliados: 0,
+        montoConciliados: 0,
+        cantPendientes: 0,
+        montoPendientes: 0,
+        cantDiscrepancias: 0,
+        montoDiscrepancias: 0,
+        sumaDiferenciaDiscrepancias: 0
+      }
+    )
+  }, [movimientosBancarios, resumenEstado])
+
   const totalMovs =
-    (resumenEstado?.cantConciliados || 0) +
-    (resumenEstado?.cantPendientes || 0) +
-    (resumenEstado?.cantDiscrepancias || 0)
+    resumenFinal.cantConciliados +
+    resumenFinal.cantPendientes +
+    resumenFinal.cantDiscrepancias
   const porcentaje =
-    totalMovs > 0 ? Math.round(((resumenEstado?.cantConciliados || 0) / totalMovs) * 100) : 0
+    totalMovs > 0 ? Math.round((resumenFinal.cantConciliados / totalMovs) * 100) : 0
 
   return (
     <div className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto space-y-6 animate-in fade-in duration-300">
@@ -387,11 +436,13 @@ export default function ConciliacionBancariaPage() {
 
           <button
             type="button"
-            onClick={fetchConciliacionData}
-            className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl bg-[#dfd9ce] hover:bg-[#d5cfc2] dark:bg-slate-800 dark:hover:bg-slate-700 text-xs font-bold transition-all cursor-pointer border border-[#cec8bc] dark:border-slate-700"
+            disabled={loading}
+            onClick={() => fetchConciliacionData(true)}
+            className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl bg-[#dfd9ce] hover:bg-[#d5cfc2] dark:bg-slate-800 dark:hover:bg-slate-700 text-xs font-bold transition-all cursor-pointer border border-[#cec8bc] dark:border-slate-700 disabled:opacity-60"
+            title="Sincronizar extracto bancario y libro interno con el backend"
           >
-            <RefreshCw className="w-3.5 h-3.5 text-blue-600" />
-            <span>Sincronizar</span>
+            <RefreshCw className={`w-3.5 h-3.5 text-blue-600 ${loading ? 'animate-spin' : ''}`} />
+            <span>{loading ? 'Sincronizando...' : 'Sincronizar'}</span>
           </button>
         </div>
       </div>
@@ -409,7 +460,7 @@ export default function ConciliacionBancariaPage() {
             <p className="text-sm text-slate-600 dark:text-slate-400 mt-1">{apiError}</p>
           </div>
           <button
-            onClick={fetchConciliacionData}
+            onClick={() => fetchConciliacionData(true)}
             className="inline-flex items-center gap-2 px-4 py-2 bg-amber-600 hover:bg-amber-500 text-white rounded-xl text-sm font-semibold transition-colors cursor-pointer shadow-md shadow-amber-600/20"
           >
             <RotateCcw className="w-4 h-4" />
@@ -418,7 +469,7 @@ export default function ConciliacionBancariaPage() {
         </div>
       ) : (
         <>
-          {/* CARDS DE RESUMEN DE CONCILIACIÓN (Desde /api/v1/conciliacion/estado oficial) */}
+          {/* CARDS DE RESUMEN DE CONCILIACIÓN (Desde /api/v1/conciliacion/estado oficial y cotejo) */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4">
             <div className="p-4 rounded-2xl bg-white/70 dark:bg-slate-900/70 border border-[#cec8bc] dark:border-slate-800 shadow-sm space-y-1">
               <span className="text-xs text-[#7d776f] font-semibold">Tasa de Conciliación</span>
@@ -431,30 +482,30 @@ export default function ConciliacionBancariaPage() {
             <div className="p-4 rounded-2xl bg-white/70 dark:bg-slate-900/70 border border-[#cec8bc] dark:border-slate-800 shadow-sm space-y-1">
               <span className="text-xs text-[#7d776f] font-semibold">Conciliados</span>
               <div className="text-2xl font-black text-emerald-700 dark:text-emerald-400 font-mono">
-                {resumenEstado?.cantConciliados ?? 0}
+                {resumenFinal.cantConciliados}
               </div>
               <span className="text-[10px] text-emerald-600 font-medium">
-                Bs. {(resumenEstado?.montoConciliados ?? 0).toFixed(2)}
+                Bs. {resumenFinal.montoConciliados.toFixed(2)}
               </span>
             </div>
 
             <div className="p-4 rounded-2xl bg-white/70 dark:bg-slate-900/70 border border-[#cec8bc] dark:border-slate-800 shadow-sm space-y-1">
               <span className="text-xs text-[#7d776f] font-semibold">Pendientes</span>
               <div className="text-2xl font-black text-amber-700 dark:text-amber-400 font-mono">
-                {resumenEstado?.cantPendientes ?? 0}
+                {resumenFinal.cantPendientes}
               </div>
               <span className="text-[10px] text-amber-600 font-medium">
-                Bs. {(resumenEstado?.montoPendientes ?? 0).toFixed(2)}
+                Bs. {resumenFinal.montoPendientes.toFixed(2)}
               </span>
             </div>
 
             <div className="p-4 rounded-2xl bg-white/70 dark:bg-slate-900/70 border border-[#cec8bc] dark:border-slate-800 shadow-sm space-y-1">
               <span className="text-xs text-[#7d776f] font-semibold">Discrepancias</span>
               <div className="text-2xl font-black text-rose-700 dark:text-rose-400 font-mono">
-                {resumenEstado?.cantDiscrepancias ?? 0}
+                {resumenFinal.cantDiscrepancias}
               </div>
               <span className="text-[10px] text-rose-600 font-medium">
-                Dif: Bs. {(resumenEstado?.sumaDiferenciaDiscrepancias ?? 0).toFixed(2)}
+                Dif: Bs. {resumenFinal.sumaDiferenciaDiscrepancias.toFixed(2)}
               </span>
             </div>
           </div>

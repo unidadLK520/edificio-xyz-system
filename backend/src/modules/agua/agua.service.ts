@@ -12,6 +12,8 @@ import {
 import {
   calcularCapitalPendiente,
   determinarEstadoYSaldoExpensa,
+  calcularMontoTotalExpensa,
+  sumarExtrasVigentes,
 } from '../expensas';
 
 /**
@@ -144,6 +146,9 @@ export async function registrarOActualizarMontosAgua(
               tipo: { select: { nombre: true, montoExpensa: true } },
             },
           },
+          extras: {
+            where: { anulado: false },
+          },
         },
       });
       const mapaExpensas = new Map(expensasDelPeriodo.map((e) => [e.idDepartamento, e]));
@@ -179,7 +184,7 @@ export async function registrarOActualizarMontosAgua(
                 ? Math.round((montoActualExp - aguaActualExp) * 100) / 100
                 : montoActualExp)
         );
-        const montoTotalCalculado = Math.round((mBaseExp + nuevoAgua) * 100) / 100;
+        const montoTotalCalculado = calcularMontoTotalExpensa(mBaseExp, nuevoAgua, exp.extras);
         const requiereRecalculo = nuevoAgua !== aguaActualExp || montoActualExp !== montoTotalCalculado;
 
         if (
@@ -254,7 +259,7 @@ export async function registrarOActualizarMontosAgua(
                 : montoActual)
         );
 
-        const nuevoMontoTotal = Math.round((montoBase + nuevoAgua) * 100) / 100;
+        const nuevoMontoTotal = calcularMontoTotalExpensa(montoBase, nuevoAgua, expensa.extras);
 
         // Si el agua no cambia y además el monto ya cuadra perfectamente con montoBase + nuevoAgua, no la toques ni audites (idempotente)
         if (nuevoAgua === aguaActualExpensa && montoActual === nuevoMontoTotal) {
@@ -350,6 +355,7 @@ export async function registrarOActualizarMontosAgua(
       for (const item of input.montos) {
         const montoRedondeado = Math.round(item.montoAgua * 100) / 100;
         const anterior = mapaAnteriores.get(item.idDepartamento);
+        const descripcionItem = item.descripcion !== undefined ? item.descripcion : (anterior ? anterior.descripcion : null);
 
         let montoGuardado: any;
 
@@ -358,6 +364,7 @@ export async function registrarOActualizarMontosAgua(
             where: { idMonto: anterior.idMonto },
             data: {
               montoAgua: montoRedondeado,
+              descripcion: descripcionItem,
               idUsuarioRegistro: input.idUsuario || null,
               fechaRegistro: new Date(),
             },
@@ -368,6 +375,7 @@ export async function registrarOActualizarMontosAgua(
               idDepartamento: item.idDepartamento,
               periodo: periodoDate,
               montoAgua: montoRedondeado,
+              descripcion: descripcionItem,
               idUsuarioRegistro: input.idUsuario || null,
             },
           });
@@ -387,6 +395,7 @@ export async function registrarOActualizarMontosAgua(
                 idDepartamento: anterior.idDepartamento,
                 periodo: periodoNormalizado,
                 montoAgua: Number(anterior.montoAgua),
+                descripcion: anterior.descripcion ?? null,
               }
             : undefined,
           datosNuevos: {
@@ -394,6 +403,7 @@ export async function registrarOActualizarMontosAgua(
             idDepartamento: montoGuardado.idDepartamento,
             periodo: periodoNormalizado,
             montoAgua: Number(montoGuardado.montoAgua),
+            descripcion: montoGuardado.descripcion ?? null,
           },
           idUsuario: input.idUsuario || null,
           fechaHora: new Date(),
@@ -417,6 +427,7 @@ export async function registrarOActualizarMontosAgua(
             : undefined,
           periodo: periodoNormalizado,
           montoAgua: Number(montoGuardado.montoAgua),
+          descripcion: montoGuardado.descripcion ?? null,
           idUsuarioRegistro: montoGuardado.idUsuarioRegistro,
           fechaRegistro: montoGuardado.fechaRegistro,
         });
@@ -526,6 +537,7 @@ export async function obtenerMontosAgua(
         : undefined,
       periodo: pStr,
       montoAgua: Number(m.montoAgua),
+      descripcion: m.descripcion ?? null,
       idUsuarioRegistro: m.idUsuarioRegistro,
       usuarioRegistro: m.usuarioRegistro,
       fechaRegistro: m.fechaRegistro,

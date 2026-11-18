@@ -20,8 +20,8 @@ export default function RegistrarExtraModal({
   expensa,
   onSuccess
 }: RegistrarExtraModalProps) {
-  const [concepto, setConcepto] = useState('Extra Pintura Edificio')
-  const [montoExtra, setMontoExtra] = useState<number | ''>(10)
+  const [concepto, setConcepto] = useState('Cuota Extraordinaria')
+  const [montoExtra, setMontoExtra] = useState<number | ''>(50)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
 
   useEffect(() => {
@@ -29,12 +29,12 @@ export default function RegistrarExtraModal({
       if (expensa.extraConcepto) {
         setConcepto(expensa.extraConcepto)
       } else {
-        setConcepto('Extra Pintura Edificio')
+        setConcepto('Cuota Extraordinaria')
       }
-      if (expensa.montoExtra !== undefined) {
+      if (expensa.montoExtra !== undefined && Number(expensa.montoExtra) > 0) {
         setMontoExtra(Number(expensa.montoExtra))
       } else {
-        setMontoExtra(10)
+        setMontoExtra(50)
       }
       setErrorMessage(null)
     }

@@ -17,13 +17,24 @@ export const departamentosRouter: IRouter = Router();
 departamentosRouter.use(authMiddleware);
 
 // ── Schemas ──────────────────────────────────────────────────────────────────
-const departamentoSchema = z.object({
+export const departamentoSchema = z.object({
   numero: z.string().min(1).max(10),
   piso: z.number().int().optional(),
   areaM2: z.number().positive().optional(),
   idPropietario: z.number().int().positive().optional(),
   estado: z.enum(['Ocupado', 'Desocupado', 'EnVenta', 'EnAlquiler']).default('Ocupado'),
+  cantidadHabitantes: z
+    .number({ invalid_type_error: 'La cantidad de habitantes debe ser un número entero' })
+    .int('La cantidad de habitantes debe ser un número entero')
+    .min(0, 'La cantidad de habitantes debe ser mayor o igual a 0')
+    .optional()
+    .nullable(),
 });
+
+export const crearDepartamentoSchema = departamentoSchema;
+export const actualizarDepartamentoSchema = departamentoSchema.partial();
+export type CrearDepartamentoDTO = z.infer<typeof crearDepartamentoSchema>;
+export type ActualizarDepartamentoDTO = z.infer<typeof actualizarDepartamentoSchema>;
 
 // ── GET /departamentos ───────────────────────────────────────────────────────
 departamentosRouter.get(
@@ -44,7 +55,14 @@ departamentosRouter.get(
           orderBy: { numero: 'asc' },
           include: {
             propietario: {
-              select: { idPersona: true, nombres: true, apellidos: true, telefono: true },
+              select: {
+                idPersona: true,
+                nombres: true,
+                apellidos: true,
+                telefono: true,
+                estadoCivil: true,
+                cantidadHijos: true,
+              },
             },
             parqueos: { select: { idParqueo: true, numero: true } },
             bauleras: { select: { idBaulera: true, numero: true } },
@@ -90,7 +108,15 @@ departamentosRouter.get(
             where: { fechaFin: null }, // solo ocupantes activos
             include: {
               persona: {
-                select: { idPersona: true, nombres: true, apellidos: true, telefono: true, correo: true },
+                select: {
+                  idPersona: true,
+                  nombres: true,
+                  apellidos: true,
+                  telefono: true,
+                  correo: true,
+                  estadoCivil: true,
+                  cantidadHijos: true,
+                },
               },
             },
             orderBy: { fechaInicio: 'desc' },
@@ -130,7 +156,7 @@ departamentosRouter.post(
         return;
       }
 
-      const { numero, piso, areaM2, idPropietario, estado } = result.data;
+      const { numero, piso, areaM2, idPropietario, estado, cantidadHabitantes } = result.data;
 
       const departamento = await prisma.departamento.create({
         data: {
@@ -139,6 +165,7 @@ departamentosRouter.post(
           areaM2: areaM2 !== undefined ? areaM2 : undefined,
           idPropietario,
           estado,
+          cantidadHabitantes: cantidadHabitantes !== undefined ? cantidadHabitantes : null,
         },
         include: {
           propietario: { select: { nombres: true, apellidos: true } },

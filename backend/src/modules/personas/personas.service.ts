@@ -57,6 +57,8 @@ export class PersonasService {
           telefono: persona.telefono,
           correo: persona.correo,
           direccion: persona.direccion,
+          estadoCivil: persona.estadoCivil,
+          cantidadHijos: persona.cantidadHijos,
         },
       });
     } catch (err) {
@@ -156,6 +158,8 @@ export class PersonasService {
           telefono: existente.telefono,
           correo: existente.correo,
           direccion: existente.direccion,
+          estadoCivil: existente.estadoCivil,
+          cantidadHijos: existente.cantidadHijos,
         },
         datosNuevos: {
           ...dto,

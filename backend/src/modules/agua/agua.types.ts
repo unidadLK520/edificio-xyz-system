@@ -4,6 +4,7 @@
 export interface ItemMontoAguaInput {
   idDepartamento: number;
   montoAgua: number;
+  descripcion?: string | null;
 }
 
 export interface RegistrarMontosAguaInput {
@@ -30,6 +31,7 @@ export interface MontoAguaResponse {
   };
   periodo: string;
   montoAgua: number;
+  descripcion?: string | null;
   idUsuarioRegistro?: number | null;
   usuarioRegistro?: {
     idUsuario: number;
