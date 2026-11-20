@@ -56,7 +56,7 @@ auditoriaRouter.get(
 
 /**
  * POST /api/v1/auditoria/export-prune
- * Exporta los 150 registros más antiguos a Excel y los elimina.
+ * Exporta los 500 registros más antiguos a Excel y los elimina.
  * Sólo accesible por Administrador y Directorio.
  */
 auditoriaRouter.post(
@@ -66,10 +66,17 @@ auditoriaRouter.post(
     try {
       const buffer = await exportAndPruneOldest();
       const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+      // Set proper MIME type for Excel files
       res.setHeader(
         'Content-Type',
         'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
       );
+      res.setHeader(
+        'Content-Disposition',
+        `attachment; filename="auditoria_${timestamp}.xlsx"`
+      );
+      res.write(buffer);
+      res.end();
       res.setHeader(
         'Content-Disposition',
         `attachment; filename="auditoria_${timestamp}.xlsx"`

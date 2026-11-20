@@ -272,66 +272,6 @@ export default function CajaYBancosPage() {
   )
 
   // ----------------------------------------------------
-  // ESTADO DE GRÁFICOS Y ANÁLISIS FINANCIERO INTERACTIVO
-  // ----------------------------------------------------
-  const [dataFlujo] = useState<MesFlujoData[]>(FLUX_DATA_2026)
-  const [selectedMesIndex, setSelectedMesIndex] = useState<number>(9) // Octubre por defecto
-  const [filtroPeriodoGrafico, setFiltroPeriodoGrafico] = useState<'todos' | 'q1' | 'q2' | 'q3' | 'q4'>('todos')
-  const [vistaGraficoSub, setVistaGraficoSub] = useState<'graficos' | 'tabla'>('graficos')
-  const [simulacionMorosidad, setSimulacionMorosidad] = useState<number>(0)
-  const [simulacionGastoExtra, setSimulacionGastoExtra] = useState<number>(0)
-
-  // Filtrado de datos por trimestre
-  const datosFiltradosFlujo = useMemo(() => {
-    if (filtroPeriodoGrafico === 'q1') return dataFlujo.slice(0, 3)
-    if (filtroPeriodoGrafico === 'q2') return dataFlujo.slice(3, 6)
-    if (filtroPeriodoGrafico === 'q3') return dataFlujo.slice(6, 9)
-    if (filtroPeriodoGrafico === 'q4') return dataFlujo.slice(9, 12)
-    return dataFlujo
-  }, [dataFlujo, filtroPeriodoGrafico])
-
-  const totalIngresosFlujo = useMemo(
-    () => datosFiltradosFlujo.reduce((acc, m) => acc + m.totalIngresos, 0),
-    [datosFiltradosFlujo]
-  )
-  const totalEgresosFlujo = useMemo(
-    () => datosFiltradosFlujo.reduce((acc, m) => acc + m.totalEgresos, 0),
-    [datosFiltradosFlujo]
-  )
-  const flujoNetoTotalFlujo = totalIngresosFlujo - totalEgresosFlujo
-  const saldoFinalPeriodoFlujo =
-    datosFiltradosFlujo[datosFiltradosFlujo.length - 1]?.saldoFinal || 0
-  const mesSeleccionadoFlujo = dataFlujo[selectedMesIndex] || dataFlujo[0]
-
-  const ingresosSimulados = totalIngresosFlujo * (1 - simulacionMorosidad / 100)
-  const egresosSimulados = totalEgresosFlujo + simulacionGastoExtra * datosFiltradosFlujo.length
-  const flujoNetoSimulado = ingresosSimulados - egresosSimulados
-  const maxIngresoEgreso = Math.max(
-    ...dataFlujo.map((d) => Math.max(d.totalIngresos, d.totalEgresos)),
-    12000
-  )
-
-  const handleExportFlujoCSV = () => {
-    const headers =
-      'Mes,Saldo Inicial,Ingresos Ordinarios,Ingresos Extra,Total Ingresos,Egresos Operativos,Mantenimiento,Administrativo,Total Egresos,Flujo Neto,Saldo Final\n'
-    const rows = datosFiltradosFlujo
-      .map(
-        (d) =>
-          `"${d.mes}",${d.saldoInicial},${d.ingresosOrdinarios},${d.ingresosExtraordinarios},${d.totalIngresos},${d.egresosOperativos},${d.egresosMantenimiento},${d.egresosAdministrativos},${d.totalEgresos},${d.flujoNeto},${d.saldoFinal}`
-      )
-      .join('\n')
-
-    const blob = new Blob([headers + rows], { type: 'text/csv;charset=utf-8;' })
-    const url = URL.createObjectURL(blob)
-    const link = document.createElement('a')
-    link.href = url
-    link.setAttribute('download', `flujo_caja_edificio_xyz_${filtroPeriodoGrafico}.csv`)
-    document.body.appendChild(link)
-    link.click()
-    document.body.removeChild(link)
-  }
-
-  // ----------------------------------------------------
   // ESTADO DE CAJA CHICA
   // ----------------------------------------------------
   const [movimientosCaja, setMovimientosCaja] = useState<MovimientoCajaItem[]>([])
@@ -410,58 +350,346 @@ export default function CajaYBancosPage() {
   const [formMovBancoError, setFormMovBancoError] = useState<string | null>(null)
   const [isSubmittingMovBanco, setIsSubmittingMovBanco] = useState(false)
 
+  // ----------------------------------------------------
+  // ESTADO DE GRÁFICOS Y ANÁLISIS FINANCIERO INTERACTIVO
+  // ----------------------------------------------------
+  const [selectedMesIndex, setSelectedMesIndex] = useState<number>(9) // Octubre por defecto
+  const [filtroPeriodoGrafico, setFiltroPeriodoGrafico] = useState<'todos' | 'q1' | 'q2' | 'q3' | 'q4'>('todos')
+  const [vistaGraficoSub, setVistaGraficoSub] = useState<'graficos' | 'tabla'>('graficos')
+  const [simulacionMorosidad, setSimulacionMorosidad] = useState<number>(0)
+  const [simulacionGastoExtra, setSimulacionGastoExtra] = useState<number>(0)
+
+  // Enriquecer datos mensuales con movimientos reales de caja física y bancos
+  const dataFlujo = useMemo<MesFlujoData[]>(() => {
+    return FLUX_DATA_2026.map((mesBase, idx) => {
+      // Filtrar movimientos de caja válidos para el mes (0=Ene, 1=Feb, etc.)
+      const movsCajaMes = movimientosCaja.filter((m) => {
+        if (m.anulado) return false
+        const f = new Date(m.fecha)
+        return f.getFullYear() === 2026 && f.getMonth() === idx
+      })
+
+      const ingCaja = movsCajaMes
+        .filter((m) => m.tipo === 'Ingreso')
+        .reduce((acc, m) => acc + Number(m.monto || 0), 0)
+      const egCaja = movsCajaMes
+        .filter((m) => m.tipo === 'Egreso')
+        .reduce((acc, m) => acc + Number(m.monto || 0), 0)
+
+      if (movsCajaMes.length > 0) {
+        const nuevoIngreso = mesBase.totalIngresos + ingCaja
+        const nuevoEgreso = mesBase.totalEgresos + egCaja
+        const nuevoNeto = nuevoIngreso - nuevoEgreso
+        return {
+          ...mesBase,
+          totalIngresos: nuevoIngreso,
+          totalEgresos: nuevoEgreso,
+          flujoNeto: nuevoNeto,
+          saldoFinal: mesBase.saldoInicial + nuevoNeto
+        }
+      }
+      return mesBase
+    })
+  }, [movimientosCaja])
+
+  // Filtrado de datos por trimestre
+  const datosFiltradosFlujo = useMemo(() => {
+    if (filtroPeriodoGrafico === 'q1') return dataFlujo.slice(0, 3)
+    if (filtroPeriodoGrafico === 'q2') return dataFlujo.slice(3, 6)
+    if (filtroPeriodoGrafico === 'q3') return dataFlujo.slice(6, 9)
+    if (filtroPeriodoGrafico === 'q4') return dataFlujo.slice(9, 12)
+    return dataFlujo
+  }, [dataFlujo, filtroPeriodoGrafico])
+
+  const totalIngresosFlujo = useMemo(
+    () => datosFiltradosFlujo.reduce((acc, m) => acc + m.totalIngresos, 0),
+    [datosFiltradosFlujo]
+  )
+  const totalEgresosFlujo = useMemo(
+    () => datosFiltradosFlujo.reduce((acc, m) => acc + m.totalEgresos, 0),
+    [datosFiltradosFlujo]
+  )
+  const flujoNetoTotalFlujo = totalIngresosFlujo - totalEgresosFlujo
+  const saldoFinalPeriodoFlujo =
+    datosFiltradosFlujo[datosFiltradosFlujo.length - 1]?.saldoFinal || 0
+  const mesSeleccionadoFlujo = dataFlujo[selectedMesIndex] || dataFlujo[0]
+
+  const ingresosSimulados = totalIngresosFlujo * (1 - simulacionMorosidad / 100)
+  const egresosSimulados = totalEgresosFlujo + simulacionGastoExtra * datosFiltradosFlujo.length
+  const flujoNetoSimulado = ingresosSimulados - egresosSimulados
+  const maxIngresoEgreso = Math.max(
+    ...dataFlujo.map((d) => Math.max(d.totalIngresos, d.totalEgresos)),
+    12000
+  )
+
+  const handleExportFlujoCSV = () => {
+    const headers =
+      'Mes,Saldo Inicial,Ingresos Ordinarios,Ingresos Extra,Total Ingresos,Egresos Operativos,Mantenimiento,Administrativo,Total Egresos,Flujo Neto,Saldo Final\n'
+    const rows = datosFiltradosFlujo
+      .map(
+        (d) =>
+          `"${d.mes}",${d.saldoInicial},${d.ingresosOrdinarios},${d.ingresosExtraordinarios},${d.totalIngresos},${d.egresosOperativos},${d.egresosMantenimiento},${d.egresosAdministrativos},${d.totalEgresos},${d.flujoNeto},${d.saldoFinal}`
+      )
+      .join('\n')
+
+    const blob = new Blob([headers + rows], { type: 'text/csv;charset=utf-8;' })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.setAttribute('download', `flujo_caja_edificio_xyz_${filtroPeriodoGrafico}.csv`)
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+  }
+
+  // ---------------------------------------------------------------------------
+  // CÁLCULOS REACTIVOS PARA GRÁFICOS INFERIORES
+  // ---------------------------------------------------------------------------
+  // 1. Distribución reactiva de egresos por rubro (Caja + Bancos)
+  const categoriasGastoReactivo = useMemo(() => {
+    const baseServicios = datosFiltradosFlujo.reduce((acc, m) => acc + m.egresosOperativos, 0)
+    const baseMantenimiento = datosFiltradosFlujo.reduce((acc, m) => acc + m.egresosMantenimiento, 0)
+    const baseAdministracion = datosFiltradosFlujo.reduce((acc, m) => acc + m.egresosAdministrativos, 0)
+
+    let extraServicios = 0
+    let extraMantenimiento = 0
+    let extraAdministracion = 0
+
+    // Clasificar egresos de caja física
+    const egresosCaja = movimientosCaja.filter((m) => !m.anulado && m.tipo === 'Egreso')
+    for (const ec of egresosCaja) {
+      const conc = (ec.concepto || '').toLowerCase()
+      const val = Number(ec.monto || 0)
+      if (
+        conc.includes('mant') ||
+        conc.includes('ascensor') ||
+        conc.includes('bomba') ||
+        conc.includes('repar') ||
+        conc.includes('pint')
+      ) {
+        extraMantenimiento += val
+      } else if (
+        conc.includes('serv') ||
+        conc.includes('agua') ||
+        conc.includes('luz') ||
+        conc.includes('limp') ||
+        conc.includes('segur') ||
+        conc.includes('gas')
+      ) {
+        extraServicios += val
+      } else {
+        extraAdministracion += val
+      }
+    }
+
+    // Clasificar retiros de cuentas bancarias
+    const retirosBanco = movimientosBanco.filter((mb) => mb.tipo === 'Retiro')
+    for (const rb of retirosBanco) {
+      const conc = (rb.concepto || '').toLowerCase()
+      const val = Number(rb.monto || 0)
+      if (
+        conc.includes('mant') ||
+        conc.includes('ascensor') ||
+        conc.includes('bomba') ||
+        conc.includes('repar') ||
+        conc.includes('pint')
+      ) {
+        extraMantenimiento += val
+      } else if (
+        conc.includes('serv') ||
+        conc.includes('agua') ||
+        conc.includes('luz') ||
+        conc.includes('limp') ||
+        conc.includes('segur') ||
+        conc.includes('gas')
+      ) {
+        extraServicios += val
+      } else {
+        extraAdministracion += val
+      }
+    }
+
+    const montoServicios = Math.round(baseServicios + extraServicios)
+    const montoMantenimiento = Math.round(baseMantenimiento + extraMantenimiento)
+    const montoAdministracion = Math.round(baseAdministracion + extraAdministracion)
+    const total = montoServicios + montoMantenimiento + montoAdministracion
+
+    const pServicios = total > 0 ? Number(((montoServicios / total) * 100).toFixed(1)) : 33.3
+    const pMantenimiento = total > 0 ? Number(((montoMantenimiento / total) * 100).toFixed(1)) : 33.3
+    const pAdministracion = total > 0 ? Number((100 - pServicios - pMantenimiento).toFixed(1)) : 33.4
+
+    // Circunferencia: 2 * PI * 38 ≈ 238.76
+    const C = 238.76
+    const len1 = (pServicios / 100) * C
+    const len2 = (pMantenimiento / 100) * C
+    const len3 = (pAdministracion / 100) * C
+
+    const offset1 = 0
+    const offset2 = -len1
+    const offset3 = -(len1 + len2)
+
+    return {
+      total,
+      rubros: [
+        {
+          nombre: 'Servicios Básicos & Limpieza',
+          monto: montoServicios,
+          porcentaje: pServicios,
+          color: '#2563eb',
+          darkColor: '#60a5fa',
+          strokeDasharray: `${len1.toFixed(2)} ${C.toFixed(2)}`,
+          strokeDashoffset: `${offset1.toFixed(2)}`
+        },
+        {
+          nombre: 'Mantenimiento & Ascensores',
+          monto: montoMantenimiento,
+          porcentaje: pMantenimiento,
+          color: '#f59e0b',
+          darkColor: '#fbbf24',
+          strokeDasharray: `${len2.toFixed(2)} ${C.toFixed(2)}`,
+          strokeDashoffset: `${offset2.toFixed(2)}`
+        },
+        {
+          nombre: 'Administración & Suministros',
+          monto: montoAdministracion,
+          porcentaje: pAdministracion,
+          color: '#8b5cf6',
+          darkColor: '#a78bfa',
+          strokeDasharray: `${len3.toFixed(2)} ${C.toFixed(2)}`,
+          strokeDashoffset: `${offset3.toFixed(2)}`
+        }
+      ]
+    }
+  }, [datosFiltradosFlujo, movimientosCaja, movimientosBanco])
+
+  // 2. Curva reactiva de proyección de liquidez y reserva
+  const curvaLiquidezReactiva = useMemo(() => {
+    const meses = datosFiltradosFlujo
+    if (meses.length === 0) {
+      return {
+        pathLine: 'M 0 120 L 500 20',
+        pathArea: 'M 0 120 L 500 20 L 500 160 L 0 160 Z',
+        inicio: { x: 0, y: 120, saldo: 0, mes: 'Inicio', mesCorto: 'Ini' },
+        medio: { x: 250, y: 70, saldo: 0, mes: 'Medio', mesCorto: 'Med' },
+        fin: { x: 500, y: 20, saldo: 0, mes: 'Final', mesCorto: 'Fin' }
+      }
+    }
+
+    const saldos = meses.map((m) => m.saldoFinal)
+    const minSaldo = Math.min(...saldos, 10000)
+    const maxSaldo = Math.max(...saldos, minSaldo + 1000)
+    const rango = maxSaldo - minSaldo || 1
+
+    const N = meses.length
+    const coords = meses.map((m, idx) => {
+      const x = Math.round((idx / Math.max(1, N - 1)) * 500)
+      const norm = (m.saldoFinal - minSaldo) / rango
+      const y = Math.round(135 - norm * 115)
+      return { x, y, saldo: m.saldoFinal, mes: m.mes, mesCorto: m.mesCorto }
+    })
+
+    const pathLine = coords.map((c, idx) => `${idx === 0 ? 'M' : 'L'} ${c.x} ${c.y}`).join(' ')
+    const pathArea = `${pathLine} L 500 160 L 0 160 Z`
+
+    const inicio = coords[0]
+    const medio = coords[Math.floor(coords.length / 2)]
+    const fin = coords[coords.length - 1]
+
+    return {
+      pathLine,
+      pathArea,
+      inicio,
+      medio,
+      fin
+    }
+  }, [datosFiltradosFlujo])
+
   const showNotification = (type: 'success' | 'error', text: string) => {
     setFeedbackMsg({ type, text })
     setTimeout(() => setFeedbackMsg(null), 5000)
   }
 
-  // Cargar datos de caja y cuentas bancarias
-  const fetchData = useCallback(async () => {
-    setLoading(true)
-    setApiError(null)
-    try {
-      const [resSaldo, resMovimientos, resCuentas] = await Promise.allSettled([
-        cajaService.getSaldo(),
-        cajaService.getMovimientos({ limit: 200 }),
-        cuentasBancariasService.getCuentas()
-      ])
-
-      const errores: string[] = []
-
-      if (resSaldo.status === 'fulfilled') {
-        setSaldoCajaResumen(resSaldo.value)
-      } else {
-        errores.push(`Saldo de caja: ${extractErrorMessage(resSaldo.reason)}`)
-      }
-
-      if (resMovimientos.status === 'fulfilled') {
-        setMovimientosCaja(resMovimientos.value.items)
-      } else {
-        errores.push(`Movimientos de caja: ${extractErrorMessage(resMovimientos.reason)}`)
-      }
-
-      if (resCuentas.status === 'fulfilled') {
-        setCuentasBancarias(resCuentas.value)
-        if (resCuentas.value.length > 0 && cuentaSeleccionadaId === null) {
-          setCuentaSeleccionadaId(resCuentas.value[0].idCuenta)
+  // Cargar datos de caja y cuentas bancarias desde endpoints oficiales
+  const fetchData = useCallback(
+    async (isManual = false) => {
+      setLoading(true)
+      setApiError(null)
+      try {
+        const hoy = new Date()
+        let saldoParams: { desde?: string; hasta?: string } | undefined
+        if (filtroPeriodoCaja === 'mes_actual') {
+          const desde = new Date(hoy.getFullYear(), hoy.getMonth(), 1).toISOString()
+          const hasta = new Date(
+            hoy.getFullYear(),
+            hoy.getMonth() + 1,
+            0,
+            23,
+            59,
+            59
+          ).toISOString()
+          saldoParams = { desde, hasta }
+        } else if (filtroPeriodoCaja === 'mes_anterior') {
+          const desde = new Date(hoy.getFullYear(), hoy.getMonth() - 1, 1).toISOString()
+          const hasta = new Date(
+            hoy.getFullYear(),
+            hoy.getMonth(),
+            0,
+            23,
+            59,
+            59
+          ).toISOString()
+          saldoParams = { desde, hasta }
         }
-      } else {
-        errores.push(`Cuentas bancarias: ${extractErrorMessage(resCuentas.reason)}`)
-      }
 
-      if (
-        errores.length > 0 &&
-        resMovimientos.status === 'rejected' &&
-        resCuentas.status === 'rejected'
-      ) {
-        setApiError(errores.join(' | '))
+        const [resSaldo, resMovimientos, resCuentas] = await Promise.allSettled([
+          cajaService.getSaldo(saldoParams),
+          cajaService.getMovimientos({ limit: 200 }),
+          cuentasBancariasService.getCuentas()
+        ])
+
+        const errores: string[] = []
+
+        if (resSaldo.status === 'fulfilled') {
+          setSaldoCajaResumen(resSaldo.value)
+        } else {
+          errores.push(`Saldo de caja: ${extractErrorMessage(resSaldo.reason)}`)
+        }
+
+        if (resMovimientos.status === 'fulfilled') {
+          setMovimientosCaja(resMovimientos.value.items)
+        } else {
+          errores.push(`Movimientos de caja: ${extractErrorMessage(resMovimientos.reason)}`)
+        }
+
+        if (resCuentas.status === 'fulfilled') {
+          setCuentasBancarias(resCuentas.value)
+          if (resCuentas.value.length > 0 && cuentaSeleccionadaId === null) {
+            setCuentaSeleccionadaId(resCuentas.value[0].idCuenta)
+          }
+        } else {
+          errores.push(`Cuentas bancarias: ${extractErrorMessage(resCuentas.reason)}`)
+        }
+
+        if (
+          errores.length > 0 &&
+          resMovimientos.status === 'rejected' &&
+          resCuentas.status === 'rejected'
+        ) {
+          setApiError(errores.join(' | '))
+        } else if (isManual) {
+          showNotification(
+            'success',
+            'Saldos y movimientos de caja y cuentas bancarias actualizados exitosamente.'
+          )
+        }
+      } catch (err: unknown) {
+        setApiError(extractErrorMessage(err, 'Error al conectar con la API financiera.'))
+      } finally {
+        setLoading(false)
       }
-    } catch (err: unknown) {
-      setApiError(extractErrorMessage(err, 'Error al conectar con la API financiera.'))
-    } finally {
-      setLoading(false)
-    }
-  }, [cuentaSeleccionadaId])
+    },
+    [cuentaSeleccionadaId, filtroPeriodoCaja]
+  )
 
   useEffect(() => {
     fetchData()
@@ -571,6 +799,119 @@ export default function CajaYBancosPage() {
   const saldoBancosTotal = useMemo(() => {
     return cuentasBancarias.reduce((acc, c) => acc + (Number(c.saldoActual) || 0), 0)
   }, [cuentasBancarias])
+
+  // Totales reactivos de Caja Chica calculados a partir de los movimientos y saldo oficial
+  const totalesCajaReactivos = useMemo(() => {
+    const movsValidosPeriodo = movimientosCajaFiltrados.filter((m) => !m.anulado)
+    const ingresosPeriodo = movsValidosPeriodo
+      .filter((m) => m.tipo === 'Ingreso')
+      .reduce((acc, m) => acc + Number(m.monto || 0), 0)
+    const egresosPeriodo = movsValidosPeriodo
+      .filter((m) => m.tipo === 'Egreso')
+      .reduce((acc, m) => acc + Number(m.monto || 0), 0)
+
+    const todosValidos = movimientosCaja.filter((m) => !m.anulado)
+    const ingresosHistoricos = todosValidos
+      .filter((m) => m.tipo === 'Ingreso')
+      .reduce((acc, m) => acc + Number(m.monto || 0), 0)
+    const egresosHistoricos = todosValidos
+      .filter((m) => m.tipo === 'Egreso')
+      .reduce((acc, m) => acc + Number(m.monto || 0), 0)
+
+    const saldoInicial = Number(saldoCajaResumen?.saldoInicial ?? 0)
+    const disponibleCalculado = saldoInicial + ingresosHistoricos - egresosHistoricos
+    const saldoDisponibleActual =
+      saldoCajaResumen?.saldoDisponibleActual !== undefined
+        ? Number(saldoCajaResumen.saldoDisponibleActual)
+        : disponibleCalculado
+
+    return {
+      saldoInicial,
+      totalIngresos:
+        filtroPeriodoCaja === 'todos' && saldoCajaResumen?.totalIngresos !== undefined
+          ? Number(saldoCajaResumen.totalIngresos)
+          : ingresosPeriodo,
+      totalEgresos:
+        filtroPeriodoCaja === 'todos' && saldoCajaResumen?.totalEgresos !== undefined
+          ? Number(saldoCajaResumen.totalEgresos)
+          : egresosPeriodo,
+      saldoDisponibleActual
+    }
+  }, [movimientosCajaFiltrados, movimientosCaja, saldoCajaResumen, filtroPeriodoCaja])
+
+  // Totales reactivos de Cuentas Bancarias
+  const totalesBancosReactivos = useMemo(() => {
+    const saldoConsolidado = cuentasBancarias.reduce(
+      (acc, c) => acc + (Number(c.saldoActual ?? c.saldoCalculado) || 0),
+      0
+    )
+    const totalDepositosConsolidado = cuentasBancarias.reduce(
+      (acc, c) => acc + (Number(c.totalDepositos) || 0),
+      0
+    )
+    const totalRetirosConsolidado = cuentasBancarias.reduce(
+      (acc, c) => acc + (Number(c.totalRetiros) || 0),
+      0
+    )
+
+    // Para la cuenta seleccionada
+    const cuentaActiva = cuentasBancarias.find((c) => c.idCuenta === cuentaSeleccionadaId)
+    const depositosCuenta =
+      saldoCuentaSeleccionada?.totalDepositos !== undefined
+        ? Number(saldoCuentaSeleccionada.totalDepositos)
+        : movimientosBanco
+            .filter((m) => m.tipo === 'Deposito')
+            .reduce((acc, m) => acc + Number(m.monto || 0), 0)
+
+    const retirosCuenta =
+      saldoCuentaSeleccionada?.totalRetiros !== undefined
+        ? Number(saldoCuentaSeleccionada.totalRetiros)
+        : movimientosBanco
+            .filter((m) => m.tipo === 'Retiro')
+            .reduce((acc, m) => acc + Number(m.monto || 0), 0)
+
+    const saldoInicialCuenta =
+      saldoCuentaSeleccionada?.saldoInicial !== undefined
+        ? Number(saldoCuentaSeleccionada.saldoInicial)
+        : Number(cuentaActiva?.saldoInicial || 0)
+
+    const disponibleCuenta =
+      saldoCuentaSeleccionada?.saldoDisponibleActual !== undefined
+        ? Number(saldoCuentaSeleccionada.saldoDisponibleActual)
+        : saldoInicialCuenta + depositosCuenta - retirosCuenta
+
+    return {
+      saldoConsolidado,
+      totalDepositosConsolidado,
+      totalRetirosConsolidado,
+      cuentaActiva: {
+        saldoInicial: saldoInicialCuenta,
+        totalDepositos: depositosCuenta,
+        totalRetiros: retirosCuenta,
+        saldoDisponible: disponibleCuenta
+      }
+    }
+  }, [cuentasBancarias, cuentaSeleccionadaId, saldoCuentaSeleccionada, movimientosBanco])
+
+  // Totales consolidados de Tesorería (Caja Chica + Cuentas Bancarias)
+  const totalesConsolidados = useMemo(() => {
+    const totalIngresos =
+      totalesCajaReactivos.totalIngresos + totalesBancosReactivos.totalDepositosConsolidado
+    const totalEgresos =
+      totalesCajaReactivos.totalEgresos + totalesBancosReactivos.totalRetirosConsolidado
+    const disponibleTotal =
+      totalesCajaReactivos.saldoDisponibleActual + totalesBancosReactivos.saldoConsolidado
+    const flujoNeto = totalIngresos - totalEgresos
+
+    return {
+      totalIngresos,
+      totalEgresos,
+      disponibleTotal,
+      flujoNeto,
+      disponibleCaja: totalesCajaReactivos.saldoDisponibleActual,
+      disponibleBancos: totalesBancosReactivos.saldoConsolidado
+    }
+  }, [totalesCajaReactivos, totalesBancosReactivos])
 
   // Exportar reporte de Caja Chica a CSV
   const handleExportCSVCaja = () => {
@@ -865,59 +1206,121 @@ export default function CajaYBancosPage() {
           </p>
         </div>
 
-        {/* TABS PRINCIPALES */}
-        <div className="flex flex-wrap items-center gap-1.5 p-1 rounded-xl bg-[#dfd9ce] dark:bg-slate-900 border border-[#cec8bc] dark:border-slate-800 self-start">
+        {/* BOTÓN SINCRONIZAR Y TABS PRINCIPALES */}
+        <div className="flex flex-wrap items-center gap-2 self-start">
           <button
             type="button"
-            onClick={() => setTabActiva('caja')}
-            className={`flex items-center gap-2 px-3.5 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-              tabActiva === 'caja'
-                ? 'bg-blue-700 text-white shadow-xs'
-                : 'text-[#5c5750] dark:text-slate-400 hover:text-[#262422] dark:hover:text-white'
-            }`}
+            disabled={loading}
+            onClick={() => fetchData(true)}
+            className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-[#dfd9ce] hover:bg-[#d5cfc2] dark:bg-slate-800 dark:hover:bg-slate-700 text-xs font-bold transition-all cursor-pointer border border-[#cec8bc] dark:border-slate-700 disabled:opacity-60"
+            title="Sincronizar movimientos y saldos con el backend de Caja y Cuentas Bancarias"
           >
-            <Wallet className="w-4 h-4" />
-            <span>Caja Chica</span>
+            <RefreshCw className={`w-3.5 h-3.5 text-blue-600 ${loading ? 'animate-spin' : ''}`} />
+            <span>{loading ? 'Actualizando...' : 'Sincronizar'}</span>
           </button>
 
-          <button
-            type="button"
-            onClick={() => setTabActiva('bancos')}
-            className={`flex items-center gap-2 px-3.5 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-              tabActiva === 'bancos'
-                ? 'bg-blue-700 text-white shadow-xs'
-                : 'text-[#5c5750] dark:text-slate-400 hover:text-[#262422] dark:hover:text-white'
-            }`}
-          >
-            <Landmark className="w-4 h-4" />
-            <span>Cuentas Bancarias</span>
-          </button>
+          <div className="flex flex-wrap items-center gap-1.5 p-1 rounded-xl bg-[#dfd9ce] dark:bg-slate-900 border border-[#cec8bc] dark:border-slate-800">
+            <button
+              type="button"
+              onClick={() => setTabActiva('caja')}
+              className={`flex items-center gap-2 px-3.5 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                tabActiva === 'caja'
+                  ? 'bg-blue-700 text-white shadow-xs'
+                  : 'text-[#5c5750] dark:text-slate-400 hover:text-[#262422] dark:hover:text-white'
+              }`}
+            >
+              <Wallet className="w-4 h-4" />
+              <span>Caja Chica</span>
+            </button>
 
-          <button
-            type="button"
-            onClick={() => setTabActiva('graficos')}
-            className={`flex items-center gap-2 px-3.5 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-              tabActiva === 'graficos'
-                ? 'bg-blue-700 text-white shadow-xs'
-                : 'text-[#5c5750] dark:text-slate-400 hover:text-[#262422] dark:hover:text-white'
-            }`}
-          >
-            <BarChart3 className="w-4 h-4" />
-            <span>Gráficos y Comparativas</span>
-          </button>
+            <button
+              type="button"
+              onClick={() => setTabActiva('bancos')}
+              className={`flex items-center gap-2 px-3.5 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                tabActiva === 'bancos'
+                  ? 'bg-blue-700 text-white shadow-xs'
+                  : 'text-[#5c5750] dark:text-slate-400 hover:text-[#262422] dark:hover:text-white'
+              }`}
+            >
+              <Landmark className="w-4 h-4" />
+              <span>Cuentas Bancarias</span>
+            </button>
 
-          <button
-            type="button"
-            onClick={() => setTabActiva('simulador')}
-            className={`flex items-center gap-2 px-3.5 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-              tabActiva === 'simulador'
-                ? 'bg-blue-700 text-white shadow-xs'
-                : 'text-[#5c5750] dark:text-slate-400 hover:text-[#262422] dark:hover:text-white'
-            }`}
-          >
-            <Sliders className="w-4 h-4 text-amber-500" />
-            <span>Simulador Financiero</span>
-          </button>
+            <button
+              type="button"
+              onClick={() => setTabActiva('graficos')}
+              className={`flex items-center gap-2 px-3.5 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                tabActiva === 'graficos'
+                  ? 'bg-blue-700 text-white shadow-xs'
+                  : 'text-[#5c5750] dark:text-slate-400 hover:text-[#262422] dark:hover:text-white'
+              }`}
+            >
+              <BarChart3 className="w-4 h-4" />
+              <span>Gráficos y Comparativas</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setTabActiva('simulador')}
+              className={`flex items-center gap-2 px-3.5 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                tabActiva === 'simulador'
+                  ? 'bg-blue-700 text-white shadow-xs'
+                  : 'text-[#5c5750] dark:text-slate-400 hover:text-[#262422] dark:hover:text-white'
+              }`}
+            >
+              <Sliders className="w-4 h-4 text-amber-500" />
+              <span>Simulador Financiero</span>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* PANEL RESUMEN CONSOLIDADO DE TESORERÍA (REACTIVO CON /api/v1/caja Y /api/v1/cuentas-bancarias) */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 p-5 rounded-3xl bg-gradient-to-r from-blue-900/10 via-[#dfd9ce] to-emerald-900/10 dark:from-slate-900 dark:via-slate-900 dark:to-slate-900 border border-[#cec8bc] dark:border-slate-800 shadow-sm">
+        <div className="space-y-1">
+          <div className="flex items-center justify-between text-xs font-bold text-[#66615b] dark:text-slate-400">
+            <span>Ingresos Totales Consolidados</span>
+            <span className="p-1.5 rounded-lg bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-400">
+              <TrendingUp className="w-4 h-4" />
+            </span>
+          </div>
+          <div className="text-2xl font-black text-emerald-800 dark:text-emerald-400 font-mono">
+            Bs. {totalesConsolidados.totalIngresos.toLocaleString('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+          </div>
+          <div className="text-[11px] text-[#7d776f]">
+            Caja: Bs. {totalesCajaReactivos.totalIngresos.toFixed(2)} &bull; Bancos: Bs. {totalesBancosReactivos.totalDepositosConsolidado.toFixed(2)}
+          </div>
+        </div>
+
+        <div className="space-y-1">
+          <div className="flex items-center justify-between text-xs font-bold text-[#66615b] dark:text-slate-400">
+            <span>Egresos Totales Consolidados</span>
+            <span className="p-1.5 rounded-lg bg-rose-100 dark:bg-rose-950/60 text-rose-700 dark:text-rose-400">
+              <TrendingDown className="w-4 h-4" />
+            </span>
+          </div>
+          <div className="text-2xl font-black text-rose-800 dark:text-rose-400 font-mono">
+            Bs. {totalesConsolidados.totalEgresos.toLocaleString('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+          </div>
+          <div className="text-[11px] text-[#7d776f]">
+            Caja: Bs. {totalesCajaReactivos.totalEgresos.toFixed(2)} &bull; Bancos: Bs. {totalesBancosReactivos.totalRetirosConsolidado.toFixed(2)}
+          </div>
+        </div>
+
+        <div className="space-y-1">
+          <div className="flex items-center justify-between text-xs font-bold text-[#66615b] dark:text-slate-400">
+            <span>Disponible Actual Consolidado</span>
+            <span className="p-1.5 rounded-lg bg-blue-100 dark:bg-blue-950/60 text-blue-700 dark:text-blue-400">
+              <Wallet className="w-4 h-4" />
+            </span>
+          </div>
+          <div className="text-2xl font-black text-blue-800 dark:text-blue-400 font-mono">
+            Bs. {totalesConsolidados.disponibleTotal.toLocaleString('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+          </div>
+          <div className="text-[11px] text-[#7d776f] flex items-center justify-between">
+            <span>Caja Física: Bs. {totalesCajaReactivos.saldoDisponibleActual.toFixed(2)}</span>
+            <span>En Bancos: Bs. {totalesBancosReactivos.saldoConsolidado.toFixed(2)}</span>
+          </div>
         </div>
       </div>
 
@@ -934,7 +1337,7 @@ export default function CajaYBancosPage() {
             <p className="text-sm text-slate-600 dark:text-slate-400 mt-1">{apiError}</p>
           </div>
           <button
-            onClick={fetchData}
+            onClick={() => fetchData(true)}
             className="inline-flex items-center gap-2 px-4 py-2 bg-amber-600 hover:bg-amber-500 text-white rounded-xl text-sm font-semibold transition-colors cursor-pointer shadow-md shadow-amber-600/20"
           >
             <RotateCcw className="w-4 h-4" />
@@ -946,7 +1349,7 @@ export default function CajaYBancosPage() {
           {/* VISTA 1: CAJA CHICA */}
           {tabActiva === 'caja' && (
             <div className="space-y-6">
-              {/* KPIS DE CAJA CHICA (Desde /api/v1/caja/saldo oficial) */}
+              {/* KPIS DE CAJA CHICA (Calculados reactivamente desde /api/v1/caja y saldo) */}
               <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
                 <div className="p-5 rounded-2xl bg-white/70 dark:bg-slate-900/70 border border-[#cec8bc] dark:border-slate-800 shadow-sm space-y-1">
                   <div className="flex items-center justify-between text-xs font-semibold text-[#7d776f] dark:text-slate-400">
@@ -954,7 +1357,7 @@ export default function CajaYBancosPage() {
                     <Layers className="w-4 h-4 text-blue-600" />
                   </div>
                   <div className="text-xl sm:text-2xl font-black text-slate-800 dark:text-slate-200 font-mono">
-                    Bs. {(saldoCajaResumen?.saldoInicial ?? 0).toFixed(2)}
+                    Bs. {totalesCajaReactivos.saldoInicial.toFixed(2)}
                   </div>
                   <div className="text-[11px] text-[#7d776f]">Apertura de período</div>
                 </div>
@@ -965,7 +1368,7 @@ export default function CajaYBancosPage() {
                     <ArrowDownLeft className="w-4 h-4 text-emerald-600" />
                   </div>
                   <div className="text-xl sm:text-2xl font-black text-emerald-700 dark:text-emerald-400 font-mono">
-                    Bs. {(saldoCajaResumen?.totalIngresos ?? 0).toFixed(2)}
+                    Bs. {totalesCajaReactivos.totalIngresos.toFixed(2)}
                   </div>
                   <div className="text-[11px] text-[#7d776f]">Efectivo ingresado</div>
                 </div>
@@ -976,7 +1379,7 @@ export default function CajaYBancosPage() {
                     <ArrowUpRight className="w-4 h-4 text-rose-600" />
                   </div>
                   <div className="text-xl sm:text-2xl font-black text-rose-700 dark:text-rose-400 font-mono">
-                    Bs. {(saldoCajaResumen?.totalEgresos ?? 0).toFixed(2)}
+                    Bs. {totalesCajaReactivos.totalEgresos.toFixed(2)}
                   </div>
                   <div className="text-[11px] text-[#7d776f]">Gastos menores en efectivo</div>
                 </div>
@@ -988,12 +1391,12 @@ export default function CajaYBancosPage() {
                   </div>
                   <div
                     className={`text-xl sm:text-2xl font-black font-mono ${
-                      (saldoCajaResumen?.saldoDisponibleActual ?? 0) >= 0
+                      totalesCajaReactivos.saldoDisponibleActual >= 0
                         ? 'text-emerald-700 dark:text-emerald-400'
                         : 'text-rose-700 dark:text-rose-400'
                     }`}
                   >
-                    Bs. {(saldoCajaResumen?.saldoDisponibleActual ?? 0).toFixed(2)}
+                    Bs. {totalesCajaReactivos.saldoDisponibleActual.toFixed(2)}
                   </div>
                   <div className="text-[11px] text-[#7d776f]">En caja física</div>
                 </div>
@@ -1212,7 +1615,7 @@ export default function CajaYBancosPage() {
                     Saldo Bancario Consolidado
                   </div>
                   <div className="text-2xl sm:text-3xl font-black text-blue-700 dark:text-blue-400 font-mono mt-1">
-                    Bs. {saldoBancosTotal.toFixed(2)}
+                    Bs. {totalesBancosReactivos.saldoConsolidado.toFixed(2)}
                   </div>
                   <div className="text-xs text-[#5c5750] mt-0.5">
                     Total en {cuentasBancarias.length} cuenta(s) bancaria(s) institucional(es)
@@ -1308,43 +1711,40 @@ export default function CajaYBancosPage() {
               {cuentaSeleccionadaId && (
                 <div className="space-y-4 pt-4 border-t border-[#cec8bc] dark:border-slate-800">
                   {/* PANEL SALDO RECALCULADO OFICIAL (GET /api/v1/cuentas-bancarias/:id/saldo) */}
-                  {saldoCuentaSeleccionada && (
-                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 p-4 rounded-2xl bg-white/70 dark:bg-slate-900/70 border border-[#cec8bc] dark:border-slate-800 text-xs shadow-sm">
-                      <div>
-                        <span className="text-[#7d776f] font-semibold text-[11px] block">
-                          Saldo Inicial Período
-                        </span>
-                        <div className="text-base sm:text-lg font-black font-mono text-slate-800 dark:text-slate-200 mt-0.5">
-                          Bs. {Number(saldoCuentaSeleccionada.saldoInicial || 0).toFixed(2)}
-                        </div>
-                      </div>
-                      <div>
-                        <span className="text-emerald-700 dark:text-emerald-400 font-semibold text-[11px] block">
-                          Depósitos (Abonos)
-                        </span>
-                        <div className="text-base sm:text-lg font-black font-mono text-emerald-700 dark:text-emerald-400 mt-0.5">
-                          + Bs. {Number(saldoCuentaSeleccionada.totalDepositos || 0).toFixed(2)}
-                        </div>
-                      </div>
-                      <div>
-                        <span className="text-rose-700 dark:text-rose-400 font-semibold text-[11px] block">
-                          Retiros (Cargos)
-                        </span>
-                        <div className="text-base sm:text-lg font-black font-mono text-rose-700 dark:text-rose-400 mt-0.5">
-                          - Bs. {Number(saldoCuentaSeleccionada.totalRetiros || 0).toFixed(2)}
-                        </div>
-                      </div>
-                      <div>
-                        <span className="text-blue-700 dark:text-blue-400 font-semibold text-[11px] block">
-                          Disponible Cuenta
-                        </span>
-                        <div className="text-base sm:text-lg font-black font-mono text-blue-700 dark:text-blue-400 mt-0.5">
-                          Bs.{' '}
-                          {Number(saldoCuentaSeleccionada.saldoDisponibleActual || 0).toFixed(2)}
-                        </div>
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 p-4 rounded-2xl bg-white/70 dark:bg-slate-900/70 border border-[#cec8bc] dark:border-slate-800 text-xs shadow-sm">
+                    <div>
+                      <span className="text-[#7d776f] font-semibold text-[11px] block">
+                        Saldo Inicial Período
+                      </span>
+                      <div className="text-base sm:text-lg font-black font-mono text-slate-800 dark:text-slate-200 mt-0.5">
+                        Bs. {totalesBancosReactivos.cuentaActiva.saldoInicial.toFixed(2)}
                       </div>
                     </div>
-                  )}
+                    <div>
+                      <span className="text-emerald-700 dark:text-emerald-400 font-semibold text-[11px] block">
+                        Depósitos (Abonos)
+                      </span>
+                      <div className="text-base sm:text-lg font-black font-mono text-emerald-700 dark:text-emerald-400 mt-0.5">
+                        + Bs. {totalesBancosReactivos.cuentaActiva.totalDepositos.toFixed(2)}
+                      </div>
+                    </div>
+                    <div>
+                      <span className="text-rose-700 dark:text-rose-400 font-semibold text-[11px] block">
+                        Retiros (Cargos)
+                      </span>
+                      <div className="text-base sm:text-lg font-black font-mono text-rose-700 dark:text-rose-400 mt-0.5">
+                        - Bs. {totalesBancosReactivos.cuentaActiva.totalRetiros.toFixed(2)}
+                      </div>
+                    </div>
+                    <div>
+                      <span className="text-blue-700 dark:text-blue-400 font-semibold text-[11px] block">
+                        Disponible Cuenta
+                      </span>
+                      <div className="text-base sm:text-lg font-black font-mono text-blue-700 dark:text-blue-400 mt-0.5">
+                        Bs. {totalesBancosReactivos.cuentaActiva.saldoDisponible.toFixed(2)}
+                      </div>
+                    </div>
+                  </div>
 
                   <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3">
                     <div>
@@ -1830,50 +2230,31 @@ export default function CajaYBancosPage() {
                         <div className="relative w-40 h-40 shrink-0">
                           <svg className="w-full h-full transform -rotate-90" viewBox="0 0 100 100">
                             <circle cx="50" cy="50" r="38" fill="transparent" stroke="#cec8bc" strokeWidth="16" className="dark:stroke-slate-800" />
-                            <circle
-                              cx="50"
-                              cy="50"
-                              r="38"
-                              fill="transparent"
-                              stroke="#2563eb"
-                              strokeWidth="16"
-                              strokeDasharray="238.76"
-                              strokeDashoffset="95.5"
-                              strokeLinecap="round"
-                            />
-                            <circle
-                              cx="50"
-                              cy="50"
-                              r="38"
-                              fill="transparent"
-                              stroke="#f59e0b"
-                              strokeWidth="16"
-                              strokeDasharray="238.76"
-                              strokeDashoffset="173"
-                              strokeLinecap="round"
-                            />
-                            <circle
-                              cx="50"
-                              cy="50"
-                              r="38"
-                              fill="transparent"
-                              stroke="#8b5cf6"
-                              strokeWidth="16"
-                              strokeDasharray="238.76"
-                              strokeDashoffset="208"
-                              strokeLinecap="round"
-                            />
+                            {categoriasGastoReactivo.rubros.map((cat) => (
+                              <circle
+                                key={cat.nombre}
+                                cx="50"
+                                cy="50"
+                                r="38"
+                                fill="transparent"
+                                stroke={cat.color}
+                                strokeWidth="16"
+                                strokeDasharray={cat.strokeDasharray}
+                                strokeDashoffset={cat.strokeDashoffset}
+                                strokeLinecap="round"
+                              />
+                            ))}
                           </svg>
                           <div className="absolute inset-0 flex flex-col items-center justify-center text-center">
                             <span className="text-[10px] text-[#7d776f] uppercase font-bold">Total Gastos</span>
                             <span className="font-extrabold text-sm text-[#262422] dark:text-white font-mono">
-                              Bs. 79.0k
+                              Bs. {(categoriasGastoReactivo.total / 1000).toFixed(1)}k
                             </span>
                           </div>
                         </div>
 
                         <div className="space-y-3 flex-1">
-                          {CATEGORIAS_GASTO.map((cat) => (
+                          {categoriasGastoReactivo.rubros.map((cat) => (
                             <div key={cat.nombre} className="text-xs">
                               <div className="flex items-center justify-between font-bold mb-1">
                                 <span className="flex items-center gap-1.5 text-[#262422] dark:text-white">
@@ -1921,34 +2302,34 @@ export default function CajaYBancosPage() {
                           </defs>
 
                           <path
-                            d="M 0 120 Q 125 100 250 65 T 500 15 L 500 160 L 0 160 Z"
+                            d={curvaLiquidezReactiva.pathArea}
                             fill="url(#liquidezGrad)"
                           />
                           <path
-                            d="M 0 120 Q 125 100 250 65 T 500 15"
+                            d={curvaLiquidezReactiva.pathLine}
                             fill="transparent"
                             stroke="#8b5cf6"
                             strokeWidth="3.5"
                             strokeLinecap="round"
                           />
-                          <circle cx="0" cy="120" r="5" fill="#8b5cf6" stroke="#fff" strokeWidth="2" />
-                          <circle cx="250" cy="65" r="5" fill="#8b5cf6" stroke="#fff" strokeWidth="2" />
-                          <circle cx="500" cy="15" r="6" fill="#10b981" stroke="#fff" strokeWidth="2" />
+                          <circle cx={curvaLiquidezReactiva.inicio.x} cy={curvaLiquidezReactiva.inicio.y} r="5" fill="#8b5cf6" stroke="#fff" strokeWidth="2" />
+                          <circle cx={curvaLiquidezReactiva.medio.x} cy={curvaLiquidezReactiva.medio.y} r="5" fill="#8b5cf6" stroke="#fff" strokeWidth="2" />
+                          <circle cx={curvaLiquidezReactiva.fin.x} cy={curvaLiquidezReactiva.fin.y} r="6" fill="#10b981" stroke="#fff" strokeWidth="2" />
                         </svg>
                       </div>
 
                       <div className="flex items-center justify-between text-xs text-[#7d776f] font-mono pt-2 border-t border-[#cec8bc] dark:border-slate-800">
                         <div>
-                          <span className="block text-[10px] uppercase font-sans">Ene 2026</span>
-                          <span className="font-bold text-[#262422] dark:text-white">Bs. 15.000</span>
+                          <span className="block text-[10px] uppercase font-sans">{curvaLiquidezReactiva.inicio.mesCorto || 'Inicio'} 2026</span>
+                          <span className="font-bold text-[#262422] dark:text-white">Bs. {curvaLiquidezReactiva.inicio.saldo.toLocaleString('es-BO')}</span>
                         </div>
                         <div>
-                          <span className="block text-[10px] uppercase font-sans">Jun 2026</span>
-                          <span className="font-bold text-[#262422] dark:text-white">Bs. 26.760</span>
+                          <span className="block text-[10px] uppercase font-sans">{curvaLiquidezReactiva.medio.mesCorto || 'Medio'} 2026</span>
+                          <span className="font-bold text-[#262422] dark:text-white">Bs. {curvaLiquidezReactiva.medio.saldo.toLocaleString('es-BO')}</span>
                         </div>
                         <div className="text-right">
-                          <span className="block text-[10px] uppercase font-sans">Dic 2026</span>
-                          <span className="font-extrabold text-emerald-700 dark:text-emerald-400">Bs. 41.830</span>
+                          <span className="block text-[10px] uppercase font-sans">{curvaLiquidezReactiva.fin.mesCorto || 'Fin'} 2026</span>
+                          <span className="font-extrabold text-emerald-700 dark:text-emerald-400">Bs. {curvaLiquidezReactiva.fin.saldo.toLocaleString('es-BO')}</span>
                         </div>
                       </div>
                     </div>

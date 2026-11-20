@@ -36,12 +36,14 @@ import {
   TrendingUp,
   User,
   Users,
-  Info
+  Info,
+  Edit2
 } from 'lucide-react'
 import SimuladorFechaBar from '@/components/SimuladorFechaBar'
 import CobroQrSimuladorModal from '@/components/CobroQrSimuladorModal'
 import RegistrarAnticipoModal from '@/components/RegistrarAnticipoModal'
 import RegistrarExtraModal from '@/components/RegistrarExtraModal'
+import EditarExpensaModal from '@/components/EditarExpensaModal'
 import EmitirExpensaIndividualModal from '@/components/EmitirExpensaIndividualModal'
 import DetalleMoraModal from '@/components/DetalleMoraModal'
 import { useFechaSistema } from '@/context/FechaSistemaContext'
@@ -99,6 +101,8 @@ export default function ExpensasPage() {
   const [isQrSimuladorOpen, setIsQrSimuladorOpen] = useState(false)
   const [expensaParaQr, setExpensaParaQr] = useState<any | null>(null)
   const [isExtraModalOpen, setIsExtraModalOpen] = useState(false)
+  const [isEditarExpensaModalOpen, setIsEditarExpensaModalOpen] = useState(false)
+  const [expensaParaEditar, setExpensaParaEditar] = useState<any>(null)
   const [expensaParaExtra, setExpensaParaExtra] = useState<any | null>(null)
   const [extrasMap, setExtrasMap] = useState<Record<number, { concepto: string; monto: number }>>(
     () => {
@@ -112,7 +116,16 @@ export default function ExpensasPage() {
     }
   )
 
-  // Campos extendidos para política de mora de la pizarra y simulador
+// Removed static mora input states – now using context policy
+// const [moraTipoPenalidadInput, setMoraTipoPenalidadInput] = useState<'fijo' | 'porcentaje'>('fijo');
+// const [moraMontoFijoInput, setMoraMontoFijoInput] = useState<number | ''>(50);
+// const [moraDiaVencimientoInput, setMoraDiaVencimientoInput] = useState<number | ''>(10);
+// const [moraDiasGraciaInput, setMoraDiasGraciaInput] = useState<number | ''>(2);
+// const [moraDiaGeneracionInput, setMoraDiaGeneracionInput] = useState<number | ''>(1);
+
+// Removed static simulator inputs – will use defaults from backend or context where needed
+// const [simuladorMontoBaseInput, setSimuladorMontoBaseInput] = useState<number>(350);
+// const [simuladorFechaPruebaInput, setSimuladorFechaPruebaInput] = useState<string>('2026-11-15');
   const [moraTipoPenalidadInput, setMoraTipoPenalidadInput] = useState<'fijo' | 'porcentaje'>(
     'fijo'
   )
@@ -1445,6 +1458,18 @@ export default function ExpensasPage() {
                                 >
                                   <QrCode className="w-3.5 h-3.5" />
                                   <span className="text-[10px]">QR</span>
+                                </button>
+
+                                {/* Botón Editar Montos de Expensa (Base y Agua) */}
+                                <button
+                                  onClick={() => {
+                                    setExpensaParaEditar(item)
+                                    setIsEditarExpensaModalOpen(true)
+                                  }}
+                                  className="p-1 rounded-lg bg-amber-100 text-amber-800 hover:bg-amber-200 dark:bg-amber-950/60 dark:text-amber-300 transition-all cursor-pointer"
+                                  title="Editar montos de Expensa Base y Agua (Requerimiento C 2.1, 2.2, 2.3)"
+                                >
+                                  <Edit2 className="w-3.5 h-3.5" />
                                 </button>
 
                                 {/* Botón Agregar / Editar Extra */}
@@ -4535,6 +4560,16 @@ export default function ExpensasPage() {
           if (extraData && idExpensa) {
             handleGuardarExtra(idExpensa, extraData.concepto, extraData.monto)
           }
+          fetchExpensas()
+        }}
+      />
+
+      <EditarExpensaModal
+        isOpen={isEditarExpensaModalOpen}
+        onClose={() => setIsEditarExpensaModalOpen(false)}
+        expensa={expensaParaEditar}
+        onSuccess={() => {
+          showToast('✅ Montos de expensa actualizados exitosamente')
           fetchExpensas()
         }}
       />

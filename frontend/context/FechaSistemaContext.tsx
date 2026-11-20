@@ -6,6 +6,7 @@
 
 import React, { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react'
 import { fechaSolo } from '@/lib/fecha'
+import { apiFetch } from '@/lib/api'
 
 export interface PoliticaMoraLocal {
   tipoPenalidad: 'fijo' | 'porcentaje'
@@ -14,15 +15,6 @@ export interface PoliticaMoraLocal {
   diaVencimiento: number
   diasGracia: number
   diaGeneracion: number
-}
-
-export const POLITICA_MORA_DEFAULT: PoliticaMoraLocal = {
-  tipoPenalidad: 'fijo',
-  montoFijo: 50,
-  porcentaje: 10,
-  diaVencimiento: 10,
-  diasGracia: 2,
-  diaGeneracion: 1
 }
 
 export interface DetalleMesMora {
@@ -52,7 +44,7 @@ interface FechaSistemaContextType {
   resetFechaSistema: () => void
   isSimulada: boolean
   politicaMora: PoliticaMoraLocal
-  setPoliticaMora: (politica: PoliticaMoraLocal) => void
+  setPoliticaMora: (politica: PoliticaMoraLocal) => Promise<{ ok: boolean; mensaje?: string }>
   calcularMoraExpensa: (
     fechaVencimiento: string,
     saldoBase: number
@@ -74,17 +66,67 @@ export function FechaSistemaProvider({ children }: { children: React.ReactNode }
     return getFechaRealHoy()
   })
 
-  const [politicaMora, setPoliticaMoraState] = useState<PoliticaMoraLocal>(() => {
-    if (typeof window !== 'undefined') {
-      try {
-        const guardada = localStorage.getItem('politica_mora_edificio')
-        if (guardada) {
-          return { ...POLITICA_MORA_DEFAULT, ...JSON.parse(guardada) }
-        }
-      } catch {}
-    }
-    return POLITICA_MORA_DEFAULT
+  const [politicaMora, setPoliticaMoraState] = useState<PoliticaMoraLocal>({
+    tipoPenalidad: 'porcentaje',
+    montoFijo: 0,
+    porcentaje: 0,
+    diaVencimiento: 0,
+    diasGracia: 0,
+    diaGeneracion: 0,
   })
+
+  useEffect(() => {
+    if (typeof window !== 'undefined' && window.location.pathname.startsWith('/login')) {
+      return
+    }
+    let isMounted = true
+      ; (async () => {
+        try {
+          const res = await apiFetch('/api/v1/expensas/reglas-mora')
+          if (!res.ok) return
+          const data = await res.json()
+          const regla = data?.activa
+          if (!isMounted || !regla) return
+          setPoliticaMoraState({
+            tipoPenalidad: regla.tipoCalculo === 'FIJO' ? 'fijo' : 'porcentaje',
+            montoFijo: Number(regla.montoFijo ?? 0),
+            porcentaje: Number(regla.tasaInteres ?? 0),
+            diaVencimiento: Number(regla.diaVencimiento ?? 0),
+            diasGracia: Number(regla.diasGracia ?? 0),
+            diaGeneracion: Number(regla.diaGeneracion ?? 0),
+          })
+        } catch (e) {
+          console.error('Error cargando la regla de mora:', e)
+        }
+      })()
+    return () => {
+      isMounted = false
+    }
+  }, [])
+
+  const setPoliticaMora = useCallback(async (nuevaPolitica: PoliticaMoraLocal) => {
+    try {
+      const res = await apiFetch('/api/v1/expensas/reglas-mora', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          tipoCalculo: nuevaPolitica.tipoPenalidad === 'fijo' ? 'FIJO' : 'PORCENTAJE',
+          montoFijo: Number(nuevaPolitica.montoFijo),
+          tasaInteres: Number(nuevaPolitica.porcentaje),
+          diaVencimiento: Number(nuevaPolitica.diaVencimiento),
+          diaGeneracion: Number(nuevaPolitica.diaGeneracion),
+        }),
+      })
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}))
+        return { ok: false, mensaje: err?.message || `No se pudo guardar (HTTP ${res.status})` }
+      }
+      setPoliticaMoraState(nuevaPolitica)
+      return { ok: true }
+    } catch {
+      return { ok: false, mensaje: 'Error de conexión al guardar la regla de mora' }
+    }
+  }, [])
 
   const setFechaSistema = useCallback((fecha: string) => {
     setFechaSistemaState(fecha)
@@ -98,13 +140,6 @@ export function FechaSistemaProvider({ children }: { children: React.ReactNode }
     setFechaSistemaState(hoy)
     if (typeof window !== 'undefined') {
       localStorage.removeItem('fecha_sistema_simulada')
-    }
-  }, [])
-
-  const setPoliticaMora = useCallback((nuevaPolitica: PoliticaMoraLocal) => {
-    setPoliticaMoraState(nuevaPolitica)
-    if (typeof window !== 'undefined') {
-      localStorage.setItem('politica_mora_edificio', JSON.stringify(nuevaPolitica))
     }
   }, [])
 
@@ -140,9 +175,8 @@ export function FechaSistemaProvider({ children }: { children: React.ReactNode }
       const diffDias = Math.floor(diffMs / (1000 * 60 * 60 * 24))
 
       const diasGracia = politicaMora.diasGracia || 0
-
       const tipoPenalidad = politicaMora.tipoPenalidad || 'fijo'
-      const tasaOValor = tipoPenalidad === 'fijo' ? Number(politicaMora.montoFijo || 50) : Number(politicaMora.porcentaje || 10)
+      const tasaOValor = tipoPenalidad === 'fijo' ? Number(politicaMora.montoFijo || 0) : Number(politicaMora.porcentaje || 0)
 
       if (diffDias < 0) {
         return {
@@ -189,15 +223,13 @@ export function FechaSistemaProvider({ children }: { children: React.ReactNode }
         }
       }
 
-      // Aplica mora porque superó el vencimiento y los días de gracia
-      // Se calcula cuántos meses de retraso han transcurrido (1 mes por cada bloque de 30 días o fracción)
       const mesesMora = Math.max(1, Math.ceil(diffDias / 30))
 
       let montoMoraMensual = 0
       if (tipoPenalidad === 'fijo') {
-        montoMoraMensual = Number(politicaMora.montoFijo || 50)
+        montoMoraMensual = Number(politicaMora.montoFijo || 0)
       } else {
-        const pct = Number(politicaMora.porcentaje || 10)
+        const pct = Number(politicaMora.porcentaje || 0)
         montoMoraMensual = Math.round(((saldoBase * pct) / 100) * 100) / 100
       }
 
@@ -277,4 +309,3 @@ export function useFechaSistema() {
   }
   return context
 }
-

@@ -14,12 +14,13 @@ export const aguaRouter: IRouter = Router();
 aguaRouter.use(authMiddleware);
 
 // Esquema para cada elemento de monto de agua
-const itemMontoAguaSchema = z
+export const itemMontoAguaSchema = z
   .object({
     idDepartamento: z.number().int().positive().optional(),
     id_departamento: z.number().int().positive().optional(),
     montoAgua: z.number().min(0, 'El monto de agua debe ser mayor o igual a 0').optional(),
     monto_agua: z.number().min(0, 'El monto de agua debe ser mayor o igual a 0').optional(),
+    descripcion: z.string().max(200, 'La descripción no puede exceder 200 caracteres').nullable().optional(),
   })
   .refine(
     (d) =>
@@ -31,7 +32,7 @@ const itemMontoAguaSchema = z
   );
 
 // Esquema para el registro/actualización masivo por período
-const registrarMontosSchema = z.object({
+export const registrarMontosSchema = z.object({
   periodo: z.string().min(1, 'El período es obligatorio'),
   montos: z
     .array(itemMontoAguaSchema)
@@ -66,7 +67,9 @@ aguaRouter.put(
           m.idDepartamento !== undefined ? m.idDepartamento : m.id_departamento!;
         const montoAgua =
           m.montoAgua !== undefined ? m.montoAgua : m.monto_agua!;
-        return { idDepartamento, montoAgua };
+        const descripcion =
+          m.descripcion !== undefined ? (m.descripcion ? m.descripcion.trim() : null) : undefined;
+        return { idDepartamento, montoAgua, descripcion };
       });
 
       const resultado = await registrarOActualizarMontosAgua({
