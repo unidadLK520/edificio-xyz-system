@@ -59,6 +59,7 @@ export interface ExpensaItem {
   montoBase?: number
   montoAgua?: number
   montoExtra?: number
+  montoExtras?: number
   extraConcepto?: string
   saldoPendiente: number
   tasaInteresMora: number
@@ -75,7 +76,13 @@ export interface ExpensaItem {
   propietarioNombre?: string
   inquilinoNombre?: string
   pagadoPor?: string
+  pago?: any
   pagos?: any[]
+  montoPagado?: number
+  interesPagado?: number
+  metodoPago?: string
+  referenciaQr?: string | null
+  fechaPago?: string | Date
 }
 
 export default function ExpensasPage() {
@@ -575,8 +582,44 @@ export default function ExpensasPage() {
 
       await fetchExpensas()
       setIsPagarModalOpen(false)
+      const baseExpensa = expensaAPagar
+      const pago = data.pago
+      const exp = data.expensa
+      const pagadorPersona = personasList.find((p) => p.idPersona === Number(idPersonaPagadorInput))
+      const pagadorNombre = pagadorPersona ? `${pagadorPersona.nombres} ${pagadorPersona.apellidos}`.trim() : undefined
       setExpensaAPagar(null)
-      showToast(data.message || '¡Pago registrado y conciliado exitosamente!')
+      showToast(data.message || 'Pago registrado exitosamente')
+
+      if (baseExpensa && (pago || exp)) {
+        const montoVal = Number(exp?.monto ?? baseExpensa.monto ?? pago?.montoPagado ?? 0)
+        const recibo: ExpensaItem = {
+          ...baseExpensa,
+          idExpensa: exp?.idExpensa ?? baseExpensa.idExpensa,
+          idDepartamento: exp?.idDepartamento ?? baseExpensa.idDepartamento,
+          periodo: baseExpensa.periodo || exp?.periodo,
+          monto: montoVal,
+          montoBase: exp?.montoBase ?? baseExpensa.montoBase,
+          montoAgua: exp?.montoAgua ?? baseExpensa.montoAgua,
+          montoExtra: baseExpensa.montoExtra,
+          extraConcepto: baseExpensa.extraConcepto,
+          saldoPendiente: exp?.saldoPendiente !== undefined ? Number(exp.saldoPendiente) : 0,
+          tasaInteresMora: Number(baseExpensa.tasaInteresMora ?? 0),
+          fechaVencimiento: baseExpensa.fechaVencimiento || exp?.fechaVencimiento,
+          estado: exp?.estado || 'Pagado',
+          departamento: baseExpensa.departamento,
+          propietarioNombre: baseExpensa.propietarioNombre,
+          inquilinoNombre: baseExpensa.inquilinoNombre,
+          pagadoPor: pagadorNombre || baseExpensa.pagadoPor || baseExpensa.inquilinoNombre || baseExpensa.propietarioNombre,
+          montoPagado: pago ? Number(pago.montoPagado) : Number(montoPagoInput),
+          interesPagado: pago ? Number(pago.interesPagado || 0) : 0,
+          metodoPago: pago?.metodoPago || metodoPagoInput,
+          referenciaQr: pago?.referenciaQr || null,
+          fechaPago: pago?.fechaPago || new Date().toISOString(),
+          pago: pago || undefined,
+          pagos: pago ? [pago, ...(baseExpensa.pagos || [])] : (baseExpensa.pagos || [])
+        }
+        setSelectedReceipt(recibo)
+      }
     } catch (err: any) {
       const errMsg = err?.message || 'Error de conexión al registrar el pago'
       setModalError(errMsg)
@@ -2479,164 +2522,241 @@ export default function ExpensasPage() {
       )}
 
       {/* MODAL RECIBO OFICIAL DE CAJA (OFICIAL EDIFICIO XYZ) */}
-      {selectedReceipt && typeof selectedReceipt.monto === 'number' && !isNaN(selectedReceipt.monto) && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs">
-          <div className="bg-white dark:bg-slate-900 border border-[#cec8bc] dark:border-slate-800 w-full max-w-lg rounded-2xl shadow-2xl p-6 space-y-4 animate-in fade-in zoom-in-95 duration-200 text-[#262422] dark:text-slate-100">
-            <div className="flex items-center justify-between border-b pb-3 dark:border-slate-800">
-              <div className="flex items-center gap-2">
-                <ShieldCheck className="w-5 h-5 text-emerald-600" />
-                <h3 className="font-black text-base uppercase tracking-tight">
-                  Recibo Oficial de Caja — Expensas
-                </h3>
-              </div>
-              <button
-                onClick={() => setSelectedReceipt(null)}
-                className="text-slate-400 hover:text-slate-600 p-1"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
+      {selectedReceipt && (() => {
+        const pagoObj =
+          selectedReceipt.pago ||
+          (Array.isArray(selectedReceipt.pagos) && selectedReceipt.pagos.length > 0
+            ? selectedReceipt.pagos[0]
+            : null)
 
-            <div className="border border-slate-200 dark:border-slate-800 rounded-xl p-4 bg-slate-50 dark:bg-slate-950/60 space-y-3">
-              <div className="flex justify-between items-start text-xs">
-                <div>
-                  <div className="font-black text-sm text-emerald-800 dark:text-emerald-400">
-                    CONDOMINIO EDIFICIO XYZ
+        const capitalPagado = Number(
+          selectedReceipt.montoPagado ??
+          pagoObj?.montoPagado ??
+          (selectedReceipt.estado === 'Pagado' ? selectedReceipt.monto : 0)
+        )
+        const moraCobrada = Number(
+          selectedReceipt.interesPagado ??
+          pagoObj?.interesPagado ??
+          0
+        )
+        const totalPagado = Math.round((capitalPagado + moraCobrada) * 100) / 100
+
+        if (totalPagado <= 0 && !selectedReceipt.idExpensa && !selectedReceipt.idDepartamento) {
+          return null
+        }
+
+        const deptoNum =
+          selectedReceipt.departamento?.numero ||
+          (selectedReceipt.idDepartamento ? String(selectedReceipt.idDepartamento) : '')
+        const propNombre = selectedReceipt.propietarioNombre || ''
+        const periodoStr = selectedReceipt.periodo || ''
+        const montoBase = Number(selectedReceipt.montoBase ?? 0)
+        const montoAgua = Number(selectedReceipt.montoAgua ?? 0)
+        const montoExtras = Number(selectedReceipt.montoExtras ?? selectedReceipt.montoExtra ?? 0)
+        const metodoPago = selectedReceipt.metodoPago || pagoObj?.metodoPago || null
+        const referenciaQr = selectedReceipt.referenciaQr || pagoObj?.referenciaQr || null
+        const fechaPagoVal = selectedReceipt.fechaPago || pagoObj?.fechaPago || null
+
+        return (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs">
+            <div className="bg-white dark:bg-slate-900 border border-[#cec8bc] dark:border-slate-800 w-full max-w-lg rounded-2xl shadow-2xl p-6 space-y-4 animate-in fade-in zoom-in-95 duration-200 text-[#262422] dark:text-slate-100">
+              <div className="flex items-center justify-between border-b pb-3 dark:border-slate-800">
+                <div className="flex items-center gap-2">
+                  <ShieldCheck className="w-5 h-5 text-emerald-600" />
+                  <h3 className="font-black text-base uppercase tracking-tight">
+                    Recibo Oficial de Caja — Expensas
+                  </h3>
+                </div>
+                <button
+                  onClick={() => setSelectedReceipt(null)}
+                  className="text-slate-400 hover:text-slate-600 p-1 cursor-pointer"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              <div className="border border-slate-200 dark:border-slate-800 rounded-xl p-4 bg-slate-50 dark:bg-slate-950/60 space-y-3">
+                <div className="flex justify-between items-start text-xs">
+                  <div>
+                    <div className="font-black text-sm text-emerald-800 dark:text-emerald-400">
+                      CONDOMINIO EDIFICIO XYZ
+                    </div>
                   </div>
-                                  </div>
-                <div className="text-right">
-                  <div className="font-mono font-bold text-slate-900 dark:text-white">
-                    REC-EXP-{selectedReceipt.departamento?.numero || selectedReceipt.idDepartamento || '—'}
+                  <div className="text-right">
+                    <div className="font-mono font-bold text-slate-900 dark:text-white">
+                      REC-EXP-{deptoNum || '—'}
+                    </div>
+                    {periodoStr && (
+                      <div className="text-[11px] text-slate-500 font-mono">
+                        Período: {periodoStr}
+                      </div>
+                    )}
                   </div>
-                  <div className="text-[11px] text-slate-500 font-mono">
-                    Período: {selectedReceipt.periodo || '—'}
+                </div>
+
+                <div className="grid grid-cols-2 gap-2 text-xs border-t pt-2 dark:border-slate-800">
+                  {propNombre && (
+                    <div>
+                      <span className="text-slate-500 block text-[10px] uppercase font-bold">
+                        Propietario Responsable:
+                      </span>
+                      <span className="font-bold">{propNombre}</span>
+                    </div>
+                  )}
+                  {deptoNum && (
+                    <div>
+                      <span className="text-slate-500 block text-[10px] uppercase font-bold">
+                        Unidad:
+                      </span>
+                      <span className="font-bold">
+                        Dpto {deptoNum} (
+                        {selectedReceipt.departamento?.tipologia || '80 m²'})
+                      </span>
+                    </div>
+                  )}
+                  <div>
+                    <span className="text-slate-500 block text-[10px] uppercase font-bold">
+                      Pagado Por:
+                    </span>
+                    <span className="font-bold text-emerald-700 dark:text-emerald-400">
+                      {selectedReceipt.pagadoPor ||
+                        selectedReceipt.inquilinoNombre ||
+                        propNombre ||
+                        '—'}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-slate-500 block text-[10px] uppercase font-bold">
+                      Concepto:
+                    </span>
+                    <span>Expensa Común de Áreas Comunes</span>
                   </div>
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-2 text-xs border-t pt-2 dark:border-slate-800">
-                <div>
-                  <span className="text-slate-500 block text-[10px] uppercase font-bold">
-                    Propietario Responsable:
-                  </span>
-                  <span className="font-bold">{selectedReceipt.propietarioNombre || '—'}</span>
+              {/* Detalle REAL de la Expensa y del Pago */}
+              <div className="border border-slate-200 dark:border-slate-800 rounded-xl p-3 bg-slate-50 dark:bg-slate-950/60 space-y-1.5 text-xs">
+                <div className="flex justify-between items-center text-[10px] font-bold text-slate-500 uppercase pb-1 border-b dark:border-slate-800">
+                  <span>Detalle de Liquidación y Pago</span>
+                  {pagoObj?.idPago && (
+                    <span className="font-mono">Pago N.º {pagoObj.idPago}</span>
+                  )}
                 </div>
-                <div>
-                  <span className="text-slate-500 block text-[10px] uppercase font-bold">
-                    Unidad:
-                  </span>
-                  <span className="font-bold">
-                    Dpto {selectedReceipt.departamento?.numero || selectedReceipt.idDepartamento || '—'} (
-                    {selectedReceipt.departamento?.tipologia || '80 m²'})
-                  </span>
+
+                {periodoStr && (
+                  <div className="flex justify-between text-[11px]">
+                    <span className="text-slate-600 dark:text-slate-300">• Período:</span>
+                    <span className="font-mono font-medium">{periodoStr}</span>
+                  </div>
+                )}
+
+                {deptoNum && (
+                  <div className="flex justify-between text-[11px]">
+                    <span className="text-slate-600 dark:text-slate-300">• Departamento:</span>
+                    <span className="font-mono font-medium">Dpto {deptoNum}</span>
+                  </div>
+                )}
+
+                {propNombre && (
+                  <div className="flex justify-between text-[11px]">
+                    <span className="text-slate-600 dark:text-slate-300">• Propietario:</span>
+                    <span className="font-medium">{propNombre}</span>
+                  </div>
+                )}
+
+                {montoBase > 0 && (
+                  <div className="flex justify-between text-[11px]">
+                    <span className="text-slate-600 dark:text-slate-300">• Concepto base:</span>
+                    <span className="font-mono">Bs. {montoBase.toFixed(2)}</span>
+                  </div>
+                )}
+
+                {montoAgua > 0 && (
+                  <div className="flex justify-between text-[11px]">
+                    <span className="text-slate-600 dark:text-slate-300">• Agua:</span>
+                    <span className="font-mono">Bs. {montoAgua.toFixed(2)}</span>
+                  </div>
+                )}
+
+                {montoExtras > 0 && (
+                  <div className="flex justify-between text-[11px]">
+                    <span className="text-slate-600 dark:text-slate-300">
+                      • Extras{selectedReceipt.extraConcepto ? ` (${selectedReceipt.extraConcepto})` : ''}:
+                    </span>
+                    <span className="font-mono">Bs. {montoExtras.toFixed(2)}</span>
+                  </div>
+                )}
+
+                {moraCobrada > 0 && (
+                  <div className="flex justify-between text-[11px]">
+                    <span className="text-rose-600 dark:text-rose-400 font-semibold">• Mora cobrada:</span>
+                    <span className="font-mono text-rose-600 dark:text-rose-400 font-bold">
+                      +Bs. {moraCobrada.toFixed(2)}
+                    </span>
+                  </div>
+                )}
+
+                {capitalPagado > 0 && (
+                  <div className="flex justify-between text-[11px]">
+                    <span className="text-slate-600 dark:text-slate-300">• Capital pagado:</span>
+                    <span className="font-mono">Bs. {capitalPagado.toFixed(2)}</span>
+                  </div>
+                )}
+
+                {metodoPago && (
+                  <div className="flex justify-between text-[11px]">
+                    <span className="text-slate-600 dark:text-slate-300">• Método de pago:</span>
+                    <span className="font-semibold">{metodoPago}</span>
+                  </div>
+                )}
+
+                {referenciaQr && (
+                  <div className="flex justify-between text-[11px]">
+                    <span className="text-slate-600 dark:text-slate-300">• N.º de comprobante:</span>
+                    <span className="font-mono">{referenciaQr}</span>
+                  </div>
+                )}
+
+                {fechaPagoVal && (
+                  <div className="flex justify-between text-[11px]">
+                    <span className="text-slate-600 dark:text-slate-300">• Fecha de pago:</span>
+                    <span className="font-mono">{fechaSolo(fechaPagoVal)}</span>
+                  </div>
+                )}
+              </div>
+
+              <div className="space-y-1.5 text-xs">
+                <div className="flex justify-between py-2 text-sm font-black text-emerald-800 dark:text-emerald-400 border-t-2 border-slate-900 dark:border-slate-100">
+                  <span>TOTAL PAGADO</span>
+                  <span className="font-mono">Bs. {totalPagado.toFixed(2)}</span>
                 </div>
-                <div>
-                  <span className="text-slate-500 block text-[10px] uppercase font-bold">
-                    Pagado Por:
-                  </span>
-                  <span className="font-bold text-emerald-700 dark:text-emerald-400">
-                    {selectedReceipt.pagadoPor ||
-                      selectedReceipt.inquilinoNombre ||
-                      selectedReceipt.propietarioNombre ||
-                      '—'}
-                  </span>
-                </div>
-                <div>
-                  <span className="text-slate-500 block text-[10px] uppercase font-bold">
-                    Concepto:
-                  </span>
-                  <span>Expensa Común de Áreas Comunes</span>
-                </div>
               </div>
-            </div>
 
-            {/* Extracto Detallado de Gastos Comunes en el Recibo */}
-            <div className="border border-slate-200 dark:border-slate-800 rounded-xl p-3 bg-slate-50 dark:bg-slate-950/60 space-y-1.5 text-xs">
-              <div className="flex justify-between items-center text-[10px] font-bold text-slate-500 uppercase pb-1 border-b dark:border-slate-800">
-                <span>Extracto Composición de Expensa</span>
-                <span>Base Edificio: Bs 15.500</span>
+              <div className="text-[10px] text-[#7d776f] bg-amber-50 dark:bg-amber-950/20 p-2.5 rounded-xl border border-amber-200">
+                ℹ️ Nota administrativa: La administración no administra ni percibe alquileres
+                (relación privada entre inquilino y propietario) ni consumos de medidores individuales
+                (ELFEC/Agua).
               </div>
-              <div className="flex justify-between text-[11px]">
-                <span className="text-slate-600 dark:text-slate-300">
-                  • Seguridad y Vigilancia 24/7 (36.13%)
-                </span>
-                <span className="font-mono">Bs. {(Number(selectedReceipt.monto ?? 0) * 0.3613).toFixed(2)}</span>
-              </div>
-              <div className="flex justify-between text-[11px]">
-                <span className="text-slate-600 dark:text-slate-300">
-                  • Administración Central y Gestión (22.58%)
-                </span>
-                <span className="font-mono">Bs. {(Number(selectedReceipt.monto ?? 0) * 0.2258).toFixed(2)}</span>
-              </div>
-              <div className="flex justify-between text-[11px]">
-                <span className="text-slate-600 dark:text-slate-300">
-                  • Limpieza e Insumos Comunes (14.19%)
-                </span>
-                <span className="font-mono">Bs. {(Number(selectedReceipt.monto ?? 0) * 0.1419).toFixed(2)}</span>
-              </div>
-              <div className="flex justify-between text-[11px]">
-                <span className="text-slate-600 dark:text-slate-300">
-                  • Mantenimiento Preventivo (9.68%)
-                </span>
-                <span className="font-mono">Bs. {(Number(selectedReceipt.monto ?? 0) * 0.0968).toFixed(2)}</span>
-              </div>
-              <div className="flex justify-between text-[11px]">
-                <span className="text-slate-600 dark:text-slate-300">
-                  • Electricidad Común ELFEC (5.16%)
-                </span>
-                <span className="font-mono">Bs. {(Number(selectedReceipt.monto ?? 0) * 0.0516).toFixed(2)}</span>
-              </div>
-              <div className="flex justify-between text-[11px]">
-                <span className="text-slate-600 dark:text-slate-300">
-                  • Mantenimiento Ascensor Otis (4.52%)
-                </span>
-                <span className="font-mono">Bs. {(Number(selectedReceipt.monto ?? 0) * 0.0452).toFixed(2)}</span>
-              </div>
-              <div className="flex justify-between text-[11px]">
-                <span className="text-slate-600 dark:text-slate-300">
-                  • Agua Común y Cisterna SEMAPA (1.94%)
-                </span>
-                <span className="font-mono">Bs. {(Number(selectedReceipt.monto ?? 0) * 0.0194).toFixed(2)}</span>
-              </div>
-              <div className="flex justify-between text-[11px]">
-                <span className="text-slate-600 dark:text-slate-300">
-                  • Imprevistos y Fondo Menor (5.80%)
-                </span>
-                <span className="font-mono">Bs. {(Number(selectedReceipt.monto ?? 0) * 0.058).toFixed(2)}</span>
-              </div>
-            </div>
 
-            <div className="space-y-1.5 text-xs">
-              <div className="flex justify-between py-2 text-sm font-black text-emerald-800 dark:text-emerald-400 border-t-2 border-slate-900 dark:border-slate-100">
-                <span>TOTAL RECAUDADO</span>
-                <span className="font-mono">Bs. {Number(selectedReceipt.monto).toFixed(2)}</span>
+              <div className="flex justify-end gap-2 border-t pt-3 dark:border-slate-800">
+                <button
+                  onClick={() => setSelectedReceipt(null)}
+                  className="px-4 py-2 rounded-xl text-xs font-bold text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer"
+                >
+                  Cerrar
+                </button>
+                <button
+                  onClick={() => window.print()}
+                  className="flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold bg-emerald-700 hover:bg-emerald-800 text-white shadow-md cursor-pointer"
+                >
+                  <Printer className="w-4 h-4" />
+                  Imprimir Recibo
+                </button>
               </div>
-            </div>
-
-            <div className="text-[10px] text-[#7d776f] bg-amber-50 dark:bg-amber-950/20 p-2.5 rounded-xl border border-amber-200">
-              ℹ️ Nota administrativa: La administración no administra ni percibe alquileres
-              (relación privada entre inquilino y propietario) ni consumos de medidores individuales
-              (ELFEC/Agua).
-            </div>
-
-            <div className="flex justify-end gap-2 border-t pt-3 dark:border-slate-800">
-              <button
-                onClick={() => setSelectedReceipt(null)}
-                className="px-4 py-2 rounded-xl text-xs font-bold text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800"
-              >
-                Cerrar
-              </button>
-              <button
-                onClick={() => window.print()}
-                className="flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold bg-emerald-700 hover:bg-emerald-800 text-white shadow-md"
-              >
-                <Printer className="w-4 h-4" />
-                Imprimir Recibo
-              </button>
             </div>
           </div>
-        </div>
-      )}
+        )
+      })()}
 
       {/* MODAL EXTRACTO DE GASTOS COMUNES Y COMPOSICIÓN DE LA EXPENSA */}
       {(selectedExtracto || isExtractoGeneralOpen) && (
@@ -3470,7 +3590,13 @@ export default function ExpensasPage() {
               baseExpensa.pagadoPor ||
               baseExpensa.inquilinoNombre ||
               baseExpensa.propietarioNombre,
-            pagos: pago ? [...(baseExpensa.pagos || []), pago] : (baseExpensa.pagos || [])
+            montoPagado: pago ? Number(pago.montoPagado) : undefined,
+            interesPagado: pago ? Number(pago.interesPagado || 0) : undefined,
+            metodoPago: pago?.metodoPago,
+            referenciaQr: pago?.referenciaQr,
+            fechaPago: pago?.fechaPago,
+            pago: pago || undefined,
+            pagos: pago ? [pago, ...(baseExpensa.pagos || [])] : (baseExpensa.pagos || [])
           }
           setSelectedReceipt(recibo)
         }}
