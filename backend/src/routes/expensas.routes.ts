@@ -1829,21 +1829,29 @@ expensasRouter.post(
       const paramId = req.params.id;
       const parsedId = parseInt(paramId);
 
-      // Validación QR: requiere cuenta bancaria
-      if (metodoPago === 'QR' && !idCuenta) {
-        res.status(400).json({
-          error: 'Bad Request',
-          message: 'Selecciona la cuenta que recibio el pago',
+      // Resolución de cuenta: si metodoPago es 'QR' y el body no trae idCuenta, tomarla de configuracion_global 'qr_cobro_id_cuenta'
+      let finalIdCuenta = idCuenta || null;
+      if (metodoPago === 'QR' && !finalIdCuenta) {
+        const confCuenta = await prisma.configuracionGlobal.findUnique({
+          where: { clave: 'qr_cobro_id_cuenta' },
         });
-        return;
+        const idC = confCuenta?.valor ? parseInt(confCuenta.valor, 10) : null;
+        if (!idC || !Number.isInteger(idC) || idC <= 0) {
+          res.status(400).json({
+            error: 'Bad Request',
+            message: 'Falta configurar la cuenta que recibe el QR',
+          });
+          return;
+        }
+        finalIdCuenta = idC;
       }
 
-      if (idCuenta) {
-        const cuentaExiste = await prisma.cuentaBancaria.findUnique({ where: { idCuenta } });
+      if (finalIdCuenta) {
+        const cuentaExiste = await prisma.cuentaBancaria.findUnique({ where: { idCuenta: finalIdCuenta } });
         if (!cuentaExiste) {
           res.status(400).json({
             error: 'Bad Request',
-            message: 'La cuenta bancaria seleccionada no existe',
+            message: 'La cuenta seleccionada no existe',
           });
           return;
         }
@@ -1908,7 +1916,7 @@ expensasRouter.post(
 
         const pagoAnticipado = await prisma.$transaction(async (tx) => {
           let idMovimientoCaja: number | null = null;
-          if (!idCuenta && metodoPago === 'Efectivo') {
+          if (!finalIdCuenta && metodoPago === 'Efectivo') {
             const nuevoCaja = await tx.caja.create({
               data: {
                 tipo: 'Ingreso',
@@ -1932,7 +1940,7 @@ expensasRouter.post(
               metodoPago: metodoPago || 'Efectivo',
               esAnticipado: true,
               referenciaQr: referenciaQr?.trim() || null,
-              idCuenta: idCuenta || null,
+              idCuenta: finalIdCuenta || null,
               idMovimientoCaja,
               comprobanteUrl: comprobanteUrl || null,
               idUsuarioRegistro: req.user?.idUsuario || null,
@@ -1954,7 +1962,7 @@ expensasRouter.post(
             montoTotal,
             fechaPago: pago.fechaPago,
             concepto,
-            idCuenta: idCuenta || null,
+            idCuenta: finalIdCuenta || null,
             metodoPago: metodoPago || 'Efectivo',
             referenciaQr: referenciaQr?.trim() || null,
             comprobanteUrl: comprobanteUrl || null,
@@ -2022,7 +2030,7 @@ expensasRouter.post(
 
       const { pago, expensaActualizada } = await prisma.$transaction(async (tx) => {
         let idMovimientoCaja: number | null = null;
-        if (!idCuenta && metodoPago === 'Efectivo') {
+        if (!finalIdCuenta && metodoPago === 'Efectivo') {
           const nuevoCaja = await tx.caja.create({
             data: {
               tipo: 'Ingreso',
@@ -2046,7 +2054,7 @@ expensasRouter.post(
             metodoPago: metodoPago || 'Efectivo',
             esAnticipado: esAnticipado ?? false,
             referenciaQr: referenciaQr?.trim() || null,
-            idCuenta: idCuenta || null,
+            idCuenta: finalIdCuenta || null,
             idMovimientoCaja,
             comprobanteUrl: comprobanteUrl || null,
             idUsuarioRegistro: req.user?.idUsuario || null,
@@ -2077,7 +2085,7 @@ expensasRouter.post(
           montoTotal,
           fechaPago: pagoCreado.fechaPago,
           concepto,
-          idCuenta: idCuenta || null,
+          idCuenta: finalIdCuenta || null,
           metodoPago: metodoPago || 'Efectivo',
           referenciaQr: referenciaQr?.trim() || null,
           comprobanteUrl: comprobanteUrl || null,

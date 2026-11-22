@@ -39,6 +39,7 @@ interface QrCobroInfo {
   configurado: boolean
   imagen: string | null
   vigenteHasta: string | null
+  idCuenta: number | null
   vencido: boolean
   puedeEditar?: boolean
 }
@@ -56,6 +57,7 @@ export default function CobroQrSimuladorModal({
   const [mostrarFormQr, setMostrarFormQr] = useState(false)
   const [archivoQr, setArchivoQr] = useState<File | null>(null)
   const [vigenteHastaInput, setVigenteHastaInput] = useState('')
+  const [idCuentaQr, setIdCuentaQr] = useState<number | ''>('')
   const [guardandoQr, setGuardandoQr] = useState(false)
   const [errorQr, setErrorQr] = useState<string | null>(null)
   const [exitoQr, setExitoQr] = useState<string | null>(null)
@@ -68,7 +70,6 @@ export default function CobroQrSimuladorModal({
   // Estado de cuentas cargadas desde la API
   const [cuentas, setCuentas] = useState<Array<{ idCuenta: number; banco: string; numeroCuenta: string }>>([])
   const [cargandoCuentas, setCargandoCuentas] = useState(false)
-  const [idCuentaSeleccionada, setIdCuentaSeleccionada] = useState<number | ''>('')
 
   // Estado del comprobante de pago (imagen data URI)
   const [comprobanteDataUri, setComprobanteDataUri] = useState<string | null>(null)
@@ -91,6 +92,12 @@ export default function CobroQrSimuladorModal({
         throw new Error(data.message || data.error || 'Error al consultar el QR de cobro')
       }
       setQrInfo(data)
+      if (data?.idCuenta) {
+        setIdCuentaQr(data.idCuenta)
+      }
+      if (data?.vigenteHasta) {
+        setVigenteHastaInput(data.vigenteHasta)
+      }
     } catch (err: any) {
       setErrorQr(err.message || 'Error al obtener la información del QR de cobro')
     } finally {
@@ -137,11 +144,11 @@ export default function CobroQrSimuladorModal({
       setMostrarFormQr(false)
       setArchivoQr(null)
       setVigenteHastaInput('')
+      setIdCuentaQr('')
       setErrorPago(null)
       setErrorQr(null)
       setExitoQr(null)
       setNroComprobante('')
-      setIdCuentaSeleccionada('')
       setComprobanteDataUri(null)
       setErrorComprobante(null)
       setVerComprobanteCompleto(false)
@@ -193,7 +200,11 @@ export default function CobroQrSimuladorModal({
 
   const handleGuardarQr = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!archivoQr) {
+    if (!idCuentaQr) {
+      setErrorQr('Debes seleccionar la cuenta donde se acreditan los cobros')
+      return
+    }
+    if (!qrInfo?.configurado && !archivoQr) {
       setErrorQr('Debes seleccionar una imagen para el QR de cobro')
       return
     }
@@ -202,18 +213,26 @@ export default function CobroQrSimuladorModal({
     setErrorQr(null)
     setExitoQr(null)
     try {
-      const dataUri = await imagenADataUri(archivoQr, {
-        maxLado: 1000,
-        tipo: 'image/png'
-      })
+      let dataUri: string | undefined = undefined
+      if (archivoQr) {
+        dataUri = await imagenADataUri(archivoQr, {
+          maxLado: 1000,
+          tipo: 'image/png'
+        })
+      }
+
+      const bodyPayload: { imagen?: string; vigenteHasta?: string; idCuenta: number } = {
+        idCuenta: Number(idCuentaQr),
+        vigenteHasta: vigenteHastaInput || undefined,
+      }
+      if (dataUri) {
+        bodyPayload.imagen = dataUri
+      }
 
       const res = await apiFetch('/api/v1/cobro/qr', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          imagen: dataUri,
-          vigenteHasta: vigenteHastaInput || undefined
-        })
+        body: JSON.stringify(bodyPayload)
       })
 
       const data = await res.json().catch(() => ({}))
@@ -232,6 +251,13 @@ export default function CobroQrSimuladorModal({
       setGuardandoQr(false)
     }
   }
+
+  const motivoDeshabilitadoQr = (() => {
+    if (guardandoQr) return 'Guardando QR...'
+    if (!idCuentaQr) return 'Falta elegir la cuenta'
+    if (!qrInfo?.configurado && !archivoQr) return 'Falta imagen'
+    return null
+  })()
 
   const procesarArchivoComprobante = async (file: File) => {
     setErrorComprobante(null)
@@ -254,16 +280,16 @@ export default function CobroQrSimuladorModal({
   const handleRegistrarPago = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!expensa?.idExpensa) return
+    if (!qrInfo?.idCuenta) {
+      setErrorPago('El administrador aun no configuro la cuenta del QR')
+      return
+    }
     if (!idPersonaSeleccionada) {
       setErrorPago('Debes seleccionar a la persona que realiza el pago')
       return
     }
-    if (!idCuentaSeleccionada) {
-      setErrorPago('Falta elegir la cuenta')
-      return
-    }
     const nro = nroComprobante.trim()
-    if (nro.length < 4 || nro.length > 100) {
+    if (nro.length > 0 && (nro.length < 4 || nro.length > 100)) {
       setErrorPago('El N.º de comprobante del pago QR debe tener entre 4 y 100 caracteres')
       return
     }
@@ -275,18 +301,21 @@ export default function CobroQrSimuladorModal({
     setGuardandoPago(true)
     setErrorPago(null)
     try {
+      const bodyPayload: any = {
+        idPersonaPagador: Number(idPersonaSeleccionada),
+        montoPagado: capitalPendiente,
+        interesPagado: moraCalculada,
+        metodoPago: 'QR',
+        comprobanteUrl: comprobanteDataUri
+      }
+      if (nro.length > 0) {
+        bodyPayload.referenciaQr = nro
+      }
+
       const res = await apiFetch(`/api/v1/expensas/${expensa.idExpensa}/pagos`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          idPersonaPagador: Number(idPersonaSeleccionada),
-          idCuenta: Number(idCuentaSeleccionada),
-          montoPagado: capitalPendiente,
-          interesPagado: moraCalculada,
-          metodoPago: 'QR',
-          referenciaQr: nro,
-          comprobanteUrl: comprobanteDataUri
-        })
+        body: JSON.stringify(bodyPayload)
       })
 
       const data = await res.json().catch(() => ({}))
@@ -315,15 +344,16 @@ export default function CobroQrSimuladorModal({
 
   const motivoDeshabilitadoPago = (() => {
     if (guardandoPago) return 'Enviando...'
-    if (!idCuentaSeleccionada) return 'Falta elegir la cuenta'
+    if (!qrInfo?.idCuenta) return 'El administrador aun no configuro la cuenta del QR'
     if (pagadores.length === 0 && !cargandoPagadores) {
       return 'Este departamento no tiene propietario ni ocupante vigente'
     }
     if (!idPersonaSeleccionada) return 'Selecciona a la persona que realiza el pago'
-    if (nroComprobante.trim().length < 4) {
+    const nro = nroComprobante.trim()
+    if (nro.length > 0 && nro.length < 4) {
       return 'N.º de comprobante muy corto (mín. 4 caracteres)'
     }
-    if (nroComprobante.trim().length > 100) {
+    if (nro.length > 100) {
       return 'N.º de comprobante muy largo (máx. 100 caracteres)'
     }
     if (procesandoComprobante) return 'Procesando comprobante...'
@@ -405,7 +435,11 @@ export default function CobroQrSimuladorModal({
             {qrInfo?.configurado && qrInfo?.puedeEditar && !mostrarFormQr && (
               <button
                 type="button"
-                onClick={() => setMostrarFormQr(true)}
+                onClick={() => {
+                  setMostrarFormQr(true)
+                  if (qrInfo?.idCuenta) setIdCuentaQr(qrInfo.idCuenta)
+                  if (qrInfo?.vigenteHasta) setVigenteHastaInput(qrInfo.vigenteHasta)
+                }}
                 className="text-xs font-semibold text-emerald-700 dark:text-emerald-400 hover:underline cursor-pointer"
               >
                 Cambiar QR
@@ -445,6 +479,12 @@ export default function CobroQrSimuladorModal({
                   </span>
                 </p>
               )}
+              {!qrInfo.idCuenta && (
+                <div className="p-2.5 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-800 text-xs text-amber-900 dark:text-amber-200 text-center flex items-center justify-center gap-1.5">
+                  <AlertTriangle className="w-3.5 h-3.5 shrink-0 text-amber-600" />
+                  <span>El administrador aun no configuro la cuenta del QR</span>
+                </div>
+              )}
               <p className="text-xs text-[#7d776f] dark:text-slate-400 text-center">
                 Escanea para realizar el cobro por QR de las expensas.
               </p>
@@ -468,14 +508,14 @@ export default function CobroQrSimuladorModal({
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs font-bold text-[#262422] dark:text-white mb-1">
-                    Imagen del QR (PNG, JPG, WebP) *
+                    Imagen del QR (PNG, JPG, WebP) {qrInfo?.configurado ? '(opcional)' : '*'}
                   </label>
                   <input
                     type="file"
                     accept="image/*"
                     onChange={(e) => setArchivoQr(e.target.files?.[0] || null)}
                     className="w-full px-2.5 py-1.5 rounded-xl bg-white dark:bg-slate-900 border border-[#cec8bc] dark:border-slate-700 text-xs text-[#262422] dark:text-white file:mr-2 file:py-1 file:px-2 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-emerald-600 file:text-white cursor-pointer"
-                    required
+                    required={!qrInfo?.configurado}
                   />
                 </div>
                 <div>
@@ -489,6 +529,39 @@ export default function CobroQrSimuladorModal({
                     className="w-full px-2.5 py-1.5 rounded-xl bg-white dark:bg-slate-900 border border-[#cec8bc] dark:border-slate-700 text-xs text-[#262422] dark:text-white font-mono focus:outline-none focus:ring-2 focus:ring-emerald-500"
                   />
                 </div>
+              </div>
+
+              {/* Select obligatorio Cuenta donde se acreditan los cobros */}
+              <div>
+                <label className="block text-xs font-bold text-[#262422] dark:text-white mb-1">
+                  Cuenta donde se acreditan los cobros *
+                </label>
+                {cargandoCuentas ? (
+                  <div className="px-2.5 py-1.5 rounded-xl bg-white dark:bg-slate-900 border border-[#cec8bc] dark:border-slate-700 text-xs text-[#7d776f] flex items-center gap-1.5">
+                    <Loader2 className="w-3.5 h-3.5 animate-spin text-emerald-600" />
+                    <span>Cargando cuentas...</span>
+                  </div>
+                ) : cuentas.length === 0 ? (
+                  <div className="p-2.5 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-800 text-[11px] text-amber-900 dark:text-amber-200">
+                    No hay cuentas registradas en el sistema
+                  </div>
+                ) : (
+                  <select
+                    value={idCuentaQr}
+                    onChange={(e) =>
+                      setIdCuentaQr(e.target.value === '' ? '' : Number(e.target.value))
+                    }
+                    className="w-full px-2.5 py-1.5 rounded-xl bg-white dark:bg-slate-900 border border-[#cec8bc] dark:border-slate-700 text-xs text-[#262422] dark:text-white font-medium cursor-pointer focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                    required
+                  >
+                    <option value="">Selecciona la cuenta</option>
+                    {cuentas.map((c) => (
+                      <option key={`cuenta-qr-${c.idCuenta}`} value={c.idCuenta}>
+                        {c.banco} - {c.numeroCuenta}
+                      </option>
+                    ))}
+                  </select>
+                )}
               </div>
 
               {errorQr && (
@@ -520,7 +593,7 @@ export default function CobroQrSimuladorModal({
                 )}
                 <button
                   type="submit"
-                  disabled={guardandoQr || !archivoQr}
+                  disabled={Boolean(motivoDeshabilitadoQr)}
                   className="inline-flex items-center gap-1.5 px-4 py-1.5 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold shadow-xs cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {guardandoQr ? (
@@ -528,8 +601,8 @@ export default function CobroQrSimuladorModal({
                       <Loader2 className="w-3.5 h-3.5 animate-spin" />
                       <span>Guardando QR...</span>
                     </>
-                  ) : !archivoQr ? (
-                    <span>Selecciona una imagen</span>
+                  ) : motivoDeshabilitadoQr ? (
+                    <span>{motivoDeshabilitadoQr}</span>
                   ) : (
                     <span>Guardar QR</span>
                   )}
@@ -549,38 +622,12 @@ export default function CobroQrSimuladorModal({
               Registrar pago recibido por QR
             </h4>
 
-            {/* Select obligatorio Cuenta que recibio el pago */}
-            <div>
-              <label className="block text-xs font-bold text-[#262422] dark:text-white mb-1">
-                Cuenta que recibio el pago *
-              </label>
-              {cargandoCuentas ? (
-                <div className="px-2.5 py-1.5 rounded-xl bg-white dark:bg-slate-900 border border-[#cec8bc] dark:border-slate-700 text-xs text-[#7d776f] flex items-center gap-1.5">
-                  <Loader2 className="w-3.5 h-3.5 animate-spin text-emerald-600" />
-                  <span>Cargando cuentas...</span>
-                </div>
-              ) : cuentas.length === 0 ? (
-                <div className="p-2.5 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-800 text-[11px] text-amber-900 dark:text-amber-200">
-                  No hay cuentas registradas en el sistema
-                </div>
-              ) : (
-                <select
-                  value={idCuentaSeleccionada}
-                  onChange={(e) =>
-                    setIdCuentaSeleccionada(e.target.value === '' ? '' : Number(e.target.value))
-                  }
-                  className="w-full px-2.5 py-1.5 rounded-xl bg-white dark:bg-slate-900 border border-[#cec8bc] dark:border-slate-700 text-xs text-[#262422] dark:text-white font-medium cursor-pointer focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                  required
-                >
-                  <option value="">Selecciona la cuenta</option>
-                  {cuentas.map((c) => (
-                    <option key={`cuenta-${c.idCuenta}`} value={c.idCuenta}>
-                      {c.banco} - {c.numeroCuenta}
-                    </option>
-                  ))}
-                </select>
-              )}
-            </div>
+            {!qrInfo?.idCuenta && (
+              <div className="p-2.5 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-800 text-xs text-amber-900 dark:text-amber-200 flex items-center gap-1.5">
+                <AlertTriangle className="w-3.5 h-3.5 shrink-0 text-amber-600" />
+                <span>El administrador aun no configuro la cuenta del QR</span>
+              </div>
+            )}
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               {/* Select Persona Pagadora desde /api/v1/cobro/pagadores */}
@@ -619,17 +666,15 @@ export default function CobroQrSimuladorModal({
               {/* N.º de comprobante del pago QR */}
               <div>
                 <label className="block text-xs font-bold text-[#262422] dark:text-white mb-1">
-                  N.º de comprobante del pago QR *
+                  N.º de comprobante del pago QR (opcional)
                 </label>
                 <input
                   type="text"
-                  minLength={4}
                   maxLength={100}
                   value={nroComprobante}
                   onChange={(e) => setNroComprobante(e.target.value)}
                   placeholder="Número o referencia del comprobante"
                   className="w-full px-2.5 py-1.5 rounded-xl bg-white dark:bg-slate-900 border border-[#cec8bc] dark:border-slate-700 text-xs text-[#262422] dark:text-white font-mono focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                  required
                 />
               </div>
             </div>

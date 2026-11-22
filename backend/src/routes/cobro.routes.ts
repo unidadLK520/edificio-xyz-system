@@ -14,6 +14,7 @@ cobroRouter.use(authMiddleware);
 
 const KEY_QR = 'qr_cobro_imagen';
 const KEY_VIG = 'qr_cobro_vigente_hasta';
+const KEY_CUENTA = 'qr_cobro_id_cuenta';
 const MAX_QR_BYTES = 1.5 * 1024 * 1024;
 const YMD = /^\d{4}-\d{2}-\d{2}$/;
 const round2 = (n: number): number => Math.round(n * 100) / 100;
@@ -48,14 +49,18 @@ cobroRouter.get(
     authorizeRoles('Administrador', 'Directorio', 'Copropietario'),
     async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
         try {
-            const filas = await prisma.configuracionGlobal.findMany({ where: { clave: { in: [KEY_QR, KEY_VIG] } } });
+            const filas = await prisma.configuracionGlobal.findMany({ where: { clave: { in: [KEY_QR, KEY_VIG, KEY_CUENTA] } } });
             const imagen = filas.find((f) => f.clave === KEY_QR)?.valor ?? null;
             const vigenteHasta = filas.find((f) => f.clave === KEY_VIG)?.valor || null;
+            const rawCuenta = filas.find((f) => f.clave === KEY_CUENTA)?.valor;
+            const parsedCuenta = rawCuenta ? parseInt(rawCuenta, 10) : null;
+            const idCuenta = Number.isInteger(parsedCuenta) && (parsedCuenta as number) > 0 ? parsedCuenta : null;
             const puedeEditar = req.user?.rol?.toUpperCase() === 'ADMINISTRADOR';
             res.json({
                 configurado: imagen !== null,
                 imagen,
                 vigenteHasta,
+                idCuenta,
                 vencido: vigenteHasta !== null && vigenteHasta < hoyLaPaz(),
                 puedeEditar,
             });
@@ -67,8 +72,9 @@ cobroRouter.get(
 
 // ── PUT /cobro/qr — reemplaza el QR de cobro (solo Administrador) ─────────────
 const qrSchema = z.object({
-    imagen: z.string().min(100),
-    vigenteHasta: z.string().regex(YMD).optional(),
+    imagen: z.string().min(100).optional(),
+    vigenteHasta: z.string().regex(YMD).or(z.literal('')).optional(),
+    idCuenta: z.preprocess((val) => (val !== undefined && val !== null && val !== '' ? Number(val) : undefined), z.number().int().positive({ message: 'Cuenta no valida' })).optional(),
 });
 
 cobroRouter.put(
@@ -81,32 +87,69 @@ cobroRouter.put(
                 res.status(400).json({ error: 'Validation Error', message: 'Datos inválidos', details: r.error.flatten().fieldErrors });
                 return;
             }
-            const m = /^data:image\/(?:png|jpeg|webp);base64,([A-Za-z0-9+/=]+)$/.exec(r.data.imagen);
-            if (!m) throw new ErrorNegocio(400, 'La imagen debe ser PNG, JPG o WebP');
-            const buf = Buffer.from(m[1], 'base64');
-            if (buf.length === 0 || buf.length > MAX_QR_BYTES) throw new ErrorNegocio(400, 'La imagen no puede superar 1,5 MB');
-            if (!imagenValida(buf)) throw new ErrorNegocio(400, 'El archivo no es una imagen válida');
 
-            const vigencia = r.data.vigenteHasta ?? '';
-            await prisma.$transaction([
+            const qrExistente = await prisma.configuracionGlobal.findUnique({ where: { clave: KEY_QR } });
+            const tieneImagenPrevia = Boolean(qrExistente && qrExistente.valor && qrExistente.valor.length > 0);
+
+            if (!tieneImagenPrevia && !r.data.imagen) {
+                throw new ErrorNegocio(400, 'Debes seleccionar una imagen para el QR de cobro');
+            }
+
+            if (!r.data.idCuenta) {
+                throw new ErrorNegocio(400, 'Cuenta no valida');
+            }
+
+            const cuenta = await prisma.cuentaBancaria.findUnique({ where: { idCuenta: r.data.idCuenta } });
+            if (!cuenta || ('activa' in cuenta && !(cuenta as any).activa)) {
+                throw new ErrorNegocio(400, 'Cuenta no valida');
+            }
+
+            let buf: Buffer | null = null;
+            if (r.data.imagen) {
+                const m = /^data:image\/(?:png|jpeg|webp);base64,([A-Za-z0-9+/=]+)$/.exec(r.data.imagen);
+                if (!m) throw new ErrorNegocio(400, 'La imagen debe ser PNG, JPG o WebP');
+                buf = Buffer.from(m[1], 'base64');
+                if (buf.length === 0 || buf.length > MAX_QR_BYTES) throw new ErrorNegocio(400, 'La imagen no puede superar 1,5 MB');
+                if (!imagenValida(buf)) throw new ErrorNegocio(400, 'El archivo no es una imagen válida');
+            }
+
+            const ops: any[] = [
                 prisma.configuracionGlobal.upsert({
-                    where: { clave: KEY_QR },
-                    update: { valor: r.data.imagen },
-                    create: { clave: KEY_QR, valor: r.data.imagen, descripcion: 'Imagen del QR de cobro (data URI)' },
+                    where: { clave: KEY_CUENTA },
+                    update: { valor: String(r.data.idCuenta) },
+                    create: { clave: KEY_CUENTA, valor: String(r.data.idCuenta), descripcion: 'ID de la cuenta donde se acreditan los cobros por QR' },
                 }),
-                prisma.configuracionGlobal.upsert({
-                    where: { clave: KEY_VIG },
-                    update: { valor: vigencia },
-                    create: { clave: KEY_VIG, valor: vigencia, descripcion: 'Fecha límite de vigencia del QR de cobro (YYYY-MM-DD)' },
-                }),
-            ]);
+            ];
+
+            if (r.data.vigenteHasta !== undefined) {
+                const vigencia = r.data.vigenteHasta ?? '';
+                ops.push(
+                    prisma.configuracionGlobal.upsert({
+                        where: { clave: KEY_VIG },
+                        update: { valor: vigencia },
+                        create: { clave: KEY_VIG, valor: vigencia, descripcion: 'Fecha límite de vigencia del QR de cobro (YYYY-MM-DD)' },
+                    })
+                );
+            }
+
+            if (r.data.imagen) {
+                ops.push(
+                    prisma.configuracionGlobal.upsert({
+                        where: { clave: KEY_QR },
+                        update: { valor: r.data.imagen },
+                        create: { clave: KEY_QR, valor: r.data.imagen, descripcion: 'Imagen del QR de cobro (data URI)' },
+                    })
+                );
+            }
+
+            await prisma.$transaction(ops);
 
             await auditoriaService.registrarEvento({
                 tablaAfectada: 'configuracion_global',
                 idRegistro: KEY_QR,
                 accion: 'ACTUALIZAR_QR_COBRO',
                 resultado: 'EXITO',
-                datosNuevos: { vigenteHasta: r.data.vigenteHasta ?? null, bytes: buf.length },
+                datosNuevos: { idCuenta: r.data.idCuenta, vigenteHasta: r.data.vigenteHasta ?? null, bytes: buf ? buf.length : null },
                 idUsuario: req.user?.idUsuario ?? null,
             });
             res.json({ message: 'QR de cobro actualizado' });
