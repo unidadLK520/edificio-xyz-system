@@ -10,7 +10,6 @@ import {
   AlertTriangle,
   CheckCircle2,
   Loader2,
-  Upload,
   Calendar,
   Image as ImageIcon
 } from 'lucide-react'
@@ -24,6 +23,12 @@ interface PersonaItem {
   nombres: string
   apellidos: string
   ciNit?: string
+}
+
+interface PagadorItem {
+  idPersona: number
+  nombre: string
+  rol: 'Propietario' | 'Ocupante' | string
 }
 
 interface CobroQrSimuladorModalProps {
@@ -60,8 +65,20 @@ export default function CobroQrSimuladorModal({
   const [errorQr, setErrorQr] = useState<string | null>(null)
   const [exitoQr, setExitoQr] = useState<string | null>(null)
 
-  // Estado del formulario de registro de pago
+  // Estado de simulación de deuda proyectada (plegada por defecto)
+  const [mostrarSimulacion, setMostrarSimulacion] = useState(false)
+
+  // Estado de pagadores cargados desde la API
+  const [pagadores, setPagadores] = useState<PagadorItem[]>([])
+  const [cargandoPagadores, setCargandoPagadores] = useState(false)
   const [idPersonaSeleccionada, setIdPersonaSeleccionada] = useState<number | ''>('')
+
+  // Estado del comprobante de pago (imagen data URI)
+  const [comprobanteDataUri, setComprobanteDataUri] = useState<string | null>(null)
+  const [procesandoComprobante, setProcesandoComprobante] = useState(false)
+  const [errorComprobante, setErrorComprobante] = useState<string | null>(null)
+
+  // Estado del formulario de registro de pago
   const [nroComprobante, setNroComprobante] = useState('')
   const [guardandoPago, setGuardandoPago] = useState(false)
   const [errorPago, setErrorPago] = useState<string | null>(null)
@@ -83,6 +100,24 @@ export default function CobroQrSimuladorModal({
     }
   }, [])
 
+  const deptoNum =
+    expensa?.departamento?.numero ||
+    expensa?.departamentoNumero ||
+    expensa?.idDepartamento ||
+    ''
+  const periodoTexto = expensa?.periodo || ''
+  const idDepartamento =
+    Number(expensa?.idDepartamento || expensa?.departamento?.idDepartamento) || 0
+  const saldoPendiente = Number(expensa?.saldoPendiente || 0)
+
+  const capitalPendiente = Number(expensa?.capitalPendiente ?? expensa?.saldoPendiente ?? 0)
+  const moraCalculada = Number(expensa?.moraCalculada ?? 0)
+  const totalAdeudadoFila =
+    expensa?.totalAdeudado !== undefined && expensa?.totalAdeudado !== null
+      ? Number(expensa.totalAdeudado)
+      : Math.round((capitalPendiente + moraCalculada) * 100) / 100
+
+  // Reiniciar estados al abrir el modal
   useEffect(() => {
     if (isOpen) {
       fetchQr()
@@ -93,40 +128,54 @@ export default function CobroQrSimuladorModal({
       setErrorQr(null)
       setExitoQr(null)
       setNroComprobante('')
+      setComprobanteDataUri(null)
+      setErrorComprobante(null)
+      setMostrarSimulacion(false)
     }
   }, [isOpen, fetchQr])
 
-  // Inicializar la persona pagadora con el propietario de la expensa si existe
+  // Cargar pagadores desde endpoint oficial de cobro
   useEffect(() => {
-    if (expensa && personasList.length > 0) {
-      const propId =
-        expensa.departamento?.idPropietario ||
-        expensa.departamento?.propietario?.idPersona ||
-        expensa.idPersona ||
-        expensa.idPersonaPagador ||
-        null
-      if (propId) {
-        const encontrada = personasList.find((p) => p.idPersona === Number(propId))
-        setIdPersonaSeleccionada(encontrada ? encontrada.idPersona : '')
-      } else {
-        setIdPersonaSeleccionada('')
-      }
-    } else {
+    if (!isOpen || !idDepartamento) {
+      setPagadores([])
       setIdPersonaSeleccionada('')
+      return
     }
-  }, [expensa, personasList])
+
+    let activo = true
+    setCargandoPagadores(true)
+    apiFetch(`/api/v1/cobro/pagadores/${idDepartamento}`)
+      .then(async (res) => {
+        if (!res.ok) return { pagadores: [] }
+        return res.json().catch(() => ({ pagadores: [] }))
+      })
+      .then((data) => {
+        if (!activo) return
+        const list: PagadorItem[] = Array.isArray(data?.pagadores) ? data.pagadores : []
+        setPagadores(list)
+        const prop = list.find((p) => p.rol?.toLowerCase() === 'propietario')
+        if (prop) {
+          setIdPersonaSeleccionada(prop.idPersona)
+        } else {
+          setIdPersonaSeleccionada('')
+        }
+      })
+      .catch(() => {
+        if (activo) {
+          setPagadores([])
+          setIdPersonaSeleccionada('')
+        }
+      })
+      .finally(() => {
+        if (activo) setCargandoPagadores(false)
+      })
+
+    return () => {
+      activo = false
+    }
+  }, [isOpen, idDepartamento])
 
   if (!isOpen || !expensa) return null
-
-  const deptoNum =
-    expensa.departamento?.numero ||
-    expensa.departamentoNumero ||
-    expensa.idDepartamento ||
-    ''
-  const periodoTexto = expensa.periodo || ''
-  const idDepartamento =
-    Number(expensa.idDepartamento || expensa.departamento?.idDepartamento) || 0
-  const saldoPendiente = Number(expensa.saldoPendiente || 0)
 
   const handleGuardarQr = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -170,6 +219,24 @@ export default function CobroQrSimuladorModal({
     }
   }
 
+  const procesarArchivoComprobante = async (file: File) => {
+    setErrorComprobante(null)
+    setProcesandoComprobante(true)
+    try {
+      const dataUri = await imagenADataUri(file, {
+        maxLado: 1400,
+        tipo: 'image/jpeg',
+        calidad: 0.8
+      })
+      setComprobanteDataUri(dataUri)
+    } catch (err: any) {
+      setErrorComprobante(err.message || 'Error al procesar el comprobante')
+      setComprobanteDataUri(null)
+    } finally {
+      setProcesandoComprobante(false)
+    }
+  }
+
   const handleRegistrarPago = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!expensa?.idExpensa) return
@@ -182,13 +249,14 @@ export default function CobroQrSimuladorModal({
       setErrorPago('El N.º de comprobante del pago QR debe tener entre 4 y 100 caracteres')
       return
     }
+    if (!comprobanteDataUri) {
+      setErrorPago('Debes adjuntar el comprobante de pago')
+      return
+    }
 
     setGuardandoPago(true)
     setErrorPago(null)
     try {
-      const capitalPendiente = Number(expensa.capitalPendiente ?? expensa.saldoPendiente ?? 0)
-      const moraCalculada = Number(expensa.moraCalculada ?? 0)
-
       const res = await apiFetch(`/api/v1/expensas/${expensa.idExpensa}/pagos`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -197,7 +265,8 @@ export default function CobroQrSimuladorModal({
           montoPagado: capitalPendiente,
           interesPagado: moraCalculada,
           metodoPago: 'QR',
-          referenciaQr: nro
+          referenciaQr: nro,
+          comprobanteUrl: comprobanteDataUri
         })
       })
 
@@ -216,6 +285,23 @@ export default function CobroQrSimuladorModal({
       setGuardandoPago(false)
     }
   }
+
+  const motivoDeshabilitadoPago = (() => {
+    if (guardandoPago) return 'Enviando...'
+    if (pagadores.length === 0 && !cargandoPagadores) {
+      return 'Este departamento no tiene propietario ni ocupante vigente'
+    }
+    if (!idPersonaSeleccionada) return 'Selecciona a la persona que realiza el pago'
+    if (nroComprobante.trim().length < 4) {
+      return 'N.º de comprobante muy corto (mín. 4 caracteres)'
+    }
+    if (nroComprobante.trim().length > 100) {
+      return 'N.º de comprobante muy largo (máx. 100 caracteres)'
+    }
+    if (procesandoComprobante) return 'Procesando comprobante...'
+    if (!comprobanteDataUri) return 'Falta subir el comprobante de pago'
+    return null
+  })()
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in duration-200">
@@ -244,7 +330,44 @@ export default function CobroQrSimuladorModal({
           </button>
         </div>
 
-        {/* Sección: QR de cobro */}
+        {/* 1) Bloque superior: Monto de esta expensa */}
+        <div className="p-3.5 rounded-2xl bg-[#dfd9ce]/60 dark:bg-slate-800/60 border border-[#cec8bc] dark:border-slate-700 text-xs space-y-2">
+          <span className="font-bold text-[11px] uppercase tracking-wider text-[#5c5750] dark:text-slate-400 block">
+            Monto de esta expensa
+          </span>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 font-mono">
+            <div className="p-2.5 rounded-xl bg-white dark:bg-slate-900 border border-[#cec8bc] dark:border-slate-700">
+              <span className="text-[10px] text-[#7d776f] dark:text-slate-400 block uppercase">
+                Capital Pendiente
+              </span>
+              <span className="text-sm font-bold text-[#262422] dark:text-white">
+                Bs. {capitalPendiente.toFixed(2)}
+              </span>
+            </div>
+            <div className="p-2.5 rounded-xl bg-white dark:bg-slate-900 border border-[#cec8bc] dark:border-slate-700">
+              <span className="text-[10px] text-[#7d776f] dark:text-slate-400 block uppercase">
+                Mora Calculada
+              </span>
+              <span
+                className={`text-sm font-bold ${
+                  moraCalculada > 0 ? 'text-rose-600 dark:text-rose-400' : 'text-emerald-600 dark:text-emerald-400'
+                }`}
+              >
+                {moraCalculada > 0 ? `+Bs. ${moraCalculada.toFixed(2)}` : 'Bs. 0.00'}
+              </span>
+            </div>
+            <div className="p-2.5 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-300 dark:border-emerald-800">
+              <span className="text-[10px] text-emerald-800 dark:text-emerald-300 block uppercase font-bold">
+                Total Deuda
+              </span>
+              <span className="text-sm font-black text-emerald-700 dark:text-emerald-400">
+                Bs. {totalAdeudadoFila.toFixed(2)}
+              </span>
+            </div>
+          </div>
+        </div>
+
+        {/* 2) Sección: QR de cobro */}
         <div className="p-4 rounded-2xl bg-[#dfd9ce]/60 dark:bg-slate-800/60 border border-[#cec8bc] dark:border-slate-700 space-y-3">
           <div className="flex items-center justify-between">
             <span className="text-xs font-bold text-[#262422] dark:text-white flex items-center gap-1.5">
@@ -373,13 +496,15 @@ export default function CobroQrSimuladorModal({
                 <button
                   type="submit"
                   disabled={guardandoQr || !archivoQr}
-                  className="inline-flex items-center gap-1.5 px-4 py-1.5 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold shadow-xs cursor-pointer disabled:opacity-50"
+                  className="inline-flex items-center gap-1.5 px-4 py-1.5 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold shadow-xs cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {guardandoQr ? (
                     <>
                       <Loader2 className="w-3.5 h-3.5 animate-spin" />
                       <span>Guardando QR...</span>
                     </>
+                  ) : !archivoQr ? (
+                    <span>Selecciona una imagen</span>
                   ) : (
                     <span>Guardar QR</span>
                   )}
@@ -389,16 +514,39 @@ export default function CobroQrSimuladorModal({
           )}
         </div>
 
-        {/* Sección: Proyección de deuda a una fecha */}
+        {/* 3) Sección: Simulación de deuda proyectada (plegada por defecto) */}
         {idDepartamento > 0 && (
-          <ProyeccionDeuda
-            idDepartamento={idDepartamento}
-            fechaInicial={fechaSistema}
-            fechaVencimientoRef={expensa.fechaVencimiento}
-          />
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold text-[#262422] dark:text-white flex items-center gap-1.5">
+                <Calendar className="w-4 h-4 text-emerald-700 dark:text-emerald-400" />
+                Proyección de deuda a una fecha
+              </span>
+              <button
+                type="button"
+                onClick={() => setMostrarSimulacion(!mostrarSimulacion)}
+                className="px-3 py-1.5 rounded-xl border border-[#cec8bc] dark:border-slate-700 bg-white dark:bg-slate-900 text-xs font-semibold text-[#262422] dark:text-white hover:bg-[#dfd9ce]/60 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+              >
+                {mostrarSimulacion ? 'Ocultar simulación' : 'Simular deuda a una fecha'}
+              </button>
+            </div>
+
+            {mostrarSimulacion && (
+              <div className="space-y-2">
+                <ProyeccionDeuda
+                  idDepartamento={idDepartamento}
+                  fechaInicial={fechaSistema}
+                  fechaVencimientoRef={expensa.fechaVencimiento}
+                />
+                <p className="text-[11px] text-[#7d776f] dark:text-slate-400 italic px-1">
+                  La simulación suma varias expensas; el pago de abajo cubre solo la expensa de esta fila.
+                </p>
+              </div>
+            )}
+          </div>
         )}
 
-        {/* Sección: Registro de pago o estado saldado */}
+        {/* 4) y 6) Sección: Registro de pago o estado saldado */}
         {saldoPendiente > 0 ? (
           <form
             onSubmit={handleRegistrarPago}
@@ -409,27 +557,40 @@ export default function CobroQrSimuladorModal({
             </h4>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {/* Select Persona Pagadora desde /api/v1/cobro/pagadores */}
               <div>
                 <label className="block text-xs font-bold text-[#262422] dark:text-white mb-1">
                   Persona que realiza el pago *
                 </label>
-                <select
-                  value={idPersonaSeleccionada}
-                  onChange={(e) =>
-                    setIdPersonaSeleccionada(e.target.value === '' ? '' : Number(e.target.value))
-                  }
-                  className="w-full px-2.5 py-1.5 rounded-xl bg-white dark:bg-slate-900 border border-[#cec8bc] dark:border-slate-700 text-xs text-[#262422] dark:text-white font-medium cursor-pointer focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                  required
-                >
-                  <option value="">Selecciona una persona</option>
-                  {personasList.map((p) => (
-                    <option key={`persona-${p.idPersona}`} value={p.idPersona}>
-                      {p.nombres} {p.apellidos} {p.ciNit ? `(CI: ${p.ciNit})` : ''}
-                    </option>
-                  ))}
-                </select>
+                {cargandoPagadores ? (
+                  <div className="px-2.5 py-1.5 rounded-xl bg-white dark:bg-slate-900 border border-[#cec8bc] dark:border-slate-700 text-xs text-[#7d776f] flex items-center gap-1.5">
+                    <Loader2 className="w-3.5 h-3.5 animate-spin text-emerald-600" />
+                    <span>Cargando pagadores...</span>
+                  </div>
+                ) : pagadores.length === 0 ? (
+                  <div className="p-2.5 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-800 text-[11px] text-amber-900 dark:text-amber-200">
+                    Este departamento no tiene propietario ni ocupante vigente
+                  </div>
+                ) : (
+                  <select
+                    value={idPersonaSeleccionada}
+                    onChange={(e) =>
+                      setIdPersonaSeleccionada(e.target.value === '' ? '' : Number(e.target.value))
+                    }
+                    className="w-full px-2.5 py-1.5 rounded-xl bg-white dark:bg-slate-900 border border-[#cec8bc] dark:border-slate-700 text-xs text-[#262422] dark:text-white font-medium cursor-pointer focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                    required
+                  >
+                    <option value="">Selecciona una persona</option>
+                    {pagadores.map((p) => (
+                      <option key={`pagador-${p.idPersona}`} value={p.idPersona}>
+                        {p.nombre} ({p.rol})
+                      </option>
+                    ))}
+                  </select>
+                )}
               </div>
 
+              {/* N.º de comprobante del pago QR */}
               <div>
                 <label className="block text-xs font-bold text-[#262422] dark:text-white mb-1">
                   N.º de comprobante del pago QR *
@@ -445,6 +606,70 @@ export default function CobroQrSimuladorModal({
                   required
                 />
               </div>
+            </div>
+
+            {/* Subir comprobante de pago (imagen) */}
+            <div className="space-y-1.5">
+              <label className="block text-xs font-bold text-[#262422] dark:text-white">
+                Subir comprobante de pago (imagen) *
+              </label>
+              {!comprobanteDataUri ? (
+                <div>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={async (e) => {
+                      const f = e.target.files?.[0] || null
+                      if (f) {
+                        await procesarArchivoComprobante(f)
+                      }
+                    }}
+                    className="w-full px-2.5 py-1.5 rounded-xl bg-white dark:bg-slate-900 border border-[#cec8bc] dark:border-slate-700 text-xs text-[#262422] dark:text-white file:mr-2 file:py-1 file:px-2 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-emerald-600 file:text-white cursor-pointer"
+                    required
+                  />
+                  {procesandoComprobante && (
+                    <p className="text-[11px] text-[#7d776f] mt-1 flex items-center gap-1">
+                      <Loader2 className="w-3 h-3 animate-spin text-emerald-600" />
+                      <span>Procesando comprobante...</span>
+                    </p>
+                  )}
+                </div>
+              ) : (
+                <div className="flex items-center gap-3 p-2.5 rounded-xl bg-white dark:bg-slate-900 border border-[#cec8bc] dark:border-slate-700">
+                  <img
+                    src={comprobanteDataUri}
+                    alt="Vista previa del comprobante"
+                    className="w-16 h-16 object-cover rounded-lg border border-[#cec8bc] dark:border-slate-800 shadow-xs shrink-0"
+                  />
+                  <div className="space-y-1 text-xs flex-1">
+                    <p className="font-semibold text-emerald-700 dark:text-emerald-400 flex items-center gap-1">
+                      <CheckCircle2 className="w-3.5 h-3.5" />
+                      <span>Comprobante listo</span>
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setComprobanteDataUri(null)
+                        setErrorComprobante(null)
+                      }}
+                      className="text-xs font-bold text-rose-600 hover:text-rose-700 hover:underline cursor-pointer"
+                    >
+                      Quitar
+                    </button>
+                  </div>
+                </div>
+              )}
+              {errorComprobante && (
+                <div className="p-2 rounded-xl bg-rose-100 dark:bg-rose-950/70 border border-rose-300 dark:border-rose-800 text-rose-900 dark:text-rose-200 text-xs flex items-center gap-1.5">
+                  <AlertTriangle className="w-3.5 h-3.5 shrink-0 text-rose-600" />
+                  <span>{errorComprobante}</span>
+                </div>
+              )}
+            </div>
+
+            {/* Resumen antes del botón */}
+            <div className="p-2.5 rounded-xl bg-[#ede9e1] dark:bg-slate-900/80 border border-[#cec8bc] dark:border-slate-700 text-xs font-mono text-[#5c5750] dark:text-slate-300">
+              Se registrará un pago de Bs. {capitalPendiente.toFixed(2)} + mora Bs. {moraCalculada.toFixed(2)} = Bs. {totalAdeudadoFila.toFixed(2)} en la expensa del Dpto {deptoNum}, período {periodoTexto}
             </div>
 
             {errorPago && (
@@ -464,27 +689,24 @@ export default function CobroQrSimuladorModal({
               </button>
               <button
                 type="submit"
-                disabled={
-                  guardandoPago ||
-                  !idPersonaSeleccionada ||
-                  nroComprobante.trim().length < 4 ||
-                  nroComprobante.trim().length > 100
-                }
-                className="inline-flex items-center gap-1.5 px-5 py-2 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold shadow-xs cursor-pointer disabled:opacity-50 transition-all"
+                disabled={Boolean(motivoDeshabilitadoPago)}
+                className="inline-flex items-center gap-1.5 px-5 py-2 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold shadow-xs cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed transition-all"
               >
                 {guardandoPago ? (
                   <>
                     <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                    <span>Registrando pago...</span>
+                    <span>Enviando...</span>
                   </>
+                ) : motivoDeshabilitadoPago ? (
+                  <span>{motivoDeshabilitadoPago}</span>
                 ) : (
-                  <span>Registrar pago</span>
+                  <span>Registrar pago de Bs. {totalAdeudadoFila.toFixed(2)}</span>
                 )}
               </button>
             </div>
           </form>
         ) : (
-          <div className="p-3 rounded-2xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-300 dark:border-emerald-800 text-xs text-emerald-900 dark:text-emerald-300 flex items-center justify-between">
+          <div className="p-3.5 rounded-2xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-300 dark:border-emerald-800 text-xs text-emerald-900 dark:text-emerald-300 flex items-center justify-between">
             <div className="flex items-center gap-2 font-semibold">
               <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
               <span>Expensa saldada</span>
