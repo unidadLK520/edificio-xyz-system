@@ -89,18 +89,6 @@ export default function ExpensasPage() {
   const [isEditarExpensaModalOpen, setIsEditarExpensaModalOpen] = useState(false)
   const [expensaParaEditar, setExpensaParaEditar] = useState<any>(null)
   const [expensaParaExtra, setExpensaParaExtra] = useState<any | null>(null)
-  const [extrasMap, setExtrasMap] = useState<Record<number, { concepto: string; monto: number }>>(
-    () => {
-      if (typeof window !== 'undefined') {
-        try {
-          const saved = localStorage.getItem('expensas_extras_map')
-          if (saved) return JSON.parse(saved)
-        } catch {}
-      }
-      return {}
-    }
-  )
-
 // Removed static mora input states – now using context policy
 // const [moraTipoPenalidadInput, setMoraTipoPenalidadInput] = useState<'fijo' | 'porcentaje'>('fijo');
 // const [moraMontoFijoInput, setMoraMontoFijoInput] = useState<number | ''>(50);
@@ -305,29 +293,20 @@ export default function ExpensasPage() {
                 ? Number(item.montoBase)
                 : baseDefault
 
-            const extraGuardado = extrasMap[item.idExpensa]
-            const montoExtra =
-              extraGuardado !== undefined
-                ? extraGuardado.monto
-                : Number(item.montoExtra || 0)
+            const montoExtra = Number(item.montoExtras ?? item.montoExtra ?? 0)
             const extraConcepto =
-              extraGuardado !== undefined
-                ? extraGuardado.concepto
+              item.extras && item.extras.length > 0
+                ? item.extras.map((x: any) => x.concepto).join(', ')
                 : item.extraConcepto || (montoExtra > 0 ? 'Cargo Extra' : '')
 
             const montoAgua = Number(item.montoAgua || 0)
 
-            const totalCalculado =
-              Number(item.monto) > 0 && !extraGuardado && montoExtra === 0
-                ? Number(item.monto)
-                : Math.round((montoBase + montoAgua + montoExtra) * 100) / 100
+            const totalCalculado = Number(item.monto ?? (montoBase + montoAgua + montoExtra))
 
             const saldoCalc =
               item.estado === 'Pagado'
                 ? 0
-                : Number(item.saldoPendiente) > 0 && !extraGuardado && montoExtra === 0
-                  ? Number(item.saldoPendiente)
-                  : totalCalculado
+                : Number(item.saldoPendiente ?? totalCalculado)
 
             return {
               idExpensa: item.idExpensa,
@@ -477,29 +456,9 @@ export default function ExpensasPage() {
     }
   }
 
-  const handleGuardarExtra = (idExpensa: number, concepto: string, montoExtra: number) => {
-    const updated = { ...extrasMap, [idExpensa]: { concepto, monto: montoExtra } }
-    setExtrasMap(updated)
-    if (typeof window !== 'undefined') {
-      localStorage.setItem('expensas_extras_map', JSON.stringify(updated))
-    }
-    setExpensas((prev) =>
-      prev.map((e) => {
-        if (e.idExpensa === idExpensa) {
-          const base = e.montoBase !== undefined ? e.montoBase : e.monto - (e.montoAgua || 0)
-          const nuevoMonto = Math.round((base + (e.montoAgua || 0) + montoExtra) * 100) / 100
-          return {
-            ...e,
-            montoExtra,
-            extraConcepto: concepto,
-            monto: nuevoMonto,
-            saldoPendiente: nuevoMonto
-          }
-        }
-        return e
-      })
-    )
-    showToast(`¡Cargo extra "${concepto}" (+Bs ${montoExtra}) registrado para la expensa!`)
+  const handleGuardarExtra = async (idExpensa?: number, concepto?: string, montoExtra?: number) => {
+    await fetchExpensas()
+    showToast('¡Cargo extra registrado exitosamente!')
   }
 
   // Recálculo de Mora
@@ -3315,7 +3274,7 @@ export default function ExpensasPage() {
                   rows={3}
                   value={motivoAnulacionInput}
                   onChange={(e) => setMotivoAnulacionInput(e.target.value)}
-                  placeholder="Explique detalladamente el motivo de la anulación (ej. Error en número de comprobante, duplicado por el banco, etc.)..."
+                  placeholder="Explique detalladamente el motivo de la anulación (ej. Error en número de comprobante, pago duplicado, etc.)..."
                   className="w-full px-3 py-2 rounded-xl bg-[#dfd9ce] dark:bg-slate-800 border border-[#cec8bc] dark:border-slate-700 text-[#262422] dark:text-white text-xs resize-none"
                 />
               </div>
