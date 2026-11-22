@@ -65,6 +65,11 @@ export default function CobroQrSimuladorModal({
   const [cargandoPagadores, setCargandoPagadores] = useState(false)
   const [idPersonaSeleccionada, setIdPersonaSeleccionada] = useState<number | ''>('')
 
+  // Estado de cuentas cargadas desde la API
+  const [cuentas, setCuentas] = useState<Array<{ idCuenta: number; banco: string; numeroCuenta: string }>>([])
+  const [cargandoCuentas, setCargandoCuentas] = useState(false)
+  const [idCuentaSeleccionada, setIdCuentaSeleccionada] = useState<number | ''>('')
+
   // Estado del comprobante de pago (imagen data URI)
   const [comprobanteDataUri, setComprobanteDataUri] = useState<string | null>(null)
   const [procesandoComprobante, setProcesandoComprobante] = useState(false)
@@ -93,6 +98,20 @@ export default function CobroQrSimuladorModal({
     }
   }, [])
 
+  const fetchCuentas = useCallback(async () => {
+    setCargandoCuentas(true)
+    try {
+      const res = await apiFetch('/api/v1/cuentas-bancarias')
+      const json = await res.json().catch(() => ({}))
+      const lista = Array.isArray(json?.data) ? json.data : Array.isArray(json) ? json : []
+      setCuentas(lista)
+    } catch {
+      setCuentas([])
+    } finally {
+      setCargandoCuentas(false)
+    }
+  }, [])
+
   const deptoNum =
     expensa?.departamento?.numero ||
     expensa?.departamentoNumero ||
@@ -114,6 +133,7 @@ export default function CobroQrSimuladorModal({
   useEffect(() => {
     if (isOpen) {
       fetchQr()
+      fetchCuentas()
       setMostrarFormQr(false)
       setArchivoQr(null)
       setVigenteHastaInput('')
@@ -121,11 +141,12 @@ export default function CobroQrSimuladorModal({
       setErrorQr(null)
       setExitoQr(null)
       setNroComprobante('')
+      setIdCuentaSeleccionada('')
       setComprobanteDataUri(null)
       setErrorComprobante(null)
       setVerComprobanteCompleto(false)
     }
-  }, [isOpen, fetchQr])
+  }, [isOpen, fetchQr, fetchCuentas])
 
   // Cargar pagadores desde endpoint oficial de cobro
   useEffect(() => {
@@ -237,6 +258,10 @@ export default function CobroQrSimuladorModal({
       setErrorPago('Debes seleccionar a la persona que realiza el pago')
       return
     }
+    if (!idCuentaSeleccionada) {
+      setErrorPago('Falta elegir la cuenta')
+      return
+    }
     const nro = nroComprobante.trim()
     if (nro.length < 4 || nro.length > 100) {
       setErrorPago('El N.º de comprobante del pago QR debe tener entre 4 y 100 caracteres')
@@ -255,6 +280,7 @@ export default function CobroQrSimuladorModal({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           idPersonaPagador: Number(idPersonaSeleccionada),
+          idCuenta: Number(idCuentaSeleccionada),
           montoPagado: capitalPendiente,
           interesPagado: moraCalculada,
           metodoPago: 'QR',
@@ -265,7 +291,8 @@ export default function CobroQrSimuladorModal({
 
       const data = await res.json().catch(() => ({}))
       if (!res.ok) {
-        throw new Error(data.message || data.error || 'Error al registrar el pago')
+        setErrorPago(data.message || data.error || 'Error al registrar el pago')
+        return
       }
 
       onClose()
@@ -288,6 +315,7 @@ export default function CobroQrSimuladorModal({
 
   const motivoDeshabilitadoPago = (() => {
     if (guardandoPago) return 'Enviando...'
+    if (!idCuentaSeleccionada) return 'Falta elegir la cuenta'
     if (pagadores.length === 0 && !cargandoPagadores) {
       return 'Este departamento no tiene propietario ni ocupante vigente'
     }
@@ -520,6 +548,39 @@ export default function CobroQrSimuladorModal({
             <h4 className="font-bold text-xs text-[#262422] dark:text-white">
               Registrar pago recibido por QR
             </h4>
+
+            {/* Select obligatorio Cuenta que recibio el pago */}
+            <div>
+              <label className="block text-xs font-bold text-[#262422] dark:text-white mb-1">
+                Cuenta que recibio el pago *
+              </label>
+              {cargandoCuentas ? (
+                <div className="px-2.5 py-1.5 rounded-xl bg-white dark:bg-slate-900 border border-[#cec8bc] dark:border-slate-700 text-xs text-[#7d776f] flex items-center gap-1.5">
+                  <Loader2 className="w-3.5 h-3.5 animate-spin text-emerald-600" />
+                  <span>Cargando cuentas...</span>
+                </div>
+              ) : cuentas.length === 0 ? (
+                <div className="p-2.5 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-800 text-[11px] text-amber-900 dark:text-amber-200">
+                  No hay cuentas registradas en el sistema
+                </div>
+              ) : (
+                <select
+                  value={idCuentaSeleccionada}
+                  onChange={(e) =>
+                    setIdCuentaSeleccionada(e.target.value === '' ? '' : Number(e.target.value))
+                  }
+                  className="w-full px-2.5 py-1.5 rounded-xl bg-white dark:bg-slate-900 border border-[#cec8bc] dark:border-slate-700 text-xs text-[#262422] dark:text-white font-medium cursor-pointer focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                  required
+                >
+                  <option value="">Selecciona la cuenta</option>
+                  {cuentas.map((c) => (
+                    <option key={`cuenta-${c.idCuenta}`} value={c.idCuenta}>
+                      {c.banco} - {c.numeroCuenta}
+                    </option>
+                  ))}
+                </select>
+              )}
+            </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               {/* Select Persona Pagadora desde /api/v1/cobro/pagadores */}
