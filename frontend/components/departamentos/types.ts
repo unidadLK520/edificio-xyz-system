@@ -60,6 +60,7 @@ export interface UnidadItem {
   parqueo?: string
   baulera?: string
   fechaRegistro?: string
+  fechaAsignacion?: string | null
   historialOcupantes?: HistorialOcupanteItem[]
   // Parámetros de cobro y agua (Reglas del Edificio XYZ)
   expensaBase?: number
