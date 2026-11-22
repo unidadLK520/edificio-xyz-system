@@ -2479,7 +2479,7 @@ export default function ExpensasPage() {
       )}
 
       {/* MODAL RECIBO OFICIAL DE CAJA (OFICIAL EDIFICIO XYZ) */}
-      {selectedReceipt && (
+      {selectedReceipt && typeof selectedReceipt.monto === 'number' && !isNaN(selectedReceipt.monto) && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs">
           <div className="bg-white dark:bg-slate-900 border border-[#cec8bc] dark:border-slate-800 w-full max-w-lg rounded-2xl shadow-2xl p-6 space-y-4 animate-in fade-in zoom-in-95 duration-200 text-[#262422] dark:text-slate-100">
             <div className="flex items-center justify-between border-b pb-3 dark:border-slate-800">
@@ -2506,10 +2506,10 @@ export default function ExpensasPage() {
                                   </div>
                 <div className="text-right">
                   <div className="font-mono font-bold text-slate-900 dark:text-white">
-                    REC-EXP-{selectedReceipt.departamento?.numero || selectedReceipt.idDepartamento}
+                    REC-EXP-{selectedReceipt.departamento?.numero || selectedReceipt.idDepartamento || '—'}
                   </div>
                   <div className="text-[11px] text-slate-500 font-mono">
-                    Período: {selectedReceipt.periodo}
+                    Período: {selectedReceipt.periodo || '—'}
                   </div>
                 </div>
               </div>
@@ -2519,14 +2519,14 @@ export default function ExpensasPage() {
                   <span className="text-slate-500 block text-[10px] uppercase font-bold">
                     Propietario Responsable:
                   </span>
-                  <span className="font-bold">{selectedReceipt.propietarioNombre}</span>
+                  <span className="font-bold">{selectedReceipt.propietarioNombre || '—'}</span>
                 </div>
                 <div>
                   <span className="text-slate-500 block text-[10px] uppercase font-bold">
                     Unidad:
                   </span>
                   <span className="font-bold">
-                    Dpto {selectedReceipt.departamento?.numero} (
+                    Dpto {selectedReceipt.departamento?.numero || selectedReceipt.idDepartamento || '—'} (
                     {selectedReceipt.departamento?.tipologia || '80 m²'})
                   </span>
                 </div>
@@ -2537,7 +2537,8 @@ export default function ExpensasPage() {
                   <span className="font-bold text-emerald-700 dark:text-emerald-400">
                     {selectedReceipt.pagadoPor ||
                       selectedReceipt.inquilinoNombre ||
-                      selectedReceipt.propietarioNombre}
+                      selectedReceipt.propietarioNombre ||
+                      '—'}
                   </span>
                 </div>
                 <div>
@@ -2559,56 +2560,56 @@ export default function ExpensasPage() {
                 <span className="text-slate-600 dark:text-slate-300">
                   • Seguridad y Vigilancia 24/7 (36.13%)
                 </span>
-                <span className="font-mono">Bs. {(selectedReceipt.monto * 0.3613).toFixed(2)}</span>
+                <span className="font-mono">Bs. {(Number(selectedReceipt.monto ?? 0) * 0.3613).toFixed(2)}</span>
               </div>
               <div className="flex justify-between text-[11px]">
                 <span className="text-slate-600 dark:text-slate-300">
                   • Administración Central y Gestión (22.58%)
                 </span>
-                <span className="font-mono">Bs. {(selectedReceipt.monto * 0.2258).toFixed(2)}</span>
+                <span className="font-mono">Bs. {(Number(selectedReceipt.monto ?? 0) * 0.2258).toFixed(2)}</span>
               </div>
               <div className="flex justify-between text-[11px]">
                 <span className="text-slate-600 dark:text-slate-300">
                   • Limpieza e Insumos Comunes (14.19%)
                 </span>
-                <span className="font-mono">Bs. {(selectedReceipt.monto * 0.1419).toFixed(2)}</span>
+                <span className="font-mono">Bs. {(Number(selectedReceipt.monto ?? 0) * 0.1419).toFixed(2)}</span>
               </div>
               <div className="flex justify-between text-[11px]">
                 <span className="text-slate-600 dark:text-slate-300">
                   • Mantenimiento Preventivo (9.68%)
                 </span>
-                <span className="font-mono">Bs. {(selectedReceipt.monto * 0.0968).toFixed(2)}</span>
+                <span className="font-mono">Bs. {(Number(selectedReceipt.monto ?? 0) * 0.0968).toFixed(2)}</span>
               </div>
               <div className="flex justify-between text-[11px]">
                 <span className="text-slate-600 dark:text-slate-300">
                   • Electricidad Común ELFEC (5.16%)
                 </span>
-                <span className="font-mono">Bs. {(selectedReceipt.monto * 0.0516).toFixed(2)}</span>
+                <span className="font-mono">Bs. {(Number(selectedReceipt.monto ?? 0) * 0.0516).toFixed(2)}</span>
               </div>
               <div className="flex justify-between text-[11px]">
                 <span className="text-slate-600 dark:text-slate-300">
                   • Mantenimiento Ascensor Otis (4.52%)
                 </span>
-                <span className="font-mono">Bs. {(selectedReceipt.monto * 0.0452).toFixed(2)}</span>
+                <span className="font-mono">Bs. {(Number(selectedReceipt.monto ?? 0) * 0.0452).toFixed(2)}</span>
               </div>
               <div className="flex justify-between text-[11px]">
                 <span className="text-slate-600 dark:text-slate-300">
                   • Agua Común y Cisterna SEMAPA (1.94%)
                 </span>
-                <span className="font-mono">Bs. {(selectedReceipt.monto * 0.0194).toFixed(2)}</span>
+                <span className="font-mono">Bs. {(Number(selectedReceipt.monto ?? 0) * 0.0194).toFixed(2)}</span>
               </div>
               <div className="flex justify-between text-[11px]">
                 <span className="text-slate-600 dark:text-slate-300">
                   • Imprevistos y Fondo Menor (5.80%)
                 </span>
-                <span className="font-mono">Bs. {(selectedReceipt.monto * 0.058).toFixed(2)}</span>
+                <span className="font-mono">Bs. {(Number(selectedReceipt.monto ?? 0) * 0.058).toFixed(2)}</span>
               </div>
             </div>
 
             <div className="space-y-1.5 text-xs">
               <div className="flex justify-between py-2 text-sm font-black text-emerald-800 dark:text-emerald-400 border-t-2 border-slate-900 dark:border-slate-100">
                 <span>TOTAL RECAUDADO</span>
-                <span className="font-mono">Bs. {selectedReceipt.monto.toFixed(2)}</span>
+                <span className="font-mono">Bs. {Number(selectedReceipt.monto).toFixed(2)}</span>
               </div>
             </div>
 
@@ -3432,10 +3433,46 @@ export default function ExpensasPage() {
         onClose={() => setIsQrSimuladorOpen(false)}
         expensa={expensaParaQr}
         personasList={personasList}
-        onPaymentSuccess={(reciboInfo) => {
-          showToast('¡Pago QR procesado exitosamente en el simulador!')
+        onPaymentSuccess={(resultado) => {
+          showToast('Pago registrado exitosamente')
           fetchExpensas()
-          if (reciboInfo) setSelectedReceipt(reciboInfo)
+          if (!expensaParaQr && !resultado) return
+
+          const pago = resultado?.pago || (resultado?.idPago ? resultado : null)
+          const exp = resultado?.expensa || null
+          const pagadorNombre = resultado?.pagadoPor || resultado?.pagadorNombre
+          const baseExpensa = expensaParaQr || {}
+
+          const montoVal = Number(
+            exp?.monto ?? baseExpensa?.monto ?? pago?.montoPagado
+          )
+          if (isNaN(montoVal) || montoVal <= 0) return
+
+          const recibo: ExpensaItem = {
+            ...baseExpensa,
+            idExpensa: exp?.idExpensa ?? baseExpensa.idExpensa,
+            idDepartamento: exp?.idDepartamento ?? baseExpensa.idDepartamento,
+            periodo: baseExpensa.periodo || exp?.periodo,
+            monto: montoVal,
+            montoBase: baseExpensa.montoBase,
+            montoAgua: baseExpensa.montoAgua,
+            montoExtra: baseExpensa.montoExtra,
+            extraConcepto: baseExpensa.extraConcepto,
+            saldoPendiente: exp?.saldoPendiente !== undefined ? Number(exp.saldoPendiente) : 0,
+            tasaInteresMora: Number(baseExpensa.tasaInteresMora ?? 0),
+            fechaVencimiento: baseExpensa.fechaVencimiento || exp?.fechaVencimiento,
+            estado: exp?.estado || 'Pagado',
+            departamento: baseExpensa.departamento,
+            propietarioNombre: baseExpensa.propietarioNombre,
+            inquilinoNombre: baseExpensa.inquilinoNombre,
+            pagadoPor:
+              pagadorNombre ||
+              baseExpensa.pagadoPor ||
+              baseExpensa.inquilinoNombre ||
+              baseExpensa.propietarioNombre,
+            pagos: pago ? [...(baseExpensa.pagos || []), pago] : (baseExpensa.pagos || [])
+          }
+          setSelectedReceipt(recibo)
         }}
       />
 

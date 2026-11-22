@@ -69,6 +69,7 @@ export default function CobroQrSimuladorModal({
   const [comprobanteDataUri, setComprobanteDataUri] = useState<string | null>(null)
   const [procesandoComprobante, setProcesandoComprobante] = useState(false)
   const [errorComprobante, setErrorComprobante] = useState<string | null>(null)
+  const [verComprobanteCompleto, setVerComprobanteCompleto] = useState(false)
 
   // Estado del formulario de registro de pago
   const [nroComprobante, setNroComprobante] = useState('')
@@ -122,6 +123,7 @@ export default function CobroQrSimuladorModal({
       setNroComprobante('')
       setComprobanteDataUri(null)
       setErrorComprobante(null)
+      setVerComprobanteCompleto(false)
     }
   }, [isOpen, fetchQr])
 
@@ -266,10 +268,17 @@ export default function CobroQrSimuladorModal({
         throw new Error(data.message || data.error || 'Error al registrar el pago')
       }
 
-      if (onPaymentSuccess) {
-        onPaymentSuccess(data.pago || data)
-      }
       onClose()
+      if (onPaymentSuccess) {
+        const pagadorSeleccionado = pagadores.find(
+          (p) => p.idPersona === Number(idPersonaSeleccionada)
+        )
+        onPaymentSuccess({
+          pago: data.pago,
+          expensa: data.expensa,
+          pagadoPor: pagadorSeleccionado ? pagadorSeleccionado.nombre : undefined
+        })
+      }
     } catch (err: any) {
       setErrorPago(err.message || 'Error de conexión al registrar el pago')
     } finally {
@@ -591,28 +600,38 @@ export default function CobroQrSimuladorModal({
                   )}
                 </div>
               ) : (
-                <div className="flex items-center gap-3 p-2.5 rounded-xl bg-white dark:bg-slate-900 border border-[#cec8bc] dark:border-slate-700">
-                  <img
-                    src={comprobanteDataUri}
-                    alt="Vista previa del comprobante"
-                    className="w-16 h-16 object-cover rounded-lg border border-[#cec8bc] dark:border-slate-800 shadow-xs shrink-0"
-                  />
-                  <div className="space-y-1 text-xs flex-1">
-                    <p className="font-semibold text-emerald-700 dark:text-emerald-400 flex items-center gap-1">
+                <div className="p-3 rounded-2xl bg-white dark:bg-slate-900 border border-[#cec8bc] dark:border-slate-700 space-y-2">
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="font-semibold text-emerald-700 dark:text-emerald-400 flex items-center gap-1">
                       <CheckCircle2 className="w-3.5 h-3.5" />
                       <span>Comprobante listo</span>
-                    </p>
+                    </span>
                     <button
                       type="button"
                       onClick={() => {
                         setComprobanteDataUri(null)
                         setErrorComprobante(null)
+                        setVerComprobanteCompleto(false)
                       }}
                       className="text-xs font-bold text-rose-600 hover:text-rose-700 hover:underline cursor-pointer"
                     >
                       Quitar
                     </button>
                   </div>
+                  <div
+                    onClick={() => setVerComprobanteCompleto(true)}
+                    className="w-full flex items-center justify-center p-2 rounded-xl bg-slate-100 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700/60 cursor-pointer hover:opacity-95 transition-opacity"
+                    title="Haz clic para ver en tamaño completo"
+                  >
+                    <img
+                      src={comprobanteDataUri}
+                      alt="Vista previa del comprobante"
+                      className="max-h-72 w-full object-contain rounded-lg"
+                    />
+                  </div>
+                  <p className="text-[11px] text-[#7d776f] dark:text-slate-400 text-center">
+                    Haz clic en la imagen para verla en tamaño completo.
+                  </p>
                 </div>
               )}
               {errorComprobante && (
@@ -674,6 +693,37 @@ export default function CobroQrSimuladorModal({
             >
               Cerrar
             </button>
+          </div>
+        )}
+        {/* Visor simple en tamaño completo del comprobante */}
+        {verComprobanteCompleto && comprobanteDataUri && (
+          <div
+            onClick={() => setVerComprobanteCompleto(false)}
+            className="fixed inset-0 z-60 flex items-center justify-center p-4 bg-black/80 backdrop-blur-xs animate-in fade-in duration-150"
+          >
+            <div
+              onClick={(e) => e.stopPropagation()}
+              className="relative max-w-4xl max-h-[90vh] w-full flex flex-col items-center"
+            >
+              <div className="w-full flex justify-between items-center mb-2 px-2 text-white">
+                <span className="text-xs font-bold">Comprobante de pago</span>
+                <button
+                  type="button"
+                  onClick={() => setVerComprobanteCompleto(false)}
+                  className="p-1 rounded-lg bg-black/50 text-white hover:bg-black/70 cursor-pointer"
+                  title="Cerrar visor"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+              <div className="w-full flex items-center justify-center bg-black/40 rounded-2xl p-2 overflow-auto max-h-[82vh]">
+                <img
+                  src={comprobanteDataUri}
+                  alt="Comprobante completo"
+                  className="max-w-full max-h-[80vh] object-contain rounded-xl"
+                />
+              </div>
+            </div>
           </div>
         )}
       </div>
