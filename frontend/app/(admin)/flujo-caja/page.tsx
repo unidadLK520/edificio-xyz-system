@@ -64,185 +64,6 @@ export interface MesFlujoData {
   saldoFinal: number
 }
 
-// Datos anuales reales basados en el modelo de 20 departamentos del Edificio XYZ
-export const FLUX_DATA_2026: MesFlujoData[] = [
-  {
-    mes: 'Enero 2026',
-    mesCorto: 'Ene',
-    saldoInicial: 15000,
-    ingresosOrdinarios: 7420,
-    ingresosExtraordinarios: 1200,
-    totalIngresos: 8620,
-    egresosOperativos: 3800,
-    egresosMantenimiento: 1600,
-    egresosAdministrativos: 850,
-    totalEgresos: 6250,
-    flujoNeto: 2370,
-    saldoFinal: 17370
-  },
-  {
-    mes: 'Febrero 2026',
-    mesCorto: 'Feb',
-    saldoInicial: 17370,
-    ingresosOrdinarios: 7150,
-    ingresosExtraordinarios: 950,
-    totalIngresos: 8100,
-    egresosOperativos: 3950,
-    egresosMantenimiento: 2100,
-    egresosAdministrativos: 780,
-    totalEgresos: 6830,
-    flujoNeto: 1270,
-    saldoFinal: 18640
-  },
-  {
-    mes: 'Marzo 2026',
-    mesCorto: 'Mar',
-    saldoInicial: 18640,
-    ingresosOrdinarios: 7600,
-    ingresosExtraordinarios: 1500,
-    totalIngresos: 9100,
-    egresosOperativos: 3750,
-    egresosMantenimiento: 1400,
-    egresosAdministrativos: 900,
-    totalEgresos: 6050,
-    flujoNeto: 3050,
-    saldoFinal: 21690
-  },
-  {
-    mes: 'Abril 2026',
-    mesCorto: 'Abr',
-    saldoInicial: 21690,
-    ingresosOrdinarios: 6980,
-    ingresosExtraordinarios: 800,
-    totalIngresos: 7780,
-    egresosOperativos: 4100,
-    egresosMantenimiento: 2800,
-    egresosAdministrativos: 820,
-    totalEgresos: 7720,
-    flujoNeto: 60,
-    saldoFinal: 21750
-  },
-  {
-    mes: 'Mayo 2026',
-    mesCorto: 'May',
-    saldoInicial: 21750,
-    ingresosOrdinarios: 7750,
-    ingresosExtraordinarios: 1800,
-    totalIngresos: 9550,
-    egresosOperativos: 3850,
-    egresosMantenimiento: 1550,
-    egresosAdministrativos: 890,
-    totalEgresos: 6290,
-    flujoNeto: 3260,
-    saldoFinal: 25010
-  },
-  {
-    mes: 'Junio 2026',
-    mesCorto: 'Jun',
-    saldoInicial: 25010,
-    ingresosOrdinarios: 7300,
-    ingresosExtraordinarios: 1100,
-    totalIngresos: 8400,
-    egresosOperativos: 3900,
-    egresosMantenimiento: 1900,
-    egresosAdministrativos: 850,
-    totalEgresos: 6650,
-    flujoNeto: 1750,
-    saldoFinal: 26760
-  },
-  {
-    mes: 'Julio 2026',
-    mesCorto: 'Jul',
-    saldoInicial: 26760,
-    ingresosOrdinarios: 7550,
-    ingresosExtraordinarios: 1400,
-    totalIngresos: 8950,
-    egresosOperativos: 3800,
-    egresosMantenimiento: 1350,
-    egresosAdministrativos: 910,
-    totalEgresos: 6060,
-    flujoNeto: 2890,
-    saldoFinal: 29650
-  },
-  {
-    mes: 'Agosto 2026',
-    mesCorto: 'Ago',
-    saldoInicial: 29650,
-    ingresosOrdinarios: 7400,
-    ingresosExtraordinarios: 1300,
-    totalIngresos: 8700,
-    egresosOperativos: 3950,
-    egresosMantenimiento: 2200,
-    egresosAdministrativos: 840,
-    totalEgresos: 6990,
-    flujoNeto: 1710,
-    saldoFinal: 31360
-  },
-  {
-    mes: 'Septiembre 2026',
-    mesCorto: 'Sep',
-    saldoInicial: 31360,
-    ingresosOrdinarios: 7850,
-    ingresosExtraordinarios: 1650,
-    totalIngresos: 9500,
-    egresosOperativos: 3820,
-    egresosMantenimiento: 1450,
-    egresosAdministrativos: 880,
-    totalEgresos: 6150,
-    flujoNeto: 3350,
-    saldoFinal: 34710
-  },
-  {
-    mes: 'Octubre 2026',
-    mesCorto: 'Oct',
-    saldoInicial: 34710,
-    ingresosOrdinarios: 7600,
-    ingresosExtraordinarios: 1250,
-    totalIngresos: 8850,
-    egresosOperativos: 3900,
-    egresosMantenimiento: 1750,
-    egresosAdministrativos: 900,
-    totalEgresos: 6550,
-    flujoNeto: 2300,
-    saldoFinal: 37010
-  },
-  {
-    mes: 'Noviembre 2026 (Proy.)',
-    mesCorto: 'Nov',
-    saldoInicial: 37010,
-    ingresosOrdinarios: 7500,
-    ingresosExtraordinarios: 1100,
-    totalIngresos: 8600,
-    egresosOperativos: 3920,
-    egresosMantenimiento: 1600,
-    egresosAdministrativos: 860,
-    totalEgresos: 6380,
-    flujoNeto: 2220,
-    saldoFinal: 39230
-  },
-  {
-    mes: 'Diciembre 2026 (Proy.)',
-    mesCorto: 'Dic',
-    saldoInicial: 39230,
-    ingresosOrdinarios: 7900,
-    ingresosExtraordinarios: 2200,
-    totalIngresos: 10100,
-    egresosOperativos: 4500,
-    egresosMantenimiento: 1800,
-    egresosAdministrativos: 1200,
-    totalEgresos: 7500,
-    flujoNeto: 2600,
-    saldoFinal: 41830
-  }
-]
-
-// Categorías de egresos con porcentajes consolidados
-export const CATEGORIAS_GASTO = [
-  { nombre: 'Servicios Básicos & Limpieza', monto: 47240, porcentaje: 59.8, color: '#2563eb', darkColor: '#60a5fa' },
-  { nombre: 'Mantenimiento & Ascensores', monto: 21700, porcentaje: 27.5, color: '#f59e0b', darkColor: '#fbbf24' },
-  { nombre: 'Administración & Suministros', monto: 10080, porcentaje: 12.7, color: '#8b5cf6', darkColor: '#a78bfa' }
-]
-
 export default function CajaYBancosPage() {
   const [tabActiva, setTabActiva] = useState<'caja' | 'bancos' | 'graficos' | 'simulador'>('caja')
   const [loading, setLoading] = useState<boolean>(true)
@@ -353,42 +174,101 @@ export default function CajaYBancosPage() {
   // ----------------------------------------------------
   // ESTADO DE GRÁFICOS Y ANÁLISIS FINANCIERO INTERACTIVO
   // ----------------------------------------------------
-  const [selectedMesIndex, setSelectedMesIndex] = useState<number>(9) // Octubre por defecto
+  const [selectedMesIndex, setSelectedMesIndex] = useState<number>(0)
   const [filtroPeriodoGrafico, setFiltroPeriodoGrafico] = useState<'todos' | 'q1' | 'q2' | 'q3' | 'q4'>('todos')
   const [vistaGraficoSub, setVistaGraficoSub] = useState<'graficos' | 'tabla'>('graficos')
   const [simulacionMorosidad, setSimulacionMorosidad] = useState<number>(0)
   const [simulacionGastoExtra, setSimulacionGastoExtra] = useState<number>(0)
 
-  // Enriquecer datos mensuales con movimientos reales de caja física y bancos
+  // Enriquecer datos mensuales con movimientos reales de caja física y cuentas
   const dataFlujo = useMemo<MesFlujoData[]>(() => {
-    return FLUX_DATA_2026.map((mesBase, idx) => {
-      // Filtrar movimientos de caja válidos para el mes (0=Ene, 1=Feb, etc.)
-      const movsCajaMes = movimientosCaja.filter((m) => {
-        if (m.anulado) return false
-        const f = new Date(m.fecha)
-        return f.getFullYear() === 2026 && f.getMonth() === idx
-      })
+    const validos = movimientosCaja.filter((m) => !m.anulado && m.fecha)
+    if (validos.length === 0) return []
 
-      const ingCaja = movsCajaMes
-        .filter((m) => m.tipo === 'Ingreso')
-        .reduce((acc, m) => acc + Number(m.monto || 0), 0)
-      const egCaja = movsCajaMes
-        .filter((m) => m.tipo === 'Egreso')
-        .reduce((acc, m) => acc + Number(m.monto || 0), 0)
+    const mesesMap = new Map<string, {
+      mesKey: string
+      fecha: Date
+      ingresosOrd: number
+      ingresosExt: number
+      egrOp: number
+      egrMant: number
+      egrAdm: number
+      totalIng: number
+      totalEgr: number
+    }>()
 
-      if (movsCajaMes.length > 0) {
-        const nuevoIngreso = mesBase.totalIngresos + ingCaja
-        const nuevoEgreso = mesBase.totalEgresos + egCaja
-        const nuevoNeto = nuevoIngreso - nuevoEgreso
-        return {
-          ...mesBase,
-          totalIngresos: nuevoIngreso,
-          totalEgresos: nuevoEgreso,
-          flujoNeto: nuevoNeto,
-          saldoFinal: mesBase.saldoInicial + nuevoNeto
+    const nombresMeses = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre']
+    const nombresMesesCortos = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic']
+
+    for (const m of validos) {
+      const f = new Date(m.fecha)
+      if (isNaN(f.getTime())) continue
+      const y = f.getFullYear()
+      const mesIdx = f.getMonth()
+      const key = `${y}-${String(mesIdx + 1).padStart(2, '0')}`
+
+      if (!mesesMap.has(key)) {
+        mesesMap.set(key, {
+          mesKey: key,
+          fecha: f,
+          ingresosOrd: 0,
+          ingresosExt: 0,
+          egrOp: 0,
+          egrMant: 0,
+          egrAdm: 0,
+          totalIng: 0,
+          totalEgr: 0
+        })
+      }
+
+      const mesEntry = mesesMap.get(key)!
+      const monto = Number(m.monto || 0)
+      const conc = (m.concepto || '').toLowerCase()
+
+      if (m.tipo === 'Ingreso') {
+        mesEntry.totalIng += monto
+        if (conc.includes('extra') || conc.includes('salon') || conc.includes('salón') || conc.includes('multa') || conc.includes('interes')) {
+          mesEntry.ingresosExt += monto
+        } else {
+          mesEntry.ingresosOrd += monto
+        }
+      } else if (m.tipo === 'Egreso') {
+        mesEntry.totalEgr += monto
+        if (conc.includes('mant') || conc.includes('ascensor') || conc.includes('bomba') || conc.includes('repar') || conc.includes('pint')) {
+          mesEntry.egrMant += monto
+        } else if (conc.includes('serv') || conc.includes('agua') || conc.includes('luz') || conc.includes('limp') || conc.includes('segur') || conc.includes('gas')) {
+          mesEntry.egrOp += monto
+        } else {
+          mesEntry.egrAdm += monto
         }
       }
-      return mesBase
+    }
+
+    const keysSorted = Array.from(mesesMap.keys()).sort()
+    let runningSaldo = 0
+
+    return keysSorted.map((key) => {
+      const e = mesesMap.get(key)!
+      const y = e.fecha.getFullYear()
+      const mIdx = e.fecha.getMonth()
+      const saldoIni = runningSaldo
+      const neto = e.totalIng - e.totalEgr
+      runningSaldo = saldoIni + neto
+
+      return {
+        mes: `${nombresMeses[mIdx]} ${y}`,
+        mesCorto: nombresMesesCortos[mIdx],
+        saldoInicial: saldoIni,
+        ingresosOrdinarios: e.ingresosOrd,
+        ingresosExtraordinarios: e.ingresosExt,
+        totalIngresos: e.totalIng,
+        egresosOperativos: e.egrOp,
+        egresosMantenimiento: e.egrMant,
+        egresosAdministrativos: e.egrAdm,
+        totalEgresos: e.totalEgr,
+        flujoNeto: neto,
+        saldoFinal: runningSaldo
+      }
     })
   }, [movimientosCaja])
 
@@ -412,17 +292,21 @@ export default function CajaYBancosPage() {
   const flujoNetoTotalFlujo = totalIngresosFlujo - totalEgresosFlujo
   const saldoFinalPeriodoFlujo =
     datosFiltradosFlujo[datosFiltradosFlujo.length - 1]?.saldoFinal || 0
-  const mesSeleccionadoFlujo = dataFlujo[selectedMesIndex] || dataFlujo[0]
+  const mesSeleccionadoFlujo = dataFlujo[selectedMesIndex] || dataFlujo[0] || null
 
   const ingresosSimulados = totalIngresosFlujo * (1 - simulacionMorosidad / 100)
   const egresosSimulados = totalEgresosFlujo + simulacionGastoExtra * datosFiltradosFlujo.length
   const flujoNetoSimulado = ingresosSimulados - egresosSimulados
   const maxIngresoEgreso = Math.max(
     ...dataFlujo.map((d) => Math.max(d.totalIngresos, d.totalEgresos)),
-    12000
+    1
   )
 
   const handleExportFlujoCSV = () => {
+    if (datosFiltradosFlujo.length === 0) {
+      showNotification('error', 'Sin datos para exportar')
+      return
+    }
     const headers =
       'Mes,Saldo Inicial,Ingresos Ordinarios,Ingresos Extra,Total Ingresos,Egresos Operativos,Mantenimiento,Administrativo,Total Egresos,Flujo Neto,Saldo Final\n'
     const rows = datosFiltradosFlujo
@@ -445,12 +329,8 @@ export default function CajaYBancosPage() {
   // ---------------------------------------------------------------------------
   // CÁLCULOS REACTIVOS PARA GRÁFICOS INFERIORES
   // ---------------------------------------------------------------------------
-  // 1. Distribución reactiva de egresos por rubro (Caja + Bancos)
+  // 1. Distribución reactiva de egresos por rubro
   const categoriasGastoReactivo = useMemo(() => {
-    const baseServicios = datosFiltradosFlujo.reduce((acc, m) => acc + m.egresosOperativos, 0)
-    const baseMantenimiento = datosFiltradosFlujo.reduce((acc, m) => acc + m.egresosMantenimiento, 0)
-    const baseAdministracion = datosFiltradosFlujo.reduce((acc, m) => acc + m.egresosAdministrativos, 0)
-
     let extraServicios = 0
     let extraMantenimiento = 0
     let extraAdministracion = 0
@@ -509,14 +389,18 @@ export default function CajaYBancosPage() {
       }
     }
 
-    const montoServicios = Math.round(baseServicios + extraServicios)
-    const montoMantenimiento = Math.round(baseMantenimiento + extraMantenimiento)
-    const montoAdministracion = Math.round(baseAdministracion + extraAdministracion)
+    const montoServicios = Math.round(extraServicios)
+    const montoMantenimiento = Math.round(extraMantenimiento)
+    const montoAdministracion = Math.round(extraAdministracion)
     const total = montoServicios + montoMantenimiento + montoAdministracion
 
-    const pServicios = total > 0 ? Number(((montoServicios / total) * 100).toFixed(1)) : 33.3
-    const pMantenimiento = total > 0 ? Number(((montoMantenimiento / total) * 100).toFixed(1)) : 33.3
-    const pAdministracion = total > 0 ? Number((100 - pServicios - pMantenimiento).toFixed(1)) : 33.4
+    if (total === 0) {
+      return { total: 0, rubros: [] }
+    }
+
+    const pServicios = Number(((montoServicios / total) * 100).toFixed(1))
+    const pMantenimiento = Number(((montoMantenimiento / total) * 100).toFixed(1))
+    const pAdministracion = Number((100 - pServicios - pMantenimiento).toFixed(1))
 
     // Circunferencia: 2 * PI * 38 ≈ 238.76
     const C = 238.76
@@ -560,24 +444,18 @@ export default function CajaYBancosPage() {
         }
       ]
     }
-  }, [datosFiltradosFlujo, movimientosCaja, movimientosBanco])
+  }, [movimientosCaja, movimientosBanco])
 
-  // 2. Curva reactiva de proyección de liquidez y reserva
+  // 2. Curva reactiva de liquidez y reserva
   const curvaLiquidezReactiva = useMemo(() => {
     const meses = datosFiltradosFlujo
     if (meses.length === 0) {
-      return {
-        pathLine: 'M 0 120 L 500 20',
-        pathArea: 'M 0 120 L 500 20 L 500 160 L 0 160 Z',
-        inicio: { x: 0, y: 120, saldo: 0, mes: 'Inicio', mesCorto: 'Ini' },
-        medio: { x: 250, y: 70, saldo: 0, mes: 'Medio', mesCorto: 'Med' },
-        fin: { x: 500, y: 20, saldo: 0, mes: 'Final', mesCorto: 'Fin' }
-      }
+      return null
     }
 
     const saldos = meses.map((m) => m.saldoFinal)
-    const minSaldo = Math.min(...saldos, 10000)
-    const maxSaldo = Math.max(...saldos, minSaldo + 1000)
+    const minSaldo = Math.min(...saldos)
+    const maxSaldo = Math.max(...saldos, minSaldo + 1)
     const rango = maxSaldo - minSaldo || 1
 
     const N = meses.length
@@ -667,7 +545,7 @@ export default function CajaYBancosPage() {
             setCuentaSeleccionadaId(resCuentas.value[0].idCuenta)
           }
         } else {
-          errores.push(`Cuentas bancarias: ${extractErrorMessage(resCuentas.reason)}`)
+          errores.push(`Cuentas: ${extractErrorMessage(resCuentas.reason)}`)
         }
 
         if (
@@ -679,7 +557,7 @@ export default function CajaYBancosPage() {
         } else if (isManual) {
           showNotification(
             'success',
-            'Saldos y movimientos de caja y cuentas bancarias actualizados exitosamente.'
+            'Saldos y movimientos de caja y cuentas actualizados exitosamente.'
           )
         }
       } catch (err: unknown) {
@@ -720,7 +598,7 @@ export default function CajaYBancosPage() {
       } else {
         showNotification(
           'error',
-          `Error al cargar movimientos bancarios: ${extractErrorMessage(resMovs.reason)}`
+          `Error al cargar movimientos: ${extractErrorMessage(resMovs.reason)}`
         )
       }
 
@@ -728,7 +606,7 @@ export default function CajaYBancosPage() {
         setSaldoCuentaSeleccionada(resSaldo.value)
       }
     } catch (err: unknown) {
-      showNotification('error', `Error en la cuenta bancaria: ${extractErrorMessage(err)}`)
+      showNotification('error', `Error en la cuenta: ${extractErrorMessage(err)}`)
     } finally {
       setLoadingMovBancos(false)
       setLoadingSaldoCuenta(false)
@@ -944,15 +822,15 @@ export default function CajaYBancosPage() {
     showNotification('success', 'Reporte CSV de Caja Chica descargado correctamente.')
   }
 
-  // Exportar extracto bancario de la cuenta seleccionada a CSV
+  // Exportar extracto de la cuenta seleccionada a CSV
   const handleExportCSVBancos = () => {
     if (movimientosBancoFiltrados.length === 0) {
-      showNotification('error', 'No hay movimientos bancarios para exportar.')
+      showNotification('error', 'No hay movimientos para exportar.')
       return
     }
     const cuentaActual = cuentasBancarias.find((c) => c.idCuenta === cuentaSeleccionadaId)
     const headers = [
-      'Banco',
+      'Entidad',
       'Cuenta',
       'Tipo',
       'Fecha',
@@ -979,12 +857,12 @@ export default function CajaYBancosPage() {
     link.setAttribute('href', encodedUri)
     link.setAttribute(
       'download',
-      `extracto_${cuentaActual?.banco || 'bancario'}_${new Date().toISOString().slice(0, 10)}.csv`
+      `extracto_cuenta_${cuentaSeleccionadaId || 'institucional'}_${new Date().toISOString().slice(0, 10)}.csv`
     )
     document.body.appendChild(link)
     link.click()
     document.body.removeChild(link)
-    showNotification('success', 'Extracto bancario exportado a CSV exitosamente.')
+    showNotification('success', 'Extracto de cuenta exportado a CSV exitosamente.')
   }
 
   // Registrar movimiento de caja chica
@@ -1198,11 +1076,10 @@ export default function CajaYBancosPage() {
             Tesorería y Flujo Financiero &bull; US2.3
           </div>
           <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-[#262422] dark:text-white">
-            Flujo de Caja y Bancos
+            Flujo de Caja y Cuentas
           </h1>
           <p className="text-xs sm:text-sm text-[#66615b] dark:text-slate-400 mt-1">
-            Gestión de disponibilidad líquida, arqueos de caja chica física y movimientos de cuentas
-            bancarias.
+            Gestión de disponibilidad líquida, arqueos de caja chica física y movimientos de cuentas.
           </p>
         </div>
 
@@ -1213,7 +1090,7 @@ export default function CajaYBancosPage() {
             disabled={loading}
             onClick={() => fetchData(true)}
             className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-[#dfd9ce] hover:bg-[#d5cfc2] dark:bg-slate-800 dark:hover:bg-slate-700 text-xs font-bold transition-all cursor-pointer border border-[#cec8bc] dark:border-slate-700 disabled:opacity-60"
-            title="Sincronizar movimientos y saldos con el backend de Caja y Cuentas Bancarias"
+            title="Sincronizar movimientos y saldos con el backend de Caja y Cuentas"
           >
             <RefreshCw className={`w-3.5 h-3.5 text-blue-600 ${loading ? 'animate-spin' : ''}`} />
             <span>{loading ? 'Actualizando...' : 'Sincronizar'}</span>
@@ -1243,7 +1120,7 @@ export default function CajaYBancosPage() {
               }`}
             >
               <Landmark className="w-4 h-4" />
-              <span>Cuentas Bancarias</span>
+              <span>Cuentas Institucionales</span>
             </button>
 
             <button
@@ -1288,7 +1165,7 @@ export default function CajaYBancosPage() {
             Bs. {totalesConsolidados.totalIngresos.toLocaleString('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
           </div>
           <div className="text-[11px] text-[#7d776f]">
-            Caja: Bs. {totalesCajaReactivos.totalIngresos.toFixed(2)} &bull; Bancos: Bs. {totalesBancosReactivos.totalDepositosConsolidado.toFixed(2)}
+            Caja: Bs. {totalesCajaReactivos.totalIngresos.toFixed(2)} &bull; Cuentas: Bs. {totalesBancosReactivos.totalDepositosConsolidado.toFixed(2)}
           </div>
         </div>
 
@@ -1303,7 +1180,7 @@ export default function CajaYBancosPage() {
             Bs. {totalesConsolidados.totalEgresos.toLocaleString('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
           </div>
           <div className="text-[11px] text-[#7d776f]">
-            Caja: Bs. {totalesCajaReactivos.totalEgresos.toFixed(2)} &bull; Bancos: Bs. {totalesBancosReactivos.totalRetirosConsolidado.toFixed(2)}
+            Caja: Bs. {totalesCajaReactivos.totalEgresos.toFixed(2)} &bull; Cuentas: Bs. {totalesBancosReactivos.totalRetirosConsolidado.toFixed(2)}
           </div>
         </div>
 
@@ -1319,7 +1196,7 @@ export default function CajaYBancosPage() {
           </div>
           <div className="text-[11px] text-[#7d776f] flex items-center justify-between">
             <span>Caja Física: Bs. {totalesCajaReactivos.saldoDisponibleActual.toFixed(2)}</span>
-            <span>En Bancos: Bs. {totalesBancosReactivos.saldoConsolidado.toFixed(2)}</span>
+            <span>En Cuentas: Bs. {totalesBancosReactivos.saldoConsolidado.toFixed(2)}</span>
           </div>
         </div>
       </div>
@@ -1332,7 +1209,7 @@ export default function CajaYBancosPage() {
           </div>
           <div>
             <h3 className="text-base font-bold text-slate-900 dark:text-white">
-              Servicio de Caja y Bancos no disponible
+              Servicio de Caja y Cuentas no disponible
             </h3>
             <p className="text-sm text-slate-600 dark:text-slate-400 mt-1">{apiError}</p>
           </div>
@@ -1608,17 +1485,17 @@ export default function CajaYBancosPage() {
           {/* VISTA 2: CUENTAS BANCARIAS Y MOVIMIENTOS BANCARIOS */}
           {tabActiva === 'bancos' && (
             <div className="space-y-6">
-              {/* SALDO BANCARIO TOTAL Y BOTONES */}
+              {/* SALDO DE CUENTAS TOTAL Y BOTONES */}
               <div className="p-5 rounded-2xl bg-white/70 dark:bg-slate-900/70 border border-[#cec8bc] dark:border-slate-800 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                 <div>
                   <div className="text-xs font-semibold text-[#7d776f]">
-                    Saldo Bancario Consolidado
+                    Saldo de Cuentas Consolidado
                   </div>
                   <div className="text-2xl sm:text-3xl font-black text-blue-700 dark:text-blue-400 font-mono mt-1">
                     Bs. {totalesBancosReactivos.saldoConsolidado.toFixed(2)}
                   </div>
                   <div className="text-xs text-[#5c5750] mt-0.5">
-                    Total en {cuentasBancarias.length} cuenta(s) bancaria(s) institucional(es)
+                    Total en {cuentasBancarias.length} cuenta(s) institucional(es)
                   </div>
                 </div>
 
@@ -1638,17 +1515,17 @@ export default function CajaYBancosPage() {
                       className="px-3.5 py-2 rounded-xl bg-blue-700 hover:bg-blue-600 text-white text-xs font-bold flex items-center gap-1.5 shadow-sm cursor-pointer"
                     >
                       <Plus className="w-4 h-4" />
-                      <span>Nueva Cuenta Bancaria</span>
+                      <span>Nueva Cuenta</span>
                     </button>
                   </div>
                 )}
               </div>
 
-              {/* LISTADO DE CUENTAS BANCARIAS */}
+              {/* LISTADO DE CUENTAS INSTITUCIONALES */}
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 {cuentasBancarias.length === 0 ? (
                   <div className="col-span-full p-8 text-center rounded-2xl bg-white/50 border border-[#cec8bc] dark:border-slate-800 text-xs text-[#7d776f]">
-                    No existen cuentas bancarias registradas en el sistema.
+                    No existen cuentas registradas en el sistema.
                   </div>
                 ) : (
                   cuentasBancarias.map((cuenta) => {
@@ -1750,7 +1627,7 @@ export default function CajaYBancosPage() {
                     <div>
                       <h3 className="text-base font-extrabold text-[#262422] dark:text-white flex items-center gap-2">
                         <CreditCard className="w-4 h-4 text-blue-600" />
-                        Movimientos del Extracto Bancario
+                        Movimientos del Extracto de Cuenta
                       </h3>
                       <p className="text-xs text-[#7d776f]">
                         Cuenta:{' '}
@@ -1826,13 +1703,13 @@ export default function CajaYBancosPage() {
                           className="px-3 py-1.5 rounded-xl bg-blue-700 hover:bg-blue-600 text-white text-xs font-bold flex items-center gap-1 shadow-sm cursor-pointer"
                         >
                           <Plus className="w-3.5 h-3.5" />
-                          <span>Registrar Mov. Bancario</span>
+                          <span>Registrar Movimiento</span>
                         </button>
                       )}
                     </div>
                   </div>
 
-                  {/* TABLA MOVIMIENTOS BANCARIOS */}
+                  {/* TABLA MOVIMIENTOS */}
                   <div className="rounded-2xl border border-[#cec8bc] dark:border-slate-800 bg-white/70 dark:bg-slate-900/70 shadow-sm overflow-hidden">
                     <div className="overflow-x-auto">
                       <table className="w-full text-left border-collapse text-xs">
@@ -1857,7 +1734,7 @@ export default function CajaYBancosPage() {
                           ) : movimientosBancoFiltrados.length === 0 ? (
                             <tr>
                               <td colSpan={7} className="py-8 text-center text-[#7d776f]">
-                                No hay movimientos bancarios registrados para esta cuenta y filtros.
+                                No hay movimientos registrados para esta cuenta y filtros.
                               </td>
                             </tr>
                           ) : (
@@ -2127,89 +2004,97 @@ export default function CajaYBancosPage() {
                     </div>
 
                     {/* BARRAS MENSUALES */}
-                    <div className="grid grid-cols-6 sm:grid-cols-12 gap-2 pt-4 items-end min-h-[260px]">
-                      {dataFlujo.map((mesData, idx) => {
-                        const isSelected = selectedMesIndex === idx
-                        const heightIngreso = Math.round((mesData.totalIngresos / maxIngresoEgreso) * 180)
-                        const heightEgreso = Math.round((mesData.totalEgresos / maxIngresoEgreso) * 180)
+                    {dataFlujo.length === 0 ? (
+                      <div className="py-12 text-center text-xs text-[#7d776f] font-medium">
+                        Sin datos
+                      </div>
+                    ) : (
+                      <div className="grid grid-cols-6 sm:grid-cols-12 gap-2 pt-4 items-end min-h-[260px]">
+                        {dataFlujo.map((mesData, idx) => {
+                          const isSelected = selectedMesIndex === idx
+                          const heightIngreso = Math.round((mesData.totalIngresos / maxIngresoEgreso) * 180)
+                          const heightEgreso = Math.round((mesData.totalEgresos / maxIngresoEgreso) * 180)
 
-                        return (
-                          <div
-                            key={mesData.mes}
-                            onClick={() => setSelectedMesIndex(idx)}
-                            className={`flex flex-col items-center group cursor-pointer p-1.5 rounded-2xl transition-all ${
-                              isSelected
-                                ? 'bg-[#dfd9ce] dark:bg-slate-800/90 ring-2 ring-blue-600 shadow-md scale-105'
-                                : 'hover:bg-[#dfd9ce]/50 dark:hover:bg-slate-800/40'
-                            }`}
-                          >
-                            <div className="text-[10px] font-mono font-bold text-[#7d776f] dark:text-slate-400 mb-1 text-center">
-                              +{Math.round(mesData.flujoNeto / 1000)}k
-                            </div>
-
-                            <div className="flex items-end gap-1 h-[180px] w-full justify-center">
-                              <div
-                                style={{ height: `${heightIngreso}px` }}
-                                className="w-2.5 sm:w-3.5 rounded-t-md bg-emerald-600 dark:bg-emerald-500 hover:brightness-110 transition-all shadow-xs"
-                                title={`Ingresos: Bs. ${mesData.totalIngresos}`}
-                              />
-                              <div
-                                style={{ height: `${heightEgreso}px` }}
-                                className="w-2.5 sm:w-3.5 rounded-t-md bg-rose-600 dark:bg-rose-500 hover:brightness-110 transition-all shadow-xs"
-                                title={`Egresos: Bs. ${mesData.totalEgresos}`}
-                              />
-                            </div>
-
-                            <span
-                              className={`text-[11px] font-bold mt-2 truncate ${
-                                isSelected ? 'text-blue-700 dark:text-blue-400 font-extrabold' : 'text-[#5c5750] dark:text-slate-400'
+                          return (
+                            <div
+                              key={mesData.mes}
+                              onClick={() => setSelectedMesIndex(idx)}
+                              className={`flex flex-col items-center group cursor-pointer p-1.5 rounded-2xl transition-all ${
+                                isSelected
+                                  ? 'bg-[#dfd9ce] dark:bg-slate-800/90 ring-2 ring-blue-600 shadow-md scale-105'
+                                  : 'hover:bg-[#dfd9ce]/50 dark:hover:bg-slate-800/40'
                               }`}
                             >
-                              {mesData.mesCorto}
-                            </span>
-                          </div>
-                        )
-                      })}
-                    </div>
+                              <div className="text-[10px] font-mono font-bold text-[#7d776f] dark:text-slate-400 mb-1 text-center">
+                                +{Math.round(mesData.flujoNeto / 1000)}k
+                              </div>
+
+                              <div className="flex items-end gap-1 h-[180px] w-full justify-center">
+                                <div
+                                  style={{ height: `${heightIngreso}px` }}
+                                  className="w-2.5 sm:w-3.5 rounded-t-md bg-emerald-600 dark:bg-emerald-500 hover:brightness-110 transition-all shadow-xs"
+                                  title={`Ingresos: Bs. ${mesData.totalIngresos}`}
+                                />
+                                <div
+                                  style={{ height: `${heightEgreso}px` }}
+                                  className="w-2.5 sm:w-3.5 rounded-t-md bg-rose-600 dark:bg-rose-500 hover:brightness-110 transition-all shadow-xs"
+                                  title={`Egresos: Bs. ${mesData.totalEgresos}`}
+                                />
+                              </div>
+
+                              <span
+                                className={`text-[11px] font-bold mt-2 truncate ${
+                                  isSelected ? 'text-blue-700 dark:text-blue-400 font-extrabold' : 'text-[#5c5750] dark:text-slate-400'
+                                }`}
+                              >
+                                {mesData.mesCorto}
+                              </span>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    )}
 
                     {/* DETALLE DEL MES SELECCIONADO */}
-                    <div className="p-4 rounded-2xl bg-[#dfd9ce]/60 dark:bg-slate-950/60 border border-[#cec8bc] dark:border-slate-800 flex flex-col md:flex-row md:items-center justify-between gap-3 text-xs">
-                      <div className="flex items-center gap-3">
-                        <span className="w-8 h-8 rounded-xl bg-blue-700 text-white font-bold flex items-center justify-center shrink-0">
-                          {mesSeleccionadoFlujo.mesCorto}
-                        </span>
-                        <div>
-                          <h4 className="font-extrabold text-sm text-[#262422] dark:text-white">
-                            Detalle de {mesSeleccionadoFlujo.mes}
-                          </h4>
-                          <span className="text-[11px] text-[#7d776f]">
-                            Saldo inicial: Bs. {mesSeleccionadoFlujo.saldoInicial.toLocaleString()} &bull; Saldo final: Bs.{' '}
-                            {mesSeleccionadoFlujo.saldoFinal.toLocaleString()}
+                    {mesSeleccionadoFlujo && (
+                      <div className="p-4 rounded-2xl bg-[#dfd9ce]/60 dark:bg-slate-950/60 border border-[#cec8bc] dark:border-slate-800 flex flex-col md:flex-row md:items-center justify-between gap-3 text-xs">
+                        <div className="flex items-center gap-3">
+                          <span className="w-8 h-8 rounded-xl bg-blue-700 text-white font-bold flex items-center justify-center shrink-0">
+                            {mesSeleccionadoFlujo.mesCorto}
                           </span>
+                          <div>
+                            <h4 className="font-extrabold text-sm text-[#262422] dark:text-white">
+                              Detalle de {mesSeleccionadoFlujo.mes}
+                            </h4>
+                            <span className="text-[11px] text-[#7d776f]">
+                              Saldo inicial: Bs. {mesSeleccionadoFlujo.saldoInicial.toLocaleString()} &bull; Saldo final: Bs.{' '}
+                              {mesSeleccionadoFlujo.saldoFinal.toLocaleString()}
+                            </span>
+                          </div>
                         </div>
-                      </div>
 
-                      <div className="flex flex-wrap items-center gap-4 font-mono font-bold">
-                        <div>
-                          <span className="block text-[10px] text-[#7d776f] uppercase font-sans">Ingresos</span>
-                          <span className="text-emerald-700 dark:text-emerald-400">
-                            Bs. {mesSeleccionadoFlujo.totalIngresos.toLocaleString()}
-                          </span>
-                        </div>
-                        <div>
-                          <span className="block text-[10px] text-[#7d776f] uppercase font-sans">Egresos</span>
-                          <span className="text-rose-700 dark:text-rose-400">
-                            Bs. {mesSeleccionadoFlujo.totalEgresos.toLocaleString()}
-                          </span>
-                        </div>
-                        <div>
-                          <span className="block text-[10px] text-[#7d776f] uppercase font-sans">Flujo Neto</span>
-                          <span className="text-blue-700 dark:text-blue-400">
-                            +Bs. {mesSeleccionadoFlujo.flujoNeto.toLocaleString()}
-                          </span>
+                        <div className="flex flex-wrap items-center gap-4 font-mono font-bold">
+                          <div>
+                            <span className="block text-[10px] text-[#7d776f] uppercase font-sans">Ingresos</span>
+                            <span className="text-emerald-700 dark:text-emerald-400">
+                              Bs. {mesSeleccionadoFlujo.totalIngresos.toLocaleString()}
+                            </span>
+                          </div>
+                          <div>
+                            <span className="block text-[10px] text-[#7d776f] uppercase font-sans">Egresos</span>
+                            <span className="text-rose-700 dark:text-rose-400">
+                              Bs. {mesSeleccionadoFlujo.totalEgresos.toLocaleString()}
+                            </span>
+                          </div>
+                          <div>
+                            <span className="block text-[10px] text-[#7d776f] uppercase font-sans">Flujo Neto</span>
+                            <span className="text-blue-700 dark:text-blue-400">
+                              +Bs. {mesSeleccionadoFlujo.flujoNeto.toLocaleString()}
+                            </span>
+                          </div>
                         </div>
                       </div>
-                    </div>
+                    )}
                   </div>
 
                   {/* GRÁFICO 2: COMPOSICIÓN DE EGRESOS & CURVA DE RESERVA */}
@@ -2226,58 +2111,64 @@ export default function CajaYBancosPage() {
                         </p>
                       </div>
 
-                      <div className="flex flex-col sm:flex-row items-center justify-around gap-6 py-2">
-                        <div className="relative w-40 h-40 shrink-0">
-                          <svg className="w-full h-full transform -rotate-90" viewBox="0 0 100 100">
-                            <circle cx="50" cy="50" r="38" fill="transparent" stroke="#cec8bc" strokeWidth="16" className="dark:stroke-slate-800" />
+                      {categoriasGastoReactivo.total === 0 || categoriasGastoReactivo.rubros.length === 0 ? (
+                        <div className="py-12 text-center text-xs text-[#7d776f] font-medium">
+                          Sin datos
+                        </div>
+                      ) : (
+                        <div className="flex flex-col sm:flex-row items-center justify-around gap-6 py-2">
+                          <div className="relative w-40 h-40 shrink-0">
+                            <svg className="w-full h-full transform -rotate-90" viewBox="0 0 100 100">
+                              <circle cx="50" cy="50" r="38" fill="transparent" stroke="#cec8bc" strokeWidth="16" className="dark:stroke-slate-800" />
+                              {categoriasGastoReactivo.rubros.map((cat) => (
+                                <circle
+                                  key={cat.nombre}
+                                  cx="50"
+                                  cy="50"
+                                  r="38"
+                                  fill="transparent"
+                                  stroke={cat.color}
+                                  strokeWidth="16"
+                                  strokeDasharray={cat.strokeDasharray}
+                                  strokeDashoffset={cat.strokeDashoffset}
+                                  strokeLinecap="round"
+                                />
+                              ))}
+                            </svg>
+                            <div className="absolute inset-0 flex flex-col items-center justify-center text-center">
+                              <span className="text-[10px] text-[#7d776f] uppercase font-bold">Total Gastos</span>
+                              <span className="font-extrabold text-sm text-[#262422] dark:text-white font-mono">
+                                Bs. {(categoriasGastoReactivo.total / 1000).toFixed(1)}k
+                              </span>
+                            </div>
+                          </div>
+
+                          <div className="space-y-3 flex-1">
                             {categoriasGastoReactivo.rubros.map((cat) => (
-                              <circle
-                                key={cat.nombre}
-                                cx="50"
-                                cy="50"
-                                r="38"
-                                fill="transparent"
-                                stroke={cat.color}
-                                strokeWidth="16"
-                                strokeDasharray={cat.strokeDasharray}
-                                strokeDashoffset={cat.strokeDashoffset}
-                                strokeLinecap="round"
-                              />
+                              <div key={cat.nombre} className="text-xs">
+                                <div className="flex items-center justify-between font-bold mb-1">
+                                  <span className="flex items-center gap-1.5 text-[#262422] dark:text-white">
+                                    <span className="w-2.5 h-2.5 rounded-full inline-block" style={{ backgroundColor: cat.color }} />
+                                    {cat.nombre}
+                                  </span>
+                                  <span className="font-mono text-[#7d776f] dark:text-slate-400">
+                                    {cat.porcentaje}%
+                                  </span>
+                                </div>
+                                <div className="w-full bg-[#dfd9ce] dark:bg-slate-800 h-2 rounded-full overflow-hidden">
+                                  <div
+                                    className="h-full rounded-full transition-all duration-500"
+                                    style={{ width: `${cat.porcentaje}%`, backgroundColor: cat.color }}
+                                  />
+                                </div>
+                                <div className="text-[11px] text-[#7d776f] text-right font-mono mt-0.5">
+                                  Bs. {cat.monto.toLocaleString('es-BO')}
+                                </div>
+                              </div>
                             ))}
-                          </svg>
-                          <div className="absolute inset-0 flex flex-col items-center justify-center text-center">
-                            <span className="text-[10px] text-[#7d776f] uppercase font-bold">Total Gastos</span>
-                            <span className="font-extrabold text-sm text-[#262422] dark:text-white font-mono">
-                              Bs. {(categoriasGastoReactivo.total / 1000).toFixed(1)}k
-                            </span>
                           </div>
                         </div>
-
-                        <div className="space-y-3 flex-1">
-                          {categoriasGastoReactivo.rubros.map((cat) => (
-                            <div key={cat.nombre} className="text-xs">
-                              <div className="flex items-center justify-between font-bold mb-1">
-                                <span className="flex items-center gap-1.5 text-[#262422] dark:text-white">
-                                  <span className="w-2.5 h-2.5 rounded-full inline-block" style={{ backgroundColor: cat.color }} />
-                                  {cat.nombre}
-                                </span>
-                                <span className="font-mono text-[#7d776f] dark:text-slate-400">
-                                  {cat.porcentaje}%
-                                </span>
-                              </div>
-                              <div className="w-full bg-[#dfd9ce] dark:bg-slate-800 h-2 rounded-full overflow-hidden">
-                                <div
-                                  className="h-full rounded-full transition-all duration-500"
-                                  style={{ width: `${cat.porcentaje}%`, backgroundColor: cat.color }}
-                                />
-                              </div>
-                              <div className="text-[11px] text-[#7d776f] text-right font-mono mt-0.5">
-                                Bs. {cat.monto.toLocaleString('es-BO')}
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
+                      )}
                     </div>
 
                     {/* Curva de Proyección de Liquidez y Reserva */}
@@ -2292,46 +2183,54 @@ export default function CajaYBancosPage() {
                         </p>
                       </div>
 
-                      <div className="w-full h-44 relative flex items-end">
-                        <svg className="w-full h-full overflow-visible" viewBox="0 0 500 160" preserveAspectRatio="none">
-                          <defs>
-                            <linearGradient id="liquidezGrad" x1="0%" y1="0%" x2="0%" y2="100%">
-                              <stop offset="0%" stopColor="#8b5cf6" stopOpacity="0.35" />
-                              <stop offset="100%" stopColor="#8b5cf6" stopOpacity="0.0" />
-                            </linearGradient>
-                          </defs>
+                      {!curvaLiquidezReactiva ? (
+                        <div className="py-12 text-center text-xs text-[#7d776f] font-medium">
+                          Sin datos
+                        </div>
+                      ) : (
+                        <>
+                          <div className="w-full h-44 relative flex items-end">
+                            <svg className="w-full h-full overflow-visible" viewBox="0 0 500 160" preserveAspectRatio="none">
+                              <defs>
+                                <linearGradient id="liquidezGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+                                  <stop offset="0%" stopColor="#8b5cf6" stopOpacity="0.35" />
+                                  <stop offset="100%" stopColor="#8b5cf6" stopOpacity="0.0" />
+                                </linearGradient>
+                              </defs>
 
-                          <path
-                            d={curvaLiquidezReactiva.pathArea}
-                            fill="url(#liquidezGrad)"
-                          />
-                          <path
-                            d={curvaLiquidezReactiva.pathLine}
-                            fill="transparent"
-                            stroke="#8b5cf6"
-                            strokeWidth="3.5"
-                            strokeLinecap="round"
-                          />
-                          <circle cx={curvaLiquidezReactiva.inicio.x} cy={curvaLiquidezReactiva.inicio.y} r="5" fill="#8b5cf6" stroke="#fff" strokeWidth="2" />
-                          <circle cx={curvaLiquidezReactiva.medio.x} cy={curvaLiquidezReactiva.medio.y} r="5" fill="#8b5cf6" stroke="#fff" strokeWidth="2" />
-                          <circle cx={curvaLiquidezReactiva.fin.x} cy={curvaLiquidezReactiva.fin.y} r="6" fill="#10b981" stroke="#fff" strokeWidth="2" />
-                        </svg>
-                      </div>
+                              <path
+                                d={curvaLiquidezReactiva.pathArea}
+                                fill="url(#liquidezGrad)"
+                              />
+                              <path
+                                d={curvaLiquidezReactiva.pathLine}
+                                fill="transparent"
+                                stroke="#8b5cf6"
+                                strokeWidth="3.5"
+                                strokeLinecap="round"
+                              />
+                              <circle cx={curvaLiquidezReactiva.inicio.x} cy={curvaLiquidezReactiva.inicio.y} r="5" fill="#8b5cf6" stroke="#fff" strokeWidth="2" />
+                              <circle cx={curvaLiquidezReactiva.medio.x} cy={curvaLiquidezReactiva.medio.y} r="5" fill="#8b5cf6" stroke="#fff" strokeWidth="2" />
+                              <circle cx={curvaLiquidezReactiva.fin.x} cy={curvaLiquidezReactiva.fin.y} r="6" fill="#10b981" stroke="#fff" strokeWidth="2" />
+                            </svg>
+                          </div>
 
-                      <div className="flex items-center justify-between text-xs text-[#7d776f] font-mono pt-2 border-t border-[#cec8bc] dark:border-slate-800">
-                        <div>
-                          <span className="block text-[10px] uppercase font-sans">{curvaLiquidezReactiva.inicio.mesCorto || 'Inicio'} 2026</span>
-                          <span className="font-bold text-[#262422] dark:text-white">Bs. {curvaLiquidezReactiva.inicio.saldo.toLocaleString('es-BO')}</span>
-                        </div>
-                        <div>
-                          <span className="block text-[10px] uppercase font-sans">{curvaLiquidezReactiva.medio.mesCorto || 'Medio'} 2026</span>
-                          <span className="font-bold text-[#262422] dark:text-white">Bs. {curvaLiquidezReactiva.medio.saldo.toLocaleString('es-BO')}</span>
-                        </div>
-                        <div className="text-right">
-                          <span className="block text-[10px] uppercase font-sans">{curvaLiquidezReactiva.fin.mesCorto || 'Fin'} 2026</span>
-                          <span className="font-extrabold text-emerald-700 dark:text-emerald-400">Bs. {curvaLiquidezReactiva.fin.saldo.toLocaleString('es-BO')}</span>
-                        </div>
-                      </div>
+                          <div className="flex items-center justify-between text-xs text-[#7d776f] font-mono pt-2 border-t border-[#cec8bc] dark:border-slate-800">
+                            <div>
+                              <span className="block text-[10px] uppercase font-sans">{curvaLiquidezReactiva.inicio.mesCorto || 'Inicio'} 2026</span>
+                              <span className="font-bold text-[#262422] dark:text-white">Bs. {curvaLiquidezReactiva.inicio.saldo.toLocaleString('es-BO')}</span>
+                            </div>
+                            <div>
+                              <span className="block text-[10px] uppercase font-sans">{curvaLiquidezReactiva.medio.mesCorto || 'Medio'} 2026</span>
+                              <span className="font-bold text-[#262422] dark:text-white">Bs. {curvaLiquidezReactiva.medio.saldo.toLocaleString('es-BO')}</span>
+                            </div>
+                            <div className="text-right">
+                              <span className="block text-[10px] uppercase font-sans">{curvaLiquidezReactiva.fin.mesCorto || 'Fin'} 2026</span>
+                              <span className="font-extrabold text-emerald-700 dark:text-emerald-400">Bs. {curvaLiquidezReactiva.fin.saldo.toLocaleString('es-BO')}</span>
+                            </div>
+                          </div>
+                        </>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -2385,83 +2284,93 @@ export default function CajaYBancosPage() {
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-[#cec8bc] dark:divide-slate-800 font-mono">
-                        {datosFiltradosFlujo.map((fila) => (
-                          <tr key={fila.mes} className="hover:bg-[#dfd9ce]/40 dark:hover:bg-slate-800/40 transition-colors">
-                            <td className="py-3 px-3.5 font-bold font-sans text-[#262422] dark:text-white">
-                              {fila.mes}
-                            </td>
-                            <td className="py-3 px-3 text-right text-[#5c5750] dark:text-slate-400">
-                              Bs. {fila.saldoInicial.toLocaleString()}
-                            </td>
-                            <td className="py-3 px-3 text-right text-emerald-700 dark:text-emerald-400 font-semibold">
-                              +{fila.ingresosOrdinarios.toLocaleString()}
-                            </td>
-                            <td className="py-3 px-3 text-right text-emerald-700 dark:text-emerald-400">
-                              +{fila.ingresosExtraordinarios.toLocaleString()}
-                            </td>
-                            <td className="py-3 px-3.5 text-right font-bold text-emerald-800 dark:text-emerald-300 bg-emerald-500/5">
-                              Bs. {fila.totalIngresos.toLocaleString()}
-                            </td>
-                            <td className="py-3 px-3 text-right text-rose-700 dark:text-rose-400">
-                              -{fila.egresosOperativos.toLocaleString()}
-                            </td>
-                            <td className="py-3 px-3 text-right text-rose-700 dark:text-rose-400">
-                              -{fila.egresosMantenimiento.toLocaleString()}
-                            </td>
-                            <td className="py-3 px-3 text-right text-rose-700 dark:text-rose-400">
-                              -{fila.egresosAdministrativos.toLocaleString()}
-                            </td>
-                            <td className="py-3 px-3.5 text-right font-bold text-rose-800 dark:text-rose-300 bg-rose-500/5">
-                              Bs. {fila.totalEgresos.toLocaleString()}
-                            </td>
-                            <td
-                              className={`py-3 px-3.5 text-right font-extrabold ${
-                                fila.flujoNeto >= 0 ? 'text-emerald-800 dark:text-emerald-400' : 'text-rose-800 dark:text-rose-400'
-                              }`}
-                            >
-                              {fila.flujoNeto >= 0 ? '+' : ''}Bs. {fila.flujoNeto.toLocaleString()}
-                            </td>
-                            <td className="py-3 px-3.5 text-right font-extrabold text-purple-800 dark:text-purple-300">
-                              Bs. {fila.saldoFinal.toLocaleString()}
+                        {datosFiltradosFlujo.length === 0 ? (
+                          <tr>
+                            <td colSpan={11} className="py-8 text-center text-xs text-[#7d776f] font-medium font-sans">
+                              Sin datos
                             </td>
                           </tr>
-                        ))}
+                        ) : (
+                          datosFiltradosFlujo.map((fila) => (
+                            <tr key={fila.mes} className="hover:bg-[#dfd9ce]/40 dark:hover:bg-slate-800/40 transition-colors">
+                              <td className="py-3 px-3.5 font-bold font-sans text-[#262422] dark:text-white">
+                                {fila.mes}
+                              </td>
+                              <td className="py-3 px-3 text-right text-[#5c5750] dark:text-slate-400">
+                                Bs. {fila.saldoInicial.toLocaleString()}
+                              </td>
+                              <td className="py-3 px-3 text-right text-emerald-700 dark:text-emerald-400 font-semibold">
+                                +{fila.ingresosOrdinarios.toLocaleString()}
+                              </td>
+                              <td className="py-3 px-3 text-right text-emerald-700 dark:text-emerald-400">
+                                +{fila.ingresosExtraordinarios.toLocaleString()}
+                              </td>
+                              <td className="py-3 px-3.5 text-right font-bold text-emerald-800 dark:text-emerald-300 bg-emerald-500/5">
+                                Bs. {fila.totalIngresos.toLocaleString()}
+                              </td>
+                              <td className="py-3 px-3 text-right text-rose-700 dark:text-rose-400">
+                                -{fila.egresosOperativos.toLocaleString()}
+                              </td>
+                              <td className="py-3 px-3 text-right text-rose-700 dark:text-rose-400">
+                                -{fila.egresosMantenimiento.toLocaleString()}
+                              </td>
+                              <td className="py-3 px-3 text-right text-rose-700 dark:text-rose-400">
+                                -{fila.egresosAdministrativos.toLocaleString()}
+                              </td>
+                              <td className="py-3 px-3.5 text-right font-bold text-rose-800 dark:text-rose-300 bg-rose-500/5">
+                                Bs. {fila.totalEgresos.toLocaleString()}
+                              </td>
+                              <td
+                                className={`py-3 px-3.5 text-right font-extrabold ${
+                                  fila.flujoNeto >= 0 ? 'text-emerald-800 dark:text-emerald-400' : 'text-rose-800 dark:text-rose-400'
+                                }`}
+                              >
+                                {fila.flujoNeto >= 0 ? '+' : ''}Bs. {fila.flujoNeto.toLocaleString()}
+                              </td>
+                              <td className="py-3 px-3.5 text-right font-extrabold text-purple-800 dark:text-purple-300">
+                                Bs. {fila.saldoFinal.toLocaleString()}
+                              </td>
+                            </tr>
+                          ))
+                        )}
                       </tbody>
-                      <tfoot>
-                        <tr className="border-t-2 border-[#cec8bc] dark:border-slate-700 bg-[#dfd9ce]/80 dark:bg-slate-950/80 font-bold font-mono text-xs">
-                          <td className="py-3 px-3.5 font-sans uppercase text-[#262422] dark:text-white">
-                            TOTALES ACUMULADOS
-                          </td>
-                          <td className="py-3 px-3 text-right text-[#7d776f]">-</td>
-                          <td className="py-3 px-3 text-right text-emerald-700">
-                            +{datosFiltradosFlujo.reduce((a, b) => a + b.ingresosOrdinarios, 0).toLocaleString()}
-                          </td>
-                          <td className="py-3 px-3 text-right text-emerald-700">
-                            +{datosFiltradosFlujo.reduce((a, b) => a + b.ingresosExtraordinarios, 0).toLocaleString()}
-                          </td>
-                          <td className="py-3 px-3.5 text-right font-extrabold text-emerald-800 bg-emerald-500/10">
-                            Bs. {totalIngresosFlujo.toLocaleString()}
-                          </td>
-                          <td className="py-3 px-3 text-right text-rose-700">
-                            -{datosFiltradosFlujo.reduce((a, b) => a + b.egresosOperativos, 0).toLocaleString()}
-                          </td>
-                          <td className="py-3 px-3 text-right text-rose-700">
-                            -{datosFiltradosFlujo.reduce((a, b) => a + b.egresosMantenimiento, 0).toLocaleString()}
-                          </td>
-                          <td className="py-3 px-3 text-right text-rose-700">
-                            -{datosFiltradosFlujo.reduce((a, b) => a + b.egresosAdministrativos, 0).toLocaleString()}
-                          </td>
-                          <td className="py-3 px-3.5 text-right font-extrabold text-rose-800 bg-rose-500/10">
-                            Bs. {totalEgresosFlujo.toLocaleString()}
-                          </td>
-                          <td className="py-3 px-3.5 text-right font-extrabold text-blue-800">
-                            +Bs. {flujoNetoTotalFlujo.toLocaleString()}
-                          </td>
-                          <td className="py-3 px-3.5 text-right font-extrabold text-purple-800">
-                            Bs. {saldoFinalPeriodoFlujo.toLocaleString()}
-                          </td>
-                        </tr>
-                      </tfoot>
+                      {datosFiltradosFlujo.length > 0 && (
+                        <tfoot>
+                          <tr className="border-t-2 border-[#cec8bc] dark:border-slate-700 bg-[#dfd9ce]/80 dark:bg-slate-950/80 font-bold font-mono text-xs">
+                            <td className="py-3 px-3.5 font-sans uppercase text-[#262422] dark:text-white">
+                              TOTALES ACUMULADOS
+                            </td>
+                            <td className="py-3 px-3 text-right text-[#7d776f]">-</td>
+                            <td className="py-3 px-3 text-right text-emerald-700">
+                              +{datosFiltradosFlujo.reduce((a, b) => a + b.ingresosOrdinarios, 0).toLocaleString()}
+                            </td>
+                            <td className="py-3 px-3 text-right text-emerald-700">
+                              +{datosFiltradosFlujo.reduce((a, b) => a + b.ingresosExtraordinarios, 0).toLocaleString()}
+                            </td>
+                            <td className="py-3 px-3.5 text-right font-extrabold text-emerald-800 bg-emerald-500/10">
+                              Bs. {totalIngresosFlujo.toLocaleString()}
+                            </td>
+                            <td className="py-3 px-3 text-right text-rose-700">
+                              -{datosFiltradosFlujo.reduce((a, b) => a + b.egresosOperativos, 0).toLocaleString()}
+                            </td>
+                            <td className="py-3 px-3 text-right text-rose-700">
+                              -{datosFiltradosFlujo.reduce((a, b) => a + b.egresosMantenimiento, 0).toLocaleString()}
+                            </td>
+                            <td className="py-3 px-3 text-right text-rose-700">
+                              -{datosFiltradosFlujo.reduce((a, b) => a + b.egresosAdministrativos, 0).toLocaleString()}
+                            </td>
+                            <td className="py-3 px-3.5 text-right font-extrabold text-rose-800 bg-rose-500/10">
+                              Bs. {totalEgresosFlujo.toLocaleString()}
+                            </td>
+                            <td className="py-3 px-3.5 text-right font-extrabold text-blue-800">
+                              +Bs. {flujoNetoTotalFlujo.toLocaleString()}
+                            </td>
+                            <td className="py-3 px-3.5 text-right font-extrabold text-purple-800">
+                              Bs. {saldoFinalPeriodoFlujo.toLocaleString()}
+                            </td>
+                          </tr>
+                        </tfoot>
+                      )}
                     </table>
                   </div>
                 </div>
@@ -2482,108 +2391,116 @@ export default function CajaYBancosPage() {
                 </p>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                {/* Control 1: Morosidad */}
-                <div className="p-5 rounded-2xl bg-[#dfd9ce]/60 dark:bg-slate-950/60 border border-[#cec8bc] dark:border-slate-800 space-y-3">
-                  <div className="flex items-center justify-between">
-                    <label className="text-xs font-bold text-[#262422] dark:text-white">
-                      Tasa de Morosidad Proyectada
-                    </label>
-                    <span className="font-mono font-extrabold text-sm text-rose-700 dark:text-rose-400">
-                      {simulacionMorosidad}%
-                    </span>
+              {totalIngresosFlujo === 0 ? (
+                <div className="py-12 text-center text-xs text-[#7d776f] font-medium">
+                  Sin datos
+                </div>
+              ) : (
+                <>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    {/* Control 1: Morosidad */}
+                    <div className="p-5 rounded-2xl bg-[#dfd9ce]/60 dark:bg-slate-950/60 border border-[#cec8bc] dark:border-slate-800 space-y-3">
+                      <div className="flex items-center justify-between">
+                        <label className="text-xs font-bold text-[#262422] dark:text-white">
+                          Tasa de Morosidad Proyectada
+                        </label>
+                        <span className="font-mono font-extrabold text-sm text-rose-700 dark:text-rose-400">
+                          {simulacionMorosidad}%
+                        </span>
+                      </div>
+                      <input
+                        type="range"
+                        min="0"
+                        max="40"
+                        step="5"
+                        value={simulacionMorosidad}
+                        onChange={(e) => setSimulacionMorosidad(Number(e.target.value))}
+                        className="w-full accent-rose-600 cursor-pointer"
+                      />
+                      <p className="text-[11px] text-[#7d776f]">
+                        {simulacionMorosidad === 0
+                          ? 'Escenario ideal: 100% de recaudación oportuna.'
+                          : `Reducción estimada de ingresos: -Bs. ${((totalIngresosFlujo * simulacionMorosidad) / 100).toLocaleString('es-BO')}`}
+                      </p>
+                    </div>
+
+                    {/* Control 2: Gasto Extra */}
+                    <div className="p-5 rounded-2xl bg-[#dfd9ce]/60 dark:bg-slate-950/60 border border-[#cec8bc] dark:border-slate-800 space-y-3">
+                      <div className="flex items-center justify-between">
+                        <label className="text-xs font-bold text-[#262422] dark:text-white">
+                          Gasto Extraordinario Mensual Imprevisto
+                        </label>
+                        <span className="font-mono font-extrabold text-sm text-amber-600 dark:text-amber-400">
+                          +Bs. {simulacionGastoExtra} / mes
+                        </span>
+                      </div>
+                      <input
+                        type="range"
+                        min="0"
+                        max="3000"
+                        step="250"
+                        value={simulacionGastoExtra}
+                        onChange={(e) => setSimulacionGastoExtra(Number(e.target.value))}
+                        className="w-full accent-amber-600 cursor-pointer"
+                      />
+                      <p className="text-[11px] text-[#7d776f]">
+                        {simulacionGastoExtra === 0
+                          ? 'Sin gastos no presupuestados.'
+                          : `Impacto anual en caja: -Bs. ${(simulacionGastoExtra * datosFiltradosFlujo.length).toLocaleString('es-BO')}`}
+                      </p>
+                    </div>
                   </div>
-                  <input
-                    type="range"
-                    min="0"
-                    max="40"
-                    step="5"
-                    value={simulacionMorosidad}
-                    onChange={(e) => setSimulacionMorosidad(Number(e.target.value))}
-                    className="w-full accent-rose-600 cursor-pointer"
-                  />
-                  <p className="text-[11px] text-[#7d776f]">
-                    {simulacionMorosidad === 0
-                      ? 'Escenario ideal: 100% de recaudación oportuna.'
-                      : `Reducción estimada de ingresos: -Bs. ${((totalIngresosFlujo * simulacionMorosidad) / 100).toLocaleString('es-BO')}`}
-                  </p>
-                </div>
 
-                {/* Control 2: Gasto Extra */}
-                <div className="p-5 rounded-2xl bg-[#dfd9ce]/60 dark:bg-slate-950/60 border border-[#cec8bc] dark:border-slate-800 space-y-3">
-                  <div className="flex items-center justify-between">
-                    <label className="text-xs font-bold text-[#262422] dark:text-white">
-                      Gasto Extraordinario Mensual Imprevisto
-                    </label>
-                    <span className="font-mono font-extrabold text-sm text-amber-600 dark:text-amber-400">
-                      +Bs. {simulacionGastoExtra} / mes
-                    </span>
+                  {/* Resultado de la Simulación */}
+                  <div className="p-5 rounded-2xl bg-[#dfd9ce]/90 dark:bg-slate-950/80 border border-[#cec8bc] dark:border-slate-800 grid grid-cols-1 sm:grid-cols-3 gap-4 text-center">
+                    <div>
+                      <span className="text-[11px] font-bold text-[#7d776f] uppercase block">
+                        Ingresos Simulados
+                      </span>
+                      <span className="text-lg font-mono font-extrabold text-emerald-700 dark:text-emerald-400">
+                        Bs. {ingresosSimulados.toLocaleString('es-BO', { maximumFractionDigits: 0 })}
+                      </span>
+                    </div>
+
+                    <div>
+                      <span className="text-[11px] font-bold text-[#7d776f] uppercase block">
+                        Egresos Simulados
+                      </span>
+                      <span className="text-lg font-mono font-extrabold text-rose-700 dark:text-rose-400">
+                        Bs. {egresosSimulados.toLocaleString('es-BO', { maximumFractionDigits: 0 })}
+                      </span>
+                    </div>
+
+                    <div>
+                      <span className="text-[11px] font-bold text-[#7d776f] uppercase block">
+                        Flujo Neto Proyectado
+                      </span>
+                      <span
+                        className={`text-lg font-mono font-extrabold ${
+                          flujoNetoSimulado >= 0 ? 'text-blue-700 dark:text-blue-400' : 'text-red-600 dark:text-red-400'
+                        }`}
+                      >
+                        {flujoNetoSimulado >= 0 ? '+' : ''}Bs.{' '}
+                        {flujoNetoSimulado.toLocaleString('es-BO', { maximumFractionDigits: 0 })}
+                      </span>
+                    </div>
                   </div>
-                  <input
-                    type="range"
-                    min="0"
-                    max="3000"
-                    step="250"
-                    value={simulacionGastoExtra}
-                    onChange={(e) => setSimulacionGastoExtra(Number(e.target.value))}
-                    className="w-full accent-amber-600 cursor-pointer"
-                  />
-                  <p className="text-[11px] text-[#7d776f]">
-                    {simulacionGastoExtra === 0
-                      ? 'Sin gastos no presupuestados.'
-                      : `Impacto anual en caja: -Bs. ${(simulacionGastoExtra * datosFiltradosFlujo.length).toLocaleString('es-BO')}`}
-                  </p>
-                </div>
-              </div>
 
-              {/* Resultado de la Simulación */}
-              <div className="p-5 rounded-2xl bg-[#dfd9ce]/90 dark:bg-slate-950/80 border border-[#cec8bc] dark:border-slate-800 grid grid-cols-1 sm:grid-cols-3 gap-4 text-center">
-                <div>
-                  <span className="text-[11px] font-bold text-[#7d776f] uppercase block">
-                    Ingresos Simulados
-                  </span>
-                  <span className="text-lg font-mono font-extrabold text-emerald-700 dark:text-emerald-400">
-                    Bs. {ingresosSimulados.toLocaleString('es-BO', { maximumFractionDigits: 0 })}
-                  </span>
-                </div>
-
-                <div>
-                  <span className="text-[11px] font-bold text-[#7d776f] uppercase block">
-                    Egresos Simulados
-                  </span>
-                  <span className="text-lg font-mono font-extrabold text-rose-700 dark:text-rose-400">
-                    Bs. {egresosSimulados.toLocaleString('es-BO', { maximumFractionDigits: 0 })}
-                  </span>
-                </div>
-
-                <div>
-                  <span className="text-[11px] font-bold text-[#7d776f] uppercase block">
-                    Flujo Neto Proyectado
-                  </span>
-                  <span
-                    className={`text-lg font-mono font-extrabold ${
-                      flujoNetoSimulado >= 0 ? 'text-blue-700 dark:text-blue-400' : 'text-red-600 dark:text-red-400'
-                    }`}
-                  >
-                    {flujoNetoSimulado >= 0 ? '+' : ''}Bs.{' '}
-                    {flujoNetoSimulado.toLocaleString('es-BO', { maximumFractionDigits: 0 })}
-                  </span>
-                </div>
-              </div>
-
-              <div className="flex justify-end">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setSimulacionMorosidad(0)
-                    setSimulacionGastoExtra(0)
-                  }}
-                  className="px-4 py-2 rounded-xl border border-[#cec8bc] dark:border-slate-700 text-xs font-bold text-[#5c5750] dark:text-slate-300 hover:bg-[#ded8cc] transition-colors cursor-pointer flex items-center gap-1.5"
-                >
-                  <RefreshCw className="w-3.5 h-3.5" />
-                  <span>Restablecer Simulación</span>
-                </button>
-              </div>
+                  <div className="flex justify-end">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSimulacionMorosidad(0)
+                        setSimulacionGastoExtra(0)
+                      }}
+                      className="px-4 py-2 rounded-xl border border-[#cec8bc] dark:border-slate-700 text-xs font-bold text-[#5c5750] dark:text-slate-300 hover:bg-[#ded8cc] transition-colors cursor-pointer flex items-center gap-1.5"
+                    >
+                      <RefreshCw className="w-3.5 h-3.5" />
+                      <span>Restablecer Simulación</span>
+                    </button>
+                  </div>
+                </>
+              )}
             </div>
           )}
         </>
@@ -2764,14 +2681,14 @@ export default function CajaYBancosPage() {
         </div>
       )}
 
-      {/* MODAL CREAR / EDITAR CUENTA BANCARIA */}
+      {/* MODAL CREAR / EDITAR CUENTA INSTITUCIONAL */}
       {isModalCuentaOpen && (
         <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 backdrop-blur-xs">
           <div className="w-full max-w-md bg-[#ede9e1] dark:bg-slate-900 rounded-3xl border border-[#cec8bc] dark:border-slate-800 shadow-2xl p-6 sm:p-7 space-y-4">
             <div className="flex items-center justify-between border-b border-[#cec8bc] dark:border-slate-800 pb-3">
               <h3 className="font-extrabold text-base text-[#262422] dark:text-white flex items-center gap-2">
                 <Landmark className="w-4 h-4 text-blue-600" />
-                {cuentaEnEdicion ? 'Editar Cuenta Bancaria' : 'Nueva Cuenta Bancaria'}
+                {cuentaEnEdicion ? 'Editar Cuenta Institucional' : 'Nueva Cuenta Institucional'}
               </h3>
               <button
                 type="button"
@@ -2792,12 +2709,12 @@ export default function CajaYBancosPage() {
             <form onSubmit={handleGuardarCuenta} className="space-y-3 text-xs">
               <div>
                 <label className="block font-bold text-[#383430] dark:text-slate-300 mb-1">
-                  Banco / Entidad Financiera *
+                  Entidad / Institución *
                 </label>
                 <input
                   type="text"
                   required
-                  placeholder="Ej: Banco Nacional de Bolivia, Banco Unión..."
+                  placeholder="Ej: Institución Financiera, Cooperativa..."
                   value={formCuentaBanco}
                   onChange={(e) => setFormCuentaBanco(e.target.value)}
                   className="w-full px-3 py-2 rounded-xl bg-[#dfd9ce] dark:bg-slate-950 border border-[#cec8bc]"
@@ -2869,14 +2786,14 @@ export default function CajaYBancosPage() {
         </div>
       )}
 
-      {/* MODAL CREAR / EDITAR MOVIMIENTO BANCARIO */}
+      {/* MODAL CREAR / EDITAR MOVIMIENTO DE CUENTA */}
       {isModalMovBancoOpen && (
         <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 backdrop-blur-xs">
           <div className="w-full max-w-md bg-[#ede9e1] dark:bg-slate-900 rounded-3xl border border-[#cec8bc] dark:border-slate-800 shadow-2xl p-6 sm:p-7 space-y-4">
             <div className="flex items-center justify-between border-b border-[#cec8bc] dark:border-slate-800 pb-3">
               <h3 className="font-extrabold text-base text-[#262422] dark:text-white flex items-center gap-2">
                 <CreditCard className="w-4 h-4 text-blue-600" />
-                {movBancoEnEdicion ? 'Editar Movimiento Bancario' : 'Registrar Movimiento Bancario'}
+                {movBancoEnEdicion ? 'Editar Movimiento de Cuenta' : 'Registrar Movimiento de Cuenta'}
               </h3>
               <button
                 type="button"
@@ -2897,7 +2814,7 @@ export default function CajaYBancosPage() {
             <form onSubmit={handleGuardarMovBanco} className="space-y-3 text-xs">
               <div>
                 <label className="block font-bold text-[#383430] dark:text-slate-300 mb-1">
-                  Cuenta Bancaria *
+                  Cuenta Institucional *
                 </label>
                 <select
                   required
@@ -2967,7 +2884,7 @@ export default function CajaYBancosPage() {
 
               <div>
                 <label className="block font-bold text-[#383430] dark:text-slate-300 mb-1">
-                  Referencia Bancaria
+                  Referencia
                 </label>
                 <input
                   type="text"
@@ -3026,14 +2943,14 @@ export default function CajaYBancosPage() {
         </div>
       )}
 
-      {/* MODAL DETALLE DE MOVIMIENTO BANCARIO (GET /api/v1/movimientos-bancarios/:id) */}
+      {/* MODAL DETALLE DE MOVIMIENTO DE CUENTA (GET /api/v1/movimientos-bancarios/:id) */}
       {isModalDetalleMovOpen && (
         <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 backdrop-blur-xs">
           <div className="w-full max-w-md bg-[#ede9e1] dark:bg-slate-900 rounded-3xl border border-[#cec8bc] dark:border-slate-800 shadow-2xl p-6 space-y-4">
             <div className="flex items-center justify-between border-b border-[#cec8bc] dark:border-slate-800 pb-3">
               <h3 className="font-extrabold text-base text-[#262422] dark:text-white flex items-center gap-2">
                 <Eye className="w-4 h-4 text-blue-600" />
-                Detalle del Movimiento Bancario
+                Detalle del Movimiento de Cuenta
               </h3>
               <button
                 type="button"

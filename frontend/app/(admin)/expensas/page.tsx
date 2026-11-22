@@ -151,7 +151,17 @@ export default function ExpensasPage() {
     Array<{ idPersona: number; nombres: string; apellidos: string; ciNit?: string }>
   >([])
   const [departamentosList, setDepartamentosList] = useState<
-    Array<{ idDepartamento: number; numero: string; tipologia?: string }>
+    Array<{ idDepartamento: number; numero: string; areaM2?: number; tipologia?: string }>
+  >([])
+  const [tiposDepartamento, setTiposDepartamento] = useState<
+    Array<{
+      idTipo: number
+      nombre: string
+      montoExpensa: number
+      areaM2: number | null
+      activo: boolean
+      departamentosAsignados?: number
+    }>
   >([])
 
   // Filtros interactivos del Estado de Cuenta
@@ -249,13 +259,28 @@ export default function ExpensasPage() {
           const mapped = json.data.map((d: any) => ({
             idDepartamento: d.idDepartamento,
             numero: d.numero,
-            tipologia: d.tipo?.nombre || d.tipologia || 'Tipo A'
+            areaM2: d.areaM2 ? Number(d.areaM2) : undefined,
+            tipologia: d.tipo?.nombre || d.tipologia || 'General'
           }))
           setDepartamentosList(mapped)
         }
       }
     } catch (err) {
       console.error('Error al cargar departamentos:', err)
+    }
+  }, [])
+
+  const fetchTiposDepartamento = useCallback(async () => {
+    try {
+      const res = await apiFetch('/api/v1/tipos-departamento')
+      if (res.ok) {
+        const json = await res.json()
+        if (json.data && Array.isArray(json.data)) {
+          setTiposDepartamento(json.data)
+        }
+      }
+    } catch (err) {
+      console.error('Error al cargar tipos de departamento:', err)
     }
   }, [])
 
@@ -278,23 +303,15 @@ export default function ExpensasPage() {
         const json = await res.json()
         if (json.data && Array.isArray(json.data)) {
           const mapped: ExpensaItem[] = json.data.map((item: any) => {
-            const deptoNum = item.departamento?.numero || ''
             const tipologiaDepto =
               item.departamento?.tipologia ||
               item.departamento?.tipo?.nombre ||
-              (item.departamento?.areaM2 === 60 || deptoNum.startsWith('A')
-                ? 'Tipo A'
-                : item.departamento?.areaM2 === 80 || deptoNum.startsWith('B')
-                  ? 'Tipo B'
-                  : item.departamento?.areaM2 === 100 || deptoNum.startsWith('C')
-                    ? 'Tipo C'
-                    : 'Tipo A')
+              'General'
 
-            const baseDefault = tipologiaDepto.includes('B')
-              ? 350
-              : tipologiaDepto.includes('C')
-                ? 400
-                : 300
+            const tipoItem = tiposDepartamento.find(
+              (t) => t.nombre.toLowerCase() === tipologiaDepto.toLowerCase()
+            )
+            const baseDefault = tipoItem ? Number(tipoItem.montoExpensa) : 0
             const montoBase =
               item.montoBase !== undefined && item.montoBase !== null && item.montoBase > 0
                 ? Number(item.montoBase)
@@ -355,7 +372,7 @@ export default function ExpensasPage() {
         setIsLoading(false)
       }
     },
-    [filtroEstado]
+    [filtroEstado, tiposDepartamento]
   )
 
   const fetchMorosos = useCallback(async () => {
@@ -392,7 +409,8 @@ export default function ExpensasPage() {
     fetchPersonas()
     fetchReglasMora()
     fetchDepartamentos()
-  }, [fetchExpensas, fetchMorosos, fetchPersonas, fetchReglasMora, fetchDepartamentos])
+    fetchTiposDepartamento()
+  }, [fetchExpensas, fetchMorosos, fetchPersonas, fetchReglasMora, fetchDepartamentos, fetchTiposDepartamento])
 
   // KPIs
   const totalFacturado = useMemo(
@@ -832,12 +850,6 @@ export default function ExpensasPage() {
         const tipoNombre = (item.departamento?.tipologia || '').toLowerCase()
         const matchTipo =
           filtroTipoDpto === 'Todos' ||
-          (filtroTipoDpto === 'Tipo A' &&
-            (tipoNombre.includes('tipo a') || tipoNombre.includes('tipo 1'))) ||
-          (filtroTipoDpto === 'Tipo B' &&
-            (tipoNombre.includes('tipo b') || tipoNombre.includes('tipo 2'))) ||
-          (filtroTipoDpto === 'Tipo C' &&
-            (tipoNombre.includes('tipo c') || tipoNombre.includes('tipo 3'))) ||
           tipoNombre.includes(filtroTipoDpto.toLowerCase())
         const matchPeriodo =
           filtroPeriodo === 'Todos' || (item.periodo && item.periodo.startsWith(filtroPeriodo))
@@ -1009,7 +1021,7 @@ export default function ExpensasPage() {
             Bs. {totalCobrado.toLocaleString('es-BO', { minimumFractionDigits: 2 })}
           </div>
           <span className="text-[11px] text-[#7d776f] dark:text-slate-500">
-            Ingresos a cuenta bancaria
+            Ingresos a cuenta
           </span>
         </div>
 
@@ -1113,9 +1125,11 @@ export default function ExpensasPage() {
                   className="bg-transparent text-[#262422] dark:text-white focus:outline-none cursor-pointer font-medium"
                 >
                   <option value="Todos">Tipo Dpto: Todos</option>
-                  <option value="Tipo A">Tipo A (Bs 300)</option>
-                  <option value="Tipo B">Tipo B (Bs 350)</option>
-                  <option value="Tipo C">Tipo C (Bs 400)</option>
+                  {tiposDepartamento.map((t) => (
+                    <option key={t.idTipo} value={t.nombre}>
+                      {t.nombre} (Bs {Number(t.montoExpensa).toFixed(2)})
+                    </option>
+                  ))}
                 </select>
               </div>
 
@@ -1625,7 +1639,15 @@ export default function ExpensasPage() {
         </>
       ) : activeTab === 'cuotas' ? (
         /* VISTA TARIFARIO: ¿CUÁNTO SE COBRA A CADA UNO? */
-        <div className="space-y-6">
+        <div id="area-impresion" className="space-y-6">
+          <style dangerouslySetInnerHTML={{ __html: `
+            @media print {
+              body * { visibility: hidden !important; }
+              #area-impresion, #area-impresion * { visibility: visible !important; color: #000 !important; }
+              #area-impresion { position: absolute !important; left: 0 !important; top: 0 !important; width: 100% !important; background: #fff !important; color: #000 !important; }
+              .no-print { display: none !important; }
+            }
+          `}} />
           {/* Banner Explicativo */}
           <div className="p-4 sm:p-5 rounded-2xl bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-900/50 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
             <div>
@@ -1636,15 +1658,13 @@ export default function ExpensasPage() {
                 </h3>
               </div>
               <p className="text-xs text-blue-800 dark:text-blue-300 mt-1">
-                El monto base de expensas proviene del tipo asignado al departamento (Tipo A = 300
-                Bs, Tipo B = 350 Bs, Tipo C = 400 Bs), más el monto de consumo de agua registrado
-                para el período.
+                El monto base de expensas proviene del tipo asignado al departamento, más el monto de consumo de agua registrado para el período.
               </p>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 no-print">
               <button
                 onClick={() => window.print()}
-                className="px-3.5 py-2 rounded-xl bg-blue-700 hover:bg-blue-800 text-white text-xs font-bold transition-all shadow-sm flex items-center gap-1.5 cursor-pointer"
+                className="px-3.5 py-2 rounded-xl bg-blue-700 hover:bg-blue-800 text-white text-xs font-bold transition-all shadow-sm flex items-center gap-1.5 cursor-pointer no-print"
               >
                 <Printer className="w-4 h-4" />
                 Imprimir Cuadro Tarifario
@@ -1654,59 +1674,36 @@ export default function ExpensasPage() {
 
           {/* Tarjetas Resumen por Tipología */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            {/* Tipo A */}
-            <div className="p-4 sm:p-5 rounded-2xl bg-[#ede9e1] dark:bg-slate-900 border border-[#cec8bc] dark:border-slate-800 shadow-sm space-y-3">
-              <div className="flex justify-between items-center">
-                <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black bg-blue-100 text-blue-800 dark:bg-blue-950/60 dark:text-blue-300">
-                  Tipo A (60 m²)
-                </span>
-                <span className="text-xs text-[#7d776f] font-mono font-bold">Base Estándar</span>
+            {tiposDepartamento.length === 0 ? (
+              <div className="col-span-full p-6 text-center text-xs text-[#7d776f]">
+                Cargando tipos de departamento...
               </div>
-              <div>
-                <div className="text-2xl font-black font-mono text-[#262422] dark:text-white">
-                  Bs. 300.00 <span className="text-xs text-[#7d776f] font-normal">/ mes base</span>
+            ) : (
+              tiposDepartamento.map((tipo) => (
+                <div
+                  key={tipo.idTipo}
+                  className="p-4 sm:p-5 rounded-2xl bg-[#ede9e1] dark:bg-slate-900 border border-[#cec8bc] dark:border-slate-800 shadow-sm space-y-3"
+                >
+                  <div className="flex justify-between items-center">
+                    <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black bg-blue-100 text-blue-800 dark:bg-blue-950/60 dark:text-blue-300">
+                      {tipo.nombre}{tipo.areaM2 ? ` (${tipo.areaM2} m²)` : ''}
+                    </span>
+                    <span className="text-xs text-[#7d776f] font-mono font-bold">Base Estándar</span>
+                  </div>
+                  <div>
+                    <div className="text-2xl font-black font-mono text-[#262422] dark:text-white">
+                      Bs. {Number(tipo.montoExpensa).toFixed(2)}{' '}
+                      <span className="text-xs text-[#7d776f] font-normal">/ mes base</span>
+                    </div>
+                    {tipo.areaM2 ? (
+                      <div className="text-xs text-[#7d776f] dark:text-slate-400 mt-0.5">
+                        Superficie referencia: {tipo.areaM2} m²
+                      </div>
+                    ) : null}
+                  </div>
                 </div>
-                <div className="text-xs text-[#7d776f] dark:text-slate-400 mt-0.5">
-                  Superficie referencia: 60 m²
-                </div>
-              </div>
-            </div>
-
-            {/* Tipo B */}
-            <div className="p-4 sm:p-5 rounded-2xl bg-[#ede9e1] dark:bg-slate-900 border border-[#cec8bc] dark:border-slate-800 shadow-sm space-y-3">
-              <div className="flex justify-between items-center">
-                <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black bg-purple-100 text-purple-800 dark:bg-purple-950/60 dark:text-purple-300">
-                  Tipo B (80 m²)
-                </span>
-                <span className="text-xs text-[#7d776f] font-mono font-bold">Base Estándar</span>
-              </div>
-              <div>
-                <div className="text-2xl font-black font-mono text-[#262422] dark:text-white">
-                  Bs. 350.00 <span className="text-xs text-[#7d776f] font-normal">/ mes base</span>
-                </div>
-                <div className="text-xs text-[#7d776f] dark:text-slate-400 mt-0.5">
-                  Superficie referencia: 80 m²
-                </div>
-              </div>
-            </div>
-
-            {/* Tipo C */}
-            <div className="p-4 sm:p-5 rounded-2xl bg-[#ede9e1] dark:bg-slate-900 border border-[#cec8bc] dark:border-slate-800 shadow-sm space-y-3">
-              <div className="flex justify-between items-center">
-                <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300">
-                  Tipo C (100 m²)
-                </span>
-                <span className="text-xs text-[#7d776f] font-mono font-bold">Base Estándar</span>
-              </div>
-              <div>
-                <div className="text-2xl font-black font-mono text-[#262422] dark:text-white">
-                  Bs. 400.00 <span className="text-xs text-[#7d776f] font-normal">/ mes base</span>
-                </div>
-                <div className="text-xs text-[#7d776f] dark:text-slate-400 mt-0.5">
-                  Superficie referencia: 100 m²
-                </div>
-              </div>
-            </div>
+              ))
+            )}
           </div>
 
           {/* Tabla Maestra Arancelaria */}

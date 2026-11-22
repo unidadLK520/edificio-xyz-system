@@ -573,7 +573,7 @@ export default function ReportesPage() {
     const tel = m.propietario?.telefono?.replace(/\D/g, '') || ''
     const numeroTel = tel.length === 8 ? `591${tel}` : tel
     const nombre = m.propietario ? `${m.propietario.nombres} ${m.propietario.apellidos}` : 'Copropietario'
-    const texto = `Estimado(a) *${nombre}*,\n\nLe saludamos cordialmente de la Administración del *Condominio Edificio XYZ*.\n\nLe recordamos amablemente que la unidad *Dpto ${m.numero}* cuenta con un saldo pendiente de expensas por *Bs. ${m.totalDeuda.toLocaleString('es-BO', { minimumFractionDigits: 2 })}* (${m.expensasMoraCount} ${m.expensasMoraCount === 1 ? 'mes' : 'meses'} pendientes).\n\nPuede realizar el pago al instante mediante Código QR bancario o transferencia directa a la cuenta del edificio. Para mayor información o enviar su comprobante, quedamos a su entera disposición.\n\n¡Agradecemos mucho su gentil colaboración y compromiso con nuestro edificio!`
+    const texto = `Estimado(a) *${nombre}*,\n\nLe saludamos cordialmente de la Administración del *Condominio Edificio XYZ*.\n\nLe recordamos amablemente que la unidad *Dpto ${m.numero}* cuenta con un saldo pendiente de expensas por *Bs. ${m.totalDeuda.toLocaleString('es-BO', { minimumFractionDigits: 2 })}* (${m.expensasMoraCount} ${m.expensasMoraCount === 1 ? 'mes' : 'meses'} pendientes).\n\nPuede realizar el pago al instante mediante Código QR o transferencia directa a la cuenta del edificio. Para mayor información o enviar su comprobante, quedamos a su entera disposición.\n\n¡Agradecemos mucho su gentil colaboración y compromiso con nuestro edificio!`
 
     const url = `https://wa.me/${numeroTel}?text=${encodeURIComponent(texto)}`
     window.open(url, '_blank')
@@ -1263,7 +1263,7 @@ export default function ReportesPage() {
         </div>
       )}
 
-      {/* ── VISOR 3: FLUJO DE CAJA Y CUENTAS BANCARIAS (8.3) ────────────────── */}
+      {/* ── VISOR 3: FLUJO DE CAJA Y CUENTAS INSTITUCIONALES (8.3) ────────────────── */}
       {activeTab === 'flujo' && (
         <div className="space-y-6 animate-in fade-in duration-200">
           {/* Cuentas de Liquidez */}
@@ -1271,7 +1271,7 @@ export default function ReportesPage() {
             <div className="bg-[#ede9e1] dark:bg-slate-900 p-5 rounded-2xl border border-[#cec8bc] dark:border-slate-800 shadow-xs">
               <div className="flex items-center justify-between">
                 <span className="text-xs font-bold text-[#7d776f] dark:text-slate-400 uppercase">
-                  {cuentasBancarias.length > 0 ? cuentasBancarias[0].banco : 'Cuentas Bancarias'}
+                  {cuentasBancarias.length > 0 ? (cuentasBancarias[0].banco || 'Cuentas Institucionales') : 'Cuentas Institucionales'}
                 </span>
                 <div className="p-2 rounded-xl bg-blue-100 dark:bg-blue-950/50 text-blue-700 dark:text-blue-400">
                   <Landmark className="w-4 h-4" />
@@ -1284,7 +1284,7 @@ export default function ReportesPage() {
                 <div className="text-[11px] text-[#7d776f] dark:text-slate-400 mt-1 font-semibold truncate">
                   {cuentasBancarias.length > 0
                     ? `Cta: ${cuentasBancarias[0].numeroCuenta}${cuentasBancarias.length > 1 ? ` (+${cuentasBancarias.length - 1} más)` : ''}`
-                    : 'Sin cuentas bancarias registradas'}
+                    : 'Sin cuentas registradas'}
                 </div>
               </div>
             </div>
@@ -1458,7 +1458,7 @@ export default function ReportesPage() {
       {activeTab === 'historial_dpto' && (
         <div className="space-y-6 animate-in fade-in duration-200">
           {/* Selector de Departamento */}
-          <div className="bg-[#ede9e1] dark:bg-slate-900 p-5 rounded-3xl border border-[#cec8bc] dark:border-slate-800 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div className="no-print bg-[#ede9e1] dark:bg-slate-900 p-5 rounded-3xl border border-[#cec8bc] dark:border-slate-800 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div className="space-y-1">
               <h2 className="text-base font-extrabold text-[#262422] dark:text-white flex items-center gap-2">
                 <Building className="w-4 h-4 text-purple-700 dark:text-purple-400" />
@@ -1491,172 +1491,194 @@ export default function ReportesPage() {
             </div>
           </div>
 
-          {/* Ficha Resumen del Departamento Seleccionado */}
-          {estadoCuentaDpto ? (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-              <div className="bg-[#ede9e1] dark:bg-slate-900 p-5 rounded-2xl border border-[#cec8bc] dark:border-slate-800 shadow-xs">
-                <span className="text-[11px] font-bold text-[#7d776f] dark:text-slate-400 uppercase">
-                  Unidad Habitacional
-                </span>
-                <div className="text-xl font-black text-[#262422] dark:text-white mt-1">
-                  Dpto {estadoCuentaDpto.departamento.numero}
-                </div>
-                <div className="text-xs text-[#7d776f] dark:text-slate-400 mt-0.5">
-                  Piso {estadoCuentaDpto.departamento.piso || 1} · {estadoCuentaDpto.departamento.tipo?.nombre || 'Tipo A'}
-                </div>
-              </div>
+          {/* Contenedor Imprimible del Extracto de Unidad */}
+          <div
+            id={!isExportModalOpen && activeTab === 'historial_dpto' ? "area-impresion" : undefined}
+            className="space-y-6"
+          >
+            <style dangerouslySetInnerHTML={{ __html: `
+              @media print {
+                body * { visibility: hidden !important; }
+                #area-impresion, #area-impresion * { visibility: visible !important; color: #000 !important; }
+                #area-impresion { position: absolute !important; left: 0 !important; top: 0 !important; width: 100% !important; background: #fff !important; color: #000 !important; }
+                .no-print { display: none !important; }
+              }
+            `}} />
 
-              <div className="bg-[#ede9e1] dark:bg-slate-900 p-5 rounded-2xl border border-[#cec8bc] dark:border-slate-800 shadow-xs">
-                <span className="text-[11px] font-bold text-[#7d776f] dark:text-slate-400 uppercase">
-                  Propietario Registrado
-                </span>
-                <div className="text-sm font-black text-[#262422] dark:text-white mt-1 truncate">
-                  {estadoCuentaDpto.departamento.propietario
-                    ? `${estadoCuentaDpto.departamento.propietario.nombres} ${estadoCuentaDpto.departamento.propietario.apellidos}`
-                    : 'Sin Propietario'}
-                </div>
-                <div className="text-xs text-[#7d776f] dark:text-slate-400 mt-0.5 flex items-center gap-1 font-mono">
-                  <Phone className="w-3 h-3" />
-                  <span>{estadoCuentaDpto.departamento.propietario?.telefono || 'Sin teléfono'}</span>
-                </div>
-              </div>
-
-              <div className="bg-[#ede9e1] dark:bg-slate-900 p-5 rounded-2xl border border-[#cec8bc] dark:border-slate-800 shadow-xs">
-                <span className="text-[11px] font-bold text-[#7d776f] dark:text-slate-400 uppercase">
-                  Total Pagado Histórico
-                </span>
-                <div className="text-xl font-black text-emerald-700 dark:text-emerald-400 mt-1 font-mono">
-                  Bs. {estadoCuentaDpto.resumen.totalPagado.toLocaleString('es-BO', { minimumFractionDigits: 2 })}
-                </div>
-                <div className="text-xs text-[#7d776f] dark:text-slate-400 mt-0.5">
-                  Obligaciones: Bs. {estadoCuentaDpto.resumen.totalObligaciones.toLocaleString('es-BO', { minimumFractionDigits: 2 })}
-                </div>
-              </div>
-
-              <div className="bg-[#ede9e1] dark:bg-slate-900 p-5 rounded-2xl border border-[#cec8bc] dark:border-slate-800 shadow-xs">
-                <span className="text-[11px] font-bold text-[#7d776f] dark:text-slate-400 uppercase">
-                  Saldo Actual de la Unidad
-                </span>
-                <div
-                  className={`text-xl font-black mt-1 font-mono ${
-                    estadoCuentaDpto.resumen.saldoPendienteTotal > 0
-                      ? 'text-rose-700 dark:text-rose-400'
-                      : 'text-emerald-700 dark:text-emerald-400'
-                  }`}
-                >
-                  Bs. {estadoCuentaDpto.resumen.saldoPendienteTotal.toLocaleString('es-BO', { minimumFractionDigits: 2 })}
-                </div>
-                <div className="text-xs font-bold mt-0.5">
-                  {estadoCuentaDpto.resumen.saldoPendienteTotal === 0 ? (
-                    <span className="text-emerald-700 dark:text-emerald-400">✅ Al día (Sin deudas)</span>
-                  ) : (
-                    <span className="text-rose-700 dark:text-rose-400">⚠️ Saldo Pendiente por regularizar</span>
-                  )}
-                </div>
-              </div>
-            </div>
-          ) : (
-            <div className="bg-[#ede9e1] dark:bg-slate-900 p-8 rounded-3xl border border-[#cec8bc] dark:border-slate-800 text-center text-[#7d776f] dark:text-slate-400">
-              <Building className="w-10 h-10 mx-auto mb-2 opacity-40 text-purple-600" />
-              <div className="font-extrabold text-sm text-[#262422] dark:text-slate-200">
-                Sin movimientos registrados para esta unidad
-              </div>
-              <div className="text-xs mt-1">
-                Este departamento aún no cuenta con obligaciones emitidas o pagos registrados en el sistema.
-              </div>
-            </div>
-          )}
-
-          {/* Tabla Cronológica de Movimientos del Departamento */}
-          {estadoCuentaDpto && (
-            <div className="bg-[#ede9e1] dark:bg-slate-900 p-5 sm:p-6 rounded-3xl border border-[#cec8bc] dark:border-slate-800 shadow-xs space-y-4">
-              <div className="flex items-center justify-between border-b border-[#cec8bc] dark:border-slate-800 pb-3">
-                <div>
-                  <h3 className="text-sm font-extrabold text-[#262422] dark:text-white">
-                    Línea de Tiempo Financiera: Expensas Emitidas y Pagos Registrados
-                  </h3>
-                  <p className="text-xs text-[#7d776f] dark:text-slate-400">
-                    Trazabilidad de cada obligación y abono con saldo progresivo.
-                  </p>
+            {/* Ficha Resumen del Departamento Seleccionado */}
+            {estadoCuentaDpto ? (
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                <div className="bg-[#ede9e1] dark:bg-slate-900 p-5 rounded-2xl border border-[#cec8bc] dark:border-slate-800 shadow-xs">
+                  <span className="text-[11px] font-bold text-[#7d776f] dark:text-slate-400 uppercase">
+                    Unidad Habitacional
+                  </span>
+                  <div className="text-xl font-black text-[#262422] dark:text-white mt-1">
+                    Dpto {estadoCuentaDpto.departamento.numero}
+                  </div>
+                  <div className="text-xs text-[#7d776f] dark:text-slate-400 mt-0.5">
+                    Piso {estadoCuentaDpto.departamento.piso || 1} · {estadoCuentaDpto.departamento.tipo?.nombre || 'Tipo A'}
+                  </div>
                 </div>
 
-                <button
-                  onClick={() => window.print()}
-                  className="px-3 py-1.5 rounded-xl bg-[#dfd9ce] hover:bg-[#d5cfc2] dark:bg-slate-800 dark:hover:bg-slate-700 text-[#5c5750] dark:text-slate-300 text-xs font-bold inline-flex items-center gap-1.5 transition-all cursor-pointer"
-                >
-                  <Printer className="w-3.5 h-3.5" />
-                  <span>Imprimir Extracto</span>
-                </button>
-              </div>
-
-              {isLoadingDpto ? (
-                <div className="py-12 text-center text-[#7d776f] dark:text-slate-400">
-                  <RefreshCw className="w-6 h-6 animate-spin mx-auto mb-2 text-purple-600" />
-                  <span>Cargando extracto de la unidad...</span>
+                <div className="bg-[#ede9e1] dark:bg-slate-900 p-5 rounded-2xl border border-[#cec8bc] dark:border-slate-800 shadow-xs">
+                  <span className="text-[11px] font-bold text-[#7d776f] dark:text-slate-400 uppercase">
+                    Propietario Registrado
+                  </span>
+                  <div className="text-sm font-black text-[#262422] dark:text-white mt-1 truncate">
+                    {estadoCuentaDpto.departamento.propietario
+                      ? `${estadoCuentaDpto.departamento.propietario.nombres} ${estadoCuentaDpto.departamento.propietario.apellidos}`
+                      : 'Sin Propietario'}
+                  </div>
+                  <div className="text-xs text-[#7d776f] dark:text-slate-400 mt-0.5 flex items-center gap-1 font-mono">
+                    <Phone className="w-3 h-3" />
+                    <span>{estadoCuentaDpto.departamento.propietario?.telefono || 'Sin teléfono'}</span>
+                  </div>
                 </div>
-              ) : (
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left text-xs">
-                    <thead>
-                      <tr className="border-b border-[#cec8bc] dark:border-slate-800 text-[#7d776f] dark:text-slate-400 font-bold uppercase tracking-wider">
-                        <th className="pb-3 px-3">Fecha</th>
-                        <th className="pb-3 px-3">Concepto / Obligación</th>
-                        <th className="pb-3 px-3">Medio de Pago</th>
-                        <th className="pb-3 px-3 text-right">Cargo (Debe)</th>
-                        <th className="pb-3 px-3 text-right">Abono (Haber)</th>
-                        <th className="pb-3 px-3 text-right">Saldo Progresivo</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-[#cec8bc]/50 dark:divide-slate-800/60 font-mono">
-                      {estadoCuentaDpto.movimientos.length === 0 ? (
-                        <tr>
-                          <td colSpan={6} className="py-6 text-center text-[#7d776f] font-sans">
-                            No se registran movimientos en la cuenta de este departamento.
-                          </td>
+
+                <div className="bg-[#ede9e1] dark:bg-slate-900 p-5 rounded-2xl border border-[#cec8bc] dark:border-slate-800 shadow-xs">
+                  <span className="text-[11px] font-bold text-[#7d776f] dark:text-slate-400 uppercase">
+                    Total Pagado Histórico
+                  </span>
+                  <div className="text-xl font-black text-emerald-700 dark:text-emerald-400 mt-1 font-mono">
+                    Bs. {estadoCuentaDpto.resumen.totalPagado.toLocaleString('es-BO', { minimumFractionDigits: 2 })}
+                  </div>
+                  <div className="text-xs text-[#7d776f] dark:text-slate-400 mt-0.5">
+                    Obligaciones: Bs. {estadoCuentaDpto.resumen.totalObligaciones.toLocaleString('es-BO', { minimumFractionDigits: 2 })}
+                  </div>
+                </div>
+
+                <div className="bg-[#ede9e1] dark:bg-slate-900 p-5 rounded-2xl border border-[#cec8bc] dark:border-slate-800 shadow-xs">
+                  <span className="text-[11px] font-bold text-[#7d776f] dark:text-slate-400 uppercase">
+                    Saldo Actual de la Unidad
+                  </span>
+                  <div
+                    className={`text-xl font-black mt-1 font-mono ${
+                      estadoCuentaDpto.resumen.saldoPendienteTotal > 0
+                        ? 'text-rose-700 dark:text-rose-400'
+                        : 'text-emerald-700 dark:text-emerald-400'
+                    }`}
+                  >
+                    Bs. {estadoCuentaDpto.resumen.saldoPendienteTotal.toLocaleString('es-BO', { minimumFractionDigits: 2 })}
+                  </div>
+                  <div className="text-xs font-bold mt-0.5">
+                    {estadoCuentaDpto.resumen.saldoPendienteTotal === 0 ? (
+                      <span className="text-emerald-700 dark:text-emerald-400">✅ Al día (Sin deudas)</span>
+                    ) : (
+                      <span className="text-rose-700 dark:text-rose-400">⚠️ Saldo Pendiente por regularizar</span>
+                    )}
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="bg-[#ede9e1] dark:bg-slate-900 p-8 rounded-3xl border border-[#cec8bc] dark:border-slate-800 text-center text-[#7d776f] dark:text-slate-400">
+                <Building className="w-10 h-10 mx-auto mb-2 opacity-40 text-purple-600" />
+                <div className="font-extrabold text-sm text-[#262422] dark:text-slate-200">
+                  Sin movimientos registrados para esta unidad
+                </div>
+                <div className="text-xs mt-1">
+                  Este departamento aún no cuenta con obligaciones emitidas o pagos registrados en el sistema.
+                </div>
+              </div>
+            )}
+
+            {/* Tabla Cronológica de Movimientos del Departamento */}
+            {estadoCuentaDpto && (
+              <div className="bg-[#ede9e1] dark:bg-slate-900 p-5 sm:p-6 rounded-3xl border border-[#cec8bc] dark:border-slate-800 shadow-xs space-y-4">
+                <div className="flex items-center justify-between border-b border-[#cec8bc] dark:border-slate-800 pb-3">
+                  <div>
+                    <h3 className="text-sm font-extrabold text-[#262422] dark:text-white">
+                      Línea de Tiempo Financiera: Expensas Emitidas y Pagos Registrados
+                    </h3>
+                    <p className="text-xs text-[#7d776f] dark:text-slate-400">
+                      Trazabilidad de cada obligación y abono con saldo progresivo.
+                    </p>
+                  </div>
+
+                  <button
+                    onClick={() => window.print()}
+                    className="no-print px-3 py-1.5 rounded-xl bg-[#dfd9ce] hover:bg-[#d5cfc2] dark:bg-slate-800 dark:hover:bg-slate-700 text-[#5c5750] dark:text-slate-300 text-xs font-bold inline-flex items-center gap-1.5 transition-all cursor-pointer"
+                  >
+                    <Printer className="w-3.5 h-3.5" />
+                    <span>Imprimir Extracto</span>
+                  </button>
+                </div>
+
+                {isLoadingDpto ? (
+                  <div className="py-12 text-center text-[#7d776f] dark:text-slate-400">
+                    <RefreshCw className="w-6 h-6 animate-spin mx-auto mb-2 text-purple-600" />
+                    <span>Cargando extracto de la unidad...</span>
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left text-xs">
+                      <thead>
+                        <tr className="border-b border-[#cec8bc] dark:border-slate-800 text-[#7d776f] dark:text-slate-400 font-bold uppercase tracking-wider">
+                          <th className="pb-3 px-3">Fecha</th>
+                          <th className="pb-3 px-3">Concepto / Obligación</th>
+                          <th className="pb-3 px-3">Medio de Pago</th>
+                          <th className="pb-3 px-3 text-right">Cargo (Debe)</th>
+                          <th className="pb-3 px-3 text-right">Abono (Haber)</th>
+                          <th className="pb-3 px-3 text-right">Saldo Progresivo</th>
                         </tr>
-                      ) : (
-                        estadoCuentaDpto.movimientos.map((m) => (
-                          <tr key={m.id} className="hover:bg-[#e4ded4]/60 dark:hover:bg-slate-800/40 transition-colors">
-                            <td className="py-3 px-3 text-[#5c5750] dark:text-slate-300">
-                              {fechaSolo(m.fecha)}
-                            </td>
-                            <td className="py-3 px-3 font-sans">
-                              <div className="font-extrabold text-[#262422] dark:text-slate-200">
-                                {m.concepto}
-                              </div>
-                              {m.periodo && (
-                                <span className="text-[10px] text-[#7d776f] dark:text-slate-400">
-                                  Período fiscal: {m.periodo}
-                                </span>
-                              )}
-                            </td>
-                            <td className="py-3 px-3 font-sans">
-                              {m.metodoPago ? (
-                                <span className="px-2 py-0.5 rounded-md bg-emerald-100 text-emerald-800 dark:bg-emerald-950/70 dark:text-emerald-300 text-[10px] font-black">
-                                  {m.metodoPago}
-                                </span>
-                              ) : (
-                                <span className="text-[#7d776f] dark:text-slate-400 text-[11px]">—</span>
-                              )}
-                            </td>
-                            <td className="py-3 px-3 text-right text-rose-700 dark:text-rose-400 font-bold">
-                              {m.debe > 0 ? `Bs. ${Number(m.debe).toFixed(2)}` : '—'}
-                            </td>
-                            <td className="py-3 px-3 text-right text-emerald-700 dark:text-emerald-400 font-bold">
-                              {m.haber > 0 ? `Bs. ${Number(m.haber).toFixed(2)}` : '—'}
-                            </td>
-                            <td className="py-3 px-3 text-right font-black text-[#262422] dark:text-white">
-                              Bs. {Number(m.saldoProgresivo).toFixed(2)}
+                      </thead>
+                      <tbody className="divide-y divide-[#cec8bc]/50 dark:divide-slate-800/60 font-mono">
+                        {estadoCuentaDpto.movimientos.length === 0 ? (
+                          <tr>
+                            <td colSpan={6} className="py-6 text-center text-[#7d776f] font-sans">
+                              No se registran movimientos en la cuenta de este departamento.
                             </td>
                           </tr>
-                        ))
-                      )}
-                    </tbody>
-                  </table>
+                        ) : (
+                          estadoCuentaDpto.movimientos.map((m) => (
+                            <tr key={m.id} className="hover:bg-[#e4ded4]/60 dark:hover:bg-slate-800/40 transition-colors">
+                              <td className="py-3 px-3 text-[#5c5750] dark:text-slate-300">
+                                {fechaSolo(m.fecha)}
+                              </td>
+                              <td className="py-3 px-3 font-sans">
+                                <div className="font-extrabold text-[#262422] dark:text-slate-200">
+                                  {m.concepto}
+                                </div>
+                                {m.periodo && (
+                                  <span className="text-[10px] text-[#7d776f] dark:text-slate-400">
+                                    Período fiscal: {m.periodo}
+                                  </span>
+                                )}
+                              </td>
+                              <td className="py-3 px-3 font-sans">
+                                {m.metodoPago ? (
+                                  <span className="px-2 py-0.5 rounded-md bg-emerald-100 text-emerald-800 dark:bg-emerald-950/70 dark:text-emerald-300 text-[10px] font-black">
+                                    {m.metodoPago}
+                                  </span>
+                                ) : (
+                                  <span className="text-[#7d776f] dark:text-slate-400 text-[11px]">—</span>
+                                )}
+                              </td>
+                              <td className="py-3 px-3 text-right text-rose-700 dark:text-rose-400 font-bold">
+                                {m.debe > 0 ? `Bs. ${Number(m.debe).toFixed(2)}` : '—'}
+                              </td>
+                              <td className="py-3 px-3 text-right text-emerald-700 dark:text-emerald-400 font-bold">
+                                {m.haber > 0 ? `Bs. ${Number(m.haber).toFixed(2)}` : '—'}
+                              </td>
+                              <td className="py-3 px-3 text-right font-black text-[#262422] dark:text-white">
+                                Bs. {Number(m.saldoProgresivo).toFixed(2)}
+                              </td>
+                            </tr>
+                          ))
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+
+                {/* Línea de firma vacía */}
+                <div className="pt-8 flex justify-end">
+                  <div className="w-48 border-t border-slate-400 pt-1 text-center text-xs text-[#5c5750] dark:text-slate-400 font-bold">
+                    Firma
+                  </div>
                 </div>
-              )}
-            </div>
-          )}
+              </div>
+            )}
+          </div>
         </div>
       )}
 
@@ -1665,7 +1687,7 @@ export default function ReportesPage() {
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-xs overflow-y-auto">
           <div className="bg-[#ede9e1] dark:bg-slate-900 border border-[#cec8bc] dark:border-slate-800 w-full max-w-3xl rounded-3xl shadow-2xl p-6 sm:p-8 space-y-6 my-8 animate-in fade-in zoom-in-95 duration-200">
             {/* Cabecera del Modal */}
-            <div className="flex items-center justify-between border-b border-[#cec8bc] dark:border-slate-800 pb-4">
+            <div className="no-print flex items-center justify-between border-b border-[#cec8bc] dark:border-slate-800 pb-4">
               <div className="flex items-center gap-3">
                 <div className="p-2.5 rounded-2xl bg-purple-700 text-white">
                   <Printer className="w-6 h-6" />
@@ -1688,16 +1710,25 @@ export default function ReportesPage() {
             </div>
 
             {/* Documento Imprimible Formal */}
-            <div className="p-6 rounded-2xl bg-white dark:bg-slate-950 border border-[#cec8bc] dark:border-slate-800 space-y-5 text-[#262422] dark:text-slate-100 font-sans shadow-inner">
+            <div
+              id="area-impresion"
+              className="p-6 rounded-2xl bg-white dark:bg-slate-950 border border-[#cec8bc] dark:border-slate-800 space-y-5 text-[#262422] dark:text-slate-100 font-sans shadow-inner"
+            >
+              <style dangerouslySetInnerHTML={{ __html: `
+                @media print {
+                  body * { visibility: hidden !important; }
+                  #area-impresion, #area-impresion * { visibility: visible !important; color: #000 !important; }
+                  #area-impresion { position: absolute !important; left: 0 !important; top: 0 !important; width: 100% !important; background: #fff !important; color: #000 !important; }
+                  .no-print { display: none !important; }
+                }
+              `}} />
+
               {/* Membrete Oficial */}
               <div className="border-b-2 border-purple-700 pb-3 flex justify-between items-start">
                 <div>
                   <h2 className="text-lg font-black tracking-tight text-purple-900 dark:text-purple-300">
                     CONDOMINIO RESIDENCIAL EDIFICIO XYZ
                   </h2>
-                  <div className="text-xs text-[#5c5750] dark:text-slate-400">
-                    NIT: 4892104018 · Personería Jurídica Nº 194/2021
-                  </div>
                   <div className="text-xs text-[#5c5750] dark:text-slate-400">
                     Av. América y Pando, Cochabamba, Bolivia
                   </div>
@@ -1757,15 +1788,15 @@ export default function ReportesPage() {
               {/* Resumen de Cartera Morosa */}
               <div>
                 <h4 className="text-xs font-black uppercase tracking-wider text-[#5c5750] dark:text-slate-300 mb-2">
-                  2. Cartera Vencida y Morosidad (Total: Bs. {totalDeudaMorosos.toLocaleString('es-BO', { minimumFractionDigits: 2 })}):
+                  2. Cartera Vencida y Morosidad (Total: Bs. {morososFiltrados.reduce((acc, m) => acc + (Number(m.totalDeuda) || 0), 0).toLocaleString('es-BO', { minimumFractionDigits: 2 })}):
                 </h4>
                 <div className="space-y-1.5 text-xs">
-                  {morososList.length === 0 ? (
+                  {morososFiltrados.length === 0 ? (
                     <div className="text-xs text-emerald-700 font-semibold py-1">
                       No existen departamentos en mora en este período.
                     </div>
                   ) : (
-                    morososList.slice(0, 5).map((m) => (
+                    morososFiltrados.slice(0, 5).map((m) => (
                       <div key={m.idDepartamento} className="flex justify-between py-1 border-b border-slate-100 dark:border-slate-800">
                         <span>Dpto {m.numero} ({m.propietario?.nombres || ''} {m.propietario?.apellidos || ''})</span>
                         <span className="font-mono font-bold text-rose-700">
@@ -1780,18 +1811,16 @@ export default function ReportesPage() {
               {/* Firmas de Conformidad */}
               <div className="pt-8 grid grid-cols-2 gap-8 text-center text-xs">
                 <div className="border-t border-slate-400 pt-2">
-                  <div className="font-bold">Lic. Marcelo Arze Quiroga</div>
-                  <div className="text-[11px] text-[#7d776f]">Administrador General · Edificio XYZ</div>
+                  <div className="text-xs font-bold text-[#5c5750] dark:text-slate-400">Firma</div>
                 </div>
                 <div className="border-t border-slate-400 pt-2">
-                  <div className="font-bold">Dr. Roberto Gutiérrez Salazar</div>
-                  <div className="text-[11px] text-[#7d776f]">Presidente del Directorio de Copropietarios</div>
+                  <div className="text-xs font-bold text-[#5c5750] dark:text-slate-400">Firma</div>
                 </div>
               </div>
             </div>
 
             {/* Acciones del Modal */}
-            <div className="flex flex-wrap items-center justify-between gap-3 pt-2 border-t border-[#cec8bc] dark:border-slate-800">
+            <div className="no-print flex flex-wrap items-center justify-between gap-3 pt-2 border-t border-[#cec8bc] dark:border-slate-800">
               <button
                 type="button"
                 onClick={() => {
@@ -1808,7 +1837,7 @@ export default function ReportesPage() {
                   link.click()
                   document.body.removeChild(link)
                 }}
-                className="px-4 py-2 rounded-xl bg-[#dfd9ce] hover:bg-[#d5cfc2] dark:bg-slate-800 dark:hover:bg-slate-700 text-[#262422] dark:text-white text-xs font-bold inline-flex items-center gap-2 transition-all cursor-pointer"
+                className="no-print px-4 py-2 rounded-xl bg-[#dfd9ce] hover:bg-[#d5cfc2] dark:bg-slate-800 dark:hover:bg-slate-700 text-[#262422] dark:text-white text-xs font-bold inline-flex items-center gap-2 transition-all cursor-pointer"
               >
                 <Download className="w-4 h-4" />
                 <span>Exportar CSV (Excel)</span>
@@ -1818,14 +1847,14 @@ export default function ReportesPage() {
                 <button
                   type="button"
                   onClick={() => setIsExportModalOpen(false)}
-                  className="px-4 py-2 rounded-xl text-xs font-bold text-[#5c5750] dark:text-slate-400 hover:bg-[#ded8cc] dark:hover:bg-slate-800 transition-colors cursor-pointer"
+                  className="no-print px-4 py-2 rounded-xl text-xs font-bold text-[#5c5750] dark:text-slate-400 hover:bg-[#ded8cc] dark:hover:bg-slate-800 transition-colors cursor-pointer"
                 >
                   Cerrar
                 </button>
                 <button
                   type="button"
                   onClick={() => window.print()}
-                  className="px-5 py-2.5 rounded-xl bg-purple-700 hover:bg-purple-800 text-white text-xs font-bold inline-flex items-center gap-2 transition-all shadow-md shadow-purple-900/20 cursor-pointer"
+                  className="no-print px-5 py-2.5 rounded-xl bg-purple-700 hover:bg-purple-800 text-white text-xs font-bold inline-flex items-center gap-2 transition-all shadow-md shadow-purple-900/20 cursor-pointer"
                 >
                   <Printer className="w-4 h-4" />
                   <span>Imprimir / Guardar en PDF</span>
