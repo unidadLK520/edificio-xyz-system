@@ -85,6 +85,21 @@ export interface ExpensaItem {
   fechaPago?: string | Date
 }
 
+function formatPeriodoEspanol(periodoStr?: string | null): string {
+  if (!periodoStr) return '—'
+  const clean = periodoStr.slice(0, 7)
+  const [year, month] = clean.split('-')
+  const meses = [
+    'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
+    'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'
+  ]
+  const mIdx = Number(month) - 1
+  if (mIdx >= 0 && mIdx < 12 && year) {
+    return `${meses[mIdx]} ${year}`
+  }
+  return periodoStr
+}
+
 export default function ExpensasPage() {
   const { fechaSistema, setFechaSistema, politicaMora, setPoliticaMora, calcularMoraExpensa } =
     useFechaSistema()
@@ -838,6 +853,32 @@ export default function ExpensasPage() {
       a.numero.localeCompare(b.numero, undefined, { numeric: true })
     )
   }, [departamentosList, expensas])
+
+  const resumenDepartamentos = useMemo(() => {
+    const totalUnidades = departamentosList.length
+    const superficieTotal = departamentosList.reduce(
+      (acc, d) => acc + (d.areaM2 ? Number(d.areaM2) : 0),
+      0
+    )
+    return { totalUnidades, superficieTotal }
+  }, [departamentosList])
+
+  const periodoExtracto = useMemo(() => {
+    if (selectedExtracto?.periodo) {
+      return selectedExtracto.periodo.slice(0, 7)
+    }
+    if (filtroPeriodo && filtroPeriodo !== 'Todos') {
+      return filtroPeriodo
+    }
+    return periodosDisponibles[0] || ''
+  }, [selectedExtracto, filtroPeriodo, periodosDisponibles])
+
+  const gastosTotalesEdificioPeriodo = useMemo(() => {
+    if (!periodoExtracto) return 0
+    return expensas
+      .filter((e) => e.periodo && e.periodo.startsWith(periodoExtracto))
+      .reduce((acc, curr) => acc + (Number(curr.monto) || 0), 0)
+  }, [expensas, periodoExtracto])
 
   // Filtrado y ordenamiento jerárquico de expensas (Requerimiento C 2.3: Listado por tipo de Dpto en cada mes)
   const expensasFiltradas = useMemo(() => {
@@ -1641,7 +1682,7 @@ export default function ExpensasPage() {
         </>
       ) : activeTab === 'cuotas' ? (
         /* VISTA TARIFARIO: ¿CUÁNTO SE COBRA A CADA UNO? */
-        <div id="area-impresion" className="space-y-6">
+        <div id={!selectedReceipt && !selectedExtracto && !isExtractoGeneralOpen && !isEstadoCuentaModalOpen ? "area-impresion" : undefined} className="space-y-6">
           <style dangerouslySetInnerHTML={{ __html: `
             @media print {
               body * { visibility: hidden !important; }
@@ -2791,128 +2832,248 @@ export default function ExpensasPage() {
                   setSelectedExtracto(null)
                   setIsExtractoGeneralOpen(false)
                 }}
-                className="text-[#7d776f] hover:text-[#262422] dark:hover:text-white p-1 cursor-pointer"
+                className="no-print text-[#7d776f] hover:text-[#262422] dark:hover:text-white p-1 cursor-pointer"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            {/* Ficha Resumen del Extracto */}
-            <div className="bg-white/80 dark:bg-slate-950/80 p-4 rounded-xl border border-[#cec8bc] dark:border-slate-800 text-xs space-y-2.5">
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-center sm:text-left">
+            {/* Documento Imprimible del Extracto: solo este contenedor lleva id="area-impresion" */}
+            <div
+              id="area-impresion"
+              className="p-6 rounded-2xl bg-white text-black border border-slate-300 space-y-4 shadow-sm"
+            >
+              <style dangerouslySetInnerHTML={{ __html: `
+                @media print {
+                  body * { visibility: hidden !important; }
+                  #area-impresion, #area-impresion * { visibility: visible !important; color: #000 !important; }
+                  #area-impresion { position: absolute !important; left: 0 !important; top: 0 !important; width: 100% !important; background: #fff !important; color: #000 !important; }
+                  .no-print { display: none !important; }
+                }
+              `}} />
+
+              {/* Membrete Oficial del Extracto */}
+              <div className="border-b-2 border-slate-800 pb-3 flex justify-between items-start text-black">
                 <div>
-                  <span className="text-[#7d776f] text-[10px] uppercase font-bold block">
-                    Período
-                  </span>
-                  <span className="font-bold text-[#262422] dark:text-white">Octubre 2026</span>
-                </div>
-                <div>
-                  <span className="text-[#7d776f] text-[10px] uppercase font-bold block">
-                    Gastos Totales Edificio
-                  </span>
-                  <span className="font-bold font-mono text-emerald-700 dark:text-emerald-400">
-                    Bs 15.500,00
-                  </span>
-                </div>
-                <div>
-                  <span className="text-[#7d776f] text-[10px] uppercase font-bold block">
-                    Superficie Total
-                  </span>
-                  <span className="font-bold font-mono">1.600 m² (20 Unidades)</span>
-                </div>
-                <div>
-                  <span className="text-[#7d776f] text-[10px] uppercase font-bold block">
-                    Unidad
-                  </span>
-                  <span className="font-bold text-[#262422] dark:text-white">
+                  <h2 className="text-base font-black tracking-tight text-black">
+                    CONDOMINIO RESIDENCIAL EDIFICIO XYZ
+                  </h2>
+                  <div className="text-xs text-slate-700">
+                    Av. América y Pando, Cochabamba, Bolivia
+                  </div>
+                  <div className="text-xs font-bold text-black mt-1">
                     {selectedExtracto
-                      ? `Dpto ${selectedExtracto.departamento?.numero} (${selectedExtracto.departamento?.tipologia || '80 m²'})`
-                      : 'Edificio Completo (20 Dptos)'}
-                  </span>
+                      ? `Extracto de Expensa — Departamento ${selectedExtracto.departamento?.numero || selectedExtracto.idDepartamento}`
+                      : 'Extracto General de Gastos Comunes'}
+                  </div>
+                </div>
+                <div className="text-right text-xs">
+                  <div className="font-mono font-bold text-black uppercase">
+                    Liquidación de Expensas
+                  </div>
+                  {periodoExtracto && (
+                    <div className="font-mono text-slate-700">
+                      Período: {formatPeriodoEspanol(periodoExtracto)}
+                    </div>
+                  )}
+                  <div className="text-[11px] text-slate-600">
+                    Emisión: {fechaSolo(new Date())}
+                  </div>
                 </div>
               </div>
 
-              {selectedExtracto && (
-                <div className="border-t border-slate-200 dark:border-slate-800 pt-2 flex flex-wrap justify-between items-center text-[11px] gap-2">
-                  <span>
-                    <strong>Propietario:</strong> {selectedExtracto.propietarioNombre}
-                  </span>
-                  <span>
-                    <strong>Ocupante:</strong> {selectedExtracto.inquilinoNombre || '—'}
-                  </span>
-                  <span>
-                    <strong>Superficie:</strong>{' '}
-                    <span className="font-mono font-bold text-emerald-700 dark:text-emerald-400">
-                      {selectedExtracto.departamento?.areaM2
-                        ? `${selectedExtracto.departamento.areaM2} m²`
-                        : '—'}
+              {/* Ficha Resumen del Extracto */}
+              <div className="bg-slate-50 p-4 rounded-xl border border-slate-300 text-xs space-y-2.5 text-black">
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-center sm:text-left">
+                  {periodoExtracto && (
+                    <div>
+                      <span className="text-slate-600 text-[10px] uppercase font-bold block">
+                        Período
+                      </span>
+                      <span className="font-bold text-black">
+                        {formatPeriodoEspanol(periodoExtracto)}
+                      </span>
+                    </div>
+                  )}
+                  {gastosTotalesEdificioPeriodo > 0 && (
+                    <div>
+                      <span className="text-slate-600 text-[10px] uppercase font-bold block">
+                        Gastos Totales Edificio
+                      </span>
+                      <span className="font-bold font-mono text-black">
+                        Bs {gastosTotalesEdificioPeriodo.toLocaleString('es-BO', { minimumFractionDigits: 2 })}
+                      </span>
+                    </div>
+                  )}
+                  {resumenDepartamentos.superficieTotal > 0 && (
+                    <div>
+                      <span className="text-slate-600 text-[10px] uppercase font-bold block">
+                        Superficie Total
+                      </span>
+                      <span className="font-bold font-mono text-black">
+                        {resumenDepartamentos.superficieTotal.toLocaleString('es-BO')} m² ({resumenDepartamentos.totalUnidades} Unidades)
+                      </span>
+                    </div>
+                  )}
+                  <div>
+                    <span className="text-slate-600 text-[10px] uppercase font-bold block">
+                      Unidad
                     </span>
-                  </span>
-                  <span>
-                    <strong>Expensa a Cobrar:</strong>{' '}
-                    <span className="font-mono font-bold text-emerald-700 dark:text-emerald-400 text-xs">
-                      Bs {selectedExtracto.monto.toFixed(2)}
+                    <span className="font-bold text-black">
+                      {selectedExtracto
+                        ? `Dpto ${selectedExtracto.departamento?.numero || selectedExtracto.idDepartamento}${selectedExtracto.departamento?.tipologia ? ` (${selectedExtracto.departamento.tipologia})` : ''}`
+                        : `Edificio Completo (${resumenDepartamentos.totalUnidades} Dptos)`}
                     </span>
-                  </span>
+                  </div>
+                </div>
+
+                {selectedExtracto && (
+                  <div className="border-t border-slate-300 pt-2 flex flex-wrap justify-between items-center text-[11px] gap-2 text-black">
+                    <span>
+                      <strong className="text-black">Propietario:</strong> {selectedExtracto.propietarioNombre || '—'}
+                    </span>
+                    <span>
+                      <strong className="text-black">Ocupante:</strong> {selectedExtracto.inquilinoNombre || '—'}
+                    </span>
+                    {selectedExtracto.departamento?.areaM2 ? (
+                      <span>
+                        <strong className="text-black">Superficie:</strong>{' '}
+                        <span className="font-mono font-bold text-black">
+                          {selectedExtracto.departamento.areaM2} m²
+                        </span>
+                      </span>
+                    ) : null}
+                    <span>
+                      <strong className="text-black">Expensa a Cobrar:</strong>{' '}
+                      <span className="font-mono font-bold text-black text-xs">
+                        Bs {selectedExtracto.monto.toFixed(2)}
+                      </span>
+                    </span>
+                  </div>
+                )}
+              </div>
+
+              {/* Detalle Real de la Expensa */}
+              {selectedExtracto ? (
+                <div className="p-4 rounded-xl border border-slate-300 bg-white space-y-3 text-black">
+                  <div className="flex justify-between items-center border-b border-slate-200 pb-2">
+                    <span className="font-extrabold text-xs uppercase text-black">
+                      Detalle de Liquidación de la Expensa
+                    </span>
+                    <div>
+                      {selectedExtracto.saldoPendiente > 0 ? (
+                        <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-slate-100 text-black border border-slate-400">
+                          Pendiente de pago: Bs {Number(selectedExtracto.saldoPendiente).toLocaleString('es-BO', { minimumFractionDigits: 2 })}
+                        </span>
+                      ) : (
+                        <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-slate-100 text-black border border-slate-400">
+                          Pagada
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="divide-y divide-slate-200 text-xs text-black">
+                    {Number(selectedExtracto.montoBase || 0) > 0 && (
+                      <div className="flex justify-between py-2">
+                        <span>Cuota Base de Mantenimiento Común</span>
+                        <span className="font-mono font-bold text-black">
+                          Bs {Number(selectedExtracto.montoBase).toLocaleString('es-BO', { minimumFractionDigits: 2 })}
+                        </span>
+                      </div>
+                    )}
+                    {Number(selectedExtracto.montoAgua || 0) > 0 && (
+                      <div className="flex justify-between py-2">
+                        <span>Consumo de Agua Potable</span>
+                        <span className="font-mono font-bold text-black">
+                          Bs {Number(selectedExtracto.montoAgua).toLocaleString('es-BO', { minimumFractionDigits: 2 })}
+                        </span>
+                      </div>
+                    )}
+                    {Number(selectedExtracto.montoExtra || selectedExtracto.montoExtras || 0) > 0 && (
+                      <div className="flex justify-between py-2">
+                        <span>
+                          Cargos Extras
+                          {selectedExtracto.extraConcepto ? ` (${selectedExtracto.extraConcepto})` : ''}
+                        </span>
+                        <span className="font-mono font-bold text-black">
+                          Bs {Number(selectedExtracto.montoExtra || selectedExtracto.montoExtras).toLocaleString('es-BO', { minimumFractionDigits: 2 })}
+                        </span>
+                      </div>
+                    )}
+                    {selectedExtracto.monto > 0 && (
+                      <div className="flex justify-between py-2 font-bold text-sm text-black border-t-2 border-slate-800">
+                        <span>Total Liquidado</span>
+                        <span className="font-mono font-bold text-black">
+                          Bs {Number(selectedExtracto.monto).toLocaleString('es-BO', { minimumFractionDigits: 2 })}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ) : (
+                <div className="p-4 rounded-xl border border-slate-300 bg-white space-y-3 text-black">
+                  <div className="flex justify-between items-center border-b border-slate-200 pb-2">
+                    <span className="font-extrabold text-xs uppercase text-black">
+                      Resumen General de Emisión del Período
+                    </span>
+                  </div>
+                  <div className="divide-y divide-slate-200 text-xs text-black">
+                    <div className="flex justify-between py-2">
+                      <span>Total Facturado en Expensas</span>
+                      <span className="font-mono font-bold text-black">
+                        Bs {gastosTotalesEdificioPeriodo.toLocaleString('es-BO', { minimumFractionDigits: 2 })}
+                      </span>
+                    </div>
+                  </div>
                 </div>
               )}
-            </div>
 
-            {/* Tabla del Extracto */}
-            <div className="p-6 rounded-xl border border-[#cec8bc] dark:border-slate-800 bg-white dark:bg-slate-950 text-center">
-              <p className="text-xs text-[#7d776f] dark:text-slate-400 font-medium">
-                Composición del gasto común disponible en el próximo período
-              </p>
-            </div>
+              {/* Bloque de Tipologías desde tiposDepartamento */}
+              {tiposDepartamento.length > 0 && (
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-center text-xs bg-slate-50 p-2.5 rounded-xl border border-slate-300 text-black">
+                  {tiposDepartamento.map((tipo) => (
+                    <div key={tipo.idTipo}>
+                      <span className="text-[10px] text-slate-500 uppercase font-bold block">
+                        {tipo.nombre}{tipo.areaM2 ? ` (${tipo.areaM2} m²)` : ''}
+                      </span>
+                      <span className="font-mono font-bold text-black">
+                        Bs. {Number(tipo.montoExpensa).toLocaleString('es-BO', { minimumFractionDigits: 2 })} base
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
 
-            {/* Comparativa por Tipología */}
-            <div className="grid grid-cols-3 gap-2 text-center text-xs bg-[#dfd9ce]/40 dark:bg-slate-950/40 p-2.5 rounded-xl border border-[#cec8bc] dark:border-slate-800">
-              <div>
-                <span className="text-[10px] text-[#7d776f] uppercase font-bold block">
-                  Tipo A (60 m²)
-                </span>
-                <span className="font-mono font-bold text-emerald-800 dark:text-emerald-400">
-                  Bs. 300,00 base
-                </span>
+              {/* Nota de Transparencia */}
+              <div className="text-[10px] text-slate-700 bg-slate-50 p-2.5 rounded-xl border border-slate-300 leading-relaxed">
+                ℹ️ <strong>Transparencia de Administración:</strong> El presente extracto detalla con
+                exactitud los gastos de mantenimiento y conservación de las partes comunes según el
+                Código Civil y reglamento de copropiedad. El alquiler del departamento es un acuerdo
+                privado independiente y no forma parte de este extracto.
               </div>
-              <div>
-                <span className="text-[10px] text-[#7d776f] uppercase font-bold block">
-                  Tipo B (80 m²)
-                </span>
-                <span className="font-mono font-bold text-emerald-800 dark:text-emerald-400">
-                  Bs. 350,00 base
-                </span>
-              </div>
-              <div>
-                <span className="text-[10px] text-[#7d776f] uppercase font-bold block">
-                  Tipo C (100 m²)
-                </span>
-                <span className="font-mono font-bold text-emerald-800 dark:text-emerald-400">
-                  Bs. 400,00 base
-                </span>
+
+              {/* Línea de firma vacía */}
+              <div className="pt-6 flex justify-end">
+                <div className="w-48 border-t border-slate-400 pt-1 text-center text-xs text-slate-700 font-bold">
+                  Firma
+                </div>
               </div>
             </div>
 
-            <div className="text-[10px] text-[#7d776f] bg-blue-50 dark:bg-blue-950/30 p-2.5 rounded-xl border border-blue-200 dark:border-blue-800 leading-relaxed">
-              ℹ️ <strong>Transparencia de Administración:</strong> El presente extracto detalla con
-              exactitud los gastos de mantenimiento y conservación de las partes comunes según el
-              Código Civil y reglamento de copropiedad. El alquiler del departamento es un acuerdo
-              privado independiente y no forma parte de este extracto.
-            </div>
-
-            <div className="flex justify-end gap-2 pt-2 border-t border-[#cec8bc] dark:border-slate-800">
+            <div className="no-print flex justify-end gap-2 pt-2 border-t border-[#cec8bc] dark:border-slate-800">
               <button
                 onClick={() => {
                   setSelectedExtracto(null)
                   setIsExtractoGeneralOpen(false)
                 }}
-                className="px-4 py-2 rounded-xl text-xs font-bold text-[#5c5750] dark:text-slate-400 hover:bg-[#ded8cc] dark:hover:bg-slate-800 transition-colors"
+                className="no-print px-4 py-2 rounded-xl text-xs font-bold text-[#5c5750] dark:text-slate-400 hover:bg-[#ded8cc] dark:hover:bg-slate-800 transition-colors cursor-pointer"
               >
                 Cerrar
               </button>
               <button
                 onClick={() => window.print()}
-                className="flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold bg-emerald-700 hover:bg-emerald-800 text-white transition-all shadow-md cursor-pointer"
+                className="no-print flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold bg-emerald-700 hover:bg-emerald-800 text-white transition-all shadow-md cursor-pointer"
               >
                 <Printer className="w-4 h-4" />
                 Imprimir Extracto
