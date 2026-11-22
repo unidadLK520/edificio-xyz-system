@@ -92,6 +92,7 @@ const pagoSchema = z.object({
   esAnticipado: z.boolean().default(false),
   idCuenta: z.number().int().positive().optional(),
   comprobanteUrl: z.string().optional(),
+  referenciaQr: z.string().trim().min(4).max(100).optional(),
   esSimulacion: z.boolean().optional(),
   fechaPagoSimulada: z.string().optional(),
 });
@@ -1748,8 +1749,7 @@ expensasRouter.post(
         });
         return;
       }
-
-      const { montoPagado, interesPagado, metodoPago, esAnticipado, idCuenta, comprobanteUrl, idExpensa, idDepartamento: idDeptoBody } = result.data;
+      const { montoPagado, interesPagado, metodoPago, esAnticipado, idCuenta, comprobanteUrl, referenciaQr, idExpensa, idDepartamento: idDeptoBody } = result.data;
       const paramId = req.params.id;
       const parsedId = parseInt(paramId);
 
@@ -1931,6 +1931,7 @@ expensasRouter.post(
             interesPagado: interesPagado ?? 0,
             metodoPago: metodoPago || 'Efectivo',
             esAnticipado: esAnticipado ?? false,
+            referenciaQr: referenciaQr || null,
             idCuenta: idCuenta || null,
             comprobanteUrl: comprobanteUrl || null,
             idUsuarioRegistro: req.user?.idUsuario || null,
