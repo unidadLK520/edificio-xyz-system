@@ -46,16 +46,18 @@ function imagenValida(buf: Buffer): boolean {
 cobroRouter.get(
     '/qr',
     authorizeRoles('Administrador', 'Directorio', 'Copropietario'),
-    async (_req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
+    async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
         try {
             const filas = await prisma.configuracionGlobal.findMany({ where: { clave: { in: [KEY_QR, KEY_VIG] } } });
             const imagen = filas.find((f) => f.clave === KEY_QR)?.valor ?? null;
             const vigenteHasta = filas.find((f) => f.clave === KEY_VIG)?.valor || null;
+            const puedeEditar = req.user?.rol?.toUpperCase() === 'ADMINISTRADOR';
             res.json({
                 configurado: imagen !== null,
                 imagen,
                 vigenteHasta,
                 vencido: vigenteHasta !== null && vigenteHasta < hoyLaPaz(),
+                puedeEditar,
             });
         } catch (err) {
             next(err);
