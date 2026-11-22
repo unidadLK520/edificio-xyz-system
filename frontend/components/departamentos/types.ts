@@ -51,6 +51,7 @@ export interface UnidadItem {
   ocupanteActual?: PropietarioInfo | null
   tipoOcupante?: string | null
   inquilinoActual?: InquilinoInfo | null
+  usuarioInquilinoId?: number | null
   idDepartamento?: number | null
   departamento?: { idDepartamento?: number; numero?: string } | null
   idPersona?: number | null
