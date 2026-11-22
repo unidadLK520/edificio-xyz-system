@@ -634,8 +634,19 @@ export default function ExpensasPage() {
     e.preventDefault()
     if (!pagoAAnular) return
 
-    if (!motivoAnulacionInput.trim()) {
-      setAnulacionError('El motivo de anulación es obligatorio.')
+    const motivo = motivoAnulacionInput.trim()
+    if (motivo.length < 5) {
+      setAnulacionError('El motivo de anulación debe tener al menos 5 caracteres.')
+      return
+    }
+
+    const idPago =
+      pagoAAnular.idPago ||
+      pagoAAnular.idReferencia ||
+      Number(String(pagoAAnular.id).replace('PAG-', ''))
+
+    if (!idPago || isNaN(idPago) || idPago <= 0) {
+      setAnulacionError('No se pudo identificar el ID del pago a anular.')
       return
     }
 
@@ -643,15 +654,11 @@ export default function ExpensasPage() {
     setAnulacionError(null)
 
     try {
-      const idPago =
-        pagoAAnular.idReferencia ||
-        pagoAAnular.idPago ||
-        Number(String(pagoAAnular.id).replace('PAG-', ''))
       const res = await apiFetch(`/api/v1/expensas/pagos/${idPago}`, {
         method: 'DELETE',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          motivo: motivoAnulacionInput.trim()
+          motivo
         })
       })
 
@@ -666,12 +673,13 @@ export default function ExpensasPage() {
       showToast(data.message || 'Pago anulado exitosamente')
       setPagoAAnular(null)
       setMotivoAnulacionInput('')
+      setAnulacionError(null)
 
-      // Recargar estado de cuenta y listado general
+      // Recargar estado de cuenta, listado general de expensas y totales
       if (selectedDeptoIdParaEstadoCuenta) {
         await handleVerEstadoCuenta(selectedDeptoIdParaEstadoCuenta)
       }
-      await fetchExpensas()
+      await Promise.all([fetchExpensas(), fetchMorosos()])
     } catch (err: any) {
       setAnulacionError(err?.message || 'Error de conexión al anular el pago')
     } finally {
@@ -3398,6 +3406,18 @@ export default function ExpensasPage() {
                   placeholder="Explique detalladamente el motivo de la anulación (ej. Error en número de comprobante, pago duplicado, etc.)..."
                   className="w-full px-3 py-2 rounded-xl bg-[#dfd9ce] dark:bg-slate-800 border border-[#cec8bc] dark:border-slate-700 text-[#262422] dark:text-white text-xs resize-none"
                 />
+                <div className="flex justify-between items-center text-[11px] mt-1 text-[#7d776f]">
+                  {motivoAnulacionInput.trim().length < 5 ? (
+                    <span className="text-amber-600 dark:text-amber-400 font-medium">
+                      Mínimo 5 caracteres
+                    </span>
+                  ) : (
+                    <span className="text-emerald-600 dark:text-emerald-400 font-medium">
+                      Requisito cumplido
+                    </span>
+                  )}
+                  <span>{motivoAnulacionInput.trim().length} / 5</span>
+                </div>
               </div>
 
               <div className="flex justify-end gap-2 pt-3 border-t border-[#cec8bc] dark:border-slate-800">
@@ -3413,7 +3433,7 @@ export default function ExpensasPage() {
                 </button>
                 <button
                   type="submit"
-                  disabled={isSubmittingAnulacion || !motivoAnulacionInput.trim()}
+                  disabled={isSubmittingAnulacion || motivoAnulacionInput.trim().length < 5}
                   className="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold shadow-md cursor-pointer disabled:opacity-50"
                 >
                   {isSubmittingAnulacion ? 'Anulando...' : 'Confirmar Anulación'}

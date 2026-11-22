@@ -99,9 +99,15 @@ const aplicarAnticipoSchema = z.object({
   monto: z.number().positive().optional(),
 });
 
-const anularPagoSchema = z.object({
-  motivo: z.string().min(1, 'El motivo de anulación es obligatorio'),
-});
+const anularPagoSchema = z
+  .object({
+    motivo: z.string().trim().min(1, 'El motivo de anulación es obligatorio').optional(),
+    motivoAnulacion: z.string().trim().min(1, 'El motivo de anulación es obligatorio').optional(),
+  })
+  .refine((data) => Boolean(data.motivo || data.motivoAnulacion), {
+    message: 'El motivo de anulación es obligatorio',
+    path: ['motivo'],
+  });
 
 const corregirPagoSchema = pagoSchema.extend({
   motivo: z.string().min(1, 'El motivo de corrección es obligatorio'),
@@ -2442,7 +2448,7 @@ expensasRouter.delete(
   async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
     try {
       const idPago = parseInt(req.params.idPago);
-      if (isNaN(idPago)) {
+      if (isNaN(idPago) || idPago <= 0) {
         res.status(400).json({ error: 'Bad Request', message: 'ID de pago inválido' });
         return;
       }
@@ -2451,13 +2457,13 @@ expensasRouter.delete(
       if (!result.success) {
         res.status(400).json({
           error: 'Validation Error',
-          message: 'Datos de anulación inválidos',
+          message: result.error.errors[0]?.message || 'Datos de anulación inválidos',
           details: result.error.flatten().fieldErrors,
         });
         return;
       }
 
-      const { motivo } = result.data;
+      const motivo = (result.data.motivo || result.data.motivoAnulacion)!.trim();
       const idUsuario = req.user?.idUsuario;
 
       const { pagoAnulado, expensaActualizada } = await prisma.$transaction(async (tx) => {
