@@ -4,6 +4,19 @@
 import React, { useState, useEffect, useMemo } from 'react'
 import { X, Building2, Car, Box, LockOpen, UserCheck, Layers, Link2 } from 'lucide-react'
 import { UnidadItem, TipoDepartamentoItem } from './types'
+import { apiFetch } from '@/lib/api'
+
+interface UsuarioOption {
+  idUsuario: number
+  nombreUsuario: string
+  idPersona?: number | null
+  idDepartamento?: number | null
+  persona?: {
+    idPersona: number
+    nombres: string
+    apellidos: string
+  } | null
+}
 
 export interface AssignmentsChangeData {
   parqueoId?: number | null // null = desvincular, number = vincular
@@ -41,6 +54,9 @@ export default function EditarDepartamentoModal({
   const isParqueo = depto?.tipoUnidad === 'Parqueo'
   const isBaulera = depto?.tipoUnidad === 'Baulera'
   const tipo = depto?.tipoUnidad || 'Departamento'
+
+  const [usuarios, setUsuarios] = useState<UsuarioOption[]>([])
+  const [cargandoUsuarios, setCargandoUsuarios] = useState(false)
 
   // Identificar el parqueo actualmente asignado al departamento
   const initialParqueoId = useMemo(() => {
@@ -90,6 +106,25 @@ export default function EditarDepartamentoModal({
       setSelectedPersonaId(depto.idPersona ?? depto.persona?.idPersona ?? null)
     }
   }, [depto, initialParqueoId, initialBauleraId])
+
+  useEffect(() => {
+    if (isOpen && depto && (depto.tipoUnidad === 'Departamento' || !depto.tipoUnidad)) {
+      setCargandoUsuarios(true)
+      apiFetch('/api/v1/usuarios')
+        .then((res) => res.json())
+        .then((data) => {
+          if (Array.isArray(data)) {
+            setUsuarios(data)
+            const usuarioAsociado = data.find((u: UsuarioOption) => u.idDepartamento === depto.id)
+            if (usuarioAsociado && !depto.usuarioInquilinoId) {
+              onChange({ ...depto, usuarioInquilinoId: usuarioAsociado.idUsuario })
+            }
+          }
+        })
+        .catch(() => {})
+        .finally(() => setCargandoUsuarios(false))
+    }
+  }, [isOpen, depto?.id])
 
   if (!isOpen || !depto) return null
 
@@ -237,6 +272,53 @@ export default function EditarDepartamentoModal({
                     className="w-full px-3 py-2 rounded-xl bg-[#ded8cc] dark:bg-slate-800 border border-[#cec8bc] dark:border-slate-700 text-[#262422] dark:text-white font-mono font-bold focus:outline-none focus:ring-2 focus:ring-blue-600"
                   />
                 </div>
+              </div>
+
+              {/* Asignación de Inquilino (JComboBox / Select de Usuario) */}
+              <div>
+                <label className="block font-bold text-[#5c5750] dark:text-slate-300 mb-1">
+                  Asignar Inquilino (Usuario del Sistema)
+                </label>
+                <div className="relative">
+                  <select
+                    value={depto.usuarioInquilinoId || ''}
+                    onChange={(e) => {
+                      const val = e.target.value ? Number(e.target.value) : null
+                      const userFound = usuarios.find((u) => u.idUsuario === val)
+                      onChange({
+                        ...depto,
+                        usuarioInquilinoId: val,
+                        inquilinoActual: userFound
+                          ? {
+                              id: userFound.persona?.idPersona || userFound.idUsuario,
+                              nombre: userFound.persona
+                                ? `${userFound.persona.nombres} ${userFound.persona.apellidos}`.trim()
+                                : userFound.nombreUsuario,
+                              telefono: ''
+                            }
+                          : null,
+                        estado: val ? 'Alquilado' : depto.propietario ? 'Ocupado por Propietario' : 'Desocupado'
+                      })
+                    }}
+                    disabled={cargandoUsuarios}
+                    className="w-full px-3 py-2 rounded-xl bg-[#ded8cc] dark:bg-slate-800 border border-[#cec8bc] dark:border-slate-700 text-xs text-[#262422] dark:text-white font-semibold focus:outline-none focus:ring-2 focus:ring-blue-600 cursor-pointer disabled:opacity-50"
+                  >
+                    <option value="">-- Sin inquilino asignado (Desocupado / Propietario) --</option>
+                    {usuarios.map((u) => {
+                      const nombreCompleto = u.persona
+                        ? `${u.persona.nombres} ${u.persona.apellidos}`.trim()
+                        : u.nombreUsuario
+                      return (
+                        <option key={u.idUsuario} value={u.idUsuario}>
+                          {nombreCompleto} (@{u.nombreUsuario})
+                        </option>
+                      )
+                    })}
+                  </select>
+                </div>
+                <p className="text-[10px] text-[#7d776f] dark:text-slate-400 mt-1">
+                  Selecciona al usuario que residirá en calidad de inquilino en este departamento.
+                </p>
               </div>
 
               {/* SECCIÓN EDITABLE: VINCULACIÓN DE PARQUEO Y BAULERA */}

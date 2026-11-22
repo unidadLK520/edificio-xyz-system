@@ -752,7 +752,20 @@ export default function DepartamentosPage() {
         }
       }
 
-      // 4. Si se editó directamente un Parqueo o Baulera
+      // 4. Si es departamento y se seleccionó / deseleccionó inquilino, sincronizar con el backend
+      if (isDepto && unidadToEdit.usuarioInquilinoId !== undefined) {
+        try {
+          await apiFetch(`/api/v1/departamentos/${unidadToEdit.id}/asignar-inquilino`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ usuarioId: unidadToEdit.usuarioInquilinoId })
+          })
+        } catch (err: any) {
+          console.error('Error al asignar inquilino:', err)
+        }
+      }
+
+      // 5. Si se editó directamente un Parqueo o Baulera
       if (!isDepto && assignments) {
         if (!assignments.departamentoId && !assignments.personaId) {
           // Desvincular si estaba asignado o se marcó Disponible
@@ -1146,7 +1159,7 @@ export default function DepartamentosPage() {
                       </td>
                     </tr>
                   ) : (
-                    unidadesFiltradas.map((unidad) => {
+                    unidadesFiltradas.map((unidad, index) => {
                       const isUnidadDepto = unidad.tipoUnidad === 'Departamento'
                       const isUnidadParqueo = unidad.tipoUnidad === 'Parqueo'
                       const isUnidadBaulera = unidad.tipoUnidad === 'Baulera'
@@ -1157,7 +1170,7 @@ export default function DepartamentosPage() {
                       if (subTipoCatastro === 'Departamentos') {
                         return (
                           <tr
-                            key={`depto-${unidad.id}`}
+                            key={`depto-${unidad.id}-${index}`}
                             className="hover:bg-[#dfd9ce]/40 dark:hover:bg-slate-800/40 transition-colors"
                           >
                             <td className="py-3 px-4">

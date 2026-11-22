@@ -16,7 +16,7 @@ import { auditoriaService } from '../modules/auditoria';
 export const departamentosRouter: IRouter = Router();
 departamentosRouter.use(authMiddleware);
 
-// ── Schemas ──────────────────────────────────────────────────────────────────
+// ── Schemas // ---------------------------------------------------------------------------───────────
 export const departamentoSchema = z.object({
   numero: z.string().min(1).max(10),
   piso: z.number().int().optional(),
@@ -36,7 +36,118 @@ export const actualizarDepartamentoSchema = departamentoSchema.partial();
 export type CrearDepartamentoDTO = z.infer<typeof crearDepartamentoSchema>;
 export type ActualizarDepartamentoDTO = z.infer<typeof actualizarDepartamentoSchema>;
 
-// ── GET /departamentos ───────────────────────────────────────────────────────
+// ── POST /api/v1/departamentos/:id/asignar-inquilino ──────────────────────────────────────────────────────
+departamentosRouter.post(
+  '/:id/asignar-inquilino',
+  authorizeRoles('Administrador', 'Directorio'),
+  async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const idDepartamento = parseInt(req.params.id);
+      const { usuarioId } = req.body as { usuarioId: number | null };
+
+      if (isNaN(idDepartamento)) {
+        res.status(400).json({ error: 'Bad Request', message: 'ID de departamento inválido' });
+        return;
+      }
+
+      const depto = await prisma.departamento.findUnique({ where: { idDepartamento } });
+      if (!depto) {
+        res.status(404).json({ error: 'Not Found', message: 'Departamento no encontrado' });
+        return;
+      }
+
+      // Si usuarioId es null o 0, finaliza la ocupación de inquilino activa
+      if (!usuarioId) {
+        await prisma.ocupanteDepartamento.updateMany({
+          where: {
+            idDepartamento,
+            tipoOcupante: 'Inquilino',
+            fechaFin: null,
+          },
+          data: {
+            fechaFin: new Date(),
+          },
+        });
+
+        res.json({ message: 'Inquilino desvinculado exitosamente' });
+        return;
+      }
+
+      const usuario = await prisma.usuario.findUnique({
+        where: { idUsuario: usuarioId },
+        include: { persona: true },
+      });
+
+      if (!usuario) {
+        res.status(404).json({ error: 'Not Found', message: 'Usuario no encontrado' });
+        return;
+      }
+
+      let personaId = usuario.idPersona;
+      // Si el usuario no tiene Persona vinculada, le creamos una básica
+      if (!personaId) {
+        const nuevaPersona = await prisma.persona.create({
+          data: {
+            nombres: usuario.nombreUsuario,
+            apellidos: '',
+            ciNit: `CI-${usuario.idUsuario}-${Date.now().toString().slice(-4)}`,
+            correo: usuario.correo,
+          },
+        });
+        personaId = nuevaPersona.idPersona;
+        await prisma.usuario.update({
+          where: { idUsuario: usuario.idUsuario },
+          data: { idPersona: personaId },
+        });
+      }
+
+      // Finalizar ocupaciones previas de inquilino para este departamento
+      await prisma.ocupanteDepartamento.updateMany({
+        where: {
+          idDepartamento,
+          tipoOcupante: 'Inquilino',
+          fechaFin: null,
+        },
+        data: {
+          fechaFin: new Date(),
+        },
+      });
+
+      // Crear nueva ocupación como Inquilino
+      const ocupacion = await prisma.ocupanteDepartamento.create({
+        data: {
+          idDepartamento,
+          idPersona: personaId,
+          tipoOcupante: 'Inquilino',
+          fechaInicio: new Date(),
+        },
+        include: {
+          persona: true,
+        },
+      });
+
+      // Actualizar el estado del departamento si estaba desocupado
+      await prisma.departamento.update({
+        where: { idDepartamento },
+        data: { estado: 'Ocupado' },
+      });
+
+      res.status(201).json({
+        message: 'Inquilino asignado exitosamente',
+        ocupacion,
+        inquilino: {
+          id: usuario.idUsuario,
+          idPersona: personaId,
+          nombre: `${usuario.persona?.nombres || usuario.nombreUsuario} ${usuario.persona?.apellidos || ''}`.trim(),
+        },
+      });
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+ // ---------------------------------------------------------------------------
 departamentosRouter.get(
   '/',
   async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
@@ -87,7 +198,8 @@ departamentosRouter.get(
   }
 );
 
-// ── GET /departamentos/:id ───────────────────────────────────────────────────
+// ---------------------------------------------------------------------------
+// GET /:id ------------------------------------------------------------------
 departamentosRouter.get(
   '/:id',
   async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
@@ -418,7 +530,8 @@ departamentosRouter.put(
   }
 );
 
-// ── PUT /departamentos/:id ───────────────────────────────────────────────────
+// ── PUT /departamentos// ---------------------------------------------------------------------------
+// GET /:id ------------------------------------------------------------------
 departamentosRouter.put(
   '/:id',
   authorizeRoles('Administrador', 'Directorio'),
