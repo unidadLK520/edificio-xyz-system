@@ -9,14 +9,10 @@ import {
   X,
   AlertTriangle,
   CheckCircle2,
-  Loader2,
-  Calendar,
-  Image as ImageIcon
+  Loader2
 } from 'lucide-react'
-import { useFechaSistema } from '@/context/FechaSistemaContext'
 import { apiFetch } from '@/lib/api'
 import { imagenADataUri } from '@/lib/imagen'
-import ProyeccionDeuda from '@/components/expensas/ProyeccionDeuda'
 
 interface PersonaItem {
   idPersona: number
@@ -44,6 +40,7 @@ interface QrCobroInfo {
   imagen: string | null
   vigenteHasta: string | null
   vencido: boolean
+  puedeEditar?: boolean
 }
 
 export default function CobroQrSimuladorModal({
@@ -53,8 +50,6 @@ export default function CobroQrSimuladorModal({
   personasList = [],
   onPaymentSuccess
 }: CobroQrSimuladorModalProps) {
-  const { fechaSistema } = useFechaSistema()
-
   // Estado del QR de cobro
   const [qrInfo, setQrInfo] = useState<QrCobroInfo | null>(null)
   const [cargandoQr, setCargandoQr] = useState(false)
@@ -64,9 +59,6 @@ export default function CobroQrSimuladorModal({
   const [guardandoQr, setGuardandoQr] = useState(false)
   const [errorQr, setErrorQr] = useState<string | null>(null)
   const [exitoQr, setExitoQr] = useState<string | null>(null)
-
-  // Estado de simulación de deuda proyectada (plegada por defecto)
-  const [mostrarSimulacion, setMostrarSimulacion] = useState(false)
 
   // Estado de pagadores cargados desde la API
   const [pagadores, setPagadores] = useState<PagadorItem[]>([])
@@ -130,7 +122,6 @@ export default function CobroQrSimuladorModal({
       setNroComprobante('')
       setComprobanteDataUri(null)
       setErrorComprobante(null)
-      setMostrarSimulacion(false)
     }
   }, [isOpen, fetchQr])
 
@@ -374,7 +365,7 @@ export default function CobroQrSimuladorModal({
               <QrCode className="w-4 h-4 text-emerald-700 dark:text-emerald-400" />
               QR de cobro vigente
             </span>
-            {qrInfo?.configurado && !mostrarFormQr && (
+            {qrInfo?.configurado && qrInfo?.puedeEditar && !mostrarFormQr && (
               <button
                 type="button"
                 onClick={() => setMostrarFormQr(true)}
@@ -391,51 +382,48 @@ export default function CobroQrSimuladorModal({
               <span>Cargando QR de cobro...</span>
             </div>
           ) : qrInfo?.configurado ? (
-            <div className="flex flex-col sm:flex-row items-center gap-4">
-              <div className="p-2.5 bg-white rounded-2xl border border-[#cec8bc] shadow-inner shrink-0">
+            <div className="flex flex-col items-center gap-3">
+              <div className="bg-white p-4 rounded-xl mx-auto">
                 {qrInfo.imagen ? (
                   <img
                     src={qrInfo.imagen}
                     alt="QR de cobro"
-                    className="w-36 h-36 object-contain rounded-xl"
+                    className="w-72 h-72 sm:w-80 sm:h-80 object-contain"
                   />
                 ) : (
-                  <QrCode className="w-36 h-36 text-slate-400" />
+                  <QrCode className="w-72 h-72 sm:w-80 sm:h-80 text-slate-400" />
                 )}
               </div>
-              <div className="text-xs space-y-1.5 flex-1 text-center sm:text-left">
-                {qrInfo.vencido ? (
-                  <div className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold bg-rose-100 text-rose-800 dark:bg-rose-950/60 dark:text-rose-300">
-                    <AlertTriangle className="w-3.5 h-3.5" />
-                    <span>QR vencido</span>
-                  </div>
-                ) : (
-                  <div className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300">
-                    <CheckCircle2 className="w-3.5 h-3.5" />
-                    <span>QR activo</span>
-                  </div>
-                )}
-                {qrInfo.vigenteHasta && (
-                  <p className="text-[#5c5750] dark:text-slate-300">
-                    Vigente hasta:{' '}
-                    <span className="font-mono font-bold text-[#262422] dark:text-white">
-                      {qrInfo.vigenteHasta}
-                    </span>
-                  </p>
-                )}
-                <p className="text-[11px] text-[#7d776f] dark:text-slate-400">
-                  Escanea para realizar el cobro por QR de las expensas.
+              {qrInfo.vencido && (
+                <div className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold bg-rose-100 text-rose-800 dark:bg-rose-950/60 dark:text-rose-300">
+                  <AlertTriangle className="w-3.5 h-3.5" />
+                  <span>QR vencido</span>
+                </div>
+              )}
+              {qrInfo.vigenteHasta && (
+                <p className="text-xs text-[#5c5750] dark:text-slate-300 text-center">
+                  Vigente hasta:{' '}
+                  <span className="font-mono font-bold text-[#262422] dark:text-white">
+                    {qrInfo.vigenteHasta}
+                  </span>
                 </p>
-              </div>
+              )}
+              <p className="text-xs text-[#7d776f] dark:text-slate-400 text-center">
+                Escanea para realizar el cobro por QR de las expensas.
+              </p>
+            </div>
+          ) : !qrInfo?.puedeEditar ? (
+            <div className="p-3 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-800 text-xs text-amber-900 dark:text-amber-200 text-center">
+              El administrador aun no cargo el QR de cobro.
             </div>
           ) : (
-            <div className="p-3 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-800 text-xs text-amber-900 dark:text-amber-200">
+            <div className="p-3 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-800 text-xs text-amber-900 dark:text-amber-200 text-center">
               Aun no hay QR de cobro
             </div>
           )}
 
           {/* Formulario de carga o actualización de QR */}
-          {(!qrInfo?.configurado || mostrarFormQr) && (
+          {Boolean(qrInfo?.puedeEditar) && (!qrInfo?.configurado || mostrarFormQr) && (
             <form
               onSubmit={handleGuardarQr}
               className="mt-3 pt-3 border-t border-[#cec8bc] dark:border-slate-700 space-y-3"
@@ -513,38 +501,6 @@ export default function CobroQrSimuladorModal({
             </form>
           )}
         </div>
-
-        {/* 3) Sección: Simulación de deuda proyectada (plegada por defecto) */}
-        {idDepartamento > 0 && (
-          <div className="space-y-2">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-bold text-[#262422] dark:text-white flex items-center gap-1.5">
-                <Calendar className="w-4 h-4 text-emerald-700 dark:text-emerald-400" />
-                Proyección de deuda a una fecha
-              </span>
-              <button
-                type="button"
-                onClick={() => setMostrarSimulacion(!mostrarSimulacion)}
-                className="px-3 py-1.5 rounded-xl border border-[#cec8bc] dark:border-slate-700 bg-white dark:bg-slate-900 text-xs font-semibold text-[#262422] dark:text-white hover:bg-[#dfd9ce]/60 dark:hover:bg-slate-800 transition-colors cursor-pointer"
-              >
-                {mostrarSimulacion ? 'Ocultar simulación' : 'Simular deuda a una fecha'}
-              </button>
-            </div>
-
-            {mostrarSimulacion && (
-              <div className="space-y-2">
-                <ProyeccionDeuda
-                  idDepartamento={idDepartamento}
-                  fechaInicial={fechaSistema}
-                  fechaVencimientoRef={expensa.fechaVencimiento}
-                />
-                <p className="text-[11px] text-[#7d776f] dark:text-slate-400 italic px-1">
-                  La simulación suma varias expensas; el pago de abajo cubre solo la expensa de esta fila.
-                </p>
-              </div>
-            )}
-          </div>
-        )}
 
         {/* 4) y 6) Sección: Registro de pago o estado saldado */}
         {saldoPendiente > 0 ? (
