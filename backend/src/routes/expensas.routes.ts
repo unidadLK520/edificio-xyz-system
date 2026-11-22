@@ -91,7 +91,7 @@ const pagoSchema = z.object({
   metodoPago: z.enum(['Efectivo', 'Transferencia', 'Cheque', 'QR']).optional(),
   esAnticipado: z.boolean().default(false),
   idCuenta: z.number().int().positive().optional(),
-  comprobanteUrl: z.string().optional(),
+  comprobanteUrl: z.string().max(2000000).refine((v) => v.length <= 500 || /^data:image\/(png|jpeg|webp);base64,/.test(v), 'El comprobante debe ser una imagen PNG, JPG o WebP').optional(),
   referenciaQr: z.string().trim().min(4).max(100).optional(),
   esSimulacion: z.boolean().optional(),
   fechaPagoSimulada: z.string().optional(),
@@ -353,6 +353,7 @@ expensasRouter.get(
               where: { anulado: false },
               orderBy: { fechaPago: 'desc' },
               include: { usuarioRegistro: { select: { nombreUsuario: true } } },
+              omit: { comprobanteUrl: true },
             },
             aplicacionesAnticipos: {
               include: { pago: true },
@@ -460,7 +461,7 @@ expensasRouter.get(
               propietario: { select: { idPersona: true, nombres: true, apellidos: true, ciNit: true, telefono: true, correo: true } },
             },
           },
-          pagos: { where: { anulado: false } },
+          pagos: { where: { anulado: false }, omit: { comprobanteUrl: true } },
           aplicacionesAnticipos: { include: { pago: true } },
         },
         orderBy: [{ idDepartamento: 'asc' }, { periodo: 'asc' }],
@@ -644,7 +645,7 @@ expensasRouter.get(
           where: expensaWhere,
           orderBy: { periodo: 'desc' },
           include: {
-            pagos: { where: { anulado: false }, include: { pagador: true } },
+            pagos: { where: { anulado: false }, include: { pagador: true }, omit: { comprobanteUrl: true } },
             aplicacionesAnticipos: { include: { pago: true } },
           },
         }),
@@ -1030,6 +1031,7 @@ expensasRouter.get(
               usuarioRegistro: { select: { nombreUsuario: true } },
               cuentaBancaria: { select: { banco: true, numeroCuenta: true } },
             },
+            omit: { comprobanteUrl: true },
           },
           aplicacionesAnticipos: {
             include: {
@@ -2141,6 +2143,7 @@ async function recalcularSaldoExpensa(
     include: {
       pagos: {
         where: { anulado: false },
+        omit: { comprobanteUrl: true },
       },
       aplicacionesAnticipos: {
         include: { pago: true },

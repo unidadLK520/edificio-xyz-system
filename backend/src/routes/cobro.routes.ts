@@ -160,7 +160,10 @@ cobroRouter.get(
                 prisma.expensa.findMany({
                     where: { idDepartamento },
                     orderBy: { periodo: 'asc' },
-                    include: { pagos: true, aplicacionesAnticipos: { include: { pago: true } } },
+                    include: {
+                        pagos: { where: { anulado: false }, omit: { comprobanteUrl: true } },
+                        aplicacionesAnticipos: { include: { pago: { omit: { comprobanteUrl: true } } } },
+                    },
                 }),
                 prisma.pago.findMany({
                     where: { idDepartamento, esAnticipado: true, anulado: false, idExpensa: null },
@@ -283,6 +286,60 @@ cobroRouter.get(
                 },
                 avisos,
             });
+        } catch (err) {
+            responderError(err, res, next);
+        }
+    }
+);// ── GET /cobro/pagadores/:idDepartamento — propietario y ocupantes vigentes ──
+cobroRouter.get(
+    '/pagadores/:idDepartamento',
+    authorizeRoles('Administrador', 'Directorio'),
+    async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
+        try {
+            const idDepartamento = Number(req.params.idDepartamento);
+            if (!Number.isInteger(idDepartamento) || idDepartamento <= 0) throw new ErrorNegocio(400, 'ID de departamento inválido');
+            const hoy = new Date(`${hoyLaPaz()}T00:00:00Z`);
+            const depto = await prisma.departamento.findUnique({
+                where: { idDepartamento },
+                select: {
+                    propietario: { select: { idPersona: true, nombres: true, apellidos: true } },
+                    ocupantes: {
+                        where: { OR: [{ fechaFin: null }, { fechaFin: { gte: hoy } }] },
+                        select: { tipoOcupante: true, persona: { select: { idPersona: true, nombres: true, apellidos: true } } },
+                    },
+                },
+            });
+            if (!depto) throw new ErrorNegocio(404, 'Departamento no encontrado');
+
+            const vistos = new Set<number>();
+            const pagadores: { idPersona: number; nombre: string; rol: 'Propietario' | 'Ocupante' }[] = [];
+            const agregar = (p: { idPersona: number; nombres: string; apellidos: string | null }, rol: 'Propietario' | 'Ocupante'): void => {
+                if (vistos.has(p.idPersona)) return;
+                vistos.add(p.idPersona);
+                pagadores.push({ idPersona: p.idPersona, nombre: `${p.nombres} ${p.apellidos ?? ''}`.trim(), rol });
+            };
+            if (depto.propietario) agregar(depto.propietario, 'Propietario');
+            for (const o of depto.ocupantes) agregar(o.persona, o.tipoOcupante === 'Propietario' ? 'Propietario' : 'Ocupante');
+            pagadores.sort((a, b) => (a.rol === b.rol ? 0 : a.rol === 'Propietario' ? -1 : 1));
+
+            res.json({ pagadores });
+        } catch (err) {
+            responderError(err, res, next);
+        }
+    }
+);
+
+// ── GET /cobro/comprobante/:idPago — imagen del comprobante de un pago ──
+cobroRouter.get(
+    '/comprobante/:idPago',
+    authorizeRoles('Administrador', 'Directorio'),
+    async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
+        try {
+            const idPago = Number(req.params.idPago);
+            if (!Number.isInteger(idPago) || idPago <= 0) throw new ErrorNegocio(400, 'ID de pago inválido');
+            const pago = await prisma.pago.findUnique({ where: { idPago }, select: { comprobanteUrl: true } });
+            if (!pago || !pago.comprobanteUrl) throw new ErrorNegocio(404, 'El pago no tiene comprobante');
+            res.json({ imagen: pago.comprobanteUrl });
         } catch (err) {
             responderError(err, res, next);
         }
