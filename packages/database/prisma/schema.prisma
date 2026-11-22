@@ -361,6 +361,7 @@ model Pago {
   pagoOriginal         Pago?                @relation("CorreccionPago", fields: [idPagoOriginal], references: [idPago])
   pagosCorreccion      Pago[]               @relation("CorreccionPago")
   aplicacionesAnticipo AplicacionAnticipo[]
+  movimientos          Movimiento[]
 
   @@index([idPersonaPagador], map: "idx_pagos_persona_pagador")
   @@index([idCuenta], map: "idx_pagos_cuenta")
@@ -416,14 +417,17 @@ model Movimiento {
   tercero             String?               @db.VarChar(120)
   nroFactura          String?               @map("nro_factura") @db.VarChar(50)
   metodoPago          String?               @map("metodo_pago") @db.VarChar(30)
+  idPago              Int?                  @map("id_pago")
   
   categoria           CategoriaMovimiento   @relation(fields: [idCategoria], references: [idCategoria])
   usuarioRegistro     Usuario?              @relation(fields: [idUsuarioRegistro], references: [idUsuario])
+  pago                Pago?                 @relation(fields: [idPago], references: [idPago])
   movimientosBancarios MovimientoBancario[]
   pagosEmpleados      PagoEmpleado[]
 
   @@index([fecha], map: "idx_movimientos_fecha")
   @@index([idCategoria], map: "idx_movimientos_categoria")
+  @@index([idPago], map: "idx_movimientos_id_pago")
   @@map("movimientos")
   @@schema("edificio")
 }

@@ -20,6 +20,7 @@ import { cajaRouter } from './caja.routes';
 import { cuentasBancariasRouter } from './cuentas-bancarias.routes';
 import { movimientosBancariosRouter } from './movimientos-bancarios.routes';
 import { conciliacionRouter } from './conciliacion.routes';
+import { cobroRouter } from './cobro.routes';
 
 export const router: IRouter = Router();
 
@@ -44,6 +45,7 @@ router.use('/comunicados', comunicadosRouter);
 router.use('/personal', personalRouter);
 router.use('/auditoria', auditoriaRouter);
 router.use('/agua', aguaRouter);
+router.use('/cobro', cobroRouter);
 
 
 

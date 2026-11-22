@@ -46,6 +46,7 @@ import RegistrarExtraModal from '@/components/RegistrarExtraModal'
 import EditarExpensaModal from '@/components/EditarExpensaModal'
 import EmitirExpensaIndividualModal from '@/components/EmitirExpensaIndividualModal'
 import DetalleMoraModal from '@/components/DetalleMoraModal'
+import ProyeccionDeuda from '@/components/expensas/ProyeccionDeuda'
 import { useFechaSistema } from '@/context/FechaSistemaContext'
 import { apiFetch } from '@/lib/api'
 import { fechaSolo, fechaHoraBolivia } from '@/lib/fecha'
@@ -58,6 +59,7 @@ export interface ExpensaItem {
   montoBase?: number
   montoAgua?: number
   montoExtra?: number
+  montoExtras?: number
   extraConcepto?: string
   saldoPendiente: number
   tasaInteresMora: number
@@ -74,24 +76,14 @@ export interface ExpensaItem {
   propietarioNombre?: string
   inquilinoNombre?: string
   pagadoPor?: string
+  pago?: any
   pagos?: any[]
+  montoPagado?: number
+  interesPagado?: number
+  metodoPago?: string
+  referenciaQr?: string | null
+  fechaPago?: string | Date
 }
-
-export const RUBROS_GASTOS_COMUNES = [
-  { concepto: 'Seguridad y Vigilancia 24/7', totalPresupuesto: 5600.0, porcentaje: 36.13 },
-  { concepto: 'Gastos de Administración Central', totalPresupuesto: 3500.0, porcentaje: 22.58 },
-  { concepto: 'Limpieza e Insumos de Áreas Comunes', totalPresupuesto: 2200.0, porcentaje: 14.19 },
-  {
-    concepto: 'Mantenimiento Preventivo de Edificación',
-    totalPresupuesto: 1500.0,
-    porcentaje: 9.68
-  },
-  { concepto: 'Imprevistos y Fondo Menor de Operación', totalPresupuesto: 900.0, porcentaje: 5.81 },
-  { concepto: 'Electricidad de Áreas Comunes (ELFEC)', totalPresupuesto: 800.0, porcentaje: 5.16 },
-  { concepto: 'Mantenimiento de Ascensor (Otis)', totalPresupuesto: 700.0, porcentaje: 4.52 },
-  { concepto: 'Agua Potable Común y Cisterna (SEMAPA)', totalPresupuesto: 300.0, porcentaje: 1.94 }
-]
-export const TOTAL_GASTOS_COMUNES = 15500.0
 
 export default function ExpensasPage() {
   const { fechaSistema, setFechaSistema, politicaMora, setPoliticaMora, calcularMoraExpensa } =
@@ -104,18 +96,6 @@ export default function ExpensasPage() {
   const [isEditarExpensaModalOpen, setIsEditarExpensaModalOpen] = useState(false)
   const [expensaParaEditar, setExpensaParaEditar] = useState<any>(null)
   const [expensaParaExtra, setExpensaParaExtra] = useState<any | null>(null)
-  const [extrasMap, setExtrasMap] = useState<Record<number, { concepto: string; monto: number }>>(
-    () => {
-      if (typeof window !== 'undefined') {
-        try {
-          const saved = localStorage.getItem('expensas_extras_map')
-          if (saved) return JSON.parse(saved)
-        } catch {}
-      }
-      return {}
-    }
-  )
-
 // Removed static mora input states – now using context policy
 // const [moraTipoPenalidadInput, setMoraTipoPenalidadInput] = useState<'fijo' | 'porcentaje'>('fijo');
 // const [moraMontoFijoInput, setMoraMontoFijoInput] = useState<number | ''>(50);
@@ -123,9 +103,6 @@ export default function ExpensasPage() {
 // const [moraDiasGraciaInput, setMoraDiasGraciaInput] = useState<number | ''>(2);
 // const [moraDiaGeneracionInput, setMoraDiaGeneracionInput] = useState<number | ''>(1);
 
-// Removed static simulator inputs – will use defaults from backend or context where needed
-// const [simuladorMontoBaseInput, setSimuladorMontoBaseInput] = useState<number>(350);
-// const [simuladorFechaPruebaInput, setSimuladorFechaPruebaInput] = useState<string>('2026-11-15');
   const [moraTipoPenalidadInput, setMoraTipoPenalidadInput] = useState<'fijo' | 'porcentaje'>(
     'fijo'
   )
@@ -134,10 +111,6 @@ export default function ExpensasPage() {
   const [moraDiasGraciaInput, setMoraDiasGraciaInput] = useState<number | ''>(2)
   const [moraDiaGeneracionInput, setMoraDiaGeneracionInput] = useState<number | ''>(1)
 
-  // Estados del Simulador Rápido de Mora en Vivo (Docente)
-  const [simuladorMontoBaseInput, setSimuladorMontoBaseInput] = useState<number>(350)
-  const [simuladorFechaPruebaInput, setSimuladorFechaPruebaInput] = useState<string>('2026-11-15')
-
   const [expensas, setExpensas] = useState<ExpensaItem[]>([])
   const [searchTerm, setSearchTerm] = useState('')
   const [filtroEstado, setFiltroEstado] = useState('Todos')
@@ -145,10 +118,7 @@ export default function ExpensasPage() {
   const [activeTab, setActiveTab] = useState<'todas' | 'cuotas' | 'morosos' | 'simulador'>('todas')
   const [listadoMorosos, setListadoMorosos] = useState<any[]>([])
 
-  // Estado del Laboratorio de Simulación de Mora (Individual y Global)
-  const [modoSimulador, setModoSimulador] = useState<'individual' | 'global'>('individual')
-  const [simDptoId, setSimDptoId] = useState<number | ''>('')
-  const [simFechaLibre, setSimFechaLibre] = useState<string>('2027-01-13') // Caso docente: 2 meses y 3 días desde 10/Nov/2026
+  const [simDptoSeleccionado, setSimDptoSeleccionado] = useState<number>(0)
 
   const periodosDisponibles = useMemo(() => {
     const set = new Set<string>()
@@ -218,8 +188,8 @@ export default function ExpensasPage() {
   const [corregirError, setCorregirError] = useState<string | null>(null)
 
   // Formulario Emisión Masiva (Requisitos HU04)
-  const [nuevoPeriodo, setNuevoPeriodo] = useState('2026-11-01')
-  const [nuevaFechaVencimiento, setNuevaFechaVencimiento] = useState('2026-11-10')
+  const [nuevoPeriodo, setNuevoPeriodo] = useState(`${fechaSistema.slice(0, 7)}-01`)
+  const [nuevaFechaVencimiento, setNuevaFechaVencimiento] = useState('')
   const [isSubmittingEmision, setIsSubmittingEmision] = useState(false)
   const [emisionError, setEmisionError] = useState<string | null>(null)
   const [resultadoEmision, setResultadoEmision] = useState<{
@@ -330,29 +300,20 @@ export default function ExpensasPage() {
                 ? Number(item.montoBase)
                 : baseDefault
 
-            const extraGuardado = extrasMap[item.idExpensa]
-            const montoExtra =
-              extraGuardado !== undefined
-                ? extraGuardado.monto
-                : Number(item.montoExtra || 0)
+            const montoExtra = Number(item.montoExtras ?? item.montoExtra ?? 0)
             const extraConcepto =
-              extraGuardado !== undefined
-                ? extraGuardado.concepto
+              item.extras && item.extras.length > 0
+                ? item.extras.map((x: any) => x.concepto).join(', ')
                 : item.extraConcepto || (montoExtra > 0 ? 'Cargo Extra' : '')
 
             const montoAgua = Number(item.montoAgua || 0)
 
-            const totalCalculado =
-              Number(item.monto) > 0 && !extraGuardado && montoExtra === 0
-                ? Number(item.monto)
-                : Math.round((montoBase + montoAgua + montoExtra) * 100) / 100
+            const totalCalculado = Number(item.monto ?? (montoBase + montoAgua + montoExtra))
 
             const saldoCalc =
               item.estado === 'Pagado'
                 ? 0
-                : Number(item.saldoPendiente) > 0 && !extraGuardado && montoExtra === 0
-                  ? Number(item.saldoPendiente)
-                  : totalCalculado
+                : Number(item.saldoPendiente ?? totalCalculado)
 
             return {
               idExpensa: item.idExpensa,
@@ -450,7 +411,7 @@ export default function ExpensasPage() {
   const handleEmisionMasiva = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!nuevoPeriodo) {
-      alert('Debe seleccionar un período válido para la emisión.')
+      showErrorToast('Debe seleccionar un período válido para la emisión.')
       return
     }
 
@@ -502,29 +463,9 @@ export default function ExpensasPage() {
     }
   }
 
-  const handleGuardarExtra = (idExpensa: number, concepto: string, montoExtra: number) => {
-    const updated = { ...extrasMap, [idExpensa]: { concepto, monto: montoExtra } }
-    setExtrasMap(updated)
-    if (typeof window !== 'undefined') {
-      localStorage.setItem('expensas_extras_map', JSON.stringify(updated))
-    }
-    setExpensas((prev) =>
-      prev.map((e) => {
-        if (e.idExpensa === idExpensa) {
-          const base = e.montoBase !== undefined ? e.montoBase : e.monto - (e.montoAgua || 0)
-          const nuevoMonto = Math.round((base + (e.montoAgua || 0) + montoExtra) * 100) / 100
-          return {
-            ...e,
-            montoExtra,
-            extraConcepto: concepto,
-            monto: nuevoMonto,
-            saldoPendiente: nuevoMonto
-          }
-        }
-        return e
-      })
-    )
-    showToast(`¡Cargo extra "${concepto}" (+Bs ${montoExtra}) registrado para la expensa!`)
+  const handleGuardarExtra = async (idExpensa?: number, concepto?: string, montoExtra?: number) => {
+    await fetchExpensas()
+    showToast('¡Cargo extra registrado exitosamente!')
   }
 
   // Recálculo de Mora
@@ -641,8 +582,44 @@ export default function ExpensasPage() {
 
       await fetchExpensas()
       setIsPagarModalOpen(false)
+      const baseExpensa = expensaAPagar
+      const pago = data.pago
+      const exp = data.expensa
+      const pagadorPersona = personasList.find((p) => p.idPersona === Number(idPersonaPagadorInput))
+      const pagadorNombre = pagadorPersona ? `${pagadorPersona.nombres} ${pagadorPersona.apellidos}`.trim() : undefined
       setExpensaAPagar(null)
-      showToast(data.message || '¡Pago registrado y conciliado exitosamente!')
+      showToast(data.message || 'Pago registrado exitosamente')
+
+      if (baseExpensa && (pago || exp)) {
+        const montoVal = Number(exp?.monto ?? baseExpensa.monto ?? pago?.montoPagado ?? 0)
+        const recibo: ExpensaItem = {
+          ...baseExpensa,
+          idExpensa: exp?.idExpensa ?? baseExpensa.idExpensa,
+          idDepartamento: exp?.idDepartamento ?? baseExpensa.idDepartamento,
+          periodo: baseExpensa.periodo || exp?.periodo,
+          monto: montoVal,
+          montoBase: exp?.montoBase ?? baseExpensa.montoBase,
+          montoAgua: exp?.montoAgua ?? baseExpensa.montoAgua,
+          montoExtra: baseExpensa.montoExtra,
+          extraConcepto: baseExpensa.extraConcepto,
+          saldoPendiente: exp?.saldoPendiente !== undefined ? Number(exp.saldoPendiente) : 0,
+          tasaInteresMora: Number(baseExpensa.tasaInteresMora ?? 0),
+          fechaVencimiento: baseExpensa.fechaVencimiento || exp?.fechaVencimiento,
+          estado: exp?.estado || 'Pagado',
+          departamento: baseExpensa.departamento,
+          propietarioNombre: baseExpensa.propietarioNombre,
+          inquilinoNombre: baseExpensa.inquilinoNombre,
+          pagadoPor: pagadorNombre || baseExpensa.pagadoPor || baseExpensa.inquilinoNombre || baseExpensa.propietarioNombre,
+          montoPagado: pago ? Number(pago.montoPagado) : Number(montoPagoInput),
+          interesPagado: pago ? Number(pago.interesPagado || 0) : 0,
+          metodoPago: pago?.metodoPago || metodoPagoInput,
+          referenciaQr: pago?.referenciaQr || null,
+          fechaPago: pago?.fechaPago || new Date().toISOString(),
+          pago: pago || undefined,
+          pagos: pago ? [pago, ...(baseExpensa.pagos || [])] : (baseExpensa.pagos || [])
+        }
+        setSelectedReceipt(recibo)
+      }
     } catch (err: any) {
       const errMsg = err?.message || 'Error de conexión al registrar el pago'
       setModalError(errMsg)
@@ -657,8 +634,19 @@ export default function ExpensasPage() {
     e.preventDefault()
     if (!pagoAAnular) return
 
-    if (!motivoAnulacionInput.trim()) {
-      setAnulacionError('El motivo de anulación es obligatorio.')
+    const motivo = motivoAnulacionInput.trim()
+    if (motivo.length < 5) {
+      setAnulacionError('El motivo de anulación debe tener al menos 5 caracteres.')
+      return
+    }
+
+    const idPago =
+      pagoAAnular.idPago ||
+      pagoAAnular.idReferencia ||
+      Number(String(pagoAAnular.id).replace('PAG-', ''))
+
+    if (!idPago || isNaN(idPago) || idPago <= 0) {
+      setAnulacionError('No se pudo identificar el ID del pago a anular.')
       return
     }
 
@@ -666,15 +654,11 @@ export default function ExpensasPage() {
     setAnulacionError(null)
 
     try {
-      const idPago =
-        pagoAAnular.idReferencia ||
-        pagoAAnular.idPago ||
-        Number(String(pagoAAnular.id).replace('PAG-', ''))
       const res = await apiFetch(`/api/v1/expensas/pagos/${idPago}`, {
         method: 'DELETE',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          motivo: motivoAnulacionInput.trim()
+          motivo
         })
       })
 
@@ -689,12 +673,13 @@ export default function ExpensasPage() {
       showToast(data.message || 'Pago anulado exitosamente')
       setPagoAAnular(null)
       setMotivoAnulacionInput('')
+      setAnulacionError(null)
 
-      // Recargar estado de cuenta y listado general
+      // Recargar estado de cuenta, listado general de expensas y totales
       if (selectedDeptoIdParaEstadoCuenta) {
         await handleVerEstadoCuenta(selectedDeptoIdParaEstadoCuenta)
       }
-      await fetchExpensas()
+      await Promise.all([fetchExpensas(), fetchMorosos()])
     } catch (err: any) {
       setAnulacionError(err?.message || 'Error de conexión al anular el pago')
     } finally {
@@ -879,102 +864,6 @@ export default function ExpensasPage() {
         return numA.localeCompare(numB, undefined, { numeric: true })
       })
   }, [expensas, searchTerm, filtroEstado, filtroPeriodo, filtroTipoDpto])
-
-  // Helper para simulación de mora con fecha evaluada arbitraria (Individual y Global)
-  const calcularMoraSimulada = (
-    fechaVencimiento: string,
-    saldoBase: number,
-    fechaEvaluacion: string
-  ) => {
-    if (!fechaVencimiento) {
-      return {
-        aplicaMora: false,
-        diasRetraso: 0,
-        mesesMora: 0,
-        penalidadMes: 0,
-        montoMora: 0,
-        totalCobrar: saldoBase,
-        desglose: [] as Array<{
-          mesNum: number
-          concepto: string
-          rangoDias: string
-          diasEnEsteMes: number
-          esFraccion: boolean
-          penalidadMes: number
-          moraAcumulada: number
-          totalConMora: number
-        }>
-      }
-    }
-
-    const fActual = new Date(`${fechaEvaluacion}T00:00:00`)
-    const fVenc = new Date(`${fechaSolo(fechaVencimiento)}T00:00:00`)
-    const diffDias = Math.floor((fActual.getTime() - fVenc.getTime()) / (1000 * 60 * 60 * 24))
-    const diasGracia = politicaMora.diasGracia || 0
-
-    if (diffDias <= diasGracia) {
-      return {
-        aplicaMora: false,
-        diasRetraso: Math.max(0, diffDias),
-        mesesMora: 0,
-        penalidadMes: 0,
-        montoMora: 0,
-        totalCobrar: saldoBase,
-        desglose: [] as Array<{
-          mesNum: number
-          concepto: string
-          rangoDias: string
-          diasEnEsteMes: number
-          esFraccion: boolean
-          penalidadMes: number
-          moraAcumulada: number
-          totalConMora: number
-        }>
-      }
-    }
-
-    // Mes o fracción de mes iniciada (regla estándar de condominios)
-    const mesesMora = Math.max(1, Math.ceil(diffDias / 30))
-    const penalidadMes =
-      politicaMora.tipoPenalidad === 'fijo'
-        ? Number(politicaMora.montoFijo || 50)
-        : Math.round(((saldoBase * Number(politicaMora.porcentaje || 10)) / 100) * 100) / 100
-
-    const desglose = []
-    let acum = 0
-    for (let i = 1; i <= mesesMora; i++) {
-      acum = Math.round((acum + penalidadMes) * 100) / 100
-      const dDesde = (i - 1) * 30 + 1
-      const dHasta = Math.min(i * 30, diffDias)
-      const diasEnEsteMes = dHasta - dDesde + 1
-      const esUltimo = i === mesesMora
-      const esFraccion = esUltimo && diasEnEsteMes < 30
-
-      desglose.push({
-        mesNum: i,
-        concepto: esFraccion
-          ? `Mes ${i} de retraso (Fracción de ${diasEnEsteMes} día${diasEnEsteMes > 1 ? 's' : ''} transcurrido${diasEnEsteMes > 1 ? 's' : ''})`
-          : `Mes ${i} completo (30 días de retraso)`,
-        rangoDias: `Día +${dDesde} a +${dHasta}`,
-        diasEnEsteMes,
-        esFraccion,
-        penalidadMes,
-        moraAcumulada: acum,
-        totalConMora: Math.round((saldoBase + acum) * 100) / 100
-      })
-    }
-
-    const montoMoraTotal = Math.round(penalidadMes * mesesMora * 100) / 100
-    return {
-      aplicaMora: true,
-      diasRetraso: diffDias,
-      mesesMora,
-      penalidadMes,
-      montoMora: montoMoraTotal,
-      totalCobrar: Math.round((saldoBase + montoMoraTotal) * 100) / 100,
-      desglose
-    }
-  }
 
   return (
     <div className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto space-y-6">
@@ -2027,682 +1916,42 @@ export default function ExpensasPage() {
         </div>
       ) : (
         /* ========================================================
-           VISTA SIMULADOR DE COBRO & MORA (INDIVIDUAL Y GLOBAL)
+           PROYECCIÓN DE DEUDA Y COBRO CON QR
            ======================================================== */
-        <div className="space-y-6">
-          {/* Header con Switch 1 Dpto vs Todo el Edificio */}
-          <div className="p-4 sm:p-5 rounded-2xl bg-indigo-50/70 dark:bg-indigo-950/40 border border-indigo-200 dark:border-indigo-900/60 shadow-xs flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+        <div className="space-y-4">
+          <div className="p-4 sm:p-5 rounded-2xl bg-[#ede9e1] dark:bg-slate-900 border border-[#cec8bc] dark:border-slate-800 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div>
-              <div className="flex items-center gap-2">
-                <Sparkles className="w-5 h-5 text-indigo-700 dark:text-indigo-400" />
-                <h3 className="font-black text-indigo-950 dark:text-indigo-200 text-sm sm:text-base">
-                  Laboratorio de Simulación: Mora y Cobros por QR
-                </h3>
-              </div>
-              <p className="text-xs text-indigo-800 dark:text-indigo-300 mt-1 max-w-2xl">
-                Simula cómo se aplica la mora en un departamento puntual (incluyendo casos de varios
-                meses y días) o analiza el impacto financiero global sobre todos los morosos del
-                edificio.
+              <h3 className="font-extrabold text-sm sm:text-base text-[#262422] dark:text-white flex items-center gap-2">
+                <Sparkles className="w-4 h-4 text-emerald-700 dark:text-emerald-400" />
+                Proyección de Deuda y Cobro con QR
+              </h3>
+              <p className="text-xs text-[#7d776f] dark:text-slate-400 mt-0.5">
+                Selecciona un departamento para calcular su deuda proyectada con mora y agua estimada a cualquier fecha.
               </p>
             </div>
-
-            {/* Switch: 1 Dpto vs Todos los Morosos */}
-            <div className="flex bg-[#ede9e1] dark:bg-slate-900 p-1 rounded-xl border border-indigo-300 dark:border-slate-700 shrink-0 shadow-inner">
-              <button
-                type="button"
-                onClick={() => setModoSimulador('individual')}
-                className={`px-3.5 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
-                  modoSimulador === 'individual'
-                    ? 'bg-indigo-700 text-white shadow-sm'
-                    : 'text-[#66615b] dark:text-slate-400 hover:text-[#262422]'
-                }`}
+            <div className="flex items-center gap-2">
+              <label className="text-xs font-bold text-[#5c5750] dark:text-slate-300 whitespace-nowrap">
+                Departamento:
+              </label>
+              <select
+                value={simDptoSeleccionado || (departamentosUnicosParaAnticipo[0]?.idDepartamento ?? '')}
+                onChange={(e) => setSimDptoSeleccionado(Number(e.target.value))}
+                className="px-3 py-1.5 rounded-xl bg-white dark:bg-slate-950 border border-[#cec8bc] dark:border-slate-700 text-xs font-bold text-[#262422] dark:text-white cursor-pointer focus:outline-none focus:ring-2 focus:ring-emerald-600"
               >
-                <User className="w-4 h-4" />
-                <span>1 Departamento (Individual)</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => setModoSimulador('global')}
-                className={`px-3.5 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
-                  modoSimulador === 'global'
-                    ? 'bg-indigo-700 text-white shadow-sm'
-                    : 'text-[#66615b] dark:text-slate-400 hover:text-[#262422]'
-                }`}
-              >
-                <Users className="w-4 h-4" />
-                <span>
-                  Todos los Morosos ({expensas.filter((e) => e.estado === 'Moroso').length})
-                </span>
-              </button>
+                {departamentosUnicosParaAnticipo.map((d) => (
+                  <option key={'sim-sel-' + d.idDepartamento} value={d.idDepartamento}>
+                    Dpto. {d.numero} {d.tipologia ? '(' + d.tipologia + ')' : ''}
+                  </option>
+                ))}
+              </select>
             </div>
           </div>
-
-          {/* Selector de Fecha de Simulación y Botones Rápidos (Compartido) */}
-          <div className="p-4 sm:p-5 rounded-2xl bg-[#ede9e1] dark:bg-slate-900 border border-[#cec8bc] dark:border-slate-800 shadow-sm space-y-3">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-[#cec8bc] dark:border-slate-800 pb-3">
-              <div>
-                <span className="font-extrabold text-sm text-[#262422] dark:text-white flex items-center gap-2">
-                  <Calendar className="w-4 h-4 text-indigo-700 dark:text-indigo-400" />
-                  Fecha de Simulación del Pago / Auditoría
-                </span>
-                <p className="text-xs text-[#7d776f] dark:text-slate-400">
-                  Elige una fecha para calcular de inmediato cuántos días de atraso han transcurrido
-                  y la mora generada.
-                </p>
-              </div>
-
-              <div className="flex items-center gap-2">
-                <input
-                  type="date"
-                  value={simFechaLibre}
-                  onChange={(e) => setSimFechaLibre(e.target.value)}
-                  className="px-3 py-1.5 rounded-xl bg-[#dfd9ce] dark:bg-slate-950 border border-[#cec8bc] dark:border-slate-700 text-xs font-mono font-bold text-[#262422] dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-600"
-                />
-              </div>
-            </div>
-
-            {/* Botones de Casos Rápidos */}
-            <div className="space-y-1.5">
-              <span className="text-[11px] font-bold text-[#66615b] dark:text-slate-400 uppercase tracking-wide">
-                Casos Rápidos de Prueba (1 Clic):
-              </span>
-              <div className="flex flex-wrap gap-2">
-                <button
-                  type="button"
-                  onClick={() => setSimFechaLibre('2026-11-08')}
-                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer border ${
-                    simFechaLibre === '2026-11-08'
-                      ? 'bg-emerald-700 text-white border-emerald-800 shadow-sm'
-                      : 'bg-emerald-100 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300 border-emerald-300 hover:bg-emerald-200'
-                  }`}
-                  title="Simular pago 2 días antes del vencimiento (Sin mora)"
-                >
-                  🟢 08/Nov: A tiempo (Sin mora)
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => setSimFechaLibre('2026-11-10')}
-                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer border ${
-                    simFechaLibre === '2026-11-10'
-                      ? 'bg-amber-600 text-white border-amber-700 shadow-sm'
-                      : 'bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300 border-amber-300 hover:bg-amber-200'
-                  }`}
-                  title="Simular pago en la fecha límite de vencimiento (Sin mora)"
-                >
-                  🟡 10/Nov: Día de Vencimiento (Sin mora)
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => setSimFechaLibre('2026-11-15')}
-                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer border ${
-                    simFechaLibre === '2026-11-15'
-                      ? 'bg-rose-700 text-white border-rose-800 shadow-sm'
-                      : 'bg-rose-100 dark:bg-rose-950/60 text-rose-800 dark:text-rose-300 border-rose-300 hover:bg-rose-200'
-                  }`}
-                  title="Simular pago con 5 días de retraso (+1 mes de mora)"
-                >
-                  🔴 15/Nov: 5 días tarde (1er mes de mora)
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => setSimFechaLibre('2027-01-13')}
-                  className={`px-3.5 py-1.5 rounded-xl text-xs font-black transition-all cursor-pointer border shadow-xs ${
-                    simFechaLibre === '2027-01-13'
-                      ? 'bg-purple-800 text-white border-purple-900 ring-2 ring-purple-400'
-                      : 'bg-purple-100 dark:bg-purple-950/60 text-purple-900 dark:text-purple-200 border-purple-300 hover:bg-purple-200'
-                  }`}
-                  title="Caso solicitado por el docente: 2 meses y 3 días de atraso (63 días en total)"
-                >
-                  🔥 13/Ene: 2 Meses y 3 Días de Atraso (Caso Docente)
-                </button>
-              </div>
-            </div>
-          </div>
-
-          {/* CONTENIDO SEGÚN MODO SELECCIONADO */}
-          {modoSimulador === 'individual'
-            ? /* ========================================================
-               MODO 1: SIMULACIÓN INDIVIDUAL (1 DEPARTAMENTO)
-               ======================================================== */
-              (() => {
-                const expensaSim =
-                  expensas.find((e) => e.idDepartamento === simDptoId) || expensas[0] || null
-                const saldoBase = Number(expensaSim?.monto || 300)
-                const fechaVenc = expensaSim?.fechaVencimiento || '2026-11-10'
-                const simRes = calcularMoraSimulada(fechaVenc, saldoBase, simFechaLibre)
-                const dptoNum =
-                  expensaSim?.departamento?.numero || expensaSim?.idDepartamento || '101'
-                const propNombre = expensaSim?.propietarioNombre || 'Propietario Responsable'
-
-                return (
-                  <div className="space-y-6">
-                    {/* Selector de Departamento */}
-                    <div className="p-4 rounded-2xl bg-[#ede9e1] dark:bg-slate-900 border border-[#cec8bc] dark:border-slate-800 space-y-2">
-                      <label className="text-xs font-bold text-[#66615b] dark:text-slate-400 uppercase tracking-wide block">
-                        Seleccionar Departamento a Simular:
-                      </label>
-                      <select
-                        value={expensaSim?.idDepartamento || ''}
-                        onChange={(e) => setSimDptoId(Number(e.target.value))}
-                        className="w-full px-3 py-2.5 rounded-xl bg-[#dfd9ce] dark:bg-slate-950 border border-[#cec8bc] dark:border-slate-700 text-xs sm:text-sm font-bold text-[#262422] dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-600 cursor-pointer"
-                      >
-                        {expensas.length === 0
-                          ? departamentosUnicosParaAnticipo.map((d, idx) => (
-                              <option
-                                key={`sim-dpto-fallback-${d.idDepartamento}-${idx}`}
-                                value={d.idDepartamento}
-                              >
-                                Dpto {d.numero} ({d.tipologia || 'Tipo A'} • Modo Simulación)
-                              </option>
-                            ))
-                          : expensas.map((item, idx) => (
-                              <option
-                                key={`sim-dpto-opt-${item.idDepartamento}-${idx}`}
-                                value={item.idDepartamento}
-                              >
-                                Dpto {item.departamento?.numero || item.idDepartamento} —{' '}
-                                {item.propietarioNombre || 'Propietario'} (
-                                {item.departamento?.tipologia || 'Tipo A'} • Base: Bs.{' '}
-                                {item.monto.toFixed(2)})
-                              </option>
-                            ))}
-                      </select>
-                    </div>
-
-                    {/* Grid de Resultados: Desglose Matemático + Código QR */}
-                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                      {/* Columna 1 y 2: Tarjetas y Desglose Mes a Mes */}
-                      <div className="lg:col-span-2 space-y-4">
-                        {/* KPIs del Resultado */}
-                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                          <div className="p-3.5 rounded-2xl bg-white dark:bg-slate-950 border border-[#cec8bc] dark:border-slate-800 space-y-1">
-                            <span className="text-[10px] font-bold text-[#7d776f] uppercase block">
-                              Capital Base
-                            </span>
-                            <div className="text-lg font-black font-mono text-[#262422] dark:text-white">
-                              Bs. {saldoBase.toFixed(2)}
-                            </div>
-                            <span className="text-[10px] text-[#7d776f]">Cuota del dpto</span>
-                          </div>
-
-                          <div className="p-3.5 rounded-2xl bg-white dark:bg-slate-950 border border-[#cec8bc] dark:border-slate-800 space-y-1">
-                            <span className="text-[10px] font-bold text-[#7d776f] uppercase block">
-                              Retraso Total
-                            </span>
-                            <div
-                              className={`text-lg font-black font-mono ${
-                                simRes.diasRetraso > 0
-                                  ? 'text-amber-700 dark:text-amber-400'
-                                  : 'text-emerald-700'
-                              }`}
-                            >
-                              {simRes.diasRetraso > 0
-                                ? `+${simRes.diasRetraso} días`
-                                : '0 días (Al día)'}
-                            </div>
-                            <span className="text-[10px] text-[#7d776f]">
-                              {simRes.mesesMora > 0
-                                ? `${simRes.mesesMora} meses mora`
-                                : 'Sin retraso'}
-                            </span>
-                          </div>
-
-                          <div className="p-3.5 rounded-2xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900/50 space-y-1">
-                            <span className="text-[10px] font-bold text-rose-800 dark:text-rose-400 uppercase block">
-                              Mora Acumulada
-                            </span>
-                            <div className="text-lg font-black font-mono text-rose-700 dark:text-rose-400">
-                              +Bs. {simRes.montoMora.toFixed(2)}
-                            </div>
-                            <span className="text-[10px] text-rose-800 dark:text-rose-300 font-semibold">
-                              {politicaMora.tipoPenalidad === 'fijo'
-                                ? `Bs. ${politicaMora.montoFijo || 50}/mes fijo`
-                                : `${politicaMora.porcentaje || 10}% mensual`}
-                            </span>
-                          </div>
-
-                          <div className="p-3.5 rounded-2xl bg-indigo-50 dark:bg-indigo-950/40 border border-indigo-200 dark:border-indigo-900/50 space-y-1">
-                            <span className="text-[10px] font-bold text-indigo-800 dark:text-indigo-400 uppercase block">
-                              Total a Cobrar
-                            </span>
-                            <div className="text-xl font-black font-mono text-indigo-700 dark:text-indigo-300">
-                              Bs. {simRes.totalCobrar.toFixed(2)}
-                            </div>
-                            <span className="text-[10px] text-indigo-800 dark:text-indigo-300 font-semibold">
-                              Base + Mora
-                            </span>
-                          </div>
-                        </div>
-
-                        {/* Explicación paso a paso de cómo se aplica la mora */}
-                        <div className="p-4 sm:p-5 rounded-2xl bg-white dark:bg-slate-950 border border-[#cec8bc] dark:border-slate-800 space-y-3 shadow-xs">
-                          <div className="flex items-center justify-between border-b border-[#cec8bc] dark:border-slate-800 pb-2">
-                            <h4 className="font-extrabold text-xs sm:text-sm text-[#262422] dark:text-white flex items-center gap-1.5">
-                              <TrendingUp className="w-4 h-4 text-rose-600" />
-                              Cronología de Acumulación Mes a Mes: Dpto {dptoNum} ({propNombre})
-                            </h4>
-                            <span className="text-[10px] px-2 py-0.5 rounded-full font-bold bg-indigo-100 text-indigo-900 dark:bg-indigo-950 dark:text-indigo-200">
-                              {simRes.aplicaMora
-                                ? `${simRes.mesesMora} períodos aplicados`
-                                : 'Al día'}
-                            </span>
-                          </div>
-
-                          {!simRes.aplicaMora ? (
-                            <div className="p-4 rounded-xl bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800 text-xs text-emerald-900 dark:text-emerald-200 flex items-center gap-2">
-                              <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
-                              <span>
-                                <strong>A tiempo:</strong> Al pagar en fecha{' '}
-                                {fechaSolo(simFechaLibre)}, la expensa se encuentra dentro del plazo
-                                o del período de gracia (+{politicaMora.diasGracia || 2} días). No
-                                se genera ningún recargo.
-                              </span>
-                            </div>
-                          ) : (
-                            <div className="overflow-x-auto rounded-xl border border-[#cec8bc] dark:border-slate-800 scrollbar-thin">
-                              <table className="w-full text-left text-xs min-w-[550px]">
-                                <thead className="bg-[#ede9e1] dark:bg-slate-900 text-[#7d776f] font-bold text-[10px] uppercase">
-                                  <tr>
-                                    <th className="py-2 px-3">Período de Atraso</th>
-                                    <th className="py-2 px-3">Rango Días</th>
-                                    <th className="py-2 px-3 font-mono text-right">Recargo Mes</th>
-                                    <th className="py-2 px-3 font-mono text-right text-rose-700">
-                                      Mora Acumulada
-                                    </th>
-                                    <th className="py-2 px-3 font-mono text-right text-indigo-700">
-                                      Saldo + Mora
-                                    </th>
-                                  </tr>
-                                </thead>
-                                <tbody className="divide-y divide-[#cec8bc]/50 dark:divide-slate-800">
-                                  {simRes.desglose.map((m) => (
-                                    <tr
-                                      key={`sim-desglose-${m.mesNum}`}
-                                      className={
-                                        m.esFraccion
-                                          ? 'bg-amber-50/70 dark:bg-amber-950/30 font-semibold'
-                                          : 'hover:bg-slate-50 dark:hover:bg-slate-900/40'
-                                      }
-                                    >
-                                      <td className="py-2.5 px-3">
-                                        <div className="font-bold text-[#262422] dark:text-white">
-                                          {m.concepto}
-                                        </div>
-                                        {m.esFraccion && (
-                                          <div className="text-[10px] text-amber-800 dark:text-amber-300">
-                                            ⚠️ Ingresó {m.diasEnEsteMes} día
-                                            {m.diasEnEsteMes > 1 ? 's' : ''} al mes {m.mesNum} →
-                                            Genera la cuota del período según política
-                                          </div>
-                                        )}
-                                      </td>
-                                      <td className="py-2.5 px-3 font-mono text-[11px] text-[#7d776f]">
-                                        {m.rangoDias}
-                                      </td>
-                                      <td className="py-2.5 px-3 font-mono text-right text-[#5c5750] dark:text-slate-300">
-                                        +Bs. {m.penalidadMes.toFixed(2)}
-                                      </td>
-                                      <td className="py-2.5 px-3 font-mono text-right font-bold text-rose-700 dark:text-rose-400">
-                                        Bs. {m.moraAcumulada.toFixed(2)}
-                                      </td>
-                                      <td className="py-2.5 px-3 font-mono text-right font-black text-indigo-800 dark:text-indigo-300">
-                                        Bs. {m.totalConMora.toFixed(2)}
-                                      </td>
-                                    </tr>
-                                  ))}
-                                </tbody>
-                              </table>
-                            </div>
-                          )}
-
-                          <div className="p-3 rounded-xl bg-[#dfd9ce]/60 dark:bg-slate-900/60 text-[11px] text-[#66615b] dark:text-slate-400 flex items-start gap-2">
-                            <Info className="w-4 h-4 text-indigo-600 shrink-0 mt-0.5" />
-                            <div>
-                              <strong>Regla de cálculo aplicada:</strong>{' '}
-                              {politicaMora.tipoPenalidad === 'fijo'
-                                ? `Mora fija de Bs. ${politicaMora.montoFijo || 50} por cada mes o fracción de mes iniciada tras vencer el día ${politicaMora.diaVencimiento || 10}.`
-                                : `Mora del ${politicaMora.porcentaje || 10}% mensual sobre el capital base (Bs. ${saldoBase.toFixed(2)}) por cada mes o fracción transcurrida.`}
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* Columna 3: Tarjeta de Cobro QR en Tiempo Real */}
-                      <div className="p-5 rounded-2xl bg-white dark:bg-slate-950 border border-[#cec8bc] dark:border-slate-800 shadow-sm flex flex-col justify-between space-y-4">
-                        <div className="space-y-3">
-                          <div className="flex items-center justify-between border-b border-[#cec8bc] dark:border-slate-800 pb-2">
-                            <span className="font-bold text-xs uppercase tracking-wider text-[#66615b] dark:text-slate-400 flex items-center gap-1.5">
-                              <QrCode className="w-4 h-4 text-emerald-700" />
-                              Cobro QR Dinámico
-                            </span>
-                            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">
-                              Simple QR
-                            </span>
-                          </div>
-
-                          {/* Visual Mock del Código QR */}
-                          <div className="p-4 bg-white rounded-2xl border-2 border-dashed border-[#cec8bc] dark:border-slate-700 flex flex-col items-center justify-center space-y-2">
-                            <div className="w-36 h-36 bg-slate-900 p-2 rounded-xl flex items-center justify-center text-white relative shadow-sm">
-                              <QrCode className="w-28 h-28 text-white" />
-                              <div className="absolute inset-0 flex items-center justify-center">
-                                <span className="bg-emerald-600 text-white font-black text-[9px] px-1.5 py-0.5 rounded shadow">
-                                  BS {simRes.totalCobrar.toFixed(0)}
-                                </span>
-                              </div>
-                            </div>
-                            <div className="text-center">
-                              <span className="text-[10px] text-[#7d776f] block">
-                                Monto total simulado a transferir:
-                              </span>
-                              <span className="text-xl font-black font-mono text-emerald-800 dark:text-emerald-500">
-                                Bs. {simRes.totalCobrar.toFixed(2)}
-                              </span>
-                            </div>
-                          </div>
-
-                          <div className="space-y-1 text-xs">
-                            <div className="flex justify-between text-[#7d776f]">
-                              <span>Destino:</span>
-                              <span className="font-bold text-[#262422] dark:text-white">
-                                Edificio XYZ
-                              </span>
-                            </div>
-                            <div className="flex justify-between text-[#7d776f]">
-                              <span>Departamento:</span>
-                              <span className="font-bold text-[#262422] dark:text-white">
-                                Dpto {dptoNum}
-                              </span>
-                            </div>
-                            <div className="flex justify-between text-[#7d776f]">
-                              <span>Concepto:</span>
-                              <span
-                                className="font-bold text-[#262422] dark:text-white truncate max-w-[170px]"
-                                title={`Expensa ${expensaSim?.periodo || 'Noviembre 2026'} + Mora`}
-                              >
-                                Expensa + Mora ({simRes.mesesMora}m)
-                              </span>
-                            </div>
-                          </div>
-                        </div>
-
-                        <div className="space-y-2 pt-3 border-t border-[#cec8bc] dark:border-slate-800">
-                          <button
-                            type="button"
-                            onClick={() => {
-                              if (expensaSim) {
-                                setFechaSistema(simFechaLibre)
-                                setExpensaParaQr({
-                                  ...expensaSim,
-                                  montoTotalSimulado: simRes.totalCobrar,
-                                  moraSimulada: simRes.montoMora,
-                                  fechaSimulada: simFechaLibre
-                                })
-                                setIsQrSimuladorOpen(true)
-                              }
-                            }}
-                            className="w-full py-2.5 px-4 rounded-xl bg-emerald-700 hover:bg-emerald-800 active:bg-emerald-900 text-white font-bold text-xs flex items-center justify-center gap-2 shadow-md cursor-pointer transition-all"
-                          >
-                            <QrCode className="w-4 h-4" />
-                            <span>Simular Pago QR de este Monto</span>
-                          </button>
-
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setFechaSistema(simFechaLibre)
-                              showToast(
-                                `⚡ Fecha del sistema actualizada a ${simFechaLibre}. Ahora toda la aplicación calcula con esta fecha.`
-                              )
-                            }}
-                            className="w-full py-2 px-3 rounded-xl bg-indigo-100 hover:bg-indigo-200 dark:bg-indigo-950 dark:hover:bg-indigo-900 text-indigo-900 dark:text-indigo-200 font-bold text-[11px] flex items-center justify-center gap-1.5 cursor-pointer transition-all"
-                          >
-                            <Clock className="w-3.5 h-3.5" />
-                            <span>Aplicar fecha ({simFechaLibre}) a todo el sistema</span>
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                )
-              })()
-            : /* ========================================================
-               MODO 2: SIMULACIÓN GLOBAL (TODOS LOS MOROSOS DEL EDIFICIO)
-               ======================================================== */
-              (() => {
-                // Calcular para cada departamento de expensas el resultado bajo simFechaLibre
-                const analisisGlobal = expensas.map((item) => {
-                  const base = Number(item.saldoPendiente || item.monto || 0)
-                  const fVenc = item.fechaVencimiento || '2026-11-10'
-                  const res = calcularMoraSimulada(fVenc, base, simFechaLibre)
-                  return {
-                    expensa: item,
-                    base,
-                    fVenc,
-                    res
-                  }
-                })
-
-                const conMora = analisisGlobal.filter((a) => a.res.aplicaMora)
-                const moraTotalEdificio = conMora.reduce((acc, curr) => acc + curr.res.montoMora, 0)
-                const carteraTotalConMora = analisisGlobal.reduce(
-                  (acc, curr) => acc + curr.res.totalCobrar,
-                  0
-                )
-
-                return (
-                  <div className="space-y-6">
-                    {/* Tarjetas KPI de Impacto Global en el Edificio */}
-                    <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
-                      <div className="p-4 rounded-2xl bg-white dark:bg-slate-950 border border-[#cec8bc] dark:border-slate-800 shadow-xs">
-                        <span className="text-xs font-bold text-[#7d776f] uppercase block">
-                          Departamentos Analizados
-                        </span>
-                        <div className="text-2xl font-black text-[#262422] dark:text-white mt-1">
-                          {expensas.length} Dptos
-                        </div>
-                        <span className="text-[11px] text-[#7d776f]">
-                          Total unidades en cartera
-                        </span>
-                      </div>
-
-                      <div className="p-4 rounded-2xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900/50 shadow-xs">
-                        <span className="text-xs font-bold text-rose-800 dark:text-rose-400 uppercase block">
-                          En Mora a esta Fecha
-                        </span>
-                        <div className="text-2xl font-black text-rose-700 dark:text-rose-400 mt-1">
-                          {conMora.length} Morosos
-                        </div>
-                        <span className="text-[11px] text-rose-800 dark:text-rose-300 font-semibold">
-                          {expensas.length > 0
-                            ? Math.round((conMora.length / expensas.length) * 100)
-                            : 0}
-                          % de morosidad
-                        </span>
-                      </div>
-
-                      <div className="p-4 rounded-2xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900/50 shadow-xs">
-                        <span className="text-xs font-bold text-amber-800 dark:text-amber-400 uppercase block">
-                          Mora Total a Recaudar
-                        </span>
-                        <div className="text-2xl font-black text-amber-700 dark:text-amber-400 mt-1 font-mono">
-                          +Bs. {moraTotalEdificio.toFixed(2)}
-                        </div>
-                        <span className="text-[11px] text-amber-800 dark:text-amber-300">
-                          Recargo neto para el condominio
-                        </span>
-                      </div>
-
-                      <div className="p-4 rounded-2xl bg-indigo-50 dark:bg-indigo-950/40 border border-indigo-200 dark:border-indigo-900/50 shadow-xs">
-                        <span className="text-xs font-bold text-indigo-800 dark:text-indigo-400 uppercase block">
-                          Cartera Total + Mora
-                        </span>
-                        <div className="text-2xl font-black text-indigo-700 dark:text-indigo-300 mt-1 font-mono">
-                          Bs. {carteraTotalConMora.toFixed(2)}
-                        </div>
-                        <span className="text-[11px] text-indigo-800 dark:text-indigo-300">
-                          Capital base + moras devengadas
-                        </span>
-                      </div>
-                    </div>
-
-                    {/* Tabla Comparativa de Todos los Departamentos */}
-                    <div className="rounded-2xl bg-white dark:bg-slate-950 border border-[#cec8bc] dark:border-slate-800 overflow-hidden shadow-xs">
-                      <div className="p-4 border-b border-[#cec8bc] dark:border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                        <div>
-                          <h4 className="font-extrabold text-sm text-[#262422] dark:text-white flex items-center gap-2">
-                            <Users className="w-4 h-4 text-indigo-700" />
-                            Auditoría Comparativa de Departamentos al {fechaSolo(simFechaLibre)}
-                          </h4>
-                          <p className="text-xs text-[#7d776f]">
-                            Compara cómo le afecta la fecha a cada departamento y salta a su
-                            simulación individual con 1 clic.
-                          </p>
-                        </div>
-
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setFechaSistema(simFechaLibre)
-                            showToast(
-                              `⚡ Fecha del sistema actualizada a ${simFechaLibre}. Ahora toda la aplicación calcula con esta fecha.`
-                            )
-                          }}
-                          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-indigo-700 hover:bg-indigo-800 text-white text-xs font-bold transition-all cursor-pointer shadow-xs"
-                        >
-                          <Clock className="w-3.5 h-3.5" />
-                          <span>Aplicar esta fecha a todo el sistema</span>
-                        </button>
-                      </div>
-
-                      <div className="overflow-x-auto scrollbar-thin">
-                        <table className="w-full text-left text-xs min-w-[850px]">
-                          <thead className="bg-[#ede9e1] dark:bg-slate-900 text-[#7d776f] font-bold text-[10px] uppercase">
-                            <tr className="border-b border-[#cec8bc] dark:border-slate-800">
-                              <th className="py-2.5 px-3">Dpto</th>
-                              <th className="py-2.5 px-3">Propietario / Responsable</th>
-                              <th className="py-2.5 px-3">Tipología</th>
-                              <th className="py-2.5 px-3 font-mono text-right">Capital Base</th>
-                              <th className="py-2.5 px-3 text-center">Días Atraso</th>
-                              <th className="py-2.5 px-3 text-center">Meses Mora</th>
-                              <th className="py-2.5 px-3 font-mono text-right text-rose-700">
-                                Mora Acum.
-                              </th>
-                              <th className="py-2.5 px-3 font-mono text-right text-indigo-700">
-                                Total a Cobrar
-                              </th>
-                              <th className="py-2.5 px-3 text-center">Estado</th>
-                              <th className="py-2.5 px-3 text-right">Acciones</th>
-                            </tr>
-                          </thead>
-                          <tbody className="divide-y divide-[#cec8bc]/40 dark:divide-slate-800">
-                            {analisisGlobal.map((item, idx) => {
-                              const dptoNum =
-                                item.expensa.departamento?.numero || item.expensa.idDepartamento
-                              return (
-                                <tr
-                                  key={`analisis-global-${item.expensa.idDepartamento}-${idx}`}
-                                  className={
-                                    item.res.aplicaMora
-                                      ? 'hover:bg-rose-50/40 dark:hover:bg-rose-950/20'
-                                      : 'hover:bg-slate-50 dark:hover:bg-slate-900/40'
-                                  }
-                                >
-                                  <td className="py-3 px-3 font-mono font-black text-[#262422] dark:text-white">
-                                    {dptoNum}
-                                  </td>
-                                  <td className="py-3 px-3 font-medium text-[#262422] dark:text-slate-200">
-                                    {item.expensa.propietarioNombre || 'Propietario Responsable'}
-                                  </td>
-                                  <td className="py-3 px-3">
-                                    <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-blue-100 text-blue-900 dark:bg-blue-950 dark:text-blue-300">
-                                      {item.expensa.departamento?.tipologia || 'Tipo A'}
-                                    </span>
-                                  </td>
-                                  <td className="py-3 px-3 font-mono text-right font-semibold">
-                                    Bs. {item.base.toFixed(2)}
-                                  </td>
-                                  <td className="py-3 px-3 text-center font-mono font-bold">
-                                    {item.res.diasRetraso > 0 ? (
-                                      <span className="text-rose-600 dark:text-rose-400">
-                                        +{item.res.diasRetraso}d
-                                      </span>
-                                    ) : (
-                                      <span className="text-emerald-600">0d</span>
-                                    )}
-                                  </td>
-                                  <td className="py-3 px-3 text-center font-mono">
-                                    {item.res.mesesMora > 0 ? (
-                                      <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300">
-                                        {item.res.mesesMora}m
-                                      </span>
-                                    ) : (
-                                      <span className="text-[#7d776f]">—</span>
-                                    )}
-                                  </td>
-                                  <td className="py-3 px-3 font-mono text-right font-bold text-rose-700 dark:text-rose-400">
-                                    +Bs. {item.res.montoMora.toFixed(2)}
-                                  </td>
-                                  <td className="py-3 px-3 font-mono text-right font-black text-indigo-700 dark:text-indigo-300">
-                                    Bs. {item.res.totalCobrar.toFixed(2)}
-                                  </td>
-                                  <td className="py-3 px-3 text-center">
-                                    <span
-                                      className={`px-2 py-0.5 rounded-full text-[10px] font-black ${
-                                        item.res.aplicaMora
-                                          ? 'bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300'
-                                          : 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300'
-                                      }`}
-                                    >
-                                      {item.res.aplicaMora ? 'En Mora' : 'Al Día'}
-                                    </span>
-                                  </td>
-                                  <td className="py-3 px-3 text-right">
-                                    <div className="flex items-center justify-end gap-1.5">
-                                      <button
-                                        type="button"
-                                        onClick={() => {
-                                          setSimDptoId(item.expensa.idDepartamento)
-                                          setModoSimulador('individual')
-                                        }}
-                                        className="px-2.5 py-1 rounded-lg bg-indigo-100 text-indigo-800 hover:bg-indigo-200 dark:bg-indigo-950 dark:text-indigo-300 text-xs font-bold transition-all cursor-pointer flex items-center gap-1"
-                                        title="Ver simulación detallada y cronología de este departamento"
-                                      >
-                                        <User className="w-3 h-3" />
-                                        <span>Simular</span>
-                                      </button>
-
-                                      <button
-                                        type="button"
-                                        onClick={() => {
-                                          setFechaSistema(simFechaLibre)
-                                          setExpensaParaQr({
-                                            ...item.expensa,
-                                            montoTotalSimulado: item.res.totalCobrar,
-                                            moraSimulada: item.res.montoMora,
-                                            fechaSimulada: simFechaLibre
-                                          })
-                                          setIsQrSimuladorOpen(true)
-                                        }}
-                                        className="p-1 rounded-lg bg-emerald-700 hover:bg-emerald-800 text-white text-xs transition-all cursor-pointer"
-                                        title="Cobro QR de este departamento"
-                                      >
-                                        <QrCode className="w-3.5 h-3.5" />
-                                      </button>
-                                    </div>
-                                  </td>
-                                </tr>
-                              )
-                            })}
-                          </tbody>
-                        </table>
-                      </div>
-                    </div>
-                  </div>
-                )
-              })()}
+          {(simDptoSeleccionado || departamentosUnicosParaAnticipo[0]?.idDepartamento) && (
+            <ProyeccionDeuda
+              idDepartamento={simDptoSeleccionado || departamentosUnicosParaAnticipo[0].idDepartamento}
+              fechaInicial={fechaSistema}
+            />
+          )}
         </div>
       )}
 
@@ -2793,6 +2042,7 @@ export default function ExpensasPage() {
                     required
                     value={nuevaFechaVencimiento}
                     onChange={(e) => setNuevaFechaVencimiento(e.target.value)}
+                    placeholder="YYYY-MM-DD"
                     className="w-full px-3 py-2 rounded-xl bg-[#dfd9ce] dark:bg-slate-800 border border-[#cec8bc] dark:border-slate-700 font-mono"
                   />
                 </div>
@@ -2900,44 +2150,8 @@ export default function ExpensasPage() {
       )}
 
       {/* MODAL CONFIGURAR REGLA DE MORA (HU04 / CA09) */}
-      {isMoraModalOpen &&
-        (() => {
-          const fPrueba = new Date(`${simuladorFechaPruebaInput}T00:00:00`)
-          const diaVencNum = Number(moraDiaVencimientoInput || 10)
-          const diasGraciaNum = Number(moraDiasGraciaInput || 0)
-          const fVenc = new Date(fPrueba.getFullYear(), fPrueba.getMonth(), diaVencNum)
-          const diffMs = fPrueba.getTime() - fVenc.getTime()
-          const diffDias = Math.floor(diffMs / (1000 * 60 * 60 * 24))
-
-          let simMontoMora = 0
-          let simEstadoLabel = ''
-          let simEstadoColor = ''
-
-          if (diffDias <= 0) {
-            simMontoMora = 0
-            simEstadoLabel = 'A tiempo (Sin mora)'
-            simEstadoColor =
-              'text-emerald-700 dark:text-emerald-400 bg-emerald-100 dark:bg-emerald-950/70 border-emerald-300'
-          } else if (diffDias <= diasGraciaNum) {
-            simMontoMora = 0
-            simEstadoLabel = `En gracia (+${diffDias}d de ${diasGraciaNum}d - Sin mora)`
-            simEstadoColor =
-              'text-amber-800 dark:text-amber-300 bg-amber-100 dark:bg-amber-950/70 border-amber-300'
-          } else {
-            if (moraTipoPenalidadInput === 'fijo') {
-              simMontoMora = Number(moraMontoFijoInput || 50)
-            } else {
-              const pct = Number(nuevaTasaMoraInput || 10)
-              simMontoMora = Math.round(((simuladorMontoBaseInput * pct) / 100) * 100) / 100
-            }
-            simEstadoLabel = `Con Mora aplicada (+${diffDias} días de mora)`
-            simEstadoColor =
-              'text-rose-800 dark:text-rose-300 bg-rose-100 dark:bg-rose-950/70 border-rose-300'
-          }
-          const simTotal = Math.round((simuladorMontoBaseInput + simMontoMora) * 100) / 100
-
-          return (
-            <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 backdrop-blur-xs overflow-y-auto">
+      {isMoraModalOpen && (
+        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 backdrop-blur-xs overflow-y-auto">
               <div className="w-full max-w-2xl bg-[#ede9e1] dark:bg-slate-900 rounded-3xl border border-[#cec8bc] dark:border-slate-800 p-6 sm:p-7 space-y-4 shadow-2xl my-8">
                 <div className="flex justify-between items-center border-b border-[#cec8bc] dark:border-slate-800 pb-3">
                   <div>
@@ -3138,215 +2352,6 @@ export default function ExpensasPage() {
                     </div>
                   </div>
 
-                  {/* ── SIMULADOR EN VIVO PARA DEMOSTRACIÓN AL DOCENTE ───────────────── */}
-                  <div className="p-4 rounded-2xl bg-[#dfd9ce] dark:bg-slate-800/90 border border-indigo-300 dark:border-indigo-800/50 space-y-3">
-                    <div className="flex items-center justify-between">
-                      <div className="font-extrabold text-xs text-indigo-950 dark:text-indigo-200 flex items-center gap-1.5">
-                        <Sparkles className="w-4 h-4 text-indigo-600" />
-                        Calculadora de Simulación en Vivo (Demostración)
-                      </div>
-                      <span className="text-[10px] font-mono text-[#7d776f] dark:text-slate-400">
-                        Modo activo:{' '}
-                        {moraTipoPenalidadInput === 'fijo' ? 'Fijo en Bs.' : 'Porcentual %'}
-                      </span>
-                    </div>
-
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                      <div>
-                        <label className="block text-[11px] font-bold text-[#5c5750] dark:text-slate-300 mb-1">
-                          Monto Expensa a Probar (Bs.):
-                        </label>
-                        <input
-                          type="number"
-                          value={simuladorMontoBaseInput}
-                          onChange={(e) => setSimuladorMontoBaseInput(Number(e.target.value) || 0)}
-                          className="w-full px-3 py-1.5 rounded-xl bg-[#ede9e1] dark:bg-slate-900 border border-[#cec8bc] dark:border-slate-700 font-mono font-black text-xs"
-                        />
-                      </div>
-
-                      <div>
-                        <label className="block text-[11px] font-bold text-[#5c5750] dark:text-slate-300 mb-1">
-                          Fecha a Simular:
-                        </label>
-                        <input
-                          type="date"
-                          value={simuladorFechaPruebaInput}
-                          onChange={(e) => setSimuladorFechaPruebaInput(e.target.value)}
-                          className="w-full px-3 py-1.5 rounded-xl bg-[#ede9e1] dark:bg-slate-900 border border-[#cec8bc] dark:border-slate-700 font-mono font-bold text-xs cursor-pointer"
-                        />
-                      </div>
-                    </div>
-
-                    {/* Botones de Casos Rápidos */}
-                    <div className="flex flex-wrap items-center gap-1.5 pt-1">
-                      <span className="text-[10px] font-bold text-[#7d776f] mr-1">
-                        Casos Rápidos:
-                      </span>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          const m = simuladorFechaPruebaInput.slice(0, 7) || '2026-11'
-                          setSimuladorFechaPruebaInput(`${m}-05`)
-                        }}
-                        className="px-2 py-0.5 rounded-md bg-emerald-100 hover:bg-emerald-200 text-emerald-800 text-[10px] font-bold cursor-pointer"
-                      >
-                        🟢 05/Nov: Antes (0 Bs)
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          const m = simuladorFechaPruebaInput.slice(0, 7) || '2026-11'
-                          const d = String(moraDiaVencimientoInput || 10).padStart(2, '0')
-                          setSimuladorFechaPruebaInput(`${m}-${d}`)
-                        }}
-                        className="px-2 py-0.5 rounded-md bg-blue-100 hover:bg-blue-200 text-blue-800 text-[10px] font-bold cursor-pointer"
-                      >
-                        🔵 10/Nov: Vencimiento (0 Bs)
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          const m = simuladorFechaPruebaInput.slice(0, 7) || '2026-11'
-                          const d = String(
-                            Number(moraDiaVencimientoInput || 10) + Number(moraDiasGraciaInput || 2)
-                          ).padStart(2, '0')
-                          setSimuladorFechaPruebaInput(`${m}-${d}`)
-                        }}
-                        className="px-2 py-0.5 rounded-md bg-amber-100 hover:bg-amber-200 text-amber-800 text-[10px] font-bold cursor-pointer"
-                      >
-                        🟡 12/Nov: Gracia (0 Bs)
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          const m = simuladorFechaPruebaInput.slice(0, 7) || '2026-11'
-                          setSimuladorFechaPruebaInput(`${m}-15`)
-                        }}
-                        className="px-2 py-0.5 rounded-md bg-rose-100 hover:bg-rose-200 text-rose-800 text-[10px] font-bold cursor-pointer"
-                      >
-                        🔴 15/Nov: Con Retraso (+Mora)
-                      </button>
-                    </div>
-
-                    {/* Tarjeta de Resultado de Simulación */}
-                    <div className="p-3 rounded-xl bg-white dark:bg-slate-950 border border-[#cec8bc] dark:border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-xs">
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <span
-                            className={`px-2 py-0.5 rounded-md text-[10px] font-black border ${simEstadoColor}`}
-                          >
-                            {simEstadoLabel}
-                          </span>
-                        </div>
-                        <div className="text-[11px] text-[#7d776f] dark:text-slate-400 mt-1 font-mono">
-                          Expensa Base: Bs. {simuladorMontoBaseInput.toFixed(2)} + Recargo Mora:{' '}
-                          <span
-                            className={
-                              simMontoMora > 0 ? 'text-rose-600 font-bold' : 'text-emerald-600'
-                            }
-                          >
-                            Bs. {simMontoMora.toFixed(2)}
-                          </span>
-                        </div>
-                      </div>
-
-                      <div className="text-right">
-                        <span className="text-[10px] text-[#7d776f] block uppercase font-bold">
-                          Total a Cobrar
-                        </span>
-                        <span className="text-base font-black text-indigo-700 dark:text-indigo-400 font-mono">
-                          Bs. {simTotal.toFixed(2)}
-                        </span>
-                      </div>
-                    </div>
-
-                    {/* Tabla de Acumulación Mensual Progresiva de Mora (Requerimiento C 3 y Pizarra) */}
-                    <div className="p-3 rounded-2xl bg-[#dfd9ce]/60 dark:bg-slate-950/60 border border-[#cec8bc] dark:border-slate-800 space-y-2">
-                      <div className="flex items-center justify-between text-xs font-bold text-[#262422] dark:text-white">
-                        <span className="flex items-center gap-1.5 text-rose-700 dark:text-rose-400">
-                          <TrendingUp className="w-3.5 h-3.5" />
-                          Tabla de Acumulación Mensual de Mora
-                        </span>
-                        <span className="text-[10px] text-[#7d776f] font-mono">
-                          {politicaMora.tipoPenalidad === 'fijo'
-                            ? `Bs. ${politicaMora.montoFijo || 50}/mes fijo`
-                            : `${politicaMora.porcentaje || 10}% mensual`}
-                        </span>
-                      </div>
-
-                      <div className="overflow-x-auto rounded-xl border border-[#cec8bc] dark:border-slate-800 bg-white dark:bg-slate-900">
-                        <table className="w-full text-[11px] text-left">
-                          <thead className="bg-[#ede9e1] dark:bg-slate-950 text-[#7d776f] font-bold text-[10px] uppercase">
-                            <tr>
-                              <th className="py-1.5 px-2.5">Atraso</th>
-                              <th className="py-1.5 px-2 font-mono text-right">Recargo Mes</th>
-                              <th className="py-1.5 px-2 font-mono text-right text-rose-700 dark:text-rose-400">
-                                Mora Acumulada
-                              </th>
-                              <th className="py-1.5 px-2.5 font-mono text-right text-indigo-700 dark:text-indigo-300">
-                                Total Adeudado
-                              </th>
-                            </tr>
-                          </thead>
-                          <tbody className="divide-y divide-[#cec8bc]/40 dark:divide-slate-800">
-                            {[1, 2, 3, 4, 5, 6].map((mesNum) => {
-                              const moraMes =
-                                politicaMora.tipoPenalidad === 'fijo'
-                                  ? Number(politicaMora.montoFijo || 50)
-                                  : Math.round(
-                                      ((simuladorMontoBaseInput *
-                                        Number(politicaMora.porcentaje || 10)) /
-                                        100) *
-                                        100
-                                    ) / 100
-                              const acumulado = Math.round(moraMes * mesNum * 100) / 100
-                              const totalMes =
-                                Math.round((simuladorMontoBaseInput + acumulado) * 100) / 100
-                              return (
-                                <tr
-                                  key={`sim-mora-mes-${mesNum}`}
-                                  className="hover:bg-rose-50/50 dark:hover:bg-rose-950/20"
-                                >
-                                  <td className="py-1.5 px-2.5 font-medium text-[#262422] dark:text-slate-200">
-                                    Mes {mesNum}{' '}
-                                    <span className="text-[10px] text-[#7d776f]">
-                                      (+{mesNum * 30} d)
-                                    </span>
-                                  </td>
-                                  <td className="py-1.5 px-2 font-mono text-right text-[#5c5750] dark:text-slate-300">
-                                    +Bs. {moraMes.toFixed(2)}
-                                  </td>
-                                  <td className="py-1.5 px-2 font-mono text-right font-bold text-rose-700 dark:text-rose-400">
-                                    Bs. {acumulado.toFixed(2)}
-                                  </td>
-                                  <td className="py-1.5 px-2.5 font-mono text-right font-black text-indigo-800 dark:text-indigo-300">
-                                    Bs. {totalMes.toFixed(2)}
-                                  </td>
-                                </tr>
-                              )
-                            })}
-                          </tbody>
-                        </table>
-                      </div>
-                    </div>
-
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setFechaSistema(simuladorFechaPruebaInput)
-                        showToast(
-                          `⚡ Fecha del sistema actualizada a ${simuladorFechaPruebaInput}. Ahora toda la pantalla calcula con esta fecha.`
-                        )
-                      }}
-                      className="w-full py-1.5 px-3 rounded-xl bg-indigo-100 hover:bg-indigo-200 dark:bg-indigo-950 dark:hover:bg-indigo-900 text-indigo-900 dark:text-indigo-200 font-bold text-[11px] flex items-center justify-center gap-1.5 cursor-pointer transition-colors"
-                    >
-                      <Clock className="w-3.5 h-3.5" />
-                      <span>
-                        Aplicar fecha simulada ({simuladorFechaPruebaInput}) al sistema general
-                      </span>
-                    </button>
-                  </div>
-
                   {/* Historial */}
                   <div className="space-y-1.5 pt-2 border-t border-[#cec8bc] dark:border-slate-800">
                     <span className="font-bold text-xs text-[#262422] dark:text-white flex items-center gap-1.5">
@@ -3412,8 +2417,7 @@ export default function ExpensasPage() {
                 </form>
               </div>
             </div>
-          )
-        })()}
+      )}
 
       {/* MODAL REGISTRO DE COBRO / PAGO DE EXPENSA */}
       {isPagarModalOpen && expensaAPagar && (
@@ -3526,166 +2530,241 @@ export default function ExpensasPage() {
       )}
 
       {/* MODAL RECIBO OFICIAL DE CAJA (OFICIAL EDIFICIO XYZ) */}
-      {selectedReceipt && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs">
-          <div className="bg-white dark:bg-slate-900 border border-[#cec8bc] dark:border-slate-800 w-full max-w-lg rounded-2xl shadow-2xl p-6 space-y-4 animate-in fade-in zoom-in-95 duration-200 text-[#262422] dark:text-slate-100">
-            <div className="flex items-center justify-between border-b pb-3 dark:border-slate-800">
-              <div className="flex items-center gap-2">
-                <ShieldCheck className="w-5 h-5 text-emerald-600" />
-                <h3 className="font-black text-base uppercase tracking-tight">
-                  Recibo Oficial de Caja — Expensas
-                </h3>
-              </div>
-              <button
-                onClick={() => setSelectedReceipt(null)}
-                className="text-slate-400 hover:text-slate-600 p-1"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
+      {selectedReceipt && (() => {
+        const pagoObj =
+          selectedReceipt.pago ||
+          (Array.isArray(selectedReceipt.pagos) && selectedReceipt.pagos.length > 0
+            ? selectedReceipt.pagos[0]
+            : null)
 
-            <div className="border border-slate-200 dark:border-slate-800 rounded-xl p-4 bg-slate-50 dark:bg-slate-950/60 space-y-3">
-              <div className="flex justify-between items-start text-xs">
-                <div>
-                  <div className="font-black text-sm text-emerald-800 dark:text-emerald-400">
-                    CONDOMINIO EDIFICIO XYZ
+        const capitalPagado = Number(
+          selectedReceipt.montoPagado ??
+          pagoObj?.montoPagado ??
+          (selectedReceipt.estado === 'Pagado' ? selectedReceipt.monto : 0)
+        )
+        const moraCobrada = Number(
+          selectedReceipt.interesPagado ??
+          pagoObj?.interesPagado ??
+          0
+        )
+        const totalPagado = Math.round((capitalPagado + moraCobrada) * 100) / 100
+
+        if (totalPagado <= 0 && !selectedReceipt.idExpensa && !selectedReceipt.idDepartamento) {
+          return null
+        }
+
+        const deptoNum =
+          selectedReceipt.departamento?.numero ||
+          (selectedReceipt.idDepartamento ? String(selectedReceipt.idDepartamento) : '')
+        const propNombre = selectedReceipt.propietarioNombre || ''
+        const periodoStr = selectedReceipt.periodo || ''
+        const montoBase = Number(selectedReceipt.montoBase ?? 0)
+        const montoAgua = Number(selectedReceipt.montoAgua ?? 0)
+        const montoExtras = Number(selectedReceipt.montoExtras ?? selectedReceipt.montoExtra ?? 0)
+        const metodoPago = selectedReceipt.metodoPago || pagoObj?.metodoPago || null
+        const referenciaQr = selectedReceipt.referenciaQr || pagoObj?.referenciaQr || null
+        const fechaPagoVal = selectedReceipt.fechaPago || pagoObj?.fechaPago || null
+
+        return (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs">
+            <div className="bg-white dark:bg-slate-900 border border-[#cec8bc] dark:border-slate-800 w-full max-w-lg rounded-2xl shadow-2xl p-6 space-y-4 animate-in fade-in zoom-in-95 duration-200 text-[#262422] dark:text-slate-100">
+              <div className="flex items-center justify-between border-b pb-3 dark:border-slate-800">
+                <div className="flex items-center gap-2">
+                  <ShieldCheck className="w-5 h-5 text-emerald-600" />
+                  <h3 className="font-black text-base uppercase tracking-tight">
+                    Recibo Oficial de Caja — Expensas
+                  </h3>
+                </div>
+                <button
+                  onClick={() => setSelectedReceipt(null)}
+                  className="text-slate-400 hover:text-slate-600 p-1 cursor-pointer"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              <div className="border border-slate-200 dark:border-slate-800 rounded-xl p-4 bg-slate-50 dark:bg-slate-950/60 space-y-3">
+                <div className="flex justify-between items-start text-xs">
+                  <div>
+                    <div className="font-black text-sm text-emerald-800 dark:text-emerald-400">
+                      CONDOMINIO EDIFICIO XYZ
+                    </div>
                   </div>
-                  <div className="text-[11px] text-slate-500">
-                    NIT: 1029384029 • Cochabamba, Bolivia
+                  <div className="text-right">
+                    <div className="font-mono font-bold text-slate-900 dark:text-white">
+                      REC-EXP-{deptoNum || '—'}
+                    </div>
+                    {periodoStr && (
+                      <div className="text-[11px] text-slate-500 font-mono">
+                        Período: {periodoStr}
+                      </div>
+                    )}
                   </div>
                 </div>
-                <div className="text-right">
-                  <div className="font-mono font-bold text-slate-900 dark:text-white">
-                    REC-EXP-{selectedReceipt.departamento?.numero || selectedReceipt.idDepartamento}
+
+                <div className="grid grid-cols-2 gap-2 text-xs border-t pt-2 dark:border-slate-800">
+                  {propNombre && (
+                    <div>
+                      <span className="text-slate-500 block text-[10px] uppercase font-bold">
+                        Propietario Responsable:
+                      </span>
+                      <span className="font-bold">{propNombre}</span>
+                    </div>
+                  )}
+                  {deptoNum && (
+                    <div>
+                      <span className="text-slate-500 block text-[10px] uppercase font-bold">
+                        Unidad:
+                      </span>
+                      <span className="font-bold">
+                        Dpto {deptoNum} (
+                        {selectedReceipt.departamento?.tipologia || '80 m²'})
+                      </span>
+                    </div>
+                  )}
+                  <div>
+                    <span className="text-slate-500 block text-[10px] uppercase font-bold">
+                      Pagado Por:
+                    </span>
+                    <span className="font-bold text-emerald-700 dark:text-emerald-400">
+                      {selectedReceipt.pagadoPor ||
+                        selectedReceipt.inquilinoNombre ||
+                        propNombre ||
+                        '—'}
+                    </span>
                   </div>
-                  <div className="text-[11px] text-slate-500 font-mono">
-                    Período: {selectedReceipt.periodo}
+                  <div>
+                    <span className="text-slate-500 block text-[10px] uppercase font-bold">
+                      Concepto:
+                    </span>
+                    <span>Expensa Común de Áreas Comunes</span>
                   </div>
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-2 text-xs border-t pt-2 dark:border-slate-800">
-                <div>
-                  <span className="text-slate-500 block text-[10px] uppercase font-bold">
-                    Propietario Responsable:
-                  </span>
-                  <span className="font-bold">{selectedReceipt.propietarioNombre}</span>
+              {/* Detalle REAL de la Expensa y del Pago */}
+              <div className="border border-slate-200 dark:border-slate-800 rounded-xl p-3 bg-slate-50 dark:bg-slate-950/60 space-y-1.5 text-xs">
+                <div className="flex justify-between items-center text-[10px] font-bold text-slate-500 uppercase pb-1 border-b dark:border-slate-800">
+                  <span>Detalle de Liquidación y Pago</span>
+                  {pagoObj?.idPago && (
+                    <span className="font-mono">Pago N.º {pagoObj.idPago}</span>
+                  )}
                 </div>
-                <div>
-                  <span className="text-slate-500 block text-[10px] uppercase font-bold">
-                    Unidad:
-                  </span>
-                  <span className="font-bold">
-                    Dpto {selectedReceipt.departamento?.numero} (
-                    {selectedReceipt.departamento?.tipologia || '80 m²'})
-                  </span>
+
+                {periodoStr && (
+                  <div className="flex justify-between text-[11px]">
+                    <span className="text-slate-600 dark:text-slate-300">• Período:</span>
+                    <span className="font-mono font-medium">{periodoStr}</span>
+                  </div>
+                )}
+
+                {deptoNum && (
+                  <div className="flex justify-between text-[11px]">
+                    <span className="text-slate-600 dark:text-slate-300">• Departamento:</span>
+                    <span className="font-mono font-medium">Dpto {deptoNum}</span>
+                  </div>
+                )}
+
+                {propNombre && (
+                  <div className="flex justify-between text-[11px]">
+                    <span className="text-slate-600 dark:text-slate-300">• Propietario:</span>
+                    <span className="font-medium">{propNombre}</span>
+                  </div>
+                )}
+
+                {montoBase > 0 && (
+                  <div className="flex justify-between text-[11px]">
+                    <span className="text-slate-600 dark:text-slate-300">• Concepto base:</span>
+                    <span className="font-mono">Bs. {montoBase.toFixed(2)}</span>
+                  </div>
+                )}
+
+                {montoAgua > 0 && (
+                  <div className="flex justify-between text-[11px]">
+                    <span className="text-slate-600 dark:text-slate-300">• Agua:</span>
+                    <span className="font-mono">Bs. {montoAgua.toFixed(2)}</span>
+                  </div>
+                )}
+
+                {montoExtras > 0 && (
+                  <div className="flex justify-between text-[11px]">
+                    <span className="text-slate-600 dark:text-slate-300">
+                      • Extras{selectedReceipt.extraConcepto ? ` (${selectedReceipt.extraConcepto})` : ''}:
+                    </span>
+                    <span className="font-mono">Bs. {montoExtras.toFixed(2)}</span>
+                  </div>
+                )}
+
+                {moraCobrada > 0 && (
+                  <div className="flex justify-between text-[11px]">
+                    <span className="text-rose-600 dark:text-rose-400 font-semibold">• Mora cobrada:</span>
+                    <span className="font-mono text-rose-600 dark:text-rose-400 font-bold">
+                      +Bs. {moraCobrada.toFixed(2)}
+                    </span>
+                  </div>
+                )}
+
+                {capitalPagado > 0 && (
+                  <div className="flex justify-between text-[11px]">
+                    <span className="text-slate-600 dark:text-slate-300">• Capital pagado:</span>
+                    <span className="font-mono">Bs. {capitalPagado.toFixed(2)}</span>
+                  </div>
+                )}
+
+                {metodoPago && (
+                  <div className="flex justify-between text-[11px]">
+                    <span className="text-slate-600 dark:text-slate-300">• Método de pago:</span>
+                    <span className="font-semibold">{metodoPago}</span>
+                  </div>
+                )}
+
+                {referenciaQr && (
+                  <div className="flex justify-between text-[11px]">
+                    <span className="text-slate-600 dark:text-slate-300">• N.º de comprobante:</span>
+                    <span className="font-mono">{referenciaQr}</span>
+                  </div>
+                )}
+
+                {fechaPagoVal && (
+                  <div className="flex justify-between text-[11px]">
+                    <span className="text-slate-600 dark:text-slate-300">• Fecha de pago:</span>
+                    <span className="font-mono">{fechaSolo(fechaPagoVal)}</span>
+                  </div>
+                )}
+              </div>
+
+              <div className="space-y-1.5 text-xs">
+                <div className="flex justify-between py-2 text-sm font-black text-emerald-800 dark:text-emerald-400 border-t-2 border-slate-900 dark:border-slate-100">
+                  <span>TOTAL PAGADO</span>
+                  <span className="font-mono">Bs. {totalPagado.toFixed(2)}</span>
                 </div>
-                <div>
-                  <span className="text-slate-500 block text-[10px] uppercase font-bold">
-                    Pagado Por:
-                  </span>
-                  <span className="font-bold text-emerald-700 dark:text-emerald-400">
-                    {selectedReceipt.pagadoPor ||
-                      selectedReceipt.inquilinoNombre ||
-                      selectedReceipt.propietarioNombre}
-                  </span>
-                </div>
-                <div>
-                  <span className="text-slate-500 block text-[10px] uppercase font-bold">
-                    Concepto:
-                  </span>
-                  <span>Expensa Común de Áreas Comunes</span>
-                </div>
               </div>
-            </div>
 
-            {/* Extracto Detallado de Gastos Comunes en el Recibo */}
-            <div className="border border-slate-200 dark:border-slate-800 rounded-xl p-3 bg-slate-50 dark:bg-slate-950/60 space-y-1.5 text-xs">
-              <div className="flex justify-between items-center text-[10px] font-bold text-slate-500 uppercase pb-1 border-b dark:border-slate-800">
-                <span>Extracto Composición de Expensa</span>
-                <span>Base Edificio: Bs 15.500</span>
+              <div className="text-[10px] text-[#7d776f] bg-amber-50 dark:bg-amber-950/20 p-2.5 rounded-xl border border-amber-200">
+                ℹ️ Nota administrativa: La administración no administra ni percibe alquileres
+                (relación privada entre inquilino y propietario) ni consumos de medidores individuales
+                (ELFEC/Agua).
               </div>
-              <div className="flex justify-between text-[11px]">
-                <span className="text-slate-600 dark:text-slate-300">
-                  • Seguridad y Vigilancia 24/7 (36.13%)
-                </span>
-                <span className="font-mono">Bs. {(selectedReceipt.monto * 0.3613).toFixed(2)}</span>
-              </div>
-              <div className="flex justify-between text-[11px]">
-                <span className="text-slate-600 dark:text-slate-300">
-                  • Administración Central y Gestión (22.58%)
-                </span>
-                <span className="font-mono">Bs. {(selectedReceipt.monto * 0.2258).toFixed(2)}</span>
-              </div>
-              <div className="flex justify-between text-[11px]">
-                <span className="text-slate-600 dark:text-slate-300">
-                  • Limpieza e Insumos Comunes (14.19%)
-                </span>
-                <span className="font-mono">Bs. {(selectedReceipt.monto * 0.1419).toFixed(2)}</span>
-              </div>
-              <div className="flex justify-between text-[11px]">
-                <span className="text-slate-600 dark:text-slate-300">
-                  • Mantenimiento Preventivo (9.68%)
-                </span>
-                <span className="font-mono">Bs. {(selectedReceipt.monto * 0.0968).toFixed(2)}</span>
-              </div>
-              <div className="flex justify-between text-[11px]">
-                <span className="text-slate-600 dark:text-slate-300">
-                  • Electricidad Común ELFEC (5.16%)
-                </span>
-                <span className="font-mono">Bs. {(selectedReceipt.monto * 0.0516).toFixed(2)}</span>
-              </div>
-              <div className="flex justify-between text-[11px]">
-                <span className="text-slate-600 dark:text-slate-300">
-                  • Mantenimiento Ascensor Otis (4.52%)
-                </span>
-                <span className="font-mono">Bs. {(selectedReceipt.monto * 0.0452).toFixed(2)}</span>
-              </div>
-              <div className="flex justify-between text-[11px]">
-                <span className="text-slate-600 dark:text-slate-300">
-                  • Agua Común y Cisterna SEMAPA (1.94%)
-                </span>
-                <span className="font-mono">Bs. {(selectedReceipt.monto * 0.0194).toFixed(2)}</span>
-              </div>
-              <div className="flex justify-between text-[11px]">
-                <span className="text-slate-600 dark:text-slate-300">
-                  • Imprevistos y Fondo Menor (5.80%)
-                </span>
-                <span className="font-mono">Bs. {(selectedReceipt.monto * 0.058).toFixed(2)}</span>
-              </div>
-            </div>
 
-            <div className="space-y-1.5 text-xs">
-              <div className="flex justify-between py-2 text-sm font-black text-emerald-800 dark:text-emerald-400 border-t-2 border-slate-900 dark:border-slate-100">
-                <span>TOTAL RECAUDADO</span>
-                <span className="font-mono">Bs. {selectedReceipt.monto.toFixed(2)}</span>
+              <div className="flex justify-end gap-2 border-t pt-3 dark:border-slate-800">
+                <button
+                  onClick={() => setSelectedReceipt(null)}
+                  className="px-4 py-2 rounded-xl text-xs font-bold text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer"
+                >
+                  Cerrar
+                </button>
+                <button
+                  onClick={() => window.print()}
+                  className="flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold bg-emerald-700 hover:bg-emerald-800 text-white shadow-md cursor-pointer"
+                >
+                  <Printer className="w-4 h-4" />
+                  Imprimir Recibo
+                </button>
               </div>
-            </div>
-
-            <div className="text-[10px] text-[#7d776f] bg-amber-50 dark:bg-amber-950/20 p-2.5 rounded-xl border border-amber-200">
-              ℹ️ Nota administrativa: La administración no administra ni percibe alquileres
-              (relación privada entre inquilino y propietario) ni consumos de medidores individuales
-              (ELFEC/Agua).
-            </div>
-
-            <div className="flex justify-end gap-2 border-t pt-3 dark:border-slate-800">
-              <button
-                onClick={() => setSelectedReceipt(null)}
-                className="px-4 py-2 rounded-xl text-xs font-bold text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800"
-              >
-                Cerrar
-              </button>
-              <button
-                onClick={() => window.print()}
-                className="flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold bg-emerald-700 hover:bg-emerald-800 text-white shadow-md"
-              >
-                <Printer className="w-4 h-4" />
-                Imprimir Recibo
-              </button>
             </div>
           </div>
-        </div>
-      )}
+        )
+      })()}
 
       {/* MODAL EXTRACTO DE GASTOS COMUNES Y COMPOSICIÓN DE LA EXPENSA */}
       {(selectedExtracto || isExtractoGeneralOpen) && (
@@ -3781,56 +2860,10 @@ export default function ExpensasPage() {
             </div>
 
             {/* Tabla del Extracto */}
-            <div className="overflow-x-auto rounded-xl border border-[#cec8bc] dark:border-slate-800">
-              <table className="w-full text-left text-xs bg-white dark:bg-slate-950">
-                <thead>
-                  <tr className="border-b border-[#cec8bc] dark:border-slate-800 bg-[#dfd9ce]/60 dark:bg-slate-900/60 text-[#7d776f] dark:text-slate-400 font-bold uppercase text-[10px]">
-                    <th className="py-2.5 px-3">Rubro de Gasto Común</th>
-                    <th className="py-2.5 px-3 text-right">Presupuesto Edificio</th>
-                    <th className="py-2.5 px-3 text-right">% Ponderado</th>
-                    <th className="py-2.5 px-3 text-right font-extrabold text-emerald-800 dark:text-emerald-400">
-                      {selectedExtracto
-                        ? `Cuota Dpto ${selectedExtracto.departamento?.numero}`
-                        : 'Cuota Base'}
-                    </th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                  {RUBROS_GASTOS_COMUNES.map((r, idx) => {
-                    const montoExpensa = selectedExtracto ? selectedExtracto.monto : 775.0
-                    const cuotaRubro = montoExpensa * (r.porcentaje / 100)
-                    return (
-                      <tr
-                        key={`rubro-${idx}-${r.concepto}`}
-                        className="hover:bg-slate-50 dark:hover:bg-slate-900/40"
-                      >
-                        <td className="py-2 px-3 font-medium text-[#262422] dark:text-slate-200">
-                          {r.concepto}
-                        </td>
-                        <td className="py-2 px-3 text-right font-mono text-[#7d776f] dark:text-slate-400">
-                          Bs. {r.totalPresupuesto.toFixed(2)}
-                        </td>
-                        <td className="py-2 px-3 text-right font-mono text-[#7d776f] dark:text-slate-400">
-                          {r.porcentaje.toFixed(2)}%
-                        </td>
-                        <td className="py-2 px-3 text-right font-mono font-bold text-[#262422] dark:text-white">
-                          Bs. {cuotaRubro.toFixed(2)}
-                        </td>
-                      </tr>
-                    )
-                  })}
-                  <tr className="border-t-2 border-slate-900 dark:border-slate-200 font-black bg-slate-50 dark:bg-slate-900">
-                    <td className="py-2.5 px-3 uppercase text-[11px]">
-                      Total Liquidación de Gastos
-                    </td>
-                    <td className="py-2.5 px-3 text-right font-mono">Bs. 15.500,00</td>
-                    <td className="py-2.5 px-3 text-right font-mono">100.00%</td>
-                    <td className="py-2.5 px-3 text-right font-mono text-emerald-700 dark:text-emerald-400 text-sm">
-                      Bs. {(selectedExtracto ? selectedExtracto.monto : 775.0).toFixed(2)}
-                    </td>
-                  </tr>
-                </tbody>
-              </table>
+            <div className="p-6 rounded-xl border border-[#cec8bc] dark:border-slate-800 bg-white dark:bg-slate-950 text-center">
+              <p className="text-xs text-[#7d776f] dark:text-slate-400 font-medium">
+                Composición del gasto común disponible en el próximo período
+              </p>
             </div>
 
             {/* Comparativa por Tipología */}
@@ -4370,9 +3403,21 @@ export default function ExpensasPage() {
                   rows={3}
                   value={motivoAnulacionInput}
                   onChange={(e) => setMotivoAnulacionInput(e.target.value)}
-                  placeholder="Explique detalladamente el motivo de la anulación (ej. Error en número de comprobante, duplicado por el banco, etc.)..."
+                  placeholder="Explique detalladamente el motivo de la anulación (ej. Error en número de comprobante, pago duplicado, etc.)..."
                   className="w-full px-3 py-2 rounded-xl bg-[#dfd9ce] dark:bg-slate-800 border border-[#cec8bc] dark:border-slate-700 text-[#262422] dark:text-white text-xs resize-none"
                 />
+                <div className="flex justify-between items-center text-[11px] mt-1 text-[#7d776f]">
+                  {motivoAnulacionInput.trim().length < 5 ? (
+                    <span className="text-amber-600 dark:text-amber-400 font-medium">
+                      Mínimo 5 caracteres
+                    </span>
+                  ) : (
+                    <span className="text-emerald-600 dark:text-emerald-400 font-medium">
+                      Requisito cumplido
+                    </span>
+                  )}
+                  <span>{motivoAnulacionInput.trim().length} / 5</span>
+                </div>
               </div>
 
               <div className="flex justify-end gap-2 pt-3 border-t border-[#cec8bc] dark:border-slate-800">
@@ -4388,7 +3433,7 @@ export default function ExpensasPage() {
                 </button>
                 <button
                   type="submit"
-                  disabled={isSubmittingAnulacion || !motivoAnulacionInput.trim()}
+                  disabled={isSubmittingAnulacion || motivoAnulacionInput.trim().length < 5}
                   className="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold shadow-md cursor-pointer disabled:opacity-50"
                 >
                   {isSubmittingAnulacion ? 'Anulando...' : 'Confirmar Anulación'}
@@ -4528,10 +3573,52 @@ export default function ExpensasPage() {
         onClose={() => setIsQrSimuladorOpen(false)}
         expensa={expensaParaQr}
         personasList={personasList}
-        onPaymentSuccess={(reciboInfo) => {
-          showToast('¡Pago QR procesado exitosamente en el simulador!')
+        onPaymentSuccess={(resultado) => {
+          showToast('Pago registrado exitosamente')
           fetchExpensas()
-          if (reciboInfo) setSelectedReceipt(reciboInfo)
+          if (!expensaParaQr && !resultado) return
+
+          const pago = resultado?.pago || (resultado?.idPago ? resultado : null)
+          const exp = resultado?.expensa || null
+          const pagadorNombre = resultado?.pagadoPor || resultado?.pagadorNombre
+          const baseExpensa = expensaParaQr || {}
+
+          const montoVal = Number(
+            exp?.monto ?? baseExpensa?.monto ?? pago?.montoPagado
+          )
+          if (isNaN(montoVal) || montoVal <= 0) return
+
+          const recibo: ExpensaItem = {
+            ...baseExpensa,
+            idExpensa: exp?.idExpensa ?? baseExpensa.idExpensa,
+            idDepartamento: exp?.idDepartamento ?? baseExpensa.idDepartamento,
+            periodo: baseExpensa.periodo || exp?.periodo,
+            monto: montoVal,
+            montoBase: baseExpensa.montoBase,
+            montoAgua: baseExpensa.montoAgua,
+            montoExtra: baseExpensa.montoExtra,
+            extraConcepto: baseExpensa.extraConcepto,
+            saldoPendiente: exp?.saldoPendiente !== undefined ? Number(exp.saldoPendiente) : 0,
+            tasaInteresMora: Number(baseExpensa.tasaInteresMora ?? 0),
+            fechaVencimiento: baseExpensa.fechaVencimiento || exp?.fechaVencimiento,
+            estado: exp?.estado || 'Pagado',
+            departamento: baseExpensa.departamento,
+            propietarioNombre: baseExpensa.propietarioNombre,
+            inquilinoNombre: baseExpensa.inquilinoNombre,
+            pagadoPor:
+              pagadorNombre ||
+              baseExpensa.pagadoPor ||
+              baseExpensa.inquilinoNombre ||
+              baseExpensa.propietarioNombre,
+            montoPagado: pago ? Number(pago.montoPagado) : undefined,
+            interesPagado: pago ? Number(pago.interesPagado || 0) : undefined,
+            metodoPago: pago?.metodoPago,
+            referenciaQr: pago?.referenciaQr,
+            fechaPago: pago?.fechaPago,
+            pago: pago || undefined,
+            pagos: pago ? [pago, ...(baseExpensa.pagos || [])] : (baseExpensa.pagos || [])
+          }
+          setSelectedReceipt(recibo)
         }}
       />
 

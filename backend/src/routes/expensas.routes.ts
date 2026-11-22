@@ -91,18 +91,23 @@ const pagoSchema = z.object({
   metodoPago: z.enum(['Efectivo', 'Transferencia', 'Cheque', 'QR']).optional(),
   esAnticipado: z.boolean().default(false),
   idCuenta: z.number().int().positive().optional(),
-  comprobanteUrl: z.string().optional(),
-  esSimulacion: z.boolean().optional(),
-  fechaPagoSimulada: z.string().optional(),
+  comprobanteUrl: z.string().max(2000000).refine((v) => v.length <= 500 || /^data:image\/(png|jpeg|webp);base64,/.test(v), 'El comprobante debe ser una imagen PNG, JPG o WebP').optional(),
+  referenciaQr: z.string().trim().min(4).max(100).optional(),
 });
 
 const aplicarAnticipoSchema = z.object({
   monto: z.number().positive().optional(),
 });
 
-const anularPagoSchema = z.object({
-  motivo: z.string().min(1, 'El motivo de anulación es obligatorio'),
-});
+const anularPagoSchema = z
+  .object({
+    motivo: z.string().trim().min(1, 'El motivo de anulación es obligatorio').optional(),
+    motivoAnulacion: z.string().trim().min(1, 'El motivo de anulación es obligatorio').optional(),
+  })
+  .refine((data) => Boolean(data.motivo || data.motivoAnulacion), {
+    message: 'El motivo de anulación es obligatorio',
+    path: ['motivo'],
+  });
 
 const corregirPagoSchema = pagoSchema.extend({
   motivo: z.string().min(1, 'El motivo de corrección es obligatorio'),
@@ -352,6 +357,7 @@ expensasRouter.get(
               where: { anulado: false },
               orderBy: { fechaPago: 'desc' },
               include: { usuarioRegistro: { select: { nombreUsuario: true } } },
+              omit: { comprobanteUrl: true },
             },
             aplicacionesAnticipos: {
               include: { pago: true },
@@ -459,7 +465,7 @@ expensasRouter.get(
               propietario: { select: { idPersona: true, nombres: true, apellidos: true, ciNit: true, telefono: true, correo: true } },
             },
           },
-          pagos: { where: { anulado: false } },
+          pagos: { where: { anulado: false }, omit: { comprobanteUrl: true } },
           aplicacionesAnticipos: { include: { pago: true } },
         },
         orderBy: [{ idDepartamento: 'asc' }, { periodo: 'asc' }],
@@ -643,7 +649,7 @@ expensasRouter.get(
           where: expensaWhere,
           orderBy: { periodo: 'desc' },
           include: {
-            pagos: { where: { anulado: false }, include: { pagador: true } },
+            pagos: { where: { anulado: false }, include: { pagador: true }, omit: { comprobanteUrl: true } },
             aplicacionesAnticipos: { include: { pago: true } },
           },
         }),
@@ -1029,6 +1035,7 @@ expensasRouter.get(
               usuarioRegistro: { select: { nombreUsuario: true } },
               cuentaBancaria: { select: { banco: true, numeroCuenta: true } },
             },
+            omit: { comprobanteUrl: true },
           },
           aplicacionesAnticipos: {
             include: {
@@ -1709,6 +1716,82 @@ expensasRouter.post(
   }
 );
 
+// Helper para registrar el ingreso contable y su destino (banco / caja)
+async function registrarIngresoContableDePago(
+  tx: Prisma.TransactionClient,
+  params: {
+    idPago: number;
+    montoTotal: number;
+    fechaPago: Date;
+    concepto: string;
+    idCuenta?: number | null;
+    metodoPago?: string | null;
+    referenciaQr?: string | null;
+    comprobanteUrl?: string | null;
+    pagadorNombre?: string | null;
+    idUsuario?: number | null;
+  }
+) {
+  let catExpensa = await tx.categoriaMovimiento.findFirst({
+    where: {
+      tipo: 'Ingreso',
+      nombre: { contains: 'Expensa', mode: 'insensitive' },
+    },
+  });
+  if (!catExpensa) {
+    catExpensa = await tx.categoriaMovimiento.findFirst({
+      where: { tipo: 'Ingreso' },
+    });
+  }
+  if (!catExpensa) {
+    catExpensa = await tx.categoriaMovimiento.findFirst();
+  }
+
+  const mov = await tx.movimiento.create({
+    data: {
+      tipo: 'Ingreso',
+      idCategoria: catExpensa ? catExpensa.idCategoria : 1,
+      monto: params.montoTotal,
+      descripcion: params.concepto,
+      fecha: params.fechaPago,
+      comprobanteUrl: params.comprobanteUrl || null,
+      tercero: params.pagadorNombre || null,
+      nroFactura: params.referenciaQr || null,
+      metodoPago: params.metodoPago || (params.idCuenta ? 'Transferencia' : 'Efectivo'),
+      idUsuarioRegistro: params.idUsuario || null,
+      idPago: params.idPago,
+      anulado: false,
+    },
+  });
+
+  await auditoriaService.registrarEvento({
+    tablaAfectada: 'movimientos',
+    idRegistro: mov.idMovimiento.toString(),
+    accion: 'CREAR_MOVIMIENTO',
+    resultado: 'EXITO',
+    datosNuevos: mov,
+    idUsuario: params.idUsuario || null,
+    tx,
+  });
+
+  if (params.idCuenta) {
+    await tx.movimientoBancario.create({
+      data: {
+        idCuenta: params.idCuenta,
+        idMovimiento: mov.idMovimiento,
+        monto: params.montoTotal,
+        tipo: 'Deposito',
+        fecha: params.fechaPago,
+        concepto: params.concepto,
+        referencia: params.referenciaQr || null,
+        idUsuarioRegistro: params.idUsuario || null,
+      },
+    });
+  }
+
+  return mov;
+}
+
 // ── POST /api/v1/expensas/:id/pagos ──────────────────────────────────────────
 // CA03, CA04, CA10: Registrar pago (o anticipo si idExpensa es null) con auditoría
 expensasRouter.post(
@@ -1748,10 +1831,59 @@ expensasRouter.post(
         });
         return;
       }
-
-      const { montoPagado, interesPagado, metodoPago, esAnticipado, idCuenta, comprobanteUrl, idExpensa, idDepartamento: idDeptoBody } = result.data;
+      const { montoPagado, interesPagado, metodoPago, esAnticipado, idCuenta, comprobanteUrl, referenciaQr, idExpensa, idDepartamento: idDeptoBody } = result.data;
       const paramId = req.params.id;
       const parsedId = parseInt(paramId);
+
+      // Resolución de cuenta: si metodoPago es 'QR' y el body no trae idCuenta, tomarla de configuracion_global 'qr_cobro_id_cuenta'
+      let finalIdCuenta = idCuenta || null;
+      if (metodoPago === 'QR' && !finalIdCuenta) {
+        const confCuenta = await prisma.configuracionGlobal.findUnique({
+          where: { clave: 'qr_cobro_id_cuenta' },
+        });
+        const idC = confCuenta?.valor ? parseInt(confCuenta.valor, 10) : null;
+        if (!idC || !Number.isInteger(idC) || idC <= 0) {
+          res.status(400).json({
+            error: 'Bad Request',
+            message: 'Falta configurar la cuenta que recibe el QR',
+          });
+          return;
+        }
+        finalIdCuenta = idC;
+      }
+
+      if (finalIdCuenta) {
+        const cuentaExiste = await prisma.cuentaBancaria.findUnique({ where: { idCuenta: finalIdCuenta } });
+        if (!cuentaExiste) {
+          res.status(400).json({
+            error: 'Bad Request',
+            message: 'La cuenta seleccionada no existe',
+          });
+          return;
+        }
+      }
+
+      // Validación de comprobante QR duplicado (punto 3)
+      if (referenciaQr && referenciaQr.trim().length > 0) {
+        const refLimpia = referenciaQr.trim();
+        const pagoExistenteRef = await prisma.pago.findFirst({
+          where: {
+            referenciaQr: refLimpia,
+            anulado: false,
+          },
+        });
+        if (pagoExistenteRef) {
+          res.status(409).json({
+            error: 'Conflict',
+            code: 'REFERENCIA_QR_DUPLICADA',
+            message: 'Ese N.º de comprobante ya fue registrado',
+          });
+          return;
+        }
+      }
+
+      const pagadorNombre = `${personaExiste.nombres} ${personaExiste.apellidos}`.trim();
+      const montoTotal = Number((Number(montoPagado) + Number(interesPagado ?? 0)).toFixed(2));
 
       // Si idExpensa en el body es explícitamente null o la ruta se invoca para registrar anticipo sin expensa
       const esAnticipoSinExpensa = idExpensa === null || (paramId === 'anticipo' && idExpensa === undefined);
@@ -1784,29 +1916,68 @@ expensasRouter.post(
           return;
         }
 
-        const pagoAnticipado = await prisma.pago.create({
-          data: {
-            idExpensa: null,
-            idDepartamento: targetDepartamentoId,
-            idPersonaPagador,
-            montoPagado,
-            interesPagado: interesPagado ?? 0,
-            metodoPago: metodoPago || 'Efectivo',
-            esAnticipado: true,
-            idCuenta: idCuenta || null,
-            comprobanteUrl: comprobanteUrl || null,
-            idUsuarioRegistro: req.user?.idUsuario || null,
-          },
-        });
+        const depto = await prisma.departamento.findUnique({ where: { idDepartamento: targetDepartamentoId } });
+        const deptoNum = depto?.numero || String(targetDepartamentoId);
+        const concepto = `Cobro anticipo expensa Dpto ${deptoNum}`;
 
-        await auditoriaService.registrarEvento({
-          tablaAfectada: 'pagos',
-          idRegistro: String(pagoAnticipado.idPago),
-          accion: 'REGISTRO_ANTICIPO',
-          resultado: 'EXITO',
-          datosNuevos: { pago: pagoAnticipado },
-          idUsuario: req.user?.idUsuario || null,
-        });
+        const pagoAnticipado = await prisma.$transaction(async (tx) => {
+          let idMovimientoCaja: number | null = null;
+          if (!finalIdCuenta && metodoPago === 'Efectivo') {
+            const nuevoCaja = await tx.caja.create({
+              data: {
+                tipo: 'Ingreso',
+                monto: montoTotal,
+                concepto,
+                fecha: new Date(),
+                idUsuarioRegistro: req.user?.idUsuario || null,
+                anulado: false,
+              },
+            });
+            idMovimientoCaja = nuevoCaja.idMovimientoCaja;
+          }
+
+          const pago = await tx.pago.create({
+            data: {
+              idExpensa: null,
+              idDepartamento: targetDepartamentoId,
+              idPersonaPagador,
+              montoPagado,
+              interesPagado: interesPagado ?? 0,
+              metodoPago: metodoPago || 'Efectivo',
+              esAnticipado: true,
+              referenciaQr: referenciaQr?.trim() || null,
+              idCuenta: finalIdCuenta || null,
+              idMovimientoCaja,
+              comprobanteUrl: comprobanteUrl || null,
+              idUsuarioRegistro: req.user?.idUsuario || null,
+            },
+          });
+
+          await auditoriaService.registrarEvento({
+            tablaAfectada: 'pagos',
+            idRegistro: String(pago.idPago),
+            accion: 'REGISTRO_ANTICIPO',
+            resultado: 'EXITO',
+            datosNuevos: { pago },
+            idUsuario: req.user?.idUsuario || null,
+            tx,
+          });
+
+          await registrarIngresoContableDePago(tx, {
+            idPago: pago.idPago,
+            montoTotal,
+            fechaPago: pago.fechaPago,
+            concepto,
+            idCuenta: finalIdCuenta || null,
+            metodoPago: metodoPago || 'Efectivo',
+            referenciaQr: referenciaQr?.trim() || null,
+            comprobanteUrl: comprobanteUrl || null,
+            pagadorNombre,
+            idUsuario: req.user?.idUsuario || null,
+          });
+
+          return pago;
+        }, { timeout: 30000, maxWait: 15000 });
 
         res.status(201).json({
           message: 'Pago anticipado registrado exitosamente sin asignar a expensa',
@@ -1822,74 +1993,12 @@ expensasRouter.post(
         return;
       }
 
-      const expensa = await prisma.expensa.findUnique({ where: { idExpensa: expensaId } });
+      const expensa = await prisma.expensa.findUnique({
+        where: { idExpensa: expensaId },
+        include: { departamento: true },
+      });
       if (!expensa) {
         res.status(404).json({ error: 'Not Found', message: 'Expensa no encontrada' });
-        return;
-      }
-
-      // Soporte para Simulación de Pago QR (Requerimiento C 4)
-      if (result.data.esSimulacion) {
-        const montoEfectivo =
-          montoPagado > 0 ? montoPagado : Number(expensa.saldoPendiente || expensa.monto || 300);
-        const reciboSimulado = {
-          idPago: 900000 + (expensaId % 1000),
-          idExpensa: expensaId,
-          montoPagado: montoEfectivo,
-          interesPagado: Number(interesPagado || 0),
-          totalPagado: Math.round((montoEfectivo + Number(interesPagado || 0)) * 100) / 100,
-          metodoPago: metodoPago || 'QR',
-          fechaPago: result.data.fechaPagoSimulada || new Date().toISOString(),
-          comprobanteUrl: comprobanteUrl || `QR-SIM-${Date.now()}`,
-          esSimulacion: true,
-          estado: 'Pagado',
-        };
-
-        // Si la expensa está pendiente, registrar también el pago real en la base de datos
-        if (expensa.estado !== 'Pagado' && Number(expensa.saldoPendiente) > 0) {
-          const nuevoSaldo = Math.max(
-            0,
-            Math.round((Number(expensa.saldoPendiente) - montoEfectivo) * 100) / 100
-          );
-          await prisma.expensa.update({
-            where: { idExpensa: expensaId },
-            data: {
-              saldoPendiente: nuevoSaldo,
-              estado: nuevoSaldo === 0 ? 'Pagado' : 'Parcial',
-            },
-          });
-          await prisma.pago.create({
-            data: {
-              idExpensa: expensaId,
-              idDepartamento: expensa.idDepartamento,
-              idPersonaPagador,
-              montoPagado: montoEfectivo,
-              interesPagado: Number(interesPagado || 0),
-              metodoPago: 'QR',
-              comprobanteUrl: reciboSimulado.comprobanteUrl,
-              idUsuarioRegistro: req.user?.idUsuario || null,
-            },
-          });
-        }
-
-        await auditoriaService.registrarEvento({
-          tablaAfectada: 'pagos',
-          idRegistro: String(reciboSimulado.idPago),
-          accion: 'SIMULACION_PAGO_QR',
-          resultado: 'EXITO',
-          datosNuevos: reciboSimulado,
-          idUsuario: req.user?.idUsuario || null,
-        });
-
-        res.status(200).json({
-          message: 'Pago QR simulado con éxito',
-          pago: reciboSimulado,
-          expensa: {
-            ...expensa,
-            estado: 'Pagado',
-            saldoPendiente: 0,
-          },
-        });
         return;
       }
 
@@ -1921,8 +2030,27 @@ expensasRouter.post(
       const nuevoSaldo = Math.max(0, Math.round((saldoActual - montoPagado) * 100) / 100);
       const nuevoEstado = nuevoSaldo === 0 ? 'Pagado' : 'Parcial';
 
-      const [pago, expensaActualizada] = await prisma.$transaction([
-        prisma.pago.create({
+      const deptoNum = expensa.departamento?.numero || String(expensa.idDepartamento);
+      const periodoStr = expensa.periodo instanceof Date ? fechaYMDLaPaz(expensa.periodo).slice(0, 7) : String(expensa.periodo).slice(0, 7);
+      const concepto = `Cobro expensa Dpto ${deptoNum} - ${periodoStr}`;
+
+      const { pago, expensaActualizada } = await prisma.$transaction(async (tx) => {
+        let idMovimientoCaja: number | null = null;
+        if (!finalIdCuenta && metodoPago === 'Efectivo') {
+          const nuevoCaja = await tx.caja.create({
+            data: {
+              tipo: 'Ingreso',
+              monto: montoTotal,
+              concepto,
+              fecha: new Date(),
+              idUsuarioRegistro: req.user?.idUsuario || null,
+              anulado: false,
+            },
+          });
+          idMovimientoCaja = nuevoCaja.idMovimientoCaja;
+        }
+
+        const pagoCreado = await tx.pago.create({
           data: {
             idExpensa: expensaId,
             idDepartamento: expensa.idDepartamento,
@@ -1931,29 +2059,48 @@ expensasRouter.post(
             interesPagado: interesPagado ?? 0,
             metodoPago: metodoPago || 'Efectivo',
             esAnticipado: esAnticipado ?? false,
-            idCuenta: idCuenta || null,
+            referenciaQr: referenciaQr?.trim() || null,
+            idCuenta: finalIdCuenta || null,
+            idMovimientoCaja,
             comprobanteUrl: comprobanteUrl || null,
             idUsuarioRegistro: req.user?.idUsuario || null,
           },
-        }),
-        prisma.expensa.update({
+        });
+
+        const expActualizada = await tx.expensa.update({
           where: { idExpensa: expensaId },
           data: {
             saldoPendiente: nuevoSaldo,
             estado: nuevoEstado,
           },
-        }),
-      ]);
+        });
 
-      await auditoriaService.registrarEvento({
-        tablaAfectada: 'pagos',
-        idRegistro: String(pago.idPago),
-        accion: 'REGISTRO_PAGO_EXPENSA',
-        resultado: 'EXITO',
-        datosAnteriores: { saldoAnterior: saldoActual, estadoAnterior: expensa.estado },
-        datosNuevos: { pago, nuevoSaldo, nuevoEstado },
-        idUsuario: req.user?.idUsuario || null,
-      });
+        await auditoriaService.registrarEvento({
+          tablaAfectada: 'pagos',
+          idRegistro: String(pagoCreado.idPago),
+          accion: 'REGISTRO_PAGO_EXPENSA',
+          resultado: 'EXITO',
+          datosAnteriores: { saldoAnterior: saldoActual, estadoAnterior: expensa.estado },
+          datosNuevos: { pago: pagoCreado, nuevoSaldo, nuevoEstado },
+          idUsuario: req.user?.idUsuario || null,
+          tx,
+        });
+
+        await registrarIngresoContableDePago(tx, {
+          idPago: pagoCreado.idPago,
+          montoTotal,
+          fechaPago: pagoCreado.fechaPago,
+          concepto,
+          idCuenta: finalIdCuenta || null,
+          metodoPago: metodoPago || 'Efectivo',
+          referenciaQr: referenciaQr?.trim() || null,
+          comprobanteUrl: comprobanteUrl || null,
+          pagadorNombre,
+          idUsuario: req.user?.idUsuario || null,
+        });
+
+        return { pago: pagoCreado, expensaActualizada: expActualizada };
+      }, { timeout: 30000, maxWait: 15000 });
 
       res.status(201).json({
         message: 'Pago registrado exitosamente',
@@ -2140,6 +2287,7 @@ async function recalcularSaldoExpensa(
     include: {
       pagos: {
         where: { anulado: false },
+        omit: { comprobanteUrl: true },
       },
       aplicacionesAnticipos: {
         include: { pago: true },
@@ -2213,6 +2361,56 @@ async function anularPagoInterno(
     },
   });
 
+  // Revertir ingreso contable vinculado si existe (punto 2)
+  const movVinculado = await tx.movimiento.findFirst({
+    where: { idPago },
+  });
+
+  if (movVinculado && !movVinculado.anulado) {
+    const movAnulado = await tx.movimiento.update({
+      where: { idMovimiento: movVinculado.idMovimiento },
+      data: {
+        anulado: true,
+        fechaAnulacion: new Date(),
+        idUsuarioAnulacion: idUsuario || null,
+        motivoAnulacion: motivo,
+      },
+    });
+
+    await auditoriaService.registrarEvento({
+      tablaAfectada: 'movimientos',
+      idRegistro: movVinculado.idMovimiento.toString(),
+      accion: 'ANULACION_MOVIMIENTO',
+      resultado: 'EXITO',
+      datosAnteriores: movVinculado,
+      datosNuevos: movAnulado,
+      idUsuario: idUsuario || null,
+      tx,
+    });
+
+    await tx.movimientoBancario.deleteMany({
+      where: { idMovimiento: movVinculado.idMovimiento },
+    });
+  }
+
+  // Revertir movimiento de caja chica si el pago tuvo uno
+  if (pagoExistente.idMovimientoCaja) {
+    const cajaExistente = await tx.caja.findUnique({
+      where: { idMovimientoCaja: pagoExistente.idMovimientoCaja },
+    });
+    if (cajaExistente && !cajaExistente.anulado) {
+      await tx.caja.update({
+        where: { idMovimientoCaja: pagoExistente.idMovimientoCaja },
+        data: {
+          anulado: true,
+          fechaAnulacion: new Date(),
+          idUsuarioAnulacion: idUsuario || null,
+          motivoAnulacion: motivo,
+        },
+      });
+    }
+  }
+
   const expensaActualizada = pagoExistente.idExpensa
     ? await recalcularSaldoExpensa(tx, pagoExistente.idExpensa)
     : null;
@@ -2250,7 +2448,7 @@ expensasRouter.delete(
   async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
     try {
       const idPago = parseInt(req.params.idPago);
-      if (isNaN(idPago)) {
+      if (isNaN(idPago) || idPago <= 0) {
         res.status(400).json({ error: 'Bad Request', message: 'ID de pago inválido' });
         return;
       }
@@ -2259,13 +2457,13 @@ expensasRouter.delete(
       if (!result.success) {
         res.status(400).json({
           error: 'Validation Error',
-          message: 'Datos de anulación inválidos',
+          message: result.error.errors[0]?.message || 'Datos de anulación inválidos',
           details: result.error.flatten().fieldErrors,
         });
         return;
       }
 
-      const { motivo } = result.data;
+      const motivo = (result.data.motivo || result.data.motivoAnulacion)!.trim();
       const idUsuario = req.user?.idUsuario;
 
       const { pagoAnulado, expensaActualizada } = await prisma.$transaction(async (tx) => {
@@ -2337,7 +2535,7 @@ expensasRouter.patch(
         return;
       }
 
-      const { motivo, montoPagado, interesPagado, metodoPago, esAnticipado, idCuenta, comprobanteUrl } = result.data;
+      const { motivo, montoPagado, interesPagado, metodoPago, esAnticipado, idCuenta, comprobanteUrl, referenciaQr } = result.data;
       if (montoPagado <= 0) {
         res.status(422).json({
           error: 'Unprocessable Entity',
@@ -2372,6 +2570,33 @@ expensasRouter.patch(
         }
 
         // 2. Crear el nuevo pago vinculado al original
+        const depto = await tx.departamento.findUnique({ where: { idDepartamento: pagoAnulado.idDepartamento } });
+        const deptoNum = depto?.numero || String(pagoAnulado.idDepartamento);
+        let periodoStr = 'Periodo';
+        if (pagoAnulado.idExpensa) {
+          const exp = await tx.expensa.findUnique({ where: { idExpensa: pagoAnulado.idExpensa } });
+          if (exp) {
+            periodoStr = exp.periodo instanceof Date ? fechaYMDLaPaz(exp.periodo).slice(0, 7) : String(exp.periodo).slice(0, 7);
+          }
+        }
+        const conceptoNuevo = `Cobro expensa Dpto ${deptoNum} - ${periodoStr}`;
+        const montoTotalNuevo = Number((Number(montoPagado) + Number(interesPagado ?? 0)).toFixed(2));
+
+        let idMovimientoCajaNuevo: number | null = null;
+        if (!idCuenta && metodoPago === 'Efectivo') {
+          const nuevoCaja = await tx.caja.create({
+            data: {
+              tipo: 'Ingreso',
+              monto: montoTotalNuevo,
+              concepto: conceptoNuevo,
+              fecha: new Date(),
+              idUsuarioRegistro: idUsuario || null,
+              anulado: false,
+            },
+          });
+          idMovimientoCajaNuevo = nuevoCaja.idMovimientoCaja;
+        }
+
         const nuevoPago = await tx.pago.create({
           data: {
             idExpensa: pagoAnulado.idExpensa,
@@ -2381,7 +2606,9 @@ expensasRouter.patch(
             interesPagado: interesPagado ?? 0,
             metodoPago: metodoPago || 'Efectivo',
             esAnticipado: esAnticipado ?? false,
+            referenciaQr: referenciaQr?.trim() || null,
             idCuenta: idCuenta || null,
+            idMovimientoCaja: idMovimientoCajaNuevo,
             comprobanteUrl: comprobanteUrl || null,
             idUsuarioRegistro: idUsuario || null,
             idPagoOriginal: pagoAnulado.idPago,
@@ -2392,6 +2619,23 @@ expensasRouter.patch(
         const expensaFinal = pagoAnulado.idExpensa
           ? await recalcularSaldoExpensa(tx, pagoAnulado.idExpensa)
           : null;
+
+        // Registrar ingreso contable para el nuevo pago
+        const personaP = await tx.persona.findUnique({ where: { idPersona: idPersonaPagador } });
+        const pagadorNombre = personaP ? `${personaP.nombres} ${personaP.apellidos}`.trim() : null;
+
+        await registrarIngresoContableDePago(tx, {
+          idPago: nuevoPago.idPago,
+          montoTotal: montoTotalNuevo,
+          fechaPago: nuevoPago.fechaPago,
+          concepto: conceptoNuevo,
+          idCuenta: idCuenta || null,
+          metodoPago: metodoPago || 'Efectivo',
+          referenciaQr: referenciaQr?.trim() || null,
+          comprobanteUrl: comprobanteUrl || null,
+          pagadorNombre,
+          idUsuario: idUsuario || null,
+        });
 
         // 4. Registrar auditoría del pago corregido
         await auditoriaService.registrarEvento({
