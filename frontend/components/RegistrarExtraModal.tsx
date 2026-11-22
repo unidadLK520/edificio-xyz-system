@@ -1,17 +1,17 @@
 // frontend/components/RegistrarExtraModal.tsx
-// Modal para registrar montos extras individuales con descripción (Requerimiento C 2.2 & Pizarra)
-// Ejemplo de la pizarra: Dpto B3 -> Expensa Bs 350 + Agua Bs 20 + Extra Bs 10 = Total Bs 380
+// Modal para registrar montos extras individuales con descripción conectado a la API
 
 'use client'
 
 import React, { useState, useEffect } from 'react'
-import { PlusCircle, X, AlertCircle, DollarSign, FileText } from 'lucide-react'
+import { PlusCircle, X, AlertCircle } from 'lucide-react'
+import { apiFetch } from '@/lib/api'
 
 interface RegistrarExtraModalProps {
   isOpen: boolean
   onClose: () => void
   expensa: any
-  onSuccess: (idExpensa: number, concepto: string, montoExtra: number) => void
+  onSuccess: (idExpensa?: number, concepto?: string, montoExtra?: number) => void
 }
 
 export default function RegistrarExtraModal({
@@ -20,49 +20,68 @@ export default function RegistrarExtraModal({
   expensa,
   onSuccess
 }: RegistrarExtraModalProps) {
-  const [concepto, setConcepto] = useState('Cuota Extraordinaria')
-  const [montoExtra, setMontoExtra] = useState<number | ''>(50)
+  const [concepto, setConcepto] = useState('')
+  const [descripcion, setDescripcion] = useState('')
+  const [montoExtra, setMontoExtra] = useState<number | ''>('')
+  const [isSubmitting, setIsSubmitting] = useState(false)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
 
   useEffect(() => {
-    if (expensa) {
-      if (expensa.extraConcepto) {
-        setConcepto(expensa.extraConcepto)
-      } else {
-        setConcepto('Cuota Extraordinaria')
-      }
-      if (expensa.montoExtra !== undefined && Number(expensa.montoExtra) > 0) {
-        setMontoExtra(Number(expensa.montoExtra))
-      } else {
-        setMontoExtra(50)
-      }
+    if (isOpen) {
+      setConcepto('')
+      setDescripcion('')
+      setMontoExtra('')
       setErrorMessage(null)
+      setIsSubmitting(false)
     }
-  }, [expensa, isOpen])
+  }, [isOpen, expensa])
 
   if (!isOpen || !expensa) return null
 
   const montoBase = Number(expensa.montoBase || expensa.monto || 0)
   const montoAgua = Number(expensa.montoAgua || 0)
-  const extraNum = Number(montoExtra || 0)
+  const extraNum = typeof montoExtra === 'number' ? montoExtra : 0
   const nuevoTotalCalculado = Math.round((montoBase + montoAgua + extraNum) * 100) / 100
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setErrorMessage(null)
 
     if (!concepto.trim()) {
-      setErrorMessage('La descripción o concepto del extra es obligatoria.')
+      setErrorMessage('El concepto del extra es obligatorio.')
       return
     }
 
-    if (isNaN(extraNum) || extraNum < 0) {
-      setErrorMessage('El monto extra no puede ser negativo.')
+    if (montoExtra === '' || isNaN(Number(montoExtra)) || Number(montoExtra) <= 0) {
+      setErrorMessage('El monto debe ser un valor positivo mayor a cero.')
       return
     }
 
-    onSuccess(expensa.idExpensa, concepto.trim(), extraNum)
-    onClose()
+    setIsSubmitting(true)
+    try {
+      const res = await apiFetch(`/api/v1/expensas/${expensa.idExpensa}/extras`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          concepto: concepto.trim(),
+          descripcion: descripcion.trim() || undefined,
+          monto: Number(montoExtra)
+        })
+      })
+
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        setErrorMessage(data?.message || 'Error al registrar el cargo extra.')
+        return
+      }
+
+      onSuccess(expensa.idExpensa, concepto.trim(), Number(montoExtra))
+      onClose()
+    } catch (err: any) {
+      setErrorMessage(err?.message || 'Error de conexión al registrar cargo extra.')
+    } finally {
+      setIsSubmitting(false)
+    }
   }
 
   return (
@@ -79,11 +98,12 @@ export default function RegistrarExtraModal({
                 Cargo Extraordinario Individual
               </h3>
               <p className="text-xs text-[#7d776f]">
-                Dpto. {expensa.departamento?.numero || expensa.idDepartamento} • Requerimiento C 2.2
+                Dpto. {expensa.departamento?.numero || expensa.idDepartamento} • Expensa #{expensa.idExpensa}
               </p>
             </div>
           </div>
           <button
+            type="button"
             onClick={onClose}
             className="p-1 rounded-xl text-[#7d776f] hover:text-[#262422] dark:hover:text-white cursor-pointer"
           >
@@ -112,9 +132,20 @@ export default function RegistrarExtraModal({
               placeholder="Ej. Extra Pintura Edificio o Reparación Portón"
               className="w-full px-3 py-2 rounded-xl bg-[#dfd9ce] dark:bg-slate-800 border border-[#cec8bc] dark:border-slate-700 text-xs text-[#262422] dark:text-white font-medium"
             />
-            <p className="text-[10px] text-[#7d776f] mt-1">
-              Ejemplos pliego/pizarra: &quot;Extra Pintura Edificio&quot;, &quot;Mantenimiento Extraordinario&quot;.
-            </p>
+          </div>
+
+          {/* Descripción opcional */}
+          <div>
+            <label className="block font-bold text-[#262422] dark:text-white mb-1">
+              Detalle adicional (opcional)
+            </label>
+            <input
+              type="text"
+              value={descripcion}
+              onChange={(e) => setDescripcion(e.target.value)}
+              placeholder="Ej. Aprobado en asamblea extraordinaria de copropietarios"
+              className="w-full px-3 py-2 rounded-xl bg-[#dfd9ce] dark:bg-slate-800 border border-[#cec8bc] dark:border-slate-700 text-xs text-[#262422] dark:text-white font-medium"
+            />
           </div>
 
           {/* Monto Extra */}
@@ -125,21 +156,21 @@ export default function RegistrarExtraModal({
             <input
               type="number"
               step="0.01"
-              min="0"
+              min="0.01"
               required
               value={montoExtra}
               onChange={(e) =>
                 setMontoExtra(e.target.value === '' ? '' : Number(e.target.value))
               }
-              placeholder="Ej. 10 ó 250"
+              placeholder="Ej. 50.00"
               className="w-full px-3 py-2 rounded-xl bg-[#dfd9ce] dark:bg-slate-800 border border-[#cec8bc] dark:border-slate-700 font-mono font-bold text-sm text-indigo-700 dark:text-indigo-400"
             />
           </div>
 
-          {/* Tarjeta de visualización en vivo según la fórmula de la pizarra: Exp + Agua + Extra = Total */}
+          {/* Tarjeta de visualización en vivo */}
           <div className="p-3.5 rounded-2xl bg-indigo-50 dark:bg-indigo-950/40 border border-indigo-200 dark:border-indigo-800 space-y-1.5 font-mono text-xs text-indigo-950 dark:text-indigo-200">
             <span className="font-bold text-[10px] uppercase tracking-wider block text-indigo-700 dark:text-indigo-400">
-              Desglose Resultante (Fórmula Pizarra)
+              Desglose Resultante
             </span>
             <div className="flex justify-between">
               <span>Expensa Base:</span>
@@ -163,15 +194,17 @@ export default function RegistrarExtraModal({
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2 rounded-xl text-xs font-bold text-[#7d776f] hover:bg-[#ded8cc] dark:hover:bg-slate-800 transition-colors cursor-pointer"
+              disabled={isSubmitting}
+              className="px-4 py-2 rounded-xl text-xs font-bold text-[#7d776f] hover:bg-[#ded8cc] dark:hover:bg-slate-800 transition-colors cursor-pointer disabled:opacity-50"
             >
               Cancelar
             </button>
             <button
               type="submit"
-              className="px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 text-white text-xs font-bold shadow-md transition-all cursor-pointer"
+              disabled={isSubmitting || !concepto.trim() || montoExtra === '' || Number(montoExtra) <= 0}
+              className="px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 text-white text-xs font-bold shadow-md transition-all cursor-pointer disabled:opacity-50"
             >
-              Guardar Monto Extra
+              {isSubmitting ? 'Guardando...' : 'Guardar Monto Extra'}
             </button>
           </div>
         </form>
@@ -179,4 +212,3 @@ export default function RegistrarExtraModal({
     </div>
   )
 }
-

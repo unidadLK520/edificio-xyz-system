@@ -547,6 +547,14 @@ movimientosRouter.post(
         return;
       }
 
+      if (categoria.nombre.toLowerCase().includes('expensa')) {
+        res.status(400).json({
+          error: 'Bad Request',
+          message: 'Los cobros de expensas se registran desde Expensas',
+        });
+        return;
+      }
+
       const movimiento = await prisma.movimiento.create({
         data: {
           tipo: result.data.tipo,
@@ -601,6 +609,15 @@ movimientosRouter.put(
 
       if (!existing) {
         res.status(404).json({ error: 'Not Found', message: 'Movimiento no encontrado' });
+        return;
+      }
+
+      if (existing.idPago) {
+        res.status(409).json({
+          error: 'Conflict',
+          code: 'MOVIMIENTO_VINCULADO_PAGO',
+          message: 'Este ingreso proviene de un pago de expensa; anula el pago desde Expensas',
+        });
         return;
       }
 
@@ -735,6 +752,15 @@ movimientosRouter.delete(
 
       if (!existing) {
         res.status(404).json({ error: 'Not Found', message: 'Movimiento no encontrado' });
+        return;
+      }
+
+      if (existing.idPago) {
+        res.status(409).json({
+          error: 'Conflict',
+          code: 'MOVIMIENTO_VINCULADO_PAGO',
+          message: 'Este ingreso proviene de un pago de expensa; anula el pago desde Expensas',
+        });
         return;
       }
 

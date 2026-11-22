@@ -52,6 +52,7 @@ export interface MovimientoItem {
   registradoPor?: string
   anulado?: boolean
   motivoAnulacion?: string | null
+  idPago?: number | null
 }
 
 export interface CategoriaItem {
@@ -253,7 +254,8 @@ export default function FinanzasPage() {
             metodoPago: item.metodoPago ?? item.metodo_pago ?? '',
             registradoPor: item.usuarioRegistro?.nombreUsuario || 'admin',
             anulado: Boolean(item.anulado),
-            motivoAnulacion: item.motivoAnulacion || null
+            motivoAnulacion: item.motivoAnulacion || null,
+            idPago: item.idPago ? Number(item.idPago) : item.id_pago ? Number(item.id_pago) : null
           }
         })
         setMovimientos(mapped)
@@ -1129,7 +1131,7 @@ export default function FinanzasPage() {
 
                           {/* Acciones */}
                           <td className="py-3 px-4 text-right">
-                            <div className="inline-flex items-center gap-1">
+                            <div className="inline-flex items-center gap-1.5">
                               <button
                                 type="button"
                                 onClick={() => setSelectedMovimiento(mov)}
@@ -1139,9 +1141,17 @@ export default function FinanzasPage() {
                                 <Eye className="w-4 h-4" />
                               </button>
 
-                              {hasFinancialPermission && (
+                              {mov.anulado ? (
+                                <span className="text-[10px] text-rose-600 dark:text-rose-400 font-semibold px-1 italic">
+                                  Anulado
+                                </span>
+                              ) : mov.idPago ? (
+                                <span className="text-[10px] text-amber-700 dark:text-amber-400 font-semibold px-2 py-0.5 bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-800 rounded-md whitespace-nowrap">
+                                  Cobro de expensa: se anula desde Expensas
+                                </span>
+                              ) : (
                                 <>
-                                  {!mov.anulado ? (
+                                  {hasFinancialPermission ? (
                                     <>
                                       <button
                                         type="button"
@@ -1162,9 +1172,19 @@ export default function FinanzasPage() {
                                       </button>
                                     </>
                                   ) : (
-                                    <span className="text-[10px] text-rose-600 dark:text-rose-400 font-semibold px-1 italic">
-                                      Anulado
-                                    </span>
+                                    <div className="inline-flex items-center">
+                                      <button
+                                        type="button"
+                                        disabled
+                                        className="p-1.5 rounded-lg text-[#7d776f] opacity-50 cursor-not-allowed"
+                                        title="Sin permisos para anular"
+                                      >
+                                        <Trash2 className="w-4 h-4" />
+                                      </button>
+                                      <span className="text-[10px] text-[#7d776f] italic ml-1">
+                                        Sin permisos
+                                      </span>
+                                    </div>
                                   )}
                                 </>
                               )}
