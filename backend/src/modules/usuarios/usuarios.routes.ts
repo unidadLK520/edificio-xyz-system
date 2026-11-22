@@ -8,9 +8,9 @@ import { usuariosController } from './usuarios.controller';
 
 export const usuariosRouter: Router = Router();
 
-// Todas las rutas requieren token y rol de ADMINISTRADOR
+// Rutas protegidas para administración de usuarios (CA04, CA09)
 usuariosRouter.use(authMiddleware);
-usuariosRouter.use(authorizeRoles('ADMINISTRADOR'));
+usuariosRouter.use(authorizeRoles('ADMINISTRADOR', 'DIRECTORIO'));
 
 usuariosRouter.get('/', usuariosController.listarUsuarios);
 usuariosRouter.get('/roles', usuariosController.listarRoles);
