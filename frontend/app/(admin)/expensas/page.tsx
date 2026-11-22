@@ -4,7 +4,7 @@
 
 'use client'
 
-import React, { useState, useEffect, useMemo, useCallback } from 'react'
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import {
   Receipt,
   DollarSign,
@@ -163,6 +163,8 @@ export default function ExpensasPage() {
       departamentosAsignados?: number
     }>
   >([])
+  const tiposDepartamentoRef = useRef(tiposDepartamento)
+  tiposDepartamentoRef.current = tiposDepartamento
 
   // Filtros interactivos del Estado de Cuenta
   const [selectedDeptoIdParaEstadoCuenta, setSelectedDeptoIdParaEstadoCuenta] = useState<
@@ -308,7 +310,7 @@ export default function ExpensasPage() {
               item.departamento?.tipo?.nombre ||
               'General'
 
-            const tipoItem = tiposDepartamento.find(
+            const tipoItem = tiposDepartamentoRef.current.find(
               (t) => t.nombre.toLowerCase() === tipologiaDepto.toLowerCase()
             )
             const baseDefault = tipoItem ? Number(tipoItem.montoExpensa) : 0
@@ -372,7 +374,7 @@ export default function ExpensasPage() {
         setIsLoading(false)
       }
     },
-    [filtroEstado, tiposDepartamento]
+    [filtroEstado]
   )
 
   const fetchMorosos = useCallback(async () => {
