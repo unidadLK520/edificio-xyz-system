@@ -4,6 +4,7 @@ import React, { useState } from 'react'
 import Link from 'next/link'
 import Image from 'next/image'
 import { usePathname } from 'next/navigation'
+import { signOut, useSession } from 'next-auth/react'
 import ThemeToggle from '@/components/ThemeToggle'
 import edificioBg from '@/public/images/edificio_bg.jpg'
 import { Building2, Receipt, Users, Wallet, Users2, UserCog, LogOut, Menu, X, LineChart, Landmark, Megaphone, FileBarChart } from 'lucide-react'
@@ -24,20 +25,59 @@ const ADMIN_LINKS = [
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
   const pathname = usePathname()
+  const { data: session } = useSession()
+
+  React.useEffect(() => {
+    if (session && typeof window !== 'undefined' && !localStorage.getItem('auth_token')) {
+      const backendToken = (session as any).backendToken || (session as any).user?.backendToken
+      const backendUser = (session as any).backendUser || (session as any).user?.backendUser || {}
+      const userEmail = session.user?.email || 'usuario@google.com'
+      const rol = backendUser.rol || 'ADMINISTRADOR'
+
+      if (backendToken) {
+        document.cookie = `auth_token=${backendToken}; path=/; max-age=${60 * 60 * 8}; SameSite=Lax`
+        localStorage.setItem('auth_token', backendToken)
+        localStorage.setItem('user_role', rol)
+        localStorage.setItem(
+          'user_profile',
+          JSON.stringify({
+            email: userEmail,
+            nombre: backendUser.nombreUsuario || session.user?.name || userEmail.split('@')[0],
+            rolActivo: rol
+          })
+        )
+      }
+    }
+  }, [session])
 
   const handleLogout = async () => {
     try {
-      await fetch('/api/auth/logout', { method: 'POST' })
+      const authToken = document.cookie
+        .split('; ')
+        .find(row => row.startsWith('auth_token='))
+        ?.split('=')[1]
+
+      await fetch('/api/auth/logout', {
+        method: 'POST',
+        headers: authToken ? { Authorization: `Bearer ${authToken}` } : {}
+      })
     } catch {
       // Continuar con limpieza local
     }
+
     if (typeof window !== 'undefined') {
-      document.cookie = 'auth_token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT'
+      document.cookie.split(';').forEach(cookie => {
+        const eqPos = cookie.indexOf('=')
+        const name = eqPos >= 0 ? cookie.slice(0, eqPos) : cookie
+        document.cookie = `${name}=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT`
+      })
       localStorage.removeItem('auth_token')
       localStorage.removeItem('user_role')
       localStorage.removeItem('user_profile')
+      localStorage.setItem('logout_timestamp', Date.now().toString())
     }
-    window.location.href = '/login'
+
+    await signOut({ callbackUrl: '/login' })
   }
 
   return (

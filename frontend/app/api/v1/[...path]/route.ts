@@ -28,6 +28,19 @@ async function proxyRequest(
       token = authHeader.substring(7)
     }
 
+    if (!token) {
+      try {
+        const { getToken } = await import('next-auth/jwt')
+        const nextAuthToken = await getToken({
+          req: request,
+          secret: process.env.NEXTAUTH_SECRET || process.env.JWT_SECRET,
+        })
+        if (nextAuthToken?.backendToken) {
+          token = nextAuthToken.backendToken as string
+        }
+      } catch {}
+    }
+
     const headers: Record<string, string> = {}
     if (token) {
       headers['Authorization'] = `Bearer ${token}`

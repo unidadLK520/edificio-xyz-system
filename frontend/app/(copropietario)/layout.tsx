@@ -8,6 +8,7 @@ import React, { useState, useMemo } from 'react'
 import Link from 'next/link'
 import Image from 'next/image'
 import { usePathname } from 'next/navigation'
+import { signOut } from 'next-auth/react'
 import ThemeToggle from '@/components/ThemeToggle'
 import edificioBg from '@/public/images/edificio_bg.jpg'
 import {
@@ -135,18 +136,33 @@ export default function CopropietarioLayout({ children }: { children: React.Reac
 
   const handleLogout = async () => {
     try {
-      await fetch('/api/auth/logout', { method: 'POST' })
+      // Get token from cookie
+      const authToken = document.cookie
+        .split('; ')
+        .find(row => row.startsWith('auth_token='))
+        ?.split('=')[1]
+
+      await fetch('/api/auth/logout', {
+        method: 'POST',
+        headers: authToken ? { Authorization: `Bearer ${authToken}` } : {}
+      })
     } catch {
       // Continuar con limpieza local
     }
     if (typeof window !== 'undefined') {
-      document.cookie = 'auth_token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT'
+      document.cookie.split(';').forEach(cookie => {
+        const eqPos = cookie.indexOf('=')
+        const name = eqPos >= 0 ? cookie.slice(0, eqPos) : cookie
+        document.cookie = `${name}=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT`
+      })
       localStorage.removeItem('auth_token')
       localStorage.removeItem('user_role')
       localStorage.removeItem('user_profile')
       localStorage.removeItem('last_user_role')
+      // Guardar timestamp para cooldown de login
+      localStorage.setItem('logout_timestamp', Date.now().toString())
     }
-    window.location.href = '/login'
+    await signOut({ callbackUrl: '/login' })
   }
 
   return (

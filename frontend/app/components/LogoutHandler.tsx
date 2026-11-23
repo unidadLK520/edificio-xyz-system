@@ -1,25 +1,8 @@
-// client component to handle logout on page unload
+// client component for session handling
 "use client";
 
-import { useEffect } from "react";
-
 export default function LogoutHandler() {
-  useEffect(() => {
-    const handleUnload = async () => {
-      try {
-        await fetch("/api/v1/auth/logout", {
-          method: "POST",
-          credentials: "include",
-        });
-      } catch (e) {
-        console.error("Error al intentar cerrar sesión al unload", e);
-      }
-    };
-    window.addEventListener("beforeunload", handleUnload);
-    return () => {
-      window.removeEventListener("beforeunload", handleUnload);
-    };
-  }, []);
-
+  // Navigation should NOT trigger automatic logout.
+  // Manual logout is handled via the "Cerrar sesión" button.
   return null;
 }
