@@ -10,6 +10,7 @@ export const authRouter: IRouter = Router();
 
 authRouter.post('/login', authController.login);
 authRouter.post('/logout', authController.logout);
+authRouter.post('/google', authController.googleAuth);
 authRouter.get('/me', authMiddleware, authController.me);
 authRouter.delete(
   '/sesiones/:idUsuario',

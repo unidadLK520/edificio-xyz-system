@@ -32,5 +32,9 @@
       "esbuild",
       "bcryptjs"
     ]
+  },
+  "dependencies": {
+    "frontend": "2.0.0-alpha.4",
+    "next-auth": "^4.24.15"
   }
 }

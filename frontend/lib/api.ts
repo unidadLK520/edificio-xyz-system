@@ -35,15 +35,7 @@ export async function apiFetch(input: RequestInfo | URL, init?: RequestInit): Pr
 
   // Manejo de 401 No Autorizado / Sesión Expirada
   if (res.status === 401) {
-    if (typeof window !== 'undefined') {
-      try {
-        localStorage.removeItem('auth_token')
-        localStorage.removeItem('user_role')
-        localStorage.removeItem('user_profile')
-        document.cookie = 'auth_token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT'
-      } catch {}
-      window.location.href = '/login'
-    }
+    console.warn('[apiFetch] 401 recibido para:', input)
     return res
   }
 
