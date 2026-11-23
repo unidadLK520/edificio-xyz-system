@@ -14,6 +14,12 @@ export const loginSchema = z.object({
   message: 'Debe ingresar su correo electrónico',
 });
 
+export const googleAuthSchema = z.object({
+  email: z.string().email('Correo inválido'),
+  name: z.string().min(1, 'Nombre requerido'),
+  picture: z.string().optional(),
+});
+
 export class AuthController {
   constructor(private readonly service: AuthService = authService) {}
 
@@ -99,6 +105,34 @@ export class AuthController {
         message: 'Sesión cerrada exitosamente',
         data: resultado,
       });
+    } catch (err) {
+      next(err);
+    }
+  };
+
+  googleAuth = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const result = googleAuthSchema.safeParse(req.body);
+      if (!result.success) {
+        res.status(400).json({
+          error: 'Validation Error',
+          message: 'Datos inválidos o faltantes',
+          details: result.error.flatten().fieldErrors,
+        });
+        return;
+      }
+
+      const authResult = await this.service.googleAuth(result.data);
+
+      if (!authResult.success) {
+        res.status(401).json({
+          error: 'Unauthorized',
+          message: authResult.message,
+        });
+        return;
+      }
+
+      res.json(authResult);
     } catch (err) {
       next(err);
     }

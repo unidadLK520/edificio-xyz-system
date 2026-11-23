@@ -322,6 +322,158 @@ export class AuthService {
   async getMe(idUsuario: number) {
     return this.repository.findById(idUsuario);
   }
+
+  async googleAuth(googleUser: { email: string; name: string; picture?: string }) {
+    console.log('[Google Auth] Attempting login for:', googleUser.email);
+
+    // Buscar usuario por correo
+    const usuario = await this.repository.findByCorreo(googleUser.email);
+    console.log('[Google Auth] User found in DB:', !!usuario);
+
+    if (usuario) {
+      console.log('[Google Auth] User details:', {
+        id: usuario.idUsuario,
+        correo: usuario.correo,
+        activo: usuario.activo,
+        rol: usuario.rol?.nombre,
+      });
+
+      // Usuario existe, verificar si está activo
+      if (!usuario.activo) {
+        console.log('[Google Auth] User is inactive');
+        return {
+          success: false,
+          message: 'El usuario no está habilitado',
+        };
+      }
+
+      // Verificar si ya tiene sesión activa
+      const sesionActiva = await this.repository.findSesionActiva(usuario.idUsuario);
+      if (sesionActiva) {
+        const fechaActual = new Date();
+        const transcurridoMs = fechaActual.getTime() - sesionActiva.ultimoAcceso.getTime();
+        const minutosTranscurridos = transcurridoMs / (1000 * 60);
+
+        console.log('[Google Auth] Active session found, minutes elapsed:', minutosTranscurridos);
+
+        if (minutosTranscurridos < 5) {
+          console.log('[Google Auth] Session still active (< 5 min)');
+          return {
+            success: false,
+            message: 'Esta cuenta ya tiene una sesión activa',
+          };
+        } else {
+          console.log('[Google Auth] Session expired, deactivating');
+          await this.repository.desactivarSesionesUsuario(usuario.idUsuario);
+        }
+      }
+
+      // Crear nueva sesión
+      const nuevaSesion = await this.repository.crearSesion({ idUsuario: usuario.idUsuario });
+      console.log('[Google Auth] New session created:', nuevaSesion.idSesion);
+
+      // Reiniciar intentos fallidos
+      await this.repository.resetIntentos(usuario.idUsuario, new Date());
+
+      // Generar JWT
+      const token = await new SignJWT({
+        idUsuario: usuario.idUsuario,
+        nombreUsuario: usuario.nombreUsuario,
+        correo: usuario.correo,
+        rol: usuario.rol.nombre,
+        idRol: usuario.idRol,
+        sid: nuevaSesion.idSesion,
+      })
+        .setProtectedHeader({ alg: 'HS256' })
+        .setIssuedAt()
+        .setExpirationTime('8h')
+        .sign(config.jwtSecret);
+
+      // Registrar actividad
+      sessionManager.recordActivity(token);
+
+      // Registrar auditoría
+      await this.auditoria.registrarLoginExitoso(usuario.idUsuario, {
+        correo: usuario.correo,
+        rol: usuario.rol.nombre,
+        ip: '0.0.0.0', // Google auth no tiene IP del cliente
+        userAgent: 'Google OAuth',
+      });
+
+      console.log('[Google Auth] Login successful for existing user');
+      return {
+        success: true,
+        token,
+        usuario: {
+          idUsuario: usuario.idUsuario,
+          nombreUsuario: usuario.nombreUsuario,
+          correo: usuario.correo,
+          rol: usuario.rol.nombre,
+          ultimoAcceso: new Date(),
+        },
+      };
+    }
+
+    // Usuario no existe - crear automáticamente con rol por defecto (COPROPIETARIO)
+    console.log('[Google Auth] User not found, creating new user');
+    try {
+      const nombreUsuario = googleUser.name.split(' ')[0] || googleUser.email.split('@')[0];
+      const nuevoUsuario = await this.repository.crearUsuario({
+        nombreUsuario,
+        correo: googleUser.email,
+        rol: 'COPROPIETARIO', // Rol por defecto para usuarios de Google
+      });
+
+      console.log('[Google Auth] New user created:', nuevoUsuario.idUsuario);
+
+      // Crear sesión para el nuevo usuario
+      const nuevaSesion = await this.repository.crearSesion({ idUsuario: nuevoUsuario.idUsuario });
+
+      // Generar JWT
+      const token = await new SignJWT({
+        idUsuario: nuevoUsuario.idUsuario,
+        nombreUsuario: nuevoUsuario.nombreUsuario,
+        correo: nuevoUsuario.correo,
+        rol: nuevoUsuario.rol.nombre,
+        idRol: nuevoUsuario.idRol,
+        sid: nuevaSesion.idSesion,
+      })
+        .setProtectedHeader({ alg: 'HS256' })
+        .setIssuedAt()
+        .setExpirationTime('8h')
+        .sign(config.jwtSecret);
+
+      // Registrar actividad
+      sessionManager.recordActivity(token);
+
+      // Registrar auditoría de creación y login
+      await this.auditoria.registrarLoginExitoso(nuevoUsuario.idUsuario, {
+        correo: nuevoUsuario.correo,
+        rol: nuevoUsuario.rol.nombre,
+        ip: '0.0.0.0',
+        userAgent: 'Google OAuth (nuevo usuario)',
+      });
+
+      console.log('[Google Auth] Login successful for new user');
+      return {
+        success: true,
+        token,
+        usuario: {
+          idUsuario: nuevoUsuario.idUsuario,
+          nombreUsuario: nuevoUsuario.nombreUsuario,
+          correo: nuevoUsuario.correo,
+          rol: nuevoUsuario.rol.nombre,
+          ultimoAcceso: new Date(),
+        },
+      };
+    } catch (error) {
+      console.error('[Google Auth] Error creando usuario de Google:', error);
+      return {
+        success: false,
+        message: 'Error al crear usuario automáticamente',
+      };
+    }
+  }
 }
 
 export const authService = new AuthService();

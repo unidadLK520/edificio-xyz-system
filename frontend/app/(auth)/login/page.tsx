@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
+import { signIn } from "next-auth/react"
 import Image from 'next/image'
 import ThemeToggle from '@/components/ThemeToggle'
 import edificioBg from '@/public/images/edificio_bg.jpg'
@@ -268,6 +269,8 @@ export default function LoginPage() {
               Software Integral de Administración, Expensas, Finanzas y Control de Copropietarios.
             </p>
 
+
+
             {/* Mini Tarjeta Fotográfica de la Recepción (Visible en pantallas grandes) */}
             <div className="mt-6 p-2 rounded-2xl bg-[#ede9e1]/80 dark:bg-slate-900/80 border border-[#cec8bc]/80 dark:border-slate-800 shadow-md backdrop-blur-md hidden lg:block">
               <div className="relative h-28 w-full rounded-xl overflow-hidden">
@@ -307,6 +310,8 @@ export default function LoginPage() {
             <p className="text-xs sm:text-sm text-[#66615b] dark:text-slate-400 mt-0.5 sm:mt-1">
               Selecciona tu rol de usuario e ingresa tus credenciales.
             </p>
+
+
           </div>
 
           {errorMessage && (
@@ -364,7 +369,11 @@ export default function LoginPage() {
                       <p className="text-[10px] sm:text-[11px] text-[#6b665f] dark:text-slate-500 line-clamp-1 sm:line-clamp-2 leading-tight">
                         {item.description}
                       </p>
+
+
                     </button>
+
+
                   )
                 })}
               </div>
@@ -422,6 +431,8 @@ export default function LoginPage() {
                   >
                     {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                   </button>
+
+
                 </div>
               </div>
             </div>
@@ -447,6 +458,8 @@ export default function LoginPage() {
               >
                 ¿Olvidaste tu contraseña?
               </button>
+
+
             </div>
 
             <button
@@ -466,7 +479,22 @@ export default function LoginPage() {
                 </>
               )}
             </button>
+
+
           </form>
+
+{/* Botón iniciar sesión con Google */}
+<button
+  type="button"
+  onClick={() => signIn('google', { callbackUrl: '/' })}
+  className="flex w-full items-center justify-center gap-2 rounded-md bg-white px-4 py-2 text-sm font-medium text-gray-800 shadow-sm hover:bg-gray-50"
+>
+  {/* Google logo (simple SVG) */}
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" className="h-5 w-5">
+    <path fill="#EA4335" d="M12 11.5v3.5h5.2c-.2 1-1.4 3-5.2 3-3.1 0-5.6-2.5-5.6-5.6s2.5-5.6 5.6-5.6c1.8 0 3 .8 3.6 1.3l2.5-2.4C17.5 6.7 15 5.5 12 5.5 7 5.5 3 9.5 3 14.5s4 9 9 9c5 0 8.5-3.5 8.5-8.5 0-.6-.1-1.1-.2-1.5H12z"/>
+  </svg>
+  Iniciar sesión con Google
+</button>
         </div>
       </div>
     </div>
