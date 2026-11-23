@@ -4,7 +4,7 @@
 
 'use client'
 
-import React, { useState, useEffect, useMemo, useCallback } from 'react'
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import {
   Receipt,
   DollarSign,
@@ -65,6 +65,8 @@ export interface ExpensaItem {
   tasaInteresMora: number
   fechaVencimiento: string
   estado: string
+  moraCalculada?: number
+  mesesMora?: number
   departamento?: {
     numero: string
     piso?: number
@@ -85,6 +87,21 @@ export interface ExpensaItem {
   fechaPago?: string | Date
 }
 
+function formatPeriodoEspanol(periodoStr?: string | null): string {
+  if (!periodoStr) return '—'
+  const clean = periodoStr.slice(0, 7)
+  const [year, month] = clean.split('-')
+  const meses = [
+    'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
+    'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'
+  ]
+  const mIdx = Number(month) - 1
+  if (mIdx >= 0 && mIdx < 12 && year) {
+    return `${meses[mIdx]} ${year}`
+  }
+  return periodoStr
+}
+
 export default function ExpensasPage() {
   const { fechaSistema, setFechaSistema, politicaMora, setPoliticaMora, calcularMoraExpensa } =
     useFechaSistema()
@@ -96,12 +113,12 @@ export default function ExpensasPage() {
   const [isEditarExpensaModalOpen, setIsEditarExpensaModalOpen] = useState(false)
   const [expensaParaEditar, setExpensaParaEditar] = useState<any>(null)
   const [expensaParaExtra, setExpensaParaExtra] = useState<any | null>(null)
-// Removed static mora input states – now using context policy
-// const [moraTipoPenalidadInput, setMoraTipoPenalidadInput] = useState<'fijo' | 'porcentaje'>('fijo');
-// const [moraMontoFijoInput, setMoraMontoFijoInput] = useState<number | ''>(50);
-// const [moraDiaVencimientoInput, setMoraDiaVencimientoInput] = useState<number | ''>(10);
-// const [moraDiasGraciaInput, setMoraDiasGraciaInput] = useState<number | ''>(2);
-// const [moraDiaGeneracionInput, setMoraDiaGeneracionInput] = useState<number | ''>(1);
+  // Removed static mora input states – now using context policy
+  // const [moraTipoPenalidadInput, setMoraTipoPenalidadInput] = useState<'fijo' | 'porcentaje'>('fijo');
+  // const [moraMontoFijoInput, setMoraMontoFijoInput] = useState<number | ''>(50);
+  // const [moraDiaVencimientoInput, setMoraDiaVencimientoInput] = useState<number | ''>(10);
+  // const [moraDiasGraciaInput, setMoraDiasGraciaInput] = useState<number | ''>(2);
+  // const [moraDiaGeneracionInput, setMoraDiaGeneracionInput] = useState<number | ''>(1);
 
   const [moraTipoPenalidadInput, setMoraTipoPenalidadInput] = useState<'fijo' | 'porcentaje'>(
     'fijo'
@@ -151,8 +168,20 @@ export default function ExpensasPage() {
     Array<{ idPersona: number; nombres: string; apellidos: string; ciNit?: string }>
   >([])
   const [departamentosList, setDepartamentosList] = useState<
-    Array<{ idDepartamento: number; numero: string; tipologia?: string }>
+    Array<{ idDepartamento: number; numero: string; areaM2?: number; tipologia?: string }>
   >([])
+  const [tiposDepartamento, setTiposDepartamento] = useState<
+    Array<{
+      idTipo: number
+      nombre: string
+      montoExpensa: number
+      areaM2: number | null
+      activo: boolean
+      departamentosAsignados?: number
+    }>
+  >([])
+  const tiposDepartamentoRef = useRef(tiposDepartamento)
+  tiposDepartamentoRef.current = tiposDepartamento
 
   // Filtros interactivos del Estado de Cuenta
   const [selectedDeptoIdParaEstadoCuenta, setSelectedDeptoIdParaEstadoCuenta] = useState<
@@ -249,13 +278,28 @@ export default function ExpensasPage() {
           const mapped = json.data.map((d: any) => ({
             idDepartamento: d.idDepartamento,
             numero: d.numero,
-            tipologia: d.tipo?.nombre || d.tipologia || 'Tipo A'
+            areaM2: d.areaM2 ? Number(d.areaM2) : undefined,
+            tipologia: d.tipo?.nombre || d.tipologia || 'General'
           }))
           setDepartamentosList(mapped)
         }
       }
     } catch (err) {
       console.error('Error al cargar departamentos:', err)
+    }
+  }, [])
+
+  const fetchTiposDepartamento = useCallback(async () => {
+    try {
+      const res = await apiFetch('/api/v1/tipos-departamento')
+      if (res.ok) {
+        const json = await res.json()
+        if (json.data && Array.isArray(json.data)) {
+          setTiposDepartamento(json.data)
+        }
+      }
+    } catch (err) {
+      console.error('Error al cargar tipos de departamento:', err)
     }
   }, [])
 
@@ -278,23 +322,15 @@ export default function ExpensasPage() {
         const json = await res.json()
         if (json.data && Array.isArray(json.data)) {
           const mapped: ExpensaItem[] = json.data.map((item: any) => {
-            const deptoNum = item.departamento?.numero || ''
             const tipologiaDepto =
               item.departamento?.tipologia ||
               item.departamento?.tipo?.nombre ||
-              (item.departamento?.areaM2 === 60 || deptoNum.startsWith('A')
-                ? 'Tipo A'
-                : item.departamento?.areaM2 === 80 || deptoNum.startsWith('B')
-                  ? 'Tipo B'
-                  : item.departamento?.areaM2 === 100 || deptoNum.startsWith('C')
-                    ? 'Tipo C'
-                    : 'Tipo A')
+              'General'
 
-            const baseDefault = tipologiaDepto.includes('B')
-              ? 350
-              : tipologiaDepto.includes('C')
-                ? 400
-                : 300
+            const tipoItem = tiposDepartamentoRef.current.find(
+              (t) => t.nombre.toLowerCase() === tipologiaDepto.toLowerCase()
+            )
+            const baseDefault = tipoItem ? Number(tipoItem.montoExpensa) : 0
             const montoBase =
               item.montoBase !== undefined && item.montoBase !== null && item.montoBase > 0
                 ? Number(item.montoBase)
@@ -328,15 +364,17 @@ export default function ExpensasPage() {
               tasaInteresMora: Number(item.tasaInteresMora || 0),
               fechaVencimiento: fechaSolo(item.fechaVencimiento),
               estado: item.estado,
+              moraCalculada: Number(item.moraCalculada ?? item.montoMora ?? (saldoCalc > totalCalculado ? saldoCalc - totalCalculado : 0)),
+              mesesMora: Number(item.mesesMora || (saldoCalc > totalCalculado ? 1 : 0)),
               departamento: item.departamento
                 ? {
-                    ...item.departamento,
-                    tipologia: tipologiaDepto
-                  }
+                  ...item.departamento,
+                  tipologia: tipologiaDepto
+                }
                 : undefined,
               propietarioNombre: item.departamento?.propietario
                 ? `${item.departamento.propietario.nombres || ''} ${item.departamento.propietario.apellidos || ''}`.trim()
-                : item.propietarioNombre || 'Propietario Responsable',
+                : item.propietarioNombre || '—',
               inquilinoNombre: item.departamento?.inquilino
                 ? `${item.departamento.inquilino.nombres || ''} ${item.departamento.inquilino.apellidos || ''}`.trim()
                 : item.inquilinoNombre || '—',
@@ -367,7 +405,7 @@ export default function ExpensasPage() {
           setListadoMorosos(json.data)
         }
       }
-    } catch {}
+    } catch { }
   }, [])
 
   const fetchReglasMora = useCallback(async () => {
@@ -392,7 +430,8 @@ export default function ExpensasPage() {
     fetchPersonas()
     fetchReglasMora()
     fetchDepartamentos()
-  }, [fetchExpensas, fetchMorosos, fetchPersonas, fetchReglasMora, fetchDepartamentos])
+    fetchTiposDepartamento()
+  }, [fetchExpensas, fetchMorosos, fetchPersonas, fetchReglasMora, fetchDepartamentos, fetchTiposDepartamento])
 
   // KPIs
   const totalFacturado = useMemo(
@@ -819,6 +858,32 @@ export default function ExpensasPage() {
     )
   }, [departamentosList, expensas])
 
+  const resumenDepartamentos = useMemo(() => {
+    const totalUnidades = departamentosList.length
+    const superficieTotal = departamentosList.reduce(
+      (acc, d) => acc + (d.areaM2 ? Number(d.areaM2) : 0),
+      0
+    )
+    return { totalUnidades, superficieTotal }
+  }, [departamentosList])
+
+  const periodoExtracto = useMemo(() => {
+    if (selectedExtracto?.periodo) {
+      return selectedExtracto.periodo.slice(0, 7)
+    }
+    if (filtroPeriodo && filtroPeriodo !== 'Todos') {
+      return filtroPeriodo
+    }
+    return periodosDisponibles[0] || ''
+  }, [selectedExtracto, filtroPeriodo, periodosDisponibles])
+
+  const gastosTotalesEdificioPeriodo = useMemo(() => {
+    if (!periodoExtracto) return 0
+    return expensas
+      .filter((e) => e.periodo && e.periodo.startsWith(periodoExtracto))
+      .reduce((acc, curr) => acc + (Number(curr.monto) || 0), 0)
+  }, [expensas, periodoExtracto])
+
   // Filtrado y ordenamiento jerárquico de expensas (Requerimiento C 2.3: Listado por tipo de Dpto en cada mes)
   const expensasFiltradas = useMemo(() => {
     return expensas
@@ -832,12 +897,6 @@ export default function ExpensasPage() {
         const tipoNombre = (item.departamento?.tipologia || '').toLowerCase()
         const matchTipo =
           filtroTipoDpto === 'Todos' ||
-          (filtroTipoDpto === 'Tipo A' &&
-            (tipoNombre.includes('tipo a') || tipoNombre.includes('tipo 1'))) ||
-          (filtroTipoDpto === 'Tipo B' &&
-            (tipoNombre.includes('tipo b') || tipoNombre.includes('tipo 2'))) ||
-          (filtroTipoDpto === 'Tipo C' &&
-            (tipoNombre.includes('tipo c') || tipoNombre.includes('tipo 3'))) ||
           tipoNombre.includes(filtroTipoDpto.toLowerCase())
         const matchPeriodo =
           filtroPeriodo === 'Todos' || (item.periodo && item.periodo.startsWith(filtroPeriodo))
@@ -1009,7 +1068,7 @@ export default function ExpensasPage() {
             Bs. {totalCobrado.toLocaleString('es-BO', { minimumFractionDigits: 2 })}
           </div>
           <span className="text-[11px] text-[#7d776f] dark:text-slate-500">
-            Ingresos a cuenta bancaria
+            Ingresos a cuenta
           </span>
         </div>
 
@@ -1044,44 +1103,40 @@ export default function ExpensasPage() {
       <div className="flex border-b border-[#cec8bc] dark:border-slate-800 gap-2 overflow-x-auto pb-1 scrollbar-thin">
         <button
           onClick={() => setActiveTab('todas')}
-          className={`flex items-center gap-2 px-4 py-2.5 font-bold text-xs border-b-2 transition-all cursor-pointer shrink-0 whitespace-nowrap ${
-            activeTab === 'todas'
+          className={`flex items-center gap-2 px-4 py-2.5 font-bold text-xs border-b-2 transition-all cursor-pointer shrink-0 whitespace-nowrap ${activeTab === 'todas'
               ? 'border-emerald-600 text-emerald-800 dark:border-emerald-400 dark:text-emerald-400'
               : 'border-transparent text-[#7d776f] dark:text-slate-400'
-          }`}
+            }`}
         >
           <Receipt className="w-4 h-4" />
           Expensas Emitidas ({expensas.length})
         </button>
         <button
           onClick={() => setActiveTab('cuotas')}
-          className={`flex items-center gap-2 px-4 py-2.5 font-bold text-xs border-b-2 transition-all cursor-pointer shrink-0 whitespace-nowrap ${
-            activeTab === 'cuotas'
+          className={`flex items-center gap-2 px-4 py-2.5 font-bold text-xs border-b-2 transition-all cursor-pointer shrink-0 whitespace-nowrap ${activeTab === 'cuotas'
               ? 'border-blue-600 text-blue-800 dark:border-blue-400 dark:text-blue-400'
               : 'border-transparent text-[#7d776f] dark:text-slate-400'
-          }`}
+            }`}
         >
           <Calculator className="w-4 h-4" />
           Tarifario: ¿Cuánto se cobra a cada uno?
         </button>
         <button
           onClick={() => setActiveTab('morosos')}
-          className={`flex items-center gap-2 px-4 py-2.5 font-bold text-xs border-b-2 transition-all cursor-pointer shrink-0 whitespace-nowrap ${
-            activeTab === 'morosos'
+          className={`flex items-center gap-2 px-4 py-2.5 font-bold text-xs border-b-2 transition-all cursor-pointer shrink-0 whitespace-nowrap ${activeTab === 'morosos'
               ? 'border-red-600 text-red-800 dark:border-red-400 dark:text-red-400'
               : 'border-transparent text-[#7d776f] dark:text-slate-400'
-          }`}
+            }`}
         >
           <UserX className="w-4 h-4" />
           Listado de Morosos ({expensas.filter((e) => e.estado === 'Moroso').length})
         </button>
         <button
           onClick={() => setActiveTab('simulador')}
-          className={`flex items-center gap-2 px-4 py-2.5 font-bold text-xs border-b-2 transition-all cursor-pointer shrink-0 whitespace-nowrap ${
-            activeTab === 'simulador'
+          className={`flex items-center gap-2 px-4 py-2.5 font-bold text-xs border-b-2 transition-all cursor-pointer shrink-0 whitespace-nowrap ${activeTab === 'simulador'
               ? 'border-indigo-600 text-indigo-800 dark:border-indigo-400 dark:text-indigo-400'
               : 'border-transparent text-[#7d776f] dark:text-slate-400'
-          }`}
+            }`}
         >
           <Sparkles className="w-4 h-4 text-amber-500" />
           Simulador de Cobro & Mora
@@ -1113,9 +1168,11 @@ export default function ExpensasPage() {
                   className="bg-transparent text-[#262422] dark:text-white focus:outline-none cursor-pointer font-medium"
                 >
                   <option value="Todos">Tipo Dpto: Todos</option>
-                  <option value="Tipo A">Tipo A (Bs 300)</option>
-                  <option value="Tipo B">Tipo B (Bs 350)</option>
-                  <option value="Tipo C">Tipo C (Bs 400)</option>
+                  {tiposDepartamento.map((t) => (
+                    <option key={t.idTipo} value={t.nombre}>
+                      {t.nombre} (Bs {Number(t.montoExpensa).toFixed(2)})
+                    </option>
+                  ))}
                 </select>
               </div>
 
@@ -1311,13 +1368,12 @@ export default function ExpensasPage() {
                               <button
                                 type="button"
                                 onClick={() => setSelectedExpensaParaMora(item)}
-                                className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-extrabold cursor-pointer transition-transform hover:scale-105 ${
-                                  item.estado === 'Pagado'
+                                className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-extrabold cursor-pointer transition-transform hover:scale-105 ${item.estado === 'Pagado'
                                     ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-400'
                                     : item.estado === 'Pendiente'
                                       ? 'bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-400'
                                       : 'bg-red-100 text-red-800 dark:bg-red-950/60 dark:text-red-400'
-                                }`}
+                                  }`}
                                 title="Click para ver el cálculo y desglose de mora acumulada"
                               >
                                 {item.estado}
@@ -1476,13 +1532,12 @@ export default function ExpensasPage() {
                           <button
                             type="button"
                             onClick={() => setSelectedExpensaParaMora(item)}
-                            className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-extrabold ${
-                              item.estado === 'Pagado'
+                            className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-extrabold ${item.estado === 'Pagado'
                                 ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-400'
                                 : item.estado === 'Pendiente'
                                   ? 'bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-400'
                                   : 'bg-red-100 text-red-800 dark:bg-red-950/60 dark:text-red-400'
-                            }`}
+                              }`}
                           >
                             {item.estado}
                           </button>
@@ -1625,7 +1680,16 @@ export default function ExpensasPage() {
         </>
       ) : activeTab === 'cuotas' ? (
         /* VISTA TARIFARIO: ¿CUÁNTO SE COBRA A CADA UNO? */
-        <div className="space-y-6">
+        <div id={!selectedReceipt && !selectedExtracto && !isExtractoGeneralOpen && !isEstadoCuentaModalOpen ? "area-impresion" : undefined} className="space-y-6">
+          <style dangerouslySetInnerHTML={{
+            __html: `
+            @media print {
+              body * { visibility: hidden !important; }
+              #area-impresion, #area-impresion * { visibility: visible !important; color: #000 !important; }
+              #area-impresion { position: absolute !important; left: 0 !important; top: 0 !important; width: 100% !important; background: #fff !important; color: #000 !important; }
+              .no-print { display: none !important; }
+            }
+          `}} />
           {/* Banner Explicativo */}
           <div className="p-4 sm:p-5 rounded-2xl bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-900/50 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
             <div>
@@ -1636,15 +1700,13 @@ export default function ExpensasPage() {
                 </h3>
               </div>
               <p className="text-xs text-blue-800 dark:text-blue-300 mt-1">
-                El monto base de expensas proviene del tipo asignado al departamento (Tipo A = 300
-                Bs, Tipo B = 350 Bs, Tipo C = 400 Bs), más el monto de consumo de agua registrado
-                para el período.
+                El monto base de expensas proviene del tipo asignado al departamento, más el monto de consumo de agua registrado para el período.
               </p>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 no-print">
               <button
                 onClick={() => window.print()}
-                className="px-3.5 py-2 rounded-xl bg-blue-700 hover:bg-blue-800 text-white text-xs font-bold transition-all shadow-sm flex items-center gap-1.5 cursor-pointer"
+                className="px-3.5 py-2 rounded-xl bg-blue-700 hover:bg-blue-800 text-white text-xs font-bold transition-all shadow-sm flex items-center gap-1.5 cursor-pointer no-print"
               >
                 <Printer className="w-4 h-4" />
                 Imprimir Cuadro Tarifario
@@ -1654,59 +1716,36 @@ export default function ExpensasPage() {
 
           {/* Tarjetas Resumen por Tipología */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            {/* Tipo A */}
-            <div className="p-4 sm:p-5 rounded-2xl bg-[#ede9e1] dark:bg-slate-900 border border-[#cec8bc] dark:border-slate-800 shadow-sm space-y-3">
-              <div className="flex justify-between items-center">
-                <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black bg-blue-100 text-blue-800 dark:bg-blue-950/60 dark:text-blue-300">
-                  Tipo A (60 m²)
-                </span>
-                <span className="text-xs text-[#7d776f] font-mono font-bold">Base Estándar</span>
+            {tiposDepartamento.length === 0 ? (
+              <div className="col-span-full p-6 text-center text-xs text-[#7d776f]">
+                Cargando tipos de departamento...
               </div>
-              <div>
-                <div className="text-2xl font-black font-mono text-[#262422] dark:text-white">
-                  Bs. 300.00 <span className="text-xs text-[#7d776f] font-normal">/ mes base</span>
+            ) : (
+              tiposDepartamento.map((tipo) => (
+                <div
+                  key={tipo.idTipo}
+                  className="p-4 sm:p-5 rounded-2xl bg-[#ede9e1] dark:bg-slate-900 border border-[#cec8bc] dark:border-slate-800 shadow-sm space-y-3"
+                >
+                  <div className="flex justify-between items-center">
+                    <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black bg-blue-100 text-blue-800 dark:bg-blue-950/60 dark:text-blue-300">
+                      {tipo.nombre}{tipo.areaM2 ? ` (${tipo.areaM2} m²)` : ''}
+                    </span>
+                    <span className="text-xs text-[#7d776f] font-mono font-bold">Base Estándar</span>
+                  </div>
+                  <div>
+                    <div className="text-2xl font-black font-mono text-[#262422] dark:text-white">
+                      Bs. {Number(tipo.montoExpensa).toFixed(2)}{' '}
+                      <span className="text-xs text-[#7d776f] font-normal">/ mes base</span>
+                    </div>
+                    {tipo.areaM2 ? (
+                      <div className="text-xs text-[#7d776f] dark:text-slate-400 mt-0.5">
+                        Superficie referencia: {tipo.areaM2} m²
+                      </div>
+                    ) : null}
+                  </div>
                 </div>
-                <div className="text-xs text-[#7d776f] dark:text-slate-400 mt-0.5">
-                  Superficie referencia: 60 m²
-                </div>
-              </div>
-            </div>
-
-            {/* Tipo B */}
-            <div className="p-4 sm:p-5 rounded-2xl bg-[#ede9e1] dark:bg-slate-900 border border-[#cec8bc] dark:border-slate-800 shadow-sm space-y-3">
-              <div className="flex justify-between items-center">
-                <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black bg-purple-100 text-purple-800 dark:bg-purple-950/60 dark:text-purple-300">
-                  Tipo B (80 m²)
-                </span>
-                <span className="text-xs text-[#7d776f] font-mono font-bold">Base Estándar</span>
-              </div>
-              <div>
-                <div className="text-2xl font-black font-mono text-[#262422] dark:text-white">
-                  Bs. 350.00 <span className="text-xs text-[#7d776f] font-normal">/ mes base</span>
-                </div>
-                <div className="text-xs text-[#7d776f] dark:text-slate-400 mt-0.5">
-                  Superficie referencia: 80 m²
-                </div>
-              </div>
-            </div>
-
-            {/* Tipo C */}
-            <div className="p-4 sm:p-5 rounded-2xl bg-[#ede9e1] dark:bg-slate-900 border border-[#cec8bc] dark:border-slate-800 shadow-sm space-y-3">
-              <div className="flex justify-between items-center">
-                <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300">
-                  Tipo C (100 m²)
-                </span>
-                <span className="text-xs text-[#7d776f] font-mono font-bold">Base Estándar</span>
-              </div>
-              <div>
-                <div className="text-2xl font-black font-mono text-[#262422] dark:text-white">
-                  Bs. 400.00 <span className="text-xs text-[#7d776f] font-normal">/ mes base</span>
-                </div>
-                <div className="text-xs text-[#7d776f] dark:text-slate-400 mt-0.5">
-                  Superficie referencia: 100 m²
-                </div>
-              </div>
-            </div>
+              ))
+            )}
           </div>
 
           {/* Tabla Maestra Arancelaria */}
@@ -1876,7 +1915,7 @@ export default function ExpensasPage() {
                         {m.departamento?.tipologia || 'Piso 1'})
                       </h4>
                       <p className="text-xs text-[#7d776f] dark:text-slate-400">
-                        Propietario Responsable:{' '}
+                        Propietario:{' '}
                         <span className="font-bold">{m.propietarioNombre}</span>
                       </p>
                     </div>
@@ -2135,11 +2174,10 @@ export default function ExpensasPage() {
                 <button
                   type="submit"
                   disabled={!nuevoPeriodo || isSubmittingEmision}
-                  className={`px-5 py-2.5 rounded-xl text-xs font-bold text-white transition-all shadow-md cursor-pointer ${
-                    !nuevoPeriodo || isSubmittingEmision
+                  className={`px-5 py-2.5 rounded-xl text-xs font-bold text-white transition-all shadow-md cursor-pointer ${!nuevoPeriodo || isSubmittingEmision
                       ? 'bg-slate-400 cursor-not-allowed'
                       : 'bg-emerald-700 hover:bg-emerald-800 active:scale-95'
-                  }`}
+                    }`}
                 >
                   {isSubmittingEmision ? 'Generando lote...' : '⚡ Ejecutar Generación'}
                 </button>
@@ -2152,271 +2190,267 @@ export default function ExpensasPage() {
       {/* MODAL CONFIGURAR REGLA DE MORA (HU04 / CA09) */}
       {isMoraModalOpen && (
         <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 backdrop-blur-xs overflow-y-auto">
-              <div className="w-full max-w-2xl bg-[#ede9e1] dark:bg-slate-900 rounded-3xl border border-[#cec8bc] dark:border-slate-800 p-6 sm:p-7 space-y-4 shadow-2xl my-8">
-                <div className="flex justify-between items-center border-b border-[#cec8bc] dark:border-slate-800 pb-3">
-                  <div>
-                    <h3 className="font-extrabold text-base text-[#262422] dark:text-white flex items-center gap-2">
-                      <Calculator className="w-5 h-5 text-indigo-600" />
-                      Simulador y Configuración de Mora (en Bs. y %)
-                    </h3>
-                    <p className="text-xs text-[#7d776f]">
-                      Configura la política oficial del edificio y simula en tiempo real antes, en
-                      fecha y después del vencimiento.
-                    </p>
-                  </div>
-                  <button onClick={() => setIsMoraModalOpen(false)}>
-                    <X className="w-5 h-5 text-[#7d776f] hover:text-[#262422]" />
+          <div className="w-full max-w-2xl bg-[#ede9e1] dark:bg-slate-900 rounded-3xl border border-[#cec8bc] dark:border-slate-800 p-6 sm:p-7 space-y-4 shadow-2xl my-8">
+            <div className="flex justify-between items-center border-b border-[#cec8bc] dark:border-slate-800 pb-3">
+              <div>
+                <h3 className="font-extrabold text-base text-[#262422] dark:text-white flex items-center gap-2">
+                  <Calculator className="w-5 h-5 text-indigo-600" />
+                  Simulador y Configuración de Mora (en Bs. y %)
+                </h3>
+                <p className="text-xs text-[#7d776f]">
+                  Configura la política oficial del edificio y simula en tiempo real antes, en
+                  fecha y después del vencimiento.
+                </p>
+              </div>
+              <button onClick={() => setIsMoraModalOpen(false)}>
+                <X className="w-5 h-5 text-[#7d776f] hover:text-[#262422]" />
+              </button>
+            </div>
+
+            {moraError && (
+              <div className="p-3 bg-rose-100 dark:bg-rose-950/70 border border-rose-300 dark:border-rose-800 text-rose-900 dark:text-rose-200 rounded-xl flex items-center gap-2 text-xs">
+                <AlertCircle className="w-4 h-4 shrink-0 text-rose-600 dark:text-rose-400" />
+                <span>{moraError}</span>
+              </div>
+            )}
+
+            <form onSubmit={handleGuardarReglaMora} className="space-y-4 text-xs">
+              {/* Tarjeta de Política Activa */}
+              <div className="p-3.5 rounded-2xl bg-indigo-50 dark:bg-indigo-950/40 border border-indigo-200 dark:border-indigo-800 text-[11px] text-indigo-900 dark:text-indigo-200 flex justify-between items-center">
+                <div>
+                  <span className="font-bold block">Política Activa del Edificio:</span>
+                  <span className="text-base font-black text-indigo-700 dark:text-indigo-300 font-mono">
+                    {politicaMora.tipoPenalidad === 'fijo'
+                      ? `Bs. ${politicaMora.montoFijo} (Fijo en Bolivianos)`
+                      : `${politicaMora.porcentaje}% (Porcentual mensual)`}
+                  </span>
+                  <span className="block text-[10px] text-[#7d776f] mt-0.5">
+                    Vence: día {politicaMora.diaVencimiento} de cada mes • Gracia:{' '}
+                    {politicaMora.diasGracia} días • Generación: día{' '}
+                    {politicaMora.diaGeneracion}
+                  </span>
+                </div>
+                <div className="w-9 h-9 rounded-2xl bg-indigo-200 dark:bg-indigo-900/60 flex items-center justify-center text-indigo-700 dark:text-indigo-300 shrink-0">
+                  <Percent className="w-4 h-4" />
+                </div>
+              </div>
+
+              {/* Selector de Método de Cálculo: Monto Fijo vs Porcentaje (Requerimiento C 3.1 & Pizarra) */}
+              <div>
+                <label className="block font-bold text-[#262422] dark:text-white mb-1.5">
+                  1. Modalidad de Penalidad por Mora *
+                </label>
+                <div className="grid grid-cols-2 gap-2.5">
+                  <button
+                    type="button"
+                    onClick={() => setMoraTipoPenalidadInput('fijo')}
+                    className={`p-3 rounded-2xl font-bold border text-center transition-all cursor-pointer ${moraTipoPenalidadInput === 'fijo'
+                        ? 'bg-indigo-700 text-white border-indigo-800 shadow-md ring-2 ring-indigo-500/30'
+                        : 'bg-[#dfd9ce] dark:bg-slate-800 text-[#5c5750] dark:text-slate-300 border-[#cec8bc] dark:border-slate-700'
+                      }`}
+                  >
+                    <div className="text-xs">💵 Monto Fijo en Bolivianos (Bs.)</div>
+                    <span className="block text-[10px] font-normal opacity-90 mt-0.5">
+                      Ej. Cobro fijo de Bs. 50 a cualquier expensa vencida
+                    </span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setMoraTipoPenalidadInput('porcentaje')}
+                    className={`p-3 rounded-2xl font-bold border text-center transition-all cursor-pointer ${moraTipoPenalidadInput === 'porcentaje'
+                        ? 'bg-indigo-700 text-white border-indigo-800 shadow-md ring-2 ring-indigo-500/30'
+                        : 'bg-[#dfd9ce] dark:bg-slate-800 text-[#5c5750] dark:text-slate-300 border-[#cec8bc] dark:border-slate-700'
+                      }`}
+                  >
+                    <div className="text-xs">📊 Porcentaje de Interés (%)</div>
+                    <span className="block text-[10px] font-normal opacity-90 mt-0.5">
+                      Ej. 5% ó 10% calculado sobre el capital pendiente
+                    </span>
                   </button>
                 </div>
+              </div>
 
-                {moraError && (
-                  <div className="p-3 bg-rose-100 dark:bg-rose-950/70 border border-rose-300 dark:border-rose-800 text-rose-900 dark:text-rose-200 rounded-xl flex items-center gap-2 text-xs">
-                    <AlertCircle className="w-4 h-4 shrink-0 text-rose-600 dark:text-rose-400" />
-                    <span>{moraError}</span>
+              {/* Input según el tipo seleccionado */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {moraTipoPenalidadInput === 'fijo' ? (
+                  <div>
+                    <label className="block font-bold text-[#262422] dark:text-white mb-1">
+                      Monto Fijo de Multa (Bs.) *
+                    </label>
+                    <input
+                      type="number"
+                      step="1"
+                      min="1"
+                      required
+                      value={moraMontoFijoInput}
+                      onChange={(e) =>
+                        setMoraMontoFijoInput(
+                          e.target.value === '' ? '' : Number(e.target.value)
+                        )
+                      }
+                      placeholder="Ej. 50"
+                      className="w-full px-3 py-2 rounded-xl bg-[#dfd9ce] dark:bg-slate-800 border border-[#cec8bc] dark:border-slate-700 font-mono font-bold text-sm text-[#262422] dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-600"
+                    />
+                    <p className="text-[10px] text-[#7d776f] mt-1">
+                      Valor en Bs. aplicado a departamentos en mora.
+                    </p>
+                  </div>
+                ) : (
+                  <div>
+                    <label className="block font-bold text-[#262422] dark:text-white mb-1">
+                      Tasa de Interés Mensual (%) *
+                    </label>
+                    <input
+                      type="number"
+                      step="0.1"
+                      min="0"
+                      max="100"
+                      required
+                      value={nuevaTasaMoraInput}
+                      onChange={(e) =>
+                        setNuevaTasaMoraInput(
+                          e.target.value === '' ? '' : Number(e.target.value)
+                        )
+                      }
+                      placeholder="Ej. 10"
+                      className="w-full px-3 py-2 rounded-xl bg-[#dfd9ce] dark:bg-slate-800 border border-[#cec8bc] dark:border-slate-700 font-mono font-bold text-sm text-[#262422] dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-600"
+                    />
+                    <p className="text-[10px] text-[#7d776f] mt-1">
+                      Porcentaje sobre saldo adeudado (Ej. 5% ó 10%).
+                    </p>
                   </div>
                 )}
 
-                <form onSubmit={handleGuardarReglaMora} className="space-y-4 text-xs">
-                  {/* Tarjeta de Política Activa */}
-                  <div className="p-3.5 rounded-2xl bg-indigo-50 dark:bg-indigo-950/40 border border-indigo-200 dark:border-indigo-800 text-[11px] text-indigo-900 dark:text-indigo-200 flex justify-between items-center">
-                    <div>
-                      <span className="font-bold block">Política Activa del Edificio:</span>
-                      <span className="text-base font-black text-indigo-700 dark:text-indigo-300 font-mono">
-                        {politicaMora.tipoPenalidad === 'fijo'
-                          ? `Bs. ${politicaMora.montoFijo} (Fijo en Bolivianos)`
-                          : `${politicaMora.porcentaje}% (Porcentual mensual)`}
-                      </span>
-                      <span className="block text-[10px] text-[#7d776f] mt-0.5">
-                        Vence: día {politicaMora.diaVencimiento} de cada mes • Gracia:{' '}
-                        {politicaMora.diasGracia} días • Generación: día{' '}
-                        {politicaMora.diaGeneracion}
-                      </span>
-                    </div>
-                    <div className="w-9 h-9 rounded-2xl bg-indigo-200 dark:bg-indigo-900/60 flex items-center justify-center text-indigo-700 dark:text-indigo-300 shrink-0">
-                      <Percent className="w-4 h-4" />
-                    </div>
-                  </div>
-
-                  {/* Selector de Método de Cálculo: Monto Fijo vs Porcentaje (Requerimiento C 3.1 & Pizarra) */}
+                <div className="grid grid-cols-3 gap-2">
                   <div>
-                    <label className="block font-bold text-[#262422] dark:text-white mb-1.5">
-                      1. Modalidad de Penalidad por Mora *
+                    <label className="block font-bold text-[#262422] dark:text-white mb-1">
+                      Día Venc. *
                     </label>
-                    <div className="grid grid-cols-2 gap-2.5">
-                      <button
-                        type="button"
-                        onClick={() => setMoraTipoPenalidadInput('fijo')}
-                        className={`p-3 rounded-2xl font-bold border text-center transition-all cursor-pointer ${
-                          moraTipoPenalidadInput === 'fijo'
-                            ? 'bg-indigo-700 text-white border-indigo-800 shadow-md ring-2 ring-indigo-500/30'
-                            : 'bg-[#dfd9ce] dark:bg-slate-800 text-[#5c5750] dark:text-slate-300 border-[#cec8bc] dark:border-slate-700'
-                        }`}
-                      >
-                        <div className="text-xs">💵 Monto Fijo en Bolivianos (Bs.)</div>
-                        <span className="block text-[10px] font-normal opacity-90 mt-0.5">
-                          Ej. Cobro fijo de Bs. 50 a cualquier expensa vencida
-                        </span>
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={() => setMoraTipoPenalidadInput('porcentaje')}
-                        className={`p-3 rounded-2xl font-bold border text-center transition-all cursor-pointer ${
-                          moraTipoPenalidadInput === 'porcentaje'
-                            ? 'bg-indigo-700 text-white border-indigo-800 shadow-md ring-2 ring-indigo-500/30'
-                            : 'bg-[#dfd9ce] dark:bg-slate-800 text-[#5c5750] dark:text-slate-300 border-[#cec8bc] dark:border-slate-700'
-                        }`}
-                      >
-                        <div className="text-xs">📊 Porcentaje de Interés (%)</div>
-                        <span className="block text-[10px] font-normal opacity-90 mt-0.5">
-                          Ej. 5% ó 10% calculado sobre el capital pendiente
-                        </span>
-                      </button>
-                    </div>
+                    <input
+                      type="number"
+                      min="1"
+                      max="28"
+                      required
+                      value={moraDiaVencimientoInput}
+                      onChange={(e) =>
+                        setMoraDiaVencimientoInput(
+                          e.target.value === '' ? '' : Number(e.target.value)
+                        )
+                      }
+                      placeholder="10"
+                      className="w-full px-2 py-2 rounded-xl bg-[#dfd9ce] dark:bg-slate-800 border border-[#cec8bc] dark:border-slate-700 font-mono font-bold text-xs"
+                    />
+                    <span className="text-[9px] text-[#7d776f]">Día 10</span>
                   </div>
 
-                  {/* Input según el tipo seleccionado */}
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    {moraTipoPenalidadInput === 'fijo' ? (
-                      <div>
-                        <label className="block font-bold text-[#262422] dark:text-white mb-1">
-                          Monto Fijo de Multa (Bs.) *
-                        </label>
-                        <input
-                          type="number"
-                          step="1"
-                          min="1"
-                          required
-                          value={moraMontoFijoInput}
-                          onChange={(e) =>
-                            setMoraMontoFijoInput(
-                              e.target.value === '' ? '' : Number(e.target.value)
-                            )
-                          }
-                          placeholder="Ej. 50"
-                          className="w-full px-3 py-2 rounded-xl bg-[#dfd9ce] dark:bg-slate-800 border border-[#cec8bc] dark:border-slate-700 font-mono font-bold text-sm text-[#262422] dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-600"
-                        />
-                        <p className="text-[10px] text-[#7d776f] mt-1">
-                          Valor en Bs. aplicado a departamentos en mora.
-                        </p>
-                      </div>
-                    ) : (
-                      <div>
-                        <label className="block font-bold text-[#262422] dark:text-white mb-1">
-                          Tasa de Interés Mensual (%) *
-                        </label>
-                        <input
-                          type="number"
-                          step="0.1"
-                          min="0"
-                          max="100"
-                          required
-                          value={nuevaTasaMoraInput}
-                          onChange={(e) =>
-                            setNuevaTasaMoraInput(
-                              e.target.value === '' ? '' : Number(e.target.value)
-                            )
-                          }
-                          placeholder="Ej. 10"
-                          className="w-full px-3 py-2 rounded-xl bg-[#dfd9ce] dark:bg-slate-800 border border-[#cec8bc] dark:border-slate-700 font-mono font-bold text-sm text-[#262422] dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-600"
-                        />
-                        <p className="text-[10px] text-[#7d776f] mt-1">
-                          Porcentaje sobre saldo adeudado (Ej. 5% ó 10%).
-                        </p>
-                      </div>
-                    )}
-
-                    <div className="grid grid-cols-3 gap-2">
-                      <div>
-                        <label className="block font-bold text-[#262422] dark:text-white mb-1">
-                          Día Venc. *
-                        </label>
-                        <input
-                          type="number"
-                          min="1"
-                          max="28"
-                          required
-                          value={moraDiaVencimientoInput}
-                          onChange={(e) =>
-                            setMoraDiaVencimientoInput(
-                              e.target.value === '' ? '' : Number(e.target.value)
-                            )
-                          }
-                          placeholder="10"
-                          className="w-full px-2 py-2 rounded-xl bg-[#dfd9ce] dark:bg-slate-800 border border-[#cec8bc] dark:border-slate-700 font-mono font-bold text-xs"
-                        />
-                        <span className="text-[9px] text-[#7d776f]">Día 10</span>
-                      </div>
-
-                      <div>
-                        <label className="block font-bold text-[#262422] dark:text-white mb-1">
-                          Gracia *
-                        </label>
-                        <input
-                          type="number"
-                          min="0"
-                          max="15"
-                          required
-                          value={moraDiasGraciaInput}
-                          onChange={(e) =>
-                            setMoraDiasGraciaInput(
-                              e.target.value === '' ? '' : Number(e.target.value)
-                            )
-                          }
-                          placeholder="2"
-                          className="w-full px-2 py-2 rounded-xl bg-[#dfd9ce] dark:bg-slate-800 border border-[#cec8bc] dark:border-slate-700 font-mono font-bold text-xs"
-                        />
-                        <span className="text-[9px] text-[#7d776f]">2 días</span>
-                      </div>
-
-                      <div>
-                        <label className="block font-bold text-[#262422] dark:text-white mb-1">
-                          Emisión *
-                        </label>
-                        <input
-                          type="number"
-                          min="1"
-                          max="28"
-                          required
-                          value={moraDiaGeneracionInput}
-                          onChange={(e) =>
-                            setMoraDiaGeneracionInput(
-                              e.target.value === '' ? '' : Number(e.target.value)
-                            )
-                          }
-                          placeholder="1"
-                          className="w-full px-2 py-2 rounded-xl bg-[#dfd9ce] dark:bg-slate-800 border border-[#cec8bc] dark:border-slate-700 font-mono font-bold text-xs"
-                        />
-                        <span className="text-[9px] text-[#7d776f]">Día 01</span>
-                      </div>
-                    </div>
+                  <div>
+                    <label className="block font-bold text-[#262422] dark:text-white mb-1">
+                      Gracia *
+                    </label>
+                    <input
+                      type="number"
+                      min="0"
+                      max="15"
+                      required
+                      value={moraDiasGraciaInput}
+                      onChange={(e) =>
+                        setMoraDiasGraciaInput(
+                          e.target.value === '' ? '' : Number(e.target.value)
+                        )
+                      }
+                      placeholder="2"
+                      className="w-full px-2 py-2 rounded-xl bg-[#dfd9ce] dark:bg-slate-800 border border-[#cec8bc] dark:border-slate-700 font-mono font-bold text-xs"
+                    />
+                    <span className="text-[9px] text-[#7d776f]">2 días</span>
                   </div>
 
-                  {/* Historial */}
-                  <div className="space-y-1.5 pt-2 border-t border-[#cec8bc] dark:border-slate-800">
-                    <span className="font-bold text-xs text-[#262422] dark:text-white flex items-center gap-1.5">
-                      <History className="w-3.5 h-3.5 text-indigo-600" />
-                      Historial de Reglas de Mora Registradas
-                    </span>
-                    <div className="max-h-28 overflow-y-auto space-y-1.5 pr-1">
-                      {historialReglasMora.length === 0 ? (
-                        <p className="text-[11px] text-[#7d776f]">No hay historial registrado.</p>
-                      ) : (
-                        historialReglasMora.map((reg, idx) => (
-                          <div
-                            key={`regla-${reg.idRegla ?? reg.idReglaMora ?? idx}-${idx}`}
-                            className={`p-2 rounded-xl border text-[11px] flex justify-between items-center ${
-                              reg.activa
-                                ? 'bg-emerald-50 dark:bg-emerald-950/40 border-emerald-300 dark:border-emerald-800 text-emerald-900 dark:text-emerald-200'
-                                : 'bg-[#dfd9ce]/60 dark:bg-slate-800/60 border-[#cec8bc] dark:border-slate-700 text-[#5c5750] dark:text-slate-400'
-                            }`}
-                          >
-                            <div>
-                              <span className="font-bold font-mono text-xs">
-                                {reg.tasaInteres}%
-                              </span>
-                              <span className="text-[10px] block text-[#7d776f]">
-                                {fechaHoraBolivia(reg.fechaCreacion)}{' '}
-                                {reg.usuarioCreacion?.nombreUsuario
-                                  ? `• ${reg.usuarioCreacion.nombreUsuario}`
-                                  : ''}
-                              </span>
-                            </div>
-                            <span
-                              className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
-                                reg.activa
-                                  ? 'bg-emerald-200 dark:bg-emerald-900 text-emerald-800 dark:text-emerald-200'
-                                  : 'bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300'
-                              }`}
-                            >
-                              {reg.activa ? 'Activa' : 'Histórica'}
-                            </span>
-                          </div>
-                        ))
-                      )}
-                    </div>
+                  <div>
+                    <label className="block font-bold text-[#262422] dark:text-white mb-1">
+                      Emisión *
+                    </label>
+                    <input
+                      type="number"
+                      min="1"
+                      max="28"
+                      required
+                      value={moraDiaGeneracionInput}
+                      onChange={(e) =>
+                        setMoraDiaGeneracionInput(
+                          e.target.value === '' ? '' : Number(e.target.value)
+                        )
+                      }
+                      placeholder="1"
+                      className="w-full px-2 py-2 rounded-xl bg-[#dfd9ce] dark:bg-slate-800 border border-[#cec8bc] dark:border-slate-700 font-mono font-bold text-xs"
+                    />
+                    <span className="text-[9px] text-[#7d776f]">Día 01</span>
                   </div>
-
-                  <div className="flex justify-end gap-2 pt-3 border-t border-[#cec8bc] dark:border-slate-800">
-                    <button
-                      type="button"
-                      onClick={() => setIsMoraModalOpen(false)}
-                      className="px-4 py-2 rounded-xl text-xs font-bold text-[#7d776f] hover:text-[#262422] cursor-pointer"
-                    >
-                      Cerrar
-                    </button>
-                    <button
-                      type="submit"
-                      disabled={isSubmittingMora}
-                      className="px-5 py-2.5 rounded-xl bg-indigo-700 hover:bg-indigo-800 text-white text-xs font-bold shadow-md cursor-pointer disabled:opacity-50 inline-flex items-center gap-1.5"
-                    >
-                      <CheckCircle2 className="w-4 h-4" />
-                      <span>{isSubmittingMora ? 'Guardando...' : 'Guardar y Aplicar Regla'}</span>
-                    </button>
-                  </div>
-                </form>
+                </div>
               </div>
-            </div>
+
+              {/* Historial */}
+              <div className="space-y-1.5 pt-2 border-t border-[#cec8bc] dark:border-slate-800">
+                <span className="font-bold text-xs text-[#262422] dark:text-white flex items-center gap-1.5">
+                  <History className="w-3.5 h-3.5 text-indigo-600" />
+                  Historial de Reglas de Mora Registradas
+                </span>
+                <div className="max-h-28 overflow-y-auto space-y-1.5 pr-1">
+                  {historialReglasMora.length === 0 ? (
+                    <p className="text-[11px] text-[#7d776f]">No hay historial registrado.</p>
+                  ) : (
+                    historialReglasMora.map((reg, idx) => (
+                      <div
+                        key={`regla-${reg.idRegla ?? reg.idReglaMora ?? idx}-${idx}`}
+                        className={`p-2 rounded-xl border text-[11px] flex justify-between items-center ${reg.activa
+                            ? 'bg-emerald-50 dark:bg-emerald-950/40 border-emerald-300 dark:border-emerald-800 text-emerald-900 dark:text-emerald-200'
+                            : 'bg-[#dfd9ce]/60 dark:bg-slate-800/60 border-[#cec8bc] dark:border-slate-700 text-[#5c5750] dark:text-slate-400'
+                          }`}
+                      >
+                        <div>
+                          <span className="font-bold font-mono text-xs">
+                            {reg.tasaInteres}%
+                          </span>
+                          <span className="text-[10px] block text-[#7d776f]">
+                            {fechaHoraBolivia(reg.fechaCreacion)}{' '}
+                            {reg.usuarioCreacion?.nombreUsuario
+                              ? `• ${reg.usuarioCreacion.nombreUsuario}`
+                              : ''}
+                          </span>
+                        </div>
+                        <span
+                          className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${reg.activa
+                              ? 'bg-emerald-200 dark:bg-emerald-900 text-emerald-800 dark:text-emerald-200'
+                              : 'bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300'
+                            }`}
+                        >
+                          {reg.activa ? 'Activa' : 'Histórica'}
+                        </span>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+
+              <div className="flex justify-end gap-2 pt-3 border-t border-[#cec8bc] dark:border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => setIsMoraModalOpen(false)}
+                  className="px-4 py-2 rounded-xl text-xs font-bold text-[#7d776f] hover:text-[#262422] cursor-pointer"
+                >
+                  Cerrar
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSubmittingMora}
+                  className="px-5 py-2.5 rounded-xl bg-indigo-700 hover:bg-indigo-800 text-white text-xs font-bold shadow-md cursor-pointer disabled:opacity-50 inline-flex items-center gap-1.5"
+                >
+                  <CheckCircle2 className="w-4 h-4" />
+                  <span>{isSubmittingMora ? 'Guardando...' : 'Guardar y Aplicar Regla'}</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
       )}
 
       {/* MODAL REGISTRO DE COBRO / PAGO DE EXPENSA */}
@@ -2606,7 +2640,7 @@ export default function ExpensasPage() {
                   {propNombre && (
                     <div>
                       <span className="text-slate-500 block text-[10px] uppercase font-bold">
-                        Propietario Responsable:
+                        Propietario:
                       </span>
                       <span className="font-bold">{propNombre}</span>
                     </div>
@@ -2792,128 +2826,287 @@ export default function ExpensasPage() {
                   setSelectedExtracto(null)
                   setIsExtractoGeneralOpen(false)
                 }}
-                className="text-[#7d776f] hover:text-[#262422] dark:hover:text-white p-1 cursor-pointer"
+                className="no-print text-[#7d776f] hover:text-[#262422] dark:hover:text-white p-1 cursor-pointer"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            {/* Ficha Resumen del Extracto */}
-            <div className="bg-white/80 dark:bg-slate-950/80 p-4 rounded-xl border border-[#cec8bc] dark:border-slate-800 text-xs space-y-2.5">
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-center sm:text-left">
+            {/* Documento Imprimible del Extracto: solo este contenedor lleva id="area-impresion" */}
+            <div
+              id="area-impresion"
+              className="p-6 rounded-2xl bg-white text-black border border-slate-300 space-y-4 shadow-sm"
+            >
+              <style dangerouslySetInnerHTML={{
+                __html: `
+                @media print {
+                  body * { visibility: hidden !important; }
+                  #area-impresion, #area-impresion * { visibility: visible !important; color: #000 !important; }
+                  #area-impresion { position: absolute !important; left: 0 !important; top: 0 !important; width: 100% !important; background: #fff !important; color: #000 !important; }
+                  .no-print { display: none !important; }
+                }
+              `}} />
+
+              {/* Membrete Oficial del Extracto */}
+              <div className="border-b-2 border-slate-800 pb-3 flex justify-between items-start text-black">
                 <div>
-                  <span className="text-[#7d776f] text-[10px] uppercase font-bold block">
-                    Período
-                  </span>
-                  <span className="font-bold text-[#262422] dark:text-white">Octubre 2026</span>
-                </div>
-                <div>
-                  <span className="text-[#7d776f] text-[10px] uppercase font-bold block">
-                    Gastos Totales Edificio
-                  </span>
-                  <span className="font-bold font-mono text-emerald-700 dark:text-emerald-400">
-                    Bs 15.500,00
-                  </span>
-                </div>
-                <div>
-                  <span className="text-[#7d776f] text-[10px] uppercase font-bold block">
-                    Superficie Total
-                  </span>
-                  <span className="font-bold font-mono">1.600 m² (20 Unidades)</span>
-                </div>
-                <div>
-                  <span className="text-[#7d776f] text-[10px] uppercase font-bold block">
-                    Unidad
-                  </span>
-                  <span className="font-bold text-[#262422] dark:text-white">
+                  <h2 className="text-base font-black tracking-tight text-black">
+                    Edificio XYZ
+                  </h2>
+                  <div className="text-xs font-bold text-black mt-1">
                     {selectedExtracto
-                      ? `Dpto ${selectedExtracto.departamento?.numero} (${selectedExtracto.departamento?.tipologia || '80 m²'})`
-                      : 'Edificio Completo (20 Dptos)'}
-                  </span>
+                      ? `Extracto de Expensa — Departamento ${selectedExtracto.departamento?.numero || selectedExtracto.idDepartamento}`
+                      : 'Extracto General de Gastos Comunes'}
+                  </div>
+                </div>
+                <div className="text-right text-xs">
+                  <div className="font-mono font-bold text-black uppercase">
+                    Liquidación de Expensas
+                  </div>
+                  {periodoExtracto && (
+                    <div className="font-mono text-slate-700">
+                      Período: {formatPeriodoEspanol(periodoExtracto)}
+                    </div>
+                  )}
+                  <div className="text-[11px] text-slate-600">
+                    Emisión: {fechaSolo(new Date())}
+                  </div>
                 </div>
               </div>
 
-              {selectedExtracto && (
-                <div className="border-t border-slate-200 dark:border-slate-800 pt-2 flex flex-wrap justify-between items-center text-[11px] gap-2">
-                  <span>
-                    <strong>Propietario:</strong> {selectedExtracto.propietarioNombre}
-                  </span>
-                  <span>
-                    <strong>Ocupante:</strong> {selectedExtracto.inquilinoNombre || '—'}
-                  </span>
-                  <span>
-                    <strong>Superficie:</strong>{' '}
-                    <span className="font-mono font-bold text-emerald-700 dark:text-emerald-400">
-                      {selectedExtracto.departamento?.areaM2
-                        ? `${selectedExtracto.departamento.areaM2} m²`
-                        : '—'}
+              {/* Ficha Resumen del Extracto */}
+              <div className="bg-slate-50 p-4 rounded-xl border border-slate-300 text-xs space-y-2.5 text-black">
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 text-center sm:text-left">
+                  {periodoExtracto && (
+                    <div>
+                      <span className="text-slate-600 text-[10px] uppercase font-bold block">
+                        Período
+                      </span>
+                      <span className="font-bold text-black">
+                        {formatPeriodoEspanol(periodoExtracto)}
+                      </span>
+                    </div>
+                  )}
+                  {gastosTotalesEdificioPeriodo > 0 && (
+                    <div>
+                      <span className="text-slate-600 text-[10px] uppercase font-bold block">
+                        Total emitido en el período
+                      </span>
+                      <span className="font-bold font-mono text-black">
+                        Bs {gastosTotalesEdificioPeriodo.toLocaleString('es-BO', { minimumFractionDigits: 2 })}
+                      </span>
+                    </div>
+                  )}
+                  <div>
+                    <span className="text-slate-600 text-[10px] uppercase font-bold block">
+                      Unidad
                     </span>
-                  </span>
-                  <span>
-                    <strong>Expensa a Cobrar:</strong>{' '}
-                    <span className="font-mono font-bold text-emerald-700 dark:text-emerald-400 text-xs">
-                      Bs {selectedExtracto.monto.toFixed(2)}
+                    <span className="font-bold text-black">
+                      {selectedExtracto
+                        ? `Dpto ${selectedExtracto.departamento?.numero || selectedExtracto.idDepartamento}${selectedExtracto.departamento?.tipologia ? ` (${selectedExtracto.departamento.tipologia})` : ''}`
+                        : 'Edificio Completo'}
                     </span>
-                  </span>
+                  </div>
+                </div>
+
+                {selectedExtracto && (() => {
+                  const capitalLiquidado = Number(selectedExtracto.monto || 0)
+                  const saldoTotal = Number(selectedExtracto.saldoPendiente || 0)
+                  const moraCalculada = Number(
+                    selectedExtracto.moraCalculada ??
+                    (saldoTotal > capitalLiquidado ? saldoTotal - capitalLiquidado : 0)
+                  )
+                  const esPagada = selectedExtracto.estado === 'Pagado' || saldoTotal <= 0
+                  const totalAPagar = saldoTotal > 0 ? saldoTotal : (capitalLiquidado + moraCalculada)
+
+                  return (
+                    <div className="border-t border-slate-300 pt-2 flex flex-wrap justify-between items-center text-[11px] gap-2 text-black">
+                      <span>
+                        <strong className="text-black">Propietario:</strong> {selectedExtracto.propietarioNombre || '—'}
+                      </span>
+                      <span>
+                        <strong className="text-black">Ocupante:</strong> {selectedExtracto.inquilinoNombre || '—'}
+                      </span>
+                      {selectedExtracto.departamento?.areaM2 ? (
+                        <span>
+                          <strong className="text-black">Superficie:</strong>{' '}
+                          <span className="font-mono font-bold text-black">
+                            {selectedExtracto.departamento.areaM2} m²
+                          </span>
+                        </span>
+                      ) : null}
+                      <span>
+                        <strong className="text-black">{esPagada ? 'Total Liquidado:' : 'Total a Pagar:'}</strong>{' '}
+                        <span className="font-mono font-bold text-black text-xs">
+                          Bs {(esPagada ? capitalLiquidado : totalAPagar).toLocaleString('es-BO', { minimumFractionDigits: 2 })}
+                        </span>
+                      </span>
+                    </div>
+                  )
+                })()}
+              </div>
+
+              {/* Detalle Real de la Expensa */}
+              {selectedExtracto ? (() => {
+                const capitalLiquidado = Number(selectedExtracto.monto || 0)
+                const saldoTotal = Number(selectedExtracto.saldoPendiente || 0)
+                const moraCalculada = Number(
+                  selectedExtracto.moraCalculada ??
+                  (saldoTotal > capitalLiquidado ? saldoTotal - capitalLiquidado : 0)
+                )
+                const mesesMora = Number(
+                  selectedExtracto.mesesMora ??
+                  (moraCalculada > 0 ? 1 : 0)
+                )
+                const esPagada = selectedExtracto.estado === 'Pagado' || saldoTotal <= 0
+                const estadoReal = esPagada ? 'Pagada' : selectedExtracto.estado
+                const totalAPagar = saldoTotal > 0 ? saldoTotal : (capitalLiquidado + moraCalculada)
+
+                return (
+                  <div className="p-4 rounded-xl border border-slate-300 bg-white space-y-3 text-black">
+                    <div className="flex justify-between items-center border-b border-slate-200 pb-2">
+                      <span className="font-extrabold text-xs uppercase text-black">
+                        Detalle de Liquidación de la Expensa
+                      </span>
+                      <div>
+                        {esPagada ? (
+                          <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-slate-100 text-black border border-slate-400">
+                            Pagada
+                          </span>
+                        ) : (
+                          <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-slate-100 text-black border border-slate-400">
+                            {estadoReal} — Pendiente de pago: Bs {totalAPagar.toLocaleString('es-BO', { minimumFractionDigits: 2 })}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="divide-y divide-slate-200 text-xs text-black">
+                      {Number(selectedExtracto.montoBase || 0) > 0 && (
+                        <div className="flex justify-between py-2">
+                          <span>Cuota Base de Mantenimiento Común</span>
+                          <span className="font-mono font-bold text-black">
+                            Bs {Number(selectedExtracto.montoBase).toLocaleString('es-BO', { minimumFractionDigits: 2 })}
+                          </span>
+                        </div>
+                      )}
+                      {Number(selectedExtracto.montoAgua || 0) > 0 && (
+                        <div className="flex justify-between py-2">
+                          <span>Consumo de Agua Potable</span>
+                          <span className="font-mono font-bold text-black">
+                            Bs {Number(selectedExtracto.montoAgua).toLocaleString('es-BO', { minimumFractionDigits: 2 })}
+                          </span>
+                        </div>
+                      )}
+                      {Number(selectedExtracto.montoExtra || selectedExtracto.montoExtras || 0) > 0 && (
+                        <div className="flex justify-between py-2">
+                          <span>
+                            Cargos Extras
+                            {selectedExtracto.extraConcepto ? ` (${selectedExtracto.extraConcepto})` : ''}
+                          </span>
+                          <span className="font-mono font-bold text-black">
+                            Bs {Number(selectedExtracto.montoExtra || selectedExtracto.montoExtras).toLocaleString('es-BO', { minimumFractionDigits: 2 })}
+                          </span>
+                        </div>
+                      )}
+                      {capitalLiquidado > 0 && (
+                        <div className="flex justify-between py-2 font-bold text-xs text-black border-t border-slate-300">
+                          <span>Total Liquidado Período</span>
+                          <span className="font-mono font-bold text-black">
+                            Bs {capitalLiquidado.toLocaleString('es-BO', { minimumFractionDigits: 2 })}
+                          </span>
+                        </div>
+                      )}
+                      {!esPagada && (
+                        <>
+                          {moraCalculada > 0 && (
+                            <div className="flex justify-between py-2 text-black">
+                              <span>
+                                Recargo por Mora
+                                {mesesMora > 0 ? ` (${mesesMora} ${mesesMora === 1 ? 'mes' : 'meses'} de atraso)` : ''}
+                              </span>
+                              <span className="font-mono font-bold text-black">
+                                +Bs {moraCalculada.toLocaleString('es-BO', { minimumFractionDigits: 2 })}
+                              </span>
+                            </div>
+                          )}
+                          {selectedExtracto.fechaVencimiento && (
+                            <div className="flex justify-between py-2 text-slate-700">
+                              <span>Fecha de Vencimiento</span>
+                              <span className="font-mono font-bold text-black">
+                                {fechaSolo(selectedExtracto.fechaVencimiento)}
+                              </span>
+                            </div>
+                          )}
+                          <div className="flex justify-between py-2 font-bold text-sm text-black border-t-2 border-slate-800">
+                            <span>Total a Pagar</span>
+                            <span className="font-mono font-bold text-black">
+                              Bs {totalAPagar.toLocaleString('es-BO', { minimumFractionDigits: 2 })}
+                            </span>
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                )
+              })() : (
+                <div className="p-4 rounded-xl border border-slate-300 bg-white space-y-3 text-black">
+                  <div className="flex justify-between items-center border-b border-slate-200 pb-2">
+                    <span className="font-extrabold text-xs uppercase text-black">
+                      Resumen General de Emisión del Período
+                    </span>
+                  </div>
+                  <div className="divide-y divide-slate-200 text-xs text-black">
+                    <div className="flex justify-between py-2">
+                      <span>Total Facturado en Expensas</span>
+                      <span className="font-mono font-bold text-black">
+                        Bs {gastosTotalesEdificioPeriodo.toLocaleString('es-BO', { minimumFractionDigits: 2 })}
+                      </span>
+                    </div>
+                  </div>
                 </div>
               )}
-            </div>
 
-            {/* Tabla del Extracto */}
-            <div className="p-6 rounded-xl border border-[#cec8bc] dark:border-slate-800 bg-white dark:bg-slate-950 text-center">
-              <p className="text-xs text-[#7d776f] dark:text-slate-400 font-medium">
-                Composición del gasto común disponible en el próximo período
-              </p>
-            </div>
+              {/* Bloque de Tipologías desde tiposDepartamento */}
+              {tiposDepartamento.length > 0 && (
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-center text-xs bg-slate-50 p-2.5 rounded-xl border border-slate-300 text-black">
+                  {tiposDepartamento.map((tipo) => {
+                    const area = tipo.areaM2 ?? departamentosList.find(d => d.tipologia?.toLowerCase() === tipo.nombre.toLowerCase() && d.areaM2)?.areaM2
+                    return (
+                      <div key={tipo.idTipo}>
+                        <span className="text-[10px] text-slate-500 uppercase font-bold block">
+                          {tipo.nombre}{area ? ` (${area} m²)` : ''}
+                        </span>
+                        <span className="font-mono font-bold text-black">
+                          Bs. {Number(tipo.montoExpensa).toLocaleString('es-BO', { minimumFractionDigits: 2 })} base
+                        </span>
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
 
-            {/* Comparativa por Tipología */}
-            <div className="grid grid-cols-3 gap-2 text-center text-xs bg-[#dfd9ce]/40 dark:bg-slate-950/40 p-2.5 rounded-xl border border-[#cec8bc] dark:border-slate-800">
-              <div>
-                <span className="text-[10px] text-[#7d776f] uppercase font-bold block">
-                  Tipo A (60 m²)
-                </span>
-                <span className="font-mono font-bold text-emerald-800 dark:text-emerald-400">
-                  Bs. 300,00 base
-                </span>
-              </div>
-              <div>
-                <span className="text-[10px] text-[#7d776f] uppercase font-bold block">
-                  Tipo B (80 m²)
-                </span>
-                <span className="font-mono font-bold text-emerald-800 dark:text-emerald-400">
-                  Bs. 350,00 base
-                </span>
-              </div>
-              <div>
-                <span className="text-[10px] text-[#7d776f] uppercase font-bold block">
-                  Tipo C (100 m²)
-                </span>
-                <span className="font-mono font-bold text-emerald-800 dark:text-emerald-400">
-                  Bs. 400,00 base
-                </span>
+              {/* Línea de firma vacía */}
+              <div className="pt-6 flex justify-end">
+                <div className="w-48 border-t border-slate-400 pt-1 text-center text-xs text-slate-700 font-bold">
+                  Firma
+                </div>
               </div>
             </div>
 
-            <div className="text-[10px] text-[#7d776f] bg-blue-50 dark:bg-blue-950/30 p-2.5 rounded-xl border border-blue-200 dark:border-blue-800 leading-relaxed">
-              ℹ️ <strong>Transparencia de Administración:</strong> El presente extracto detalla con
-              exactitud los gastos de mantenimiento y conservación de las partes comunes según el
-              Código Civil y reglamento de copropiedad. El alquiler del departamento es un acuerdo
-              privado independiente y no forma parte de este extracto.
-            </div>
-
-            <div className="flex justify-end gap-2 pt-2 border-t border-[#cec8bc] dark:border-slate-800">
+            <div className="no-print flex justify-end gap-2 pt-2 border-t border-[#cec8bc] dark:border-slate-800">
               <button
                 onClick={() => {
                   setSelectedExtracto(null)
                   setIsExtractoGeneralOpen(false)
                 }}
-                className="px-4 py-2 rounded-xl text-xs font-bold text-[#5c5750] dark:text-slate-400 hover:bg-[#ded8cc] dark:hover:bg-slate-800 transition-colors"
+                className="no-print px-4 py-2 rounded-xl text-xs font-bold text-[#5c5750] dark:text-slate-400 hover:bg-[#ded8cc] dark:hover:bg-slate-800 transition-colors cursor-pointer"
               >
                 Cerrar
               </button>
               <button
                 onClick={() => window.print()}
-                className="flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold bg-emerald-700 hover:bg-emerald-800 text-white transition-all shadow-md cursor-pointer"
+                className="no-print flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold bg-emerald-700 hover:bg-emerald-800 text-white transition-all shadow-md cursor-pointer"
               >
                 <Printer className="w-4 h-4" />
                 Imprimir Extracto
@@ -2942,7 +3135,7 @@ export default function ExpensasPage() {
                     Estado de Cuenta — Departamento {estadoCuentaData.departamento?.numero}
                   </h3>
                   <p className="text-xs text-[#7d776f] dark:text-slate-400">
-                    Condominio Edificio XYZ • Cochabamba, Bolivia
+                    Edificio XYZabamba, Bolivia
                   </p>
                 </div>
               </div>
@@ -2978,7 +3171,7 @@ export default function ExpensasPage() {
               </div>
               <div>
                 <span className="text-[#7d776f] text-[10px] uppercase font-bold block">
-                  Propietario Responsable
+                  Propietario
                 </span>
                 <span className="font-extrabold text-[#262422] dark:text-white truncate block">
                   {estadoCuentaData.departamento?.propietario
@@ -3115,11 +3308,10 @@ export default function ExpensasPage() {
                 </span>
               </div>
               <div
-                className={`p-3.5 rounded-2xl text-center border ${
-                  (estadoCuentaData.resumen?.saldoPendienteTotal || 0) > 0
+                className={`p-3.5 rounded-2xl text-center border ${(estadoCuentaData.resumen?.saldoPendienteTotal || 0) > 0
                     ? 'bg-red-50 dark:bg-red-950/40 border-red-200 dark:border-red-900/60 text-red-700 dark:text-red-300'
                     : 'bg-emerald-50 dark:bg-emerald-950/40 border-emerald-200 dark:border-emerald-900/60 text-emerald-700 dark:text-emerald-300'
-                }`}
+                  }`}
               >
                 <span className="text-[10px] uppercase font-bold block">
                   Saldo Pendiente{' '}
@@ -3157,8 +3349,8 @@ export default function ExpensasPage() {
               </div>
 
               {estadoCuentaData.sinMovimientos ||
-              !estadoCuentaData.movimientos ||
-              estadoCuentaData.movimientos.length === 0 ? (
+                !estadoCuentaData.movimientos ||
+                estadoCuentaData.movimientos.length === 0 ? (
                 <div className="p-8 text-center space-y-2">
                   <FileText className="w-8 h-8 text-[#7d776f] mx-auto opacity-50" />
                   <p className="text-xs font-bold text-[#262422] dark:text-slate-300">
@@ -3199,13 +3391,12 @@ export default function ExpensasPage() {
                             </td>
                             <td className="py-2.5 px-3">
                               <span
-                                className={`inline-flex items-center px-2 py-0.5 rounded-full text-[9px] font-extrabold ${
-                                  esObligacion
+                                className={`inline-flex items-center px-2 py-0.5 rounded-full text-[9px] font-extrabold ${esObligacion
                                     ? 'bg-blue-100 text-blue-800 dark:bg-blue-950/60 dark:text-blue-400'
                                     : esAnticipo
                                       ? 'bg-purple-100 text-purple-800 dark:bg-purple-950/60 dark:text-purple-300'
                                       : 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-400'
-                                }`}
+                                  }`}
                               >
                                 {mov.tipo ||
                                   (mov.concepto?.includes('Pago') ? 'PAGO' : 'OBLIGACION')}
@@ -3243,8 +3434,7 @@ export default function ExpensasPage() {
                             </td>
                             <td className="py-2.5 px-3 text-center whitespace-nowrap">
                               <span
-                                className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-extrabold ${
-                                  mov.estado === 'Pagado'
+                                className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-extrabold ${mov.estado === 'Pagado'
                                     ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-400'
                                     : mov.estado === 'Pendiente'
                                       ? 'bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-400'
@@ -3253,7 +3443,7 @@ export default function ExpensasPage() {
                                         : mov.anulado
                                           ? 'bg-slate-200 text-slate-700 dark:bg-slate-800 dark:text-slate-400'
                                           : 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-400'
-                                }`}
+                                  }`}
                               >
                                 {mov.anulado ? 'Anulado' : mov.estado || 'Efectuado'}
                               </span>
@@ -3289,8 +3479,8 @@ export default function ExpensasPage() {
                                       )
                                       setCorregirIdPersonaInput(
                                         pagoOriginal?.idPersonaPagador ||
-                                          estadoCuentaData.departamento?.propietario?.idPersona ||
-                                          ''
+                                        estadoCuentaData.departamento?.propietario?.idPersona ||
+                                        ''
                                       )
                                       setCorregirMotivoInput('')
                                       setCorregirError(null)
