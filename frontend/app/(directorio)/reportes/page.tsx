@@ -594,7 +594,7 @@ export default function ReportesPage() {
         <div className="space-y-1">
           <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-purple-100 text-purple-900 dark:bg-purple-950/80 dark:text-purple-300 text-xs font-bold">
             <ShieldCheck className="w-3.5 h-3.5" />
-            Condominio Residencial Edificio XYZ · Fiscalización y Finanzas
+            EDIFICIO XYZ · Fiscalización y Finanzas
           </div>
           <h1 className="text-xl sm:text-2xl font-black text-[#262422] dark:text-white tracking-tight">
             Centro de Reportes Financieros y Balances
@@ -762,16 +762,14 @@ export default function ReportesPage() {
         <button
           type="button"
           onClick={() => setActiveTab('balance')}
-          className={`flex items-center gap-3 p-3.5 rounded-2xl border text-left transition-all cursor-pointer ${
-            activeTab === 'balance'
-              ? 'bg-purple-700 text-white border-purple-600 shadow-lg shadow-purple-900/20 ring-2 ring-purple-500/30'
-              : 'bg-[#ede9e1] hover:bg-[#e4ded3] dark:bg-slate-900 dark:hover:bg-slate-800/80 text-[#5c5750] dark:text-slate-400 border-[#cec8bc] dark:border-slate-800'
-          }`}
+          className={`flex items-center gap-3 p-3.5 rounded-2xl border text-left transition-all cursor-pointer ${activeTab === 'balance'
+            ? 'bg-purple-700 text-white border-purple-600 shadow-lg shadow-purple-900/20 ring-2 ring-purple-500/30'
+            : 'bg-[#ede9e1] hover:bg-[#e4ded3] dark:bg-slate-900 dark:hover:bg-slate-800/80 text-[#5c5750] dark:text-slate-400 border-[#cec8bc] dark:border-slate-800'
+            }`}
         >
           <div
-            className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
-              activeTab === 'balance' ? 'bg-white/20 text-white' : 'bg-purple-100 text-purple-800 dark:bg-slate-800 dark:text-purple-400'
-            }`}
+            className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${activeTab === 'balance' ? 'bg-white/20 text-white' : 'bg-purple-100 text-purple-800 dark:bg-slate-800 dark:text-purple-400'
+              }`}
           >
             <FileBarChart className="w-5 h-5" />
           </div>
@@ -786,16 +784,14 @@ export default function ReportesPage() {
         <button
           type="button"
           onClick={() => setActiveTab('morosos')}
-          className={`flex items-center gap-3 p-3.5 rounded-2xl border text-left transition-all cursor-pointer ${
-            activeTab === 'morosos'
-              ? 'bg-purple-700 text-white border-purple-600 shadow-lg shadow-purple-900/20 ring-2 ring-purple-500/30'
-              : 'bg-[#ede9e1] hover:bg-[#e4ded3] dark:bg-slate-900 dark:hover:bg-slate-800/80 text-[#5c5750] dark:text-slate-400 border-[#cec8bc] dark:border-slate-800'
-          }`}
+          className={`flex items-center gap-3 p-3.5 rounded-2xl border text-left transition-all cursor-pointer ${activeTab === 'morosos'
+            ? 'bg-purple-700 text-white border-purple-600 shadow-lg shadow-purple-900/20 ring-2 ring-purple-500/30'
+            : 'bg-[#ede9e1] hover:bg-[#e4ded3] dark:bg-slate-900 dark:hover:bg-slate-800/80 text-[#5c5750] dark:text-slate-400 border-[#cec8bc] dark:border-slate-800'
+            }`}
         >
           <div
-            className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
-              activeTab === 'morosos' ? 'bg-white/20 text-white' : 'bg-amber-100 text-amber-800 dark:bg-slate-800 dark:text-amber-400'
-            }`}
+            className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${activeTab === 'morosos' ? 'bg-white/20 text-white' : 'bg-amber-100 text-amber-800 dark:bg-slate-800 dark:text-amber-400'
+              }`}
           >
             <AlertTriangle className="w-5 h-5" />
           </div>
@@ -803,9 +799,8 @@ export default function ReportesPage() {
             <div className="flex items-center justify-between">
               <span className="text-xs sm:text-sm font-black truncate">2. Lista de Morosos</span>
               <span
-                className={`text-[10px] font-bold px-1.5 py-0.5 rounded-md ${
-                  activeTab === 'morosos' ? 'bg-white/20 text-white' : 'bg-rose-100 text-rose-900 dark:bg-slate-800 dark:text-rose-300'
-                }`}
+                className={`text-[10px] font-bold px-1.5 py-0.5 rounded-md ${activeTab === 'morosos' ? 'bg-white/20 text-white' : 'bg-rose-100 text-rose-900 dark:bg-slate-800 dark:text-rose-300'
+                  }`}
               >
                 {morososList.length}
               </span>
@@ -819,16 +814,14 @@ export default function ReportesPage() {
         <button
           type="button"
           onClick={() => setActiveTab('flujo')}
-          className={`flex items-center gap-3 p-3.5 rounded-2xl border text-left transition-all cursor-pointer ${
-            activeTab === 'flujo'
-              ? 'bg-purple-700 text-white border-purple-600 shadow-lg shadow-purple-900/20 ring-2 ring-purple-500/30'
-              : 'bg-[#ede9e1] hover:bg-[#e4ded3] dark:bg-slate-900 dark:hover:bg-slate-800/80 text-[#5c5750] dark:text-slate-400 border-[#cec8bc] dark:border-slate-800'
-          }`}
+          className={`flex items-center gap-3 p-3.5 rounded-2xl border text-left transition-all cursor-pointer ${activeTab === 'flujo'
+            ? 'bg-purple-700 text-white border-purple-600 shadow-lg shadow-purple-900/20 ring-2 ring-purple-500/30'
+            : 'bg-[#ede9e1] hover:bg-[#e4ded3] dark:bg-slate-900 dark:hover:bg-slate-800/80 text-[#5c5750] dark:text-slate-400 border-[#cec8bc] dark:border-slate-800'
+            }`}
         >
           <div
-            className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
-              activeTab === 'flujo' ? 'bg-white/20 text-white' : 'bg-blue-100 text-blue-800 dark:bg-slate-800 dark:text-blue-400'
-            }`}
+            className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${activeTab === 'flujo' ? 'bg-white/20 text-white' : 'bg-blue-100 text-blue-800 dark:bg-slate-800 dark:text-blue-400'
+              }`}
           >
             <Wallet className="w-5 h-5" />
           </div>
@@ -843,16 +836,14 @@ export default function ReportesPage() {
         <button
           type="button"
           onClick={() => setActiveTab('historial_dpto')}
-          className={`flex items-center gap-3 p-3.5 rounded-2xl border text-left transition-all cursor-pointer ${
-            activeTab === 'historial_dpto'
-              ? 'bg-purple-700 text-white border-purple-600 shadow-lg shadow-purple-900/20 ring-2 ring-purple-500/30'
-              : 'bg-[#ede9e1] hover:bg-[#e4ded3] dark:bg-slate-900 dark:hover:bg-slate-800/80 text-[#5c5750] dark:text-slate-400 border-[#cec8bc] dark:border-slate-800'
-          }`}
+          className={`flex items-center gap-3 p-3.5 rounded-2xl border text-left transition-all cursor-pointer ${activeTab === 'historial_dpto'
+            ? 'bg-purple-700 text-white border-purple-600 shadow-lg shadow-purple-900/20 ring-2 ring-purple-500/30'
+            : 'bg-[#ede9e1] hover:bg-[#e4ded3] dark:bg-slate-900 dark:hover:bg-slate-800/80 text-[#5c5750] dark:text-slate-400 border-[#cec8bc] dark:border-slate-800'
+            }`}
         >
           <div
-            className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
-              activeTab === 'historial_dpto' ? 'bg-white/20 text-white' : 'bg-teal-100 text-teal-800 dark:bg-slate-800 dark:text-teal-400'
-            }`}
+            className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${activeTab === 'historial_dpto' ? 'bg-white/20 text-white' : 'bg-teal-100 text-teal-800 dark:bg-slate-800 dark:text-teal-400'
+              }`}
           >
             <Building className="w-5 h-5" />
           </div>
@@ -902,11 +893,10 @@ export default function ReportesPage() {
                     <div
                       key={item.mes}
                       onClick={() => setSelectedPeriod(item.mes)}
-                      className={`p-3 rounded-2xl transition-all cursor-pointer border ${
-                        isSelected
-                          ? 'bg-[#ded8cc] dark:bg-slate-800 border-purple-600/50 ring-2 ring-purple-600/20 shadow-xs'
-                          : 'bg-[#ede9e1]/50 hover:bg-[#e3ded4] dark:bg-slate-900/40 dark:hover:bg-slate-800/60 border-transparent'
-                      }`}
+                      className={`p-3 rounded-2xl transition-all cursor-pointer border ${isSelected
+                        ? 'bg-[#ded8cc] dark:bg-slate-800 border-purple-600/50 ring-2 ring-purple-600/20 shadow-xs'
+                        : 'bg-[#ede9e1]/50 hover:bg-[#e3ded4] dark:bg-slate-900/40 dark:hover:bg-slate-800/60 border-transparent'
+                        }`}
                     >
                       <div className="flex justify-between items-center text-xs font-bold mb-1.5">
                         <span className="text-[#262422] dark:text-white flex items-center gap-2">
@@ -917,9 +907,8 @@ export default function ReportesPage() {
                           <span className="text-xs text-[#7d776f] dark:text-slate-400">
                             Superávit:{' '}
                             <span
-                              className={`font-bold ${
-                                item.balance >= 0 ? 'text-purple-700 dark:text-purple-400' : 'text-rose-700 dark:text-rose-400'
-                              }`}
+                              className={`font-bold ${item.balance >= 0 ? 'text-purple-700 dark:text-purple-400' : 'text-rose-700 dark:text-rose-400'
+                                }`}
                             >
                               {item.balance >= 0 ? '+' : ''}Bs. {item.balance.toLocaleString('es-BO', { minimumFractionDigits: 2 })}
                             </span>
@@ -1097,44 +1086,40 @@ export default function ReportesPage() {
                 <button
                   type="button"
                   onClick={() => setFiltroSeveridad('TODOS')}
-                  className={`px-3 py-1 rounded-lg transition-all cursor-pointer ${
-                    filtroSeveridad === 'TODOS'
-                      ? 'bg-purple-700 text-white shadow-xs'
-                      : 'text-[#5c5750] dark:text-slate-300 hover:text-[#262422]'
-                  }`}
+                  className={`px-3 py-1 rounded-lg transition-all cursor-pointer ${filtroSeveridad === 'TODOS'
+                    ? 'bg-purple-700 text-white shadow-xs'
+                    : 'text-[#5c5750] dark:text-slate-300 hover:text-[#262422]'
+                    }`}
                 >
                   Todos ({morososList.length})
                 </button>
                 <button
                   type="button"
                   onClick={() => setFiltroSeveridad('AVISO')}
-                  className={`px-3 py-1 rounded-lg transition-all cursor-pointer ${
-                    filtroSeveridad === 'AVISO'
-                      ? 'bg-purple-700 text-white shadow-xs'
-                      : 'text-[#5c5750] dark:text-slate-300 hover:text-[#262422]'
-                  }`}
+                  className={`px-3 py-1 rounded-lg transition-all cursor-pointer ${filtroSeveridad === 'AVISO'
+                    ? 'bg-purple-700 text-white shadow-xs'
+                    : 'text-[#5c5750] dark:text-slate-300 hover:text-[#262422]'
+                    }`}
                 >
                   Aviso 30d
                 </button>
                 <button
                   type="button"
                   onClick={() => setFiltroSeveridad('MORA')}
-                  className={`px-3 py-1 rounded-lg transition-all cursor-pointer ${
-                    filtroSeveridad === 'MORA'
-                      ? 'bg-purple-700 text-white shadow-xs'
-                      : 'text-[#5c5750] dark:text-slate-300 hover:text-[#262422]'
-                  }`}
+                  className={`px-3 py-1 rounded-lg transition-all cursor-pointer ${filtroSeveridad === 'MORA'
+                    ? 'bg-purple-700 text-white shadow-xs'
+                    : 'text-[#5c5750] dark:text-slate-300 hover:text-[#262422]'
+                    }`}
                 >
                   Mora 60d
                 </button>
                 <button
                   type="button"
                   onClick={() => setFiltroSeveridad('CRITICO')}
-                  className={`px-3 py-1 rounded-lg transition-all cursor-pointer ${
-                    filtroSeveridad === 'CRITICO'
-                      ? 'bg-purple-700 text-white shadow-xs'
-                      : 'text-[#5c5750] dark:text-slate-300 hover:text-[#262422]'
-                  }`}
+                  className={`px-3 py-1 rounded-lg transition-all cursor-pointer ${filtroSeveridad === 'CRITICO'
+                    ? 'bg-purple-700 text-white shadow-xs'
+                    : 'text-[#5c5750] dark:text-slate-300 hover:text-[#262422]'
+                    }`}
                 >
                   Crítico +90d
                 </button>
@@ -1202,13 +1187,12 @@ export default function ReportesPage() {
                         </td>
                         <td className="py-3 px-3">
                           <span
-                            className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-black ${
-                              item.expensasMoraCount >= 3
-                                ? 'bg-rose-100 text-rose-800 dark:bg-rose-950/70 dark:text-rose-300'
-                                : item.expensasMoraCount === 2
+                            className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-black ${item.expensasMoraCount >= 3
+                              ? 'bg-rose-100 text-rose-800 dark:bg-rose-950/70 dark:text-rose-300'
+                              : item.expensasMoraCount === 2
                                 ? 'bg-amber-100 text-amber-800 dark:bg-amber-950/70 dark:text-amber-300'
                                 : 'bg-blue-100 text-blue-800 dark:bg-blue-950/70 dark:text-blue-300'
-                            }`}
+                              }`}
                           >
                             <Clock className="w-3 h-3" />
                             {item.expensasMoraCount} {item.expensasMoraCount === 1 ? 'mes' : 'meses'}
@@ -1242,11 +1226,10 @@ export default function ReportesPage() {
 
                             <button
                               onClick={() => handleNotificarWhatsApp(item)}
-                              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-                                isNotified
-                                  ? 'bg-emerald-600 text-white'
-                                  : 'bg-emerald-100 text-emerald-800 hover:bg-emerald-200 dark:bg-emerald-950/60 dark:text-emerald-300'
-                              }`}
+                              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${isNotified
+                                ? 'bg-emerald-600 text-white'
+                                : 'bg-emerald-100 text-emerald-800 hover:bg-emerald-200 dark:bg-emerald-950/60 dark:text-emerald-300'
+                                }`}
                             >
                               <MessageCircle className="w-3.5 h-3.5" />
                               <span>{isNotified ? '¡Enviado!' : 'WhatsApp'}</span>
@@ -1346,33 +1329,30 @@ export default function ReportesPage() {
                   <button
                     type="button"
                     onClick={() => setFiltroTipoMov('TODOS')}
-                    className={`px-3 py-1 rounded-lg transition-all cursor-pointer ${
-                      filtroTipoMov === 'TODOS'
-                        ? 'bg-purple-700 text-white shadow-xs'
-                        : 'text-[#5c5750] dark:text-slate-300'
-                    }`}
+                    className={`px-3 py-1 rounded-lg transition-all cursor-pointer ${filtroTipoMov === 'TODOS'
+                      ? 'bg-purple-700 text-white shadow-xs'
+                      : 'text-[#5c5750] dark:text-slate-300'
+                      }`}
                   >
                     Todos
                   </button>
                   <button
                     type="button"
                     onClick={() => setFiltroTipoMov('Ingreso')}
-                    className={`px-3 py-1 rounded-lg transition-all cursor-pointer ${
-                      filtroTipoMov === 'Ingreso'
-                        ? 'bg-purple-700 text-white shadow-xs'
-                        : 'text-[#5c5750] dark:text-slate-300'
-                    }`}
+                    className={`px-3 py-1 rounded-lg transition-all cursor-pointer ${filtroTipoMov === 'Ingreso'
+                      ? 'bg-purple-700 text-white shadow-xs'
+                      : 'text-[#5c5750] dark:text-slate-300'
+                      }`}
                   >
                     Ingresos
                   </button>
                   <button
                     type="button"
                     onClick={() => setFiltroTipoMov('Egreso')}
-                    className={`px-3 py-1 rounded-lg transition-all cursor-pointer ${
-                      filtroTipoMov === 'Egreso'
-                        ? 'bg-purple-700 text-white shadow-xs'
-                        : 'text-[#5c5750] dark:text-slate-300'
-                    }`}
+                    className={`px-3 py-1 rounded-lg transition-all cursor-pointer ${filtroTipoMov === 'Egreso'
+                      ? 'bg-purple-700 text-white shadow-xs'
+                      : 'text-[#5c5750] dark:text-slate-300'
+                      }`}
                   >
                     Egresos
                   </button>
@@ -1418,11 +1398,10 @@ export default function ReportesPage() {
                         </td>
                         <td className="py-3 px-3">
                           <span
-                            className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-black ${
-                              mov.tipo === 'Ingreso'
-                                ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/70 dark:text-emerald-300'
-                                : 'bg-rose-100 text-rose-800 dark:bg-rose-950/70 dark:text-rose-300'
-                            }`}
+                            className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-black ${mov.tipo === 'Ingreso'
+                              ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/70 dark:text-emerald-300'
+                              : 'bg-rose-100 text-rose-800 dark:bg-rose-950/70 dark:text-rose-300'
+                              }`}
                           >
                             {mov.tipo === 'Ingreso' ? <ArrowUpRight className="w-3 h-3" /> : <ArrowDownRight className="w-3 h-3" />}
                             {mov.tipo}
@@ -1496,7 +1475,8 @@ export default function ReportesPage() {
             id={!isExportModalOpen && activeTab === 'historial_dpto' ? "area-impresion" : undefined}
             className="space-y-6"
           >
-            <style dangerouslySetInnerHTML={{ __html: `
+            <style dangerouslySetInnerHTML={{
+              __html: `
               @media print {
                 body * { visibility: hidden !important; }
                 #area-impresion, #area-impresion * { visibility: visible !important; color: #000 !important; }
@@ -1552,11 +1532,10 @@ export default function ReportesPage() {
                     Saldo Actual de la Unidad
                   </span>
                   <div
-                    className={`text-xl font-black mt-1 font-mono ${
-                      estadoCuentaDpto.resumen.saldoPendienteTotal > 0
-                        ? 'text-rose-700 dark:text-rose-400'
-                        : 'text-emerald-700 dark:text-emerald-400'
-                    }`}
+                    className={`text-xl font-black mt-1 font-mono ${estadoCuentaDpto.resumen.saldoPendienteTotal > 0
+                      ? 'text-rose-700 dark:text-rose-400'
+                      : 'text-emerald-700 dark:text-emerald-400'
+                      }`}
                   >
                     Bs. {estadoCuentaDpto.resumen.saldoPendienteTotal.toLocaleString('es-BO', { minimumFractionDigits: 2 })}
                   </div>
@@ -1714,7 +1693,8 @@ export default function ReportesPage() {
               id="area-impresion"
               className="p-6 rounded-2xl bg-white dark:bg-slate-950 border border-[#cec8bc] dark:border-slate-800 space-y-5 text-[#262422] dark:text-slate-100 font-sans shadow-inner"
             >
-              <style dangerouslySetInnerHTML={{ __html: `
+              <style dangerouslySetInnerHTML={{
+                __html: `
                 @media print {
                   body * { visibility: hidden !important; }
                   #area-impresion, #area-impresion * { visibility: visible !important; color: #000 !important; }
@@ -1727,11 +1707,8 @@ export default function ReportesPage() {
               <div className="border-b-2 border-purple-700 pb-3 flex justify-between items-start">
                 <div>
                   <h2 className="text-lg font-black tracking-tight text-purple-900 dark:text-purple-300">
-                    CONDOMINIO RESIDENCIAL EDIFICIO XYZ
+                    EDIFICIO XYZ
                   </h2>
-                  <div className="text-xs text-[#5c5750] dark:text-slate-400">
-                    Av. América y Pando, Cochabamba, Bolivia
-                  </div>
                 </div>
                 <div className="text-right text-xs">
                   <div className="font-extrabold uppercase text-purple-900 dark:text-purple-300">

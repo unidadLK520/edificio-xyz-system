@@ -113,12 +113,12 @@ export default function ExpensasPage() {
   const [isEditarExpensaModalOpen, setIsEditarExpensaModalOpen] = useState(false)
   const [expensaParaEditar, setExpensaParaEditar] = useState<any>(null)
   const [expensaParaExtra, setExpensaParaExtra] = useState<any | null>(null)
-// Removed static mora input states – now using context policy
-// const [moraTipoPenalidadInput, setMoraTipoPenalidadInput] = useState<'fijo' | 'porcentaje'>('fijo');
-// const [moraMontoFijoInput, setMoraMontoFijoInput] = useState<number | ''>(50);
-// const [moraDiaVencimientoInput, setMoraDiaVencimientoInput] = useState<number | ''>(10);
-// const [moraDiasGraciaInput, setMoraDiasGraciaInput] = useState<number | ''>(2);
-// const [moraDiaGeneracionInput, setMoraDiaGeneracionInput] = useState<number | ''>(1);
+  // Removed static mora input states – now using context policy
+  // const [moraTipoPenalidadInput, setMoraTipoPenalidadInput] = useState<'fijo' | 'porcentaje'>('fijo');
+  // const [moraMontoFijoInput, setMoraMontoFijoInput] = useState<number | ''>(50);
+  // const [moraDiaVencimientoInput, setMoraDiaVencimientoInput] = useState<number | ''>(10);
+  // const [moraDiasGraciaInput, setMoraDiasGraciaInput] = useState<number | ''>(2);
+  // const [moraDiaGeneracionInput, setMoraDiaGeneracionInput] = useState<number | ''>(1);
 
   const [moraTipoPenalidadInput, setMoraTipoPenalidadInput] = useState<'fijo' | 'porcentaje'>(
     'fijo'
@@ -368,9 +368,9 @@ export default function ExpensasPage() {
               mesesMora: Number(item.mesesMora || (saldoCalc > totalCalculado ? 1 : 0)),
               departamento: item.departamento
                 ? {
-                    ...item.departamento,
-                    tipologia: tipologiaDepto
-                  }
+                  ...item.departamento,
+                  tipologia: tipologiaDepto
+                }
                 : undefined,
               propietarioNombre: item.departamento?.propietario
                 ? `${item.departamento.propietario.nombres || ''} ${item.departamento.propietario.apellidos || ''}`.trim()
@@ -405,7 +405,7 @@ export default function ExpensasPage() {
           setListadoMorosos(json.data)
         }
       }
-    } catch {}
+    } catch { }
   }, [])
 
   const fetchReglasMora = useCallback(async () => {
@@ -1103,44 +1103,40 @@ export default function ExpensasPage() {
       <div className="flex border-b border-[#cec8bc] dark:border-slate-800 gap-2 overflow-x-auto pb-1 scrollbar-thin">
         <button
           onClick={() => setActiveTab('todas')}
-          className={`flex items-center gap-2 px-4 py-2.5 font-bold text-xs border-b-2 transition-all cursor-pointer shrink-0 whitespace-nowrap ${
-            activeTab === 'todas'
+          className={`flex items-center gap-2 px-4 py-2.5 font-bold text-xs border-b-2 transition-all cursor-pointer shrink-0 whitespace-nowrap ${activeTab === 'todas'
               ? 'border-emerald-600 text-emerald-800 dark:border-emerald-400 dark:text-emerald-400'
               : 'border-transparent text-[#7d776f] dark:text-slate-400'
-          }`}
+            }`}
         >
           <Receipt className="w-4 h-4" />
           Expensas Emitidas ({expensas.length})
         </button>
         <button
           onClick={() => setActiveTab('cuotas')}
-          className={`flex items-center gap-2 px-4 py-2.5 font-bold text-xs border-b-2 transition-all cursor-pointer shrink-0 whitespace-nowrap ${
-            activeTab === 'cuotas'
+          className={`flex items-center gap-2 px-4 py-2.5 font-bold text-xs border-b-2 transition-all cursor-pointer shrink-0 whitespace-nowrap ${activeTab === 'cuotas'
               ? 'border-blue-600 text-blue-800 dark:border-blue-400 dark:text-blue-400'
               : 'border-transparent text-[#7d776f] dark:text-slate-400'
-          }`}
+            }`}
         >
           <Calculator className="w-4 h-4" />
           Tarifario: ¿Cuánto se cobra a cada uno?
         </button>
         <button
           onClick={() => setActiveTab('morosos')}
-          className={`flex items-center gap-2 px-4 py-2.5 font-bold text-xs border-b-2 transition-all cursor-pointer shrink-0 whitespace-nowrap ${
-            activeTab === 'morosos'
+          className={`flex items-center gap-2 px-4 py-2.5 font-bold text-xs border-b-2 transition-all cursor-pointer shrink-0 whitespace-nowrap ${activeTab === 'morosos'
               ? 'border-red-600 text-red-800 dark:border-red-400 dark:text-red-400'
               : 'border-transparent text-[#7d776f] dark:text-slate-400'
-          }`}
+            }`}
         >
           <UserX className="w-4 h-4" />
           Listado de Morosos ({expensas.filter((e) => e.estado === 'Moroso').length})
         </button>
         <button
           onClick={() => setActiveTab('simulador')}
-          className={`flex items-center gap-2 px-4 py-2.5 font-bold text-xs border-b-2 transition-all cursor-pointer shrink-0 whitespace-nowrap ${
-            activeTab === 'simulador'
+          className={`flex items-center gap-2 px-4 py-2.5 font-bold text-xs border-b-2 transition-all cursor-pointer shrink-0 whitespace-nowrap ${activeTab === 'simulador'
               ? 'border-indigo-600 text-indigo-800 dark:border-indigo-400 dark:text-indigo-400'
               : 'border-transparent text-[#7d776f] dark:text-slate-400'
-          }`}
+            }`}
         >
           <Sparkles className="w-4 h-4 text-amber-500" />
           Simulador de Cobro & Mora
@@ -1372,13 +1368,12 @@ export default function ExpensasPage() {
                               <button
                                 type="button"
                                 onClick={() => setSelectedExpensaParaMora(item)}
-                                className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-extrabold cursor-pointer transition-transform hover:scale-105 ${
-                                  item.estado === 'Pagado'
+                                className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-extrabold cursor-pointer transition-transform hover:scale-105 ${item.estado === 'Pagado'
                                     ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-400'
                                     : item.estado === 'Pendiente'
                                       ? 'bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-400'
                                       : 'bg-red-100 text-red-800 dark:bg-red-950/60 dark:text-red-400'
-                                }`}
+                                  }`}
                                 title="Click para ver el cálculo y desglose de mora acumulada"
                               >
                                 {item.estado}
@@ -1537,13 +1532,12 @@ export default function ExpensasPage() {
                           <button
                             type="button"
                             onClick={() => setSelectedExpensaParaMora(item)}
-                            className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-extrabold ${
-                              item.estado === 'Pagado'
+                            className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-extrabold ${item.estado === 'Pagado'
                                 ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-400'
                                 : item.estado === 'Pendiente'
                                   ? 'bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-400'
                                   : 'bg-red-100 text-red-800 dark:bg-red-950/60 dark:text-red-400'
-                            }`}
+                              }`}
                           >
                             {item.estado}
                           </button>
@@ -1687,7 +1681,8 @@ export default function ExpensasPage() {
       ) : activeTab === 'cuotas' ? (
         /* VISTA TARIFARIO: ¿CUÁNTO SE COBRA A CADA UNO? */
         <div id={!selectedReceipt && !selectedExtracto && !isExtractoGeneralOpen && !isEstadoCuentaModalOpen ? "area-impresion" : undefined} className="space-y-6">
-          <style dangerouslySetInnerHTML={{ __html: `
+          <style dangerouslySetInnerHTML={{
+            __html: `
             @media print {
               body * { visibility: hidden !important; }
               #area-impresion, #area-impresion * { visibility: visible !important; color: #000 !important; }
@@ -2179,11 +2174,10 @@ export default function ExpensasPage() {
                 <button
                   type="submit"
                   disabled={!nuevoPeriodo || isSubmittingEmision}
-                  className={`px-5 py-2.5 rounded-xl text-xs font-bold text-white transition-all shadow-md cursor-pointer ${
-                    !nuevoPeriodo || isSubmittingEmision
+                  className={`px-5 py-2.5 rounded-xl text-xs font-bold text-white transition-all shadow-md cursor-pointer ${!nuevoPeriodo || isSubmittingEmision
                       ? 'bg-slate-400 cursor-not-allowed'
                       : 'bg-emerald-700 hover:bg-emerald-800 active:scale-95'
-                  }`}
+                    }`}
                 >
                   {isSubmittingEmision ? 'Generando lote...' : '⚡ Ejecutar Generación'}
                 </button>
@@ -2196,271 +2190,267 @@ export default function ExpensasPage() {
       {/* MODAL CONFIGURAR REGLA DE MORA (HU04 / CA09) */}
       {isMoraModalOpen && (
         <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 backdrop-blur-xs overflow-y-auto">
-              <div className="w-full max-w-2xl bg-[#ede9e1] dark:bg-slate-900 rounded-3xl border border-[#cec8bc] dark:border-slate-800 p-6 sm:p-7 space-y-4 shadow-2xl my-8">
-                <div className="flex justify-between items-center border-b border-[#cec8bc] dark:border-slate-800 pb-3">
-                  <div>
-                    <h3 className="font-extrabold text-base text-[#262422] dark:text-white flex items-center gap-2">
-                      <Calculator className="w-5 h-5 text-indigo-600" />
-                      Simulador y Configuración de Mora (en Bs. y %)
-                    </h3>
-                    <p className="text-xs text-[#7d776f]">
-                      Configura la política oficial del edificio y simula en tiempo real antes, en
-                      fecha y después del vencimiento.
-                    </p>
-                  </div>
-                  <button onClick={() => setIsMoraModalOpen(false)}>
-                    <X className="w-5 h-5 text-[#7d776f] hover:text-[#262422]" />
+          <div className="w-full max-w-2xl bg-[#ede9e1] dark:bg-slate-900 rounded-3xl border border-[#cec8bc] dark:border-slate-800 p-6 sm:p-7 space-y-4 shadow-2xl my-8">
+            <div className="flex justify-between items-center border-b border-[#cec8bc] dark:border-slate-800 pb-3">
+              <div>
+                <h3 className="font-extrabold text-base text-[#262422] dark:text-white flex items-center gap-2">
+                  <Calculator className="w-5 h-5 text-indigo-600" />
+                  Simulador y Configuración de Mora (en Bs. y %)
+                </h3>
+                <p className="text-xs text-[#7d776f]">
+                  Configura la política oficial del edificio y simula en tiempo real antes, en
+                  fecha y después del vencimiento.
+                </p>
+              </div>
+              <button onClick={() => setIsMoraModalOpen(false)}>
+                <X className="w-5 h-5 text-[#7d776f] hover:text-[#262422]" />
+              </button>
+            </div>
+
+            {moraError && (
+              <div className="p-3 bg-rose-100 dark:bg-rose-950/70 border border-rose-300 dark:border-rose-800 text-rose-900 dark:text-rose-200 rounded-xl flex items-center gap-2 text-xs">
+                <AlertCircle className="w-4 h-4 shrink-0 text-rose-600 dark:text-rose-400" />
+                <span>{moraError}</span>
+              </div>
+            )}
+
+            <form onSubmit={handleGuardarReglaMora} className="space-y-4 text-xs">
+              {/* Tarjeta de Política Activa */}
+              <div className="p-3.5 rounded-2xl bg-indigo-50 dark:bg-indigo-950/40 border border-indigo-200 dark:border-indigo-800 text-[11px] text-indigo-900 dark:text-indigo-200 flex justify-between items-center">
+                <div>
+                  <span className="font-bold block">Política Activa del Edificio:</span>
+                  <span className="text-base font-black text-indigo-700 dark:text-indigo-300 font-mono">
+                    {politicaMora.tipoPenalidad === 'fijo'
+                      ? `Bs. ${politicaMora.montoFijo} (Fijo en Bolivianos)`
+                      : `${politicaMora.porcentaje}% (Porcentual mensual)`}
+                  </span>
+                  <span className="block text-[10px] text-[#7d776f] mt-0.5">
+                    Vence: día {politicaMora.diaVencimiento} de cada mes • Gracia:{' '}
+                    {politicaMora.diasGracia} días • Generación: día{' '}
+                    {politicaMora.diaGeneracion}
+                  </span>
+                </div>
+                <div className="w-9 h-9 rounded-2xl bg-indigo-200 dark:bg-indigo-900/60 flex items-center justify-center text-indigo-700 dark:text-indigo-300 shrink-0">
+                  <Percent className="w-4 h-4" />
+                </div>
+              </div>
+
+              {/* Selector de Método de Cálculo: Monto Fijo vs Porcentaje (Requerimiento C 3.1 & Pizarra) */}
+              <div>
+                <label className="block font-bold text-[#262422] dark:text-white mb-1.5">
+                  1. Modalidad de Penalidad por Mora *
+                </label>
+                <div className="grid grid-cols-2 gap-2.5">
+                  <button
+                    type="button"
+                    onClick={() => setMoraTipoPenalidadInput('fijo')}
+                    className={`p-3 rounded-2xl font-bold border text-center transition-all cursor-pointer ${moraTipoPenalidadInput === 'fijo'
+                        ? 'bg-indigo-700 text-white border-indigo-800 shadow-md ring-2 ring-indigo-500/30'
+                        : 'bg-[#dfd9ce] dark:bg-slate-800 text-[#5c5750] dark:text-slate-300 border-[#cec8bc] dark:border-slate-700'
+                      }`}
+                  >
+                    <div className="text-xs">💵 Monto Fijo en Bolivianos (Bs.)</div>
+                    <span className="block text-[10px] font-normal opacity-90 mt-0.5">
+                      Ej. Cobro fijo de Bs. 50 a cualquier expensa vencida
+                    </span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setMoraTipoPenalidadInput('porcentaje')}
+                    className={`p-3 rounded-2xl font-bold border text-center transition-all cursor-pointer ${moraTipoPenalidadInput === 'porcentaje'
+                        ? 'bg-indigo-700 text-white border-indigo-800 shadow-md ring-2 ring-indigo-500/30'
+                        : 'bg-[#dfd9ce] dark:bg-slate-800 text-[#5c5750] dark:text-slate-300 border-[#cec8bc] dark:border-slate-700'
+                      }`}
+                  >
+                    <div className="text-xs">📊 Porcentaje de Interés (%)</div>
+                    <span className="block text-[10px] font-normal opacity-90 mt-0.5">
+                      Ej. 5% ó 10% calculado sobre el capital pendiente
+                    </span>
                   </button>
                 </div>
+              </div>
 
-                {moraError && (
-                  <div className="p-3 bg-rose-100 dark:bg-rose-950/70 border border-rose-300 dark:border-rose-800 text-rose-900 dark:text-rose-200 rounded-xl flex items-center gap-2 text-xs">
-                    <AlertCircle className="w-4 h-4 shrink-0 text-rose-600 dark:text-rose-400" />
-                    <span>{moraError}</span>
+              {/* Input según el tipo seleccionado */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {moraTipoPenalidadInput === 'fijo' ? (
+                  <div>
+                    <label className="block font-bold text-[#262422] dark:text-white mb-1">
+                      Monto Fijo de Multa (Bs.) *
+                    </label>
+                    <input
+                      type="number"
+                      step="1"
+                      min="1"
+                      required
+                      value={moraMontoFijoInput}
+                      onChange={(e) =>
+                        setMoraMontoFijoInput(
+                          e.target.value === '' ? '' : Number(e.target.value)
+                        )
+                      }
+                      placeholder="Ej. 50"
+                      className="w-full px-3 py-2 rounded-xl bg-[#dfd9ce] dark:bg-slate-800 border border-[#cec8bc] dark:border-slate-700 font-mono font-bold text-sm text-[#262422] dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-600"
+                    />
+                    <p className="text-[10px] text-[#7d776f] mt-1">
+                      Valor en Bs. aplicado a departamentos en mora.
+                    </p>
+                  </div>
+                ) : (
+                  <div>
+                    <label className="block font-bold text-[#262422] dark:text-white mb-1">
+                      Tasa de Interés Mensual (%) *
+                    </label>
+                    <input
+                      type="number"
+                      step="0.1"
+                      min="0"
+                      max="100"
+                      required
+                      value={nuevaTasaMoraInput}
+                      onChange={(e) =>
+                        setNuevaTasaMoraInput(
+                          e.target.value === '' ? '' : Number(e.target.value)
+                        )
+                      }
+                      placeholder="Ej. 10"
+                      className="w-full px-3 py-2 rounded-xl bg-[#dfd9ce] dark:bg-slate-800 border border-[#cec8bc] dark:border-slate-700 font-mono font-bold text-sm text-[#262422] dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-600"
+                    />
+                    <p className="text-[10px] text-[#7d776f] mt-1">
+                      Porcentaje sobre saldo adeudado (Ej. 5% ó 10%).
+                    </p>
                   </div>
                 )}
 
-                <form onSubmit={handleGuardarReglaMora} className="space-y-4 text-xs">
-                  {/* Tarjeta de Política Activa */}
-                  <div className="p-3.5 rounded-2xl bg-indigo-50 dark:bg-indigo-950/40 border border-indigo-200 dark:border-indigo-800 text-[11px] text-indigo-900 dark:text-indigo-200 flex justify-between items-center">
-                    <div>
-                      <span className="font-bold block">Política Activa del Edificio:</span>
-                      <span className="text-base font-black text-indigo-700 dark:text-indigo-300 font-mono">
-                        {politicaMora.tipoPenalidad === 'fijo'
-                          ? `Bs. ${politicaMora.montoFijo} (Fijo en Bolivianos)`
-                          : `${politicaMora.porcentaje}% (Porcentual mensual)`}
-                      </span>
-                      <span className="block text-[10px] text-[#7d776f] mt-0.5">
-                        Vence: día {politicaMora.diaVencimiento} de cada mes • Gracia:{' '}
-                        {politicaMora.diasGracia} días • Generación: día{' '}
-                        {politicaMora.diaGeneracion}
-                      </span>
-                    </div>
-                    <div className="w-9 h-9 rounded-2xl bg-indigo-200 dark:bg-indigo-900/60 flex items-center justify-center text-indigo-700 dark:text-indigo-300 shrink-0">
-                      <Percent className="w-4 h-4" />
-                    </div>
-                  </div>
-
-                  {/* Selector de Método de Cálculo: Monto Fijo vs Porcentaje (Requerimiento C 3.1 & Pizarra) */}
+                <div className="grid grid-cols-3 gap-2">
                   <div>
-                    <label className="block font-bold text-[#262422] dark:text-white mb-1.5">
-                      1. Modalidad de Penalidad por Mora *
+                    <label className="block font-bold text-[#262422] dark:text-white mb-1">
+                      Día Venc. *
                     </label>
-                    <div className="grid grid-cols-2 gap-2.5">
-                      <button
-                        type="button"
-                        onClick={() => setMoraTipoPenalidadInput('fijo')}
-                        className={`p-3 rounded-2xl font-bold border text-center transition-all cursor-pointer ${
-                          moraTipoPenalidadInput === 'fijo'
-                            ? 'bg-indigo-700 text-white border-indigo-800 shadow-md ring-2 ring-indigo-500/30'
-                            : 'bg-[#dfd9ce] dark:bg-slate-800 text-[#5c5750] dark:text-slate-300 border-[#cec8bc] dark:border-slate-700'
-                        }`}
-                      >
-                        <div className="text-xs">💵 Monto Fijo en Bolivianos (Bs.)</div>
-                        <span className="block text-[10px] font-normal opacity-90 mt-0.5">
-                          Ej. Cobro fijo de Bs. 50 a cualquier expensa vencida
-                        </span>
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={() => setMoraTipoPenalidadInput('porcentaje')}
-                        className={`p-3 rounded-2xl font-bold border text-center transition-all cursor-pointer ${
-                          moraTipoPenalidadInput === 'porcentaje'
-                            ? 'bg-indigo-700 text-white border-indigo-800 shadow-md ring-2 ring-indigo-500/30'
-                            : 'bg-[#dfd9ce] dark:bg-slate-800 text-[#5c5750] dark:text-slate-300 border-[#cec8bc] dark:border-slate-700'
-                        }`}
-                      >
-                        <div className="text-xs">📊 Porcentaje de Interés (%)</div>
-                        <span className="block text-[10px] font-normal opacity-90 mt-0.5">
-                          Ej. 5% ó 10% calculado sobre el capital pendiente
-                        </span>
-                      </button>
-                    </div>
+                    <input
+                      type="number"
+                      min="1"
+                      max="28"
+                      required
+                      value={moraDiaVencimientoInput}
+                      onChange={(e) =>
+                        setMoraDiaVencimientoInput(
+                          e.target.value === '' ? '' : Number(e.target.value)
+                        )
+                      }
+                      placeholder="10"
+                      className="w-full px-2 py-2 rounded-xl bg-[#dfd9ce] dark:bg-slate-800 border border-[#cec8bc] dark:border-slate-700 font-mono font-bold text-xs"
+                    />
+                    <span className="text-[9px] text-[#7d776f]">Día 10</span>
                   </div>
 
-                  {/* Input según el tipo seleccionado */}
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    {moraTipoPenalidadInput === 'fijo' ? (
-                      <div>
-                        <label className="block font-bold text-[#262422] dark:text-white mb-1">
-                          Monto Fijo de Multa (Bs.) *
-                        </label>
-                        <input
-                          type="number"
-                          step="1"
-                          min="1"
-                          required
-                          value={moraMontoFijoInput}
-                          onChange={(e) =>
-                            setMoraMontoFijoInput(
-                              e.target.value === '' ? '' : Number(e.target.value)
-                            )
-                          }
-                          placeholder="Ej. 50"
-                          className="w-full px-3 py-2 rounded-xl bg-[#dfd9ce] dark:bg-slate-800 border border-[#cec8bc] dark:border-slate-700 font-mono font-bold text-sm text-[#262422] dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-600"
-                        />
-                        <p className="text-[10px] text-[#7d776f] mt-1">
-                          Valor en Bs. aplicado a departamentos en mora.
-                        </p>
-                      </div>
-                    ) : (
-                      <div>
-                        <label className="block font-bold text-[#262422] dark:text-white mb-1">
-                          Tasa de Interés Mensual (%) *
-                        </label>
-                        <input
-                          type="number"
-                          step="0.1"
-                          min="0"
-                          max="100"
-                          required
-                          value={nuevaTasaMoraInput}
-                          onChange={(e) =>
-                            setNuevaTasaMoraInput(
-                              e.target.value === '' ? '' : Number(e.target.value)
-                            )
-                          }
-                          placeholder="Ej. 10"
-                          className="w-full px-3 py-2 rounded-xl bg-[#dfd9ce] dark:bg-slate-800 border border-[#cec8bc] dark:border-slate-700 font-mono font-bold text-sm text-[#262422] dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-600"
-                        />
-                        <p className="text-[10px] text-[#7d776f] mt-1">
-                          Porcentaje sobre saldo adeudado (Ej. 5% ó 10%).
-                        </p>
-                      </div>
-                    )}
-
-                    <div className="grid grid-cols-3 gap-2">
-                      <div>
-                        <label className="block font-bold text-[#262422] dark:text-white mb-1">
-                          Día Venc. *
-                        </label>
-                        <input
-                          type="number"
-                          min="1"
-                          max="28"
-                          required
-                          value={moraDiaVencimientoInput}
-                          onChange={(e) =>
-                            setMoraDiaVencimientoInput(
-                              e.target.value === '' ? '' : Number(e.target.value)
-                            )
-                          }
-                          placeholder="10"
-                          className="w-full px-2 py-2 rounded-xl bg-[#dfd9ce] dark:bg-slate-800 border border-[#cec8bc] dark:border-slate-700 font-mono font-bold text-xs"
-                        />
-                        <span className="text-[9px] text-[#7d776f]">Día 10</span>
-                      </div>
-
-                      <div>
-                        <label className="block font-bold text-[#262422] dark:text-white mb-1">
-                          Gracia *
-                        </label>
-                        <input
-                          type="number"
-                          min="0"
-                          max="15"
-                          required
-                          value={moraDiasGraciaInput}
-                          onChange={(e) =>
-                            setMoraDiasGraciaInput(
-                              e.target.value === '' ? '' : Number(e.target.value)
-                            )
-                          }
-                          placeholder="2"
-                          className="w-full px-2 py-2 rounded-xl bg-[#dfd9ce] dark:bg-slate-800 border border-[#cec8bc] dark:border-slate-700 font-mono font-bold text-xs"
-                        />
-                        <span className="text-[9px] text-[#7d776f]">2 días</span>
-                      </div>
-
-                      <div>
-                        <label className="block font-bold text-[#262422] dark:text-white mb-1">
-                          Emisión *
-                        </label>
-                        <input
-                          type="number"
-                          min="1"
-                          max="28"
-                          required
-                          value={moraDiaGeneracionInput}
-                          onChange={(e) =>
-                            setMoraDiaGeneracionInput(
-                              e.target.value === '' ? '' : Number(e.target.value)
-                            )
-                          }
-                          placeholder="1"
-                          className="w-full px-2 py-2 rounded-xl bg-[#dfd9ce] dark:bg-slate-800 border border-[#cec8bc] dark:border-slate-700 font-mono font-bold text-xs"
-                        />
-                        <span className="text-[9px] text-[#7d776f]">Día 01</span>
-                      </div>
-                    </div>
+                  <div>
+                    <label className="block font-bold text-[#262422] dark:text-white mb-1">
+                      Gracia *
+                    </label>
+                    <input
+                      type="number"
+                      min="0"
+                      max="15"
+                      required
+                      value={moraDiasGraciaInput}
+                      onChange={(e) =>
+                        setMoraDiasGraciaInput(
+                          e.target.value === '' ? '' : Number(e.target.value)
+                        )
+                      }
+                      placeholder="2"
+                      className="w-full px-2 py-2 rounded-xl bg-[#dfd9ce] dark:bg-slate-800 border border-[#cec8bc] dark:border-slate-700 font-mono font-bold text-xs"
+                    />
+                    <span className="text-[9px] text-[#7d776f]">2 días</span>
                   </div>
 
-                  {/* Historial */}
-                  <div className="space-y-1.5 pt-2 border-t border-[#cec8bc] dark:border-slate-800">
-                    <span className="font-bold text-xs text-[#262422] dark:text-white flex items-center gap-1.5">
-                      <History className="w-3.5 h-3.5 text-indigo-600" />
-                      Historial de Reglas de Mora Registradas
-                    </span>
-                    <div className="max-h-28 overflow-y-auto space-y-1.5 pr-1">
-                      {historialReglasMora.length === 0 ? (
-                        <p className="text-[11px] text-[#7d776f]">No hay historial registrado.</p>
-                      ) : (
-                        historialReglasMora.map((reg, idx) => (
-                          <div
-                            key={`regla-${reg.idRegla ?? reg.idReglaMora ?? idx}-${idx}`}
-                            className={`p-2 rounded-xl border text-[11px] flex justify-between items-center ${
-                              reg.activa
-                                ? 'bg-emerald-50 dark:bg-emerald-950/40 border-emerald-300 dark:border-emerald-800 text-emerald-900 dark:text-emerald-200'
-                                : 'bg-[#dfd9ce]/60 dark:bg-slate-800/60 border-[#cec8bc] dark:border-slate-700 text-[#5c5750] dark:text-slate-400'
-                            }`}
-                          >
-                            <div>
-                              <span className="font-bold font-mono text-xs">
-                                {reg.tasaInteres}%
-                              </span>
-                              <span className="text-[10px] block text-[#7d776f]">
-                                {fechaHoraBolivia(reg.fechaCreacion)}{' '}
-                                {reg.usuarioCreacion?.nombreUsuario
-                                  ? `• ${reg.usuarioCreacion.nombreUsuario}`
-                                  : ''}
-                              </span>
-                            </div>
-                            <span
-                              className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
-                                reg.activa
-                                  ? 'bg-emerald-200 dark:bg-emerald-900 text-emerald-800 dark:text-emerald-200'
-                                  : 'bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300'
-                              }`}
-                            >
-                              {reg.activa ? 'Activa' : 'Histórica'}
-                            </span>
-                          </div>
-                        ))
-                      )}
-                    </div>
+                  <div>
+                    <label className="block font-bold text-[#262422] dark:text-white mb-1">
+                      Emisión *
+                    </label>
+                    <input
+                      type="number"
+                      min="1"
+                      max="28"
+                      required
+                      value={moraDiaGeneracionInput}
+                      onChange={(e) =>
+                        setMoraDiaGeneracionInput(
+                          e.target.value === '' ? '' : Number(e.target.value)
+                        )
+                      }
+                      placeholder="1"
+                      className="w-full px-2 py-2 rounded-xl bg-[#dfd9ce] dark:bg-slate-800 border border-[#cec8bc] dark:border-slate-700 font-mono font-bold text-xs"
+                    />
+                    <span className="text-[9px] text-[#7d776f]">Día 01</span>
                   </div>
-
-                  <div className="flex justify-end gap-2 pt-3 border-t border-[#cec8bc] dark:border-slate-800">
-                    <button
-                      type="button"
-                      onClick={() => setIsMoraModalOpen(false)}
-                      className="px-4 py-2 rounded-xl text-xs font-bold text-[#7d776f] hover:text-[#262422] cursor-pointer"
-                    >
-                      Cerrar
-                    </button>
-                    <button
-                      type="submit"
-                      disabled={isSubmittingMora}
-                      className="px-5 py-2.5 rounded-xl bg-indigo-700 hover:bg-indigo-800 text-white text-xs font-bold shadow-md cursor-pointer disabled:opacity-50 inline-flex items-center gap-1.5"
-                    >
-                      <CheckCircle2 className="w-4 h-4" />
-                      <span>{isSubmittingMora ? 'Guardando...' : 'Guardar y Aplicar Regla'}</span>
-                    </button>
-                  </div>
-                </form>
+                </div>
               </div>
-            </div>
+
+              {/* Historial */}
+              <div className="space-y-1.5 pt-2 border-t border-[#cec8bc] dark:border-slate-800">
+                <span className="font-bold text-xs text-[#262422] dark:text-white flex items-center gap-1.5">
+                  <History className="w-3.5 h-3.5 text-indigo-600" />
+                  Historial de Reglas de Mora Registradas
+                </span>
+                <div className="max-h-28 overflow-y-auto space-y-1.5 pr-1">
+                  {historialReglasMora.length === 0 ? (
+                    <p className="text-[11px] text-[#7d776f]">No hay historial registrado.</p>
+                  ) : (
+                    historialReglasMora.map((reg, idx) => (
+                      <div
+                        key={`regla-${reg.idRegla ?? reg.idReglaMora ?? idx}-${idx}`}
+                        className={`p-2 rounded-xl border text-[11px] flex justify-between items-center ${reg.activa
+                            ? 'bg-emerald-50 dark:bg-emerald-950/40 border-emerald-300 dark:border-emerald-800 text-emerald-900 dark:text-emerald-200'
+                            : 'bg-[#dfd9ce]/60 dark:bg-slate-800/60 border-[#cec8bc] dark:border-slate-700 text-[#5c5750] dark:text-slate-400'
+                          }`}
+                      >
+                        <div>
+                          <span className="font-bold font-mono text-xs">
+                            {reg.tasaInteres}%
+                          </span>
+                          <span className="text-[10px] block text-[#7d776f]">
+                            {fechaHoraBolivia(reg.fechaCreacion)}{' '}
+                            {reg.usuarioCreacion?.nombreUsuario
+                              ? `• ${reg.usuarioCreacion.nombreUsuario}`
+                              : ''}
+                          </span>
+                        </div>
+                        <span
+                          className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${reg.activa
+                              ? 'bg-emerald-200 dark:bg-emerald-900 text-emerald-800 dark:text-emerald-200'
+                              : 'bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300'
+                            }`}
+                        >
+                          {reg.activa ? 'Activa' : 'Histórica'}
+                        </span>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+
+              <div className="flex justify-end gap-2 pt-3 border-t border-[#cec8bc] dark:border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => setIsMoraModalOpen(false)}
+                  className="px-4 py-2 rounded-xl text-xs font-bold text-[#7d776f] hover:text-[#262422] cursor-pointer"
+                >
+                  Cerrar
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSubmittingMora}
+                  className="px-5 py-2.5 rounded-xl bg-indigo-700 hover:bg-indigo-800 text-white text-xs font-bold shadow-md cursor-pointer disabled:opacity-50 inline-flex items-center gap-1.5"
+                >
+                  <CheckCircle2 className="w-4 h-4" />
+                  <span>{isSubmittingMora ? 'Guardando...' : 'Guardar y Aplicar Regla'}</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
       )}
 
       {/* MODAL REGISTRO DE COBRO / PAGO DE EXPENSA */}
@@ -2847,7 +2837,8 @@ export default function ExpensasPage() {
               id="area-impresion"
               className="p-6 rounded-2xl bg-white text-black border border-slate-300 space-y-4 shadow-sm"
             >
-              <style dangerouslySetInnerHTML={{ __html: `
+              <style dangerouslySetInnerHTML={{
+                __html: `
                 @media print {
                   body * { visibility: hidden !important; }
                   #area-impresion, #area-impresion * { visibility: visible !important; color: #000 !important; }
@@ -3144,7 +3135,7 @@ export default function ExpensasPage() {
                     Estado de Cuenta — Departamento {estadoCuentaData.departamento?.numero}
                   </h3>
                   <p className="text-xs text-[#7d776f] dark:text-slate-400">
-                    Condominio Edificio XYZ • Cochabamba, Bolivia
+                    Edificio XYZabamba, Bolivia
                   </p>
                 </div>
               </div>
@@ -3317,11 +3308,10 @@ export default function ExpensasPage() {
                 </span>
               </div>
               <div
-                className={`p-3.5 rounded-2xl text-center border ${
-                  (estadoCuentaData.resumen?.saldoPendienteTotal || 0) > 0
+                className={`p-3.5 rounded-2xl text-center border ${(estadoCuentaData.resumen?.saldoPendienteTotal || 0) > 0
                     ? 'bg-red-50 dark:bg-red-950/40 border-red-200 dark:border-red-900/60 text-red-700 dark:text-red-300'
                     : 'bg-emerald-50 dark:bg-emerald-950/40 border-emerald-200 dark:border-emerald-900/60 text-emerald-700 dark:text-emerald-300'
-                }`}
+                  }`}
               >
                 <span className="text-[10px] uppercase font-bold block">
                   Saldo Pendiente{' '}
@@ -3359,8 +3349,8 @@ export default function ExpensasPage() {
               </div>
 
               {estadoCuentaData.sinMovimientos ||
-              !estadoCuentaData.movimientos ||
-              estadoCuentaData.movimientos.length === 0 ? (
+                !estadoCuentaData.movimientos ||
+                estadoCuentaData.movimientos.length === 0 ? (
                 <div className="p-8 text-center space-y-2">
                   <FileText className="w-8 h-8 text-[#7d776f] mx-auto opacity-50" />
                   <p className="text-xs font-bold text-[#262422] dark:text-slate-300">
@@ -3401,13 +3391,12 @@ export default function ExpensasPage() {
                             </td>
                             <td className="py-2.5 px-3">
                               <span
-                                className={`inline-flex items-center px-2 py-0.5 rounded-full text-[9px] font-extrabold ${
-                                  esObligacion
+                                className={`inline-flex items-center px-2 py-0.5 rounded-full text-[9px] font-extrabold ${esObligacion
                                     ? 'bg-blue-100 text-blue-800 dark:bg-blue-950/60 dark:text-blue-400'
                                     : esAnticipo
                                       ? 'bg-purple-100 text-purple-800 dark:bg-purple-950/60 dark:text-purple-300'
                                       : 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-400'
-                                }`}
+                                  }`}
                               >
                                 {mov.tipo ||
                                   (mov.concepto?.includes('Pago') ? 'PAGO' : 'OBLIGACION')}
@@ -3445,8 +3434,7 @@ export default function ExpensasPage() {
                             </td>
                             <td className="py-2.5 px-3 text-center whitespace-nowrap">
                               <span
-                                className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-extrabold ${
-                                  mov.estado === 'Pagado'
+                                className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-extrabold ${mov.estado === 'Pagado'
                                     ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-400'
                                     : mov.estado === 'Pendiente'
                                       ? 'bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-400'
@@ -3455,7 +3443,7 @@ export default function ExpensasPage() {
                                         : mov.anulado
                                           ? 'bg-slate-200 text-slate-700 dark:bg-slate-800 dark:text-slate-400'
                                           : 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-400'
-                                }`}
+                                  }`}
                               >
                                 {mov.anulado ? 'Anulado' : mov.estado || 'Efectuado'}
                               </span>
@@ -3491,8 +3479,8 @@ export default function ExpensasPage() {
                                       )
                                       setCorregirIdPersonaInput(
                                         pagoOriginal?.idPersonaPagador ||
-                                          estadoCuentaData.departamento?.propietario?.idPersona ||
-                                          ''
+                                        estadoCuentaData.departamento?.propietario?.idPersona ||
+                                        ''
                                       )
                                       setCorregirMotivoInput('')
                                       setCorregirError(null)
