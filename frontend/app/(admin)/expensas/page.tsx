@@ -65,6 +65,8 @@ export interface ExpensaItem {
   tasaInteresMora: number
   fechaVencimiento: string
   estado: string
+  moraCalculada?: number
+  mesesMora?: number
   departamento?: {
     numero: string
     piso?: number
@@ -362,6 +364,8 @@ export default function ExpensasPage() {
               tasaInteresMora: Number(item.tasaInteresMora || 0),
               fechaVencimiento: fechaSolo(item.fechaVencimiento),
               estado: item.estado,
+              moraCalculada: Number(item.moraCalculada ?? item.montoMora ?? (saldoCalc > totalCalculado ? saldoCalc - totalCalculado : 0)),
+              mesesMora: Number(item.mesesMora || (saldoCalc > totalCalculado ? 1 : 0)),
               departamento: item.departamento
                 ? {
                     ...item.departamento,
@@ -370,7 +374,7 @@ export default function ExpensasPage() {
                 : undefined,
               propietarioNombre: item.departamento?.propietario
                 ? `${item.departamento.propietario.nombres || ''} ${item.departamento.propietario.apellidos || ''}`.trim()
-                : item.propietarioNombre || 'Propietario Responsable',
+                : item.propietarioNombre || '—',
               inquilinoNombre: item.departamento?.inquilino
                 ? `${item.departamento.inquilino.nombres || ''} ${item.departamento.inquilino.apellidos || ''}`.trim()
                 : item.inquilinoNombre || '—',
@@ -1916,7 +1920,7 @@ export default function ExpensasPage() {
                         {m.departamento?.tipologia || 'Piso 1'})
                       </h4>
                       <p className="text-xs text-[#7d776f] dark:text-slate-400">
-                        Propietario Responsable:{' '}
+                        Propietario:{' '}
                         <span className="font-bold">{m.propietarioNombre}</span>
                       </p>
                     </div>
@@ -2646,7 +2650,7 @@ export default function ExpensasPage() {
                   {propNombre && (
                     <div>
                       <span className="text-slate-500 block text-[10px] uppercase font-bold">
-                        Propietario Responsable:
+                        Propietario:
                       </span>
                       <span className="font-bold">{propNombre}</span>
                     </div>
@@ -2856,11 +2860,8 @@ export default function ExpensasPage() {
               <div className="border-b-2 border-slate-800 pb-3 flex justify-between items-start text-black">
                 <div>
                   <h2 className="text-base font-black tracking-tight text-black">
-                    CONDOMINIO RESIDENCIAL EDIFICIO XYZ
+                    Edificio XYZ
                   </h2>
-                  <div className="text-xs text-slate-700">
-                    Av. América y Pando, Cochabamba, Bolivia
-                  </div>
                   <div className="text-xs font-bold text-black mt-1">
                     {selectedExtracto
                       ? `Extracto de Expensa — Departamento ${selectedExtracto.departamento?.numero || selectedExtracto.idDepartamento}`
@@ -2884,7 +2885,7 @@ export default function ExpensasPage() {
 
               {/* Ficha Resumen del Extracto */}
               <div className="bg-slate-50 p-4 rounded-xl border border-slate-300 text-xs space-y-2.5 text-black">
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-center sm:text-left">
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 text-center sm:text-left">
                   {periodoExtracto && (
                     <div>
                       <span className="text-slate-600 text-[10px] uppercase font-bold block">
@@ -2898,20 +2899,10 @@ export default function ExpensasPage() {
                   {gastosTotalesEdificioPeriodo > 0 && (
                     <div>
                       <span className="text-slate-600 text-[10px] uppercase font-bold block">
-                        Gastos Totales Edificio
+                        Total emitido en el período
                       </span>
                       <span className="font-bold font-mono text-black">
                         Bs {gastosTotalesEdificioPeriodo.toLocaleString('es-BO', { minimumFractionDigits: 2 })}
-                      </span>
-                    </div>
-                  )}
-                  {resumenDepartamentos.superficieTotal > 0 && (
-                    <div>
-                      <span className="text-slate-600 text-[10px] uppercase font-bold block">
-                        Superficie Total
-                      </span>
-                      <span className="font-bold font-mono text-black">
-                        {resumenDepartamentos.superficieTotal.toLocaleString('es-BO')} m² ({resumenDepartamentos.totalUnidades} Unidades)
                       </span>
                     </div>
                   )}
@@ -2922,96 +2913,152 @@ export default function ExpensasPage() {
                     <span className="font-bold text-black">
                       {selectedExtracto
                         ? `Dpto ${selectedExtracto.departamento?.numero || selectedExtracto.idDepartamento}${selectedExtracto.departamento?.tipologia ? ` (${selectedExtracto.departamento.tipologia})` : ''}`
-                        : `Edificio Completo (${resumenDepartamentos.totalUnidades} Dptos)`}
+                        : 'Edificio Completo'}
                     </span>
                   </div>
                 </div>
 
-                {selectedExtracto && (
-                  <div className="border-t border-slate-300 pt-2 flex flex-wrap justify-between items-center text-[11px] gap-2 text-black">
-                    <span>
-                      <strong className="text-black">Propietario:</strong> {selectedExtracto.propietarioNombre || '—'}
-                    </span>
-                    <span>
-                      <strong className="text-black">Ocupante:</strong> {selectedExtracto.inquilinoNombre || '—'}
-                    </span>
-                    {selectedExtracto.departamento?.areaM2 ? (
+                {selectedExtracto && (() => {
+                  const capitalLiquidado = Number(selectedExtracto.monto || 0)
+                  const saldoTotal = Number(selectedExtracto.saldoPendiente || 0)
+                  const moraCalculada = Number(
+                    selectedExtracto.moraCalculada ??
+                    (saldoTotal > capitalLiquidado ? saldoTotal - capitalLiquidado : 0)
+                  )
+                  const esPagada = selectedExtracto.estado === 'Pagado' || saldoTotal <= 0
+                  const totalAPagar = saldoTotal > 0 ? saldoTotal : (capitalLiquidado + moraCalculada)
+
+                  return (
+                    <div className="border-t border-slate-300 pt-2 flex flex-wrap justify-between items-center text-[11px] gap-2 text-black">
                       <span>
-                        <strong className="text-black">Superficie:</strong>{' '}
-                        <span className="font-mono font-bold text-black">
-                          {selectedExtracto.departamento.areaM2} m²
+                        <strong className="text-black">Propietario:</strong> {selectedExtracto.propietarioNombre || '—'}
+                      </span>
+                      <span>
+                        <strong className="text-black">Ocupante:</strong> {selectedExtracto.inquilinoNombre || '—'}
+                      </span>
+                      {selectedExtracto.departamento?.areaM2 ? (
+                        <span>
+                          <strong className="text-black">Superficie:</strong>{' '}
+                          <span className="font-mono font-bold text-black">
+                            {selectedExtracto.departamento.areaM2} m²
+                          </span>
+                        </span>
+                      ) : null}
+                      <span>
+                        <strong className="text-black">{esPagada ? 'Total Liquidado:' : 'Total a Pagar:'}</strong>{' '}
+                        <span className="font-mono font-bold text-black text-xs">
+                          Bs {(esPagada ? capitalLiquidado : totalAPagar).toLocaleString('es-BO', { minimumFractionDigits: 2 })}
                         </span>
                       </span>
-                    ) : null}
-                    <span>
-                      <strong className="text-black">Expensa a Cobrar:</strong>{' '}
-                      <span className="font-mono font-bold text-black text-xs">
-                        Bs {selectedExtracto.monto.toFixed(2)}
-                      </span>
-                    </span>
-                  </div>
-                )}
+                    </div>
+                  )
+                })()}
               </div>
 
               {/* Detalle Real de la Expensa */}
-              {selectedExtracto ? (
-                <div className="p-4 rounded-xl border border-slate-300 bg-white space-y-3 text-black">
-                  <div className="flex justify-between items-center border-b border-slate-200 pb-2">
-                    <span className="font-extrabold text-xs uppercase text-black">
-                      Detalle de Liquidación de la Expensa
-                    </span>
-                    <div>
-                      {selectedExtracto.saldoPendiente > 0 ? (
-                        <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-slate-100 text-black border border-slate-400">
-                          Pendiente de pago: Bs {Number(selectedExtracto.saldoPendiente).toLocaleString('es-BO', { minimumFractionDigits: 2 })}
-                        </span>
-                      ) : (
-                        <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-slate-100 text-black border border-slate-400">
-                          Pagada
-                        </span>
+              {selectedExtracto ? (() => {
+                const capitalLiquidado = Number(selectedExtracto.monto || 0)
+                const saldoTotal = Number(selectedExtracto.saldoPendiente || 0)
+                const moraCalculada = Number(
+                  selectedExtracto.moraCalculada ??
+                  (saldoTotal > capitalLiquidado ? saldoTotal - capitalLiquidado : 0)
+                )
+                const mesesMora = Number(
+                  selectedExtracto.mesesMora ??
+                  (moraCalculada > 0 ? 1 : 0)
+                )
+                const esPagada = selectedExtracto.estado === 'Pagado' || saldoTotal <= 0
+                const estadoReal = esPagada ? 'Pagada' : selectedExtracto.estado
+                const totalAPagar = saldoTotal > 0 ? saldoTotal : (capitalLiquidado + moraCalculada)
+
+                return (
+                  <div className="p-4 rounded-xl border border-slate-300 bg-white space-y-3 text-black">
+                    <div className="flex justify-between items-center border-b border-slate-200 pb-2">
+                      <span className="font-extrabold text-xs uppercase text-black">
+                        Detalle de Liquidación de la Expensa
+                      </span>
+                      <div>
+                        {esPagada ? (
+                          <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-slate-100 text-black border border-slate-400">
+                            Pagada
+                          </span>
+                        ) : (
+                          <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-slate-100 text-black border border-slate-400">
+                            {estadoReal} — Pendiente de pago: Bs {totalAPagar.toLocaleString('es-BO', { minimumFractionDigits: 2 })}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="divide-y divide-slate-200 text-xs text-black">
+                      {Number(selectedExtracto.montoBase || 0) > 0 && (
+                        <div className="flex justify-between py-2">
+                          <span>Cuota Base de Mantenimiento Común</span>
+                          <span className="font-mono font-bold text-black">
+                            Bs {Number(selectedExtracto.montoBase).toLocaleString('es-BO', { minimumFractionDigits: 2 })}
+                          </span>
+                        </div>
+                      )}
+                      {Number(selectedExtracto.montoAgua || 0) > 0 && (
+                        <div className="flex justify-between py-2">
+                          <span>Consumo de Agua Potable</span>
+                          <span className="font-mono font-bold text-black">
+                            Bs {Number(selectedExtracto.montoAgua).toLocaleString('es-BO', { minimumFractionDigits: 2 })}
+                          </span>
+                        </div>
+                      )}
+                      {Number(selectedExtracto.montoExtra || selectedExtracto.montoExtras || 0) > 0 && (
+                        <div className="flex justify-between py-2">
+                          <span>
+                            Cargos Extras
+                            {selectedExtracto.extraConcepto ? ` (${selectedExtracto.extraConcepto})` : ''}
+                          </span>
+                          <span className="font-mono font-bold text-black">
+                            Bs {Number(selectedExtracto.montoExtra || selectedExtracto.montoExtras).toLocaleString('es-BO', { minimumFractionDigits: 2 })}
+                          </span>
+                        </div>
+                      )}
+                      {capitalLiquidado > 0 && (
+                        <div className="flex justify-between py-2 font-bold text-xs text-black border-t border-slate-300">
+                          <span>Total Liquidado Período</span>
+                          <span className="font-mono font-bold text-black">
+                            Bs {capitalLiquidado.toLocaleString('es-BO', { minimumFractionDigits: 2 })}
+                          </span>
+                        </div>
+                      )}
+                      {!esPagada && (
+                        <>
+                          {moraCalculada > 0 && (
+                            <div className="flex justify-between py-2 text-black">
+                              <span>
+                                Recargo por Mora
+                                {mesesMora > 0 ? ` (${mesesMora} ${mesesMora === 1 ? 'mes' : 'meses'} de atraso)` : ''}
+                              </span>
+                              <span className="font-mono font-bold text-black">
+                                +Bs {moraCalculada.toLocaleString('es-BO', { minimumFractionDigits: 2 })}
+                              </span>
+                            </div>
+                          )}
+                          {selectedExtracto.fechaVencimiento && (
+                            <div className="flex justify-between py-2 text-slate-700">
+                              <span>Fecha de Vencimiento</span>
+                              <span className="font-mono font-bold text-black">
+                                {fechaSolo(selectedExtracto.fechaVencimiento)}
+                              </span>
+                            </div>
+                          )}
+                          <div className="flex justify-between py-2 font-bold text-sm text-black border-t-2 border-slate-800">
+                            <span>Total a Pagar</span>
+                            <span className="font-mono font-bold text-black">
+                              Bs {totalAPagar.toLocaleString('es-BO', { minimumFractionDigits: 2 })}
+                            </span>
+                          </div>
+                        </>
                       )}
                     </div>
                   </div>
-
-                  <div className="divide-y divide-slate-200 text-xs text-black">
-                    {Number(selectedExtracto.montoBase || 0) > 0 && (
-                      <div className="flex justify-between py-2">
-                        <span>Cuota Base de Mantenimiento Común</span>
-                        <span className="font-mono font-bold text-black">
-                          Bs {Number(selectedExtracto.montoBase).toLocaleString('es-BO', { minimumFractionDigits: 2 })}
-                        </span>
-                      </div>
-                    )}
-                    {Number(selectedExtracto.montoAgua || 0) > 0 && (
-                      <div className="flex justify-between py-2">
-                        <span>Consumo de Agua Potable</span>
-                        <span className="font-mono font-bold text-black">
-                          Bs {Number(selectedExtracto.montoAgua).toLocaleString('es-BO', { minimumFractionDigits: 2 })}
-                        </span>
-                      </div>
-                    )}
-                    {Number(selectedExtracto.montoExtra || selectedExtracto.montoExtras || 0) > 0 && (
-                      <div className="flex justify-between py-2">
-                        <span>
-                          Cargos Extras
-                          {selectedExtracto.extraConcepto ? ` (${selectedExtracto.extraConcepto})` : ''}
-                        </span>
-                        <span className="font-mono font-bold text-black">
-                          Bs {Number(selectedExtracto.montoExtra || selectedExtracto.montoExtras).toLocaleString('es-BO', { minimumFractionDigits: 2 })}
-                        </span>
-                      </div>
-                    )}
-                    {selectedExtracto.monto > 0 && (
-                      <div className="flex justify-between py-2 font-bold text-sm text-black border-t-2 border-slate-800">
-                        <span>Total Liquidado</span>
-                        <span className="font-mono font-bold text-black">
-                          Bs {Number(selectedExtracto.monto).toLocaleString('es-BO', { minimumFractionDigits: 2 })}
-                        </span>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              ) : (
+                )
+              })() : (
                 <div className="p-4 rounded-xl border border-slate-300 bg-white space-y-3 text-black">
                   <div className="flex justify-between items-center border-b border-slate-200 pb-2">
                     <span className="font-extrabold text-xs uppercase text-black">
@@ -3032,26 +3079,21 @@ export default function ExpensasPage() {
               {/* Bloque de Tipologías desde tiposDepartamento */}
               {tiposDepartamento.length > 0 && (
                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-center text-xs bg-slate-50 p-2.5 rounded-xl border border-slate-300 text-black">
-                  {tiposDepartamento.map((tipo) => (
-                    <div key={tipo.idTipo}>
-                      <span className="text-[10px] text-slate-500 uppercase font-bold block">
-                        {tipo.nombre}{tipo.areaM2 ? ` (${tipo.areaM2} m²)` : ''}
-                      </span>
-                      <span className="font-mono font-bold text-black">
-                        Bs. {Number(tipo.montoExpensa).toLocaleString('es-BO', { minimumFractionDigits: 2 })} base
-                      </span>
-                    </div>
-                  ))}
+                  {tiposDepartamento.map((tipo) => {
+                    const area = tipo.areaM2 ?? departamentosList.find(d => d.tipologia?.toLowerCase() === tipo.nombre.toLowerCase() && d.areaM2)?.areaM2
+                    return (
+                      <div key={tipo.idTipo}>
+                        <span className="text-[10px] text-slate-500 uppercase font-bold block">
+                          {tipo.nombre}{area ? ` (${area} m²)` : ''}
+                        </span>
+                        <span className="font-mono font-bold text-black">
+                          Bs. {Number(tipo.montoExpensa).toLocaleString('es-BO', { minimumFractionDigits: 2 })} base
+                        </span>
+                      </div>
+                    )
+                  })}
                 </div>
               )}
-
-              {/* Nota de Transparencia */}
-              <div className="text-[10px] text-slate-700 bg-slate-50 p-2.5 rounded-xl border border-slate-300 leading-relaxed">
-                ℹ️ <strong>Transparencia de Administración:</strong> El presente extracto detalla con
-                exactitud los gastos de mantenimiento y conservación de las partes comunes según el
-                Código Civil y reglamento de copropiedad. El alquiler del departamento es un acuerdo
-                privado independiente y no forma parte de este extracto.
-              </div>
 
               {/* Línea de firma vacía */}
               <div className="pt-6 flex justify-end">
@@ -3138,7 +3180,7 @@ export default function ExpensasPage() {
               </div>
               <div>
                 <span className="text-[#7d776f] text-[10px] uppercase font-bold block">
-                  Propietario Responsable
+                  Propietario
                 </span>
                 <span className="font-extrabold text-[#262422] dark:text-white truncate block">
                   {estadoCuentaData.departamento?.propietario
