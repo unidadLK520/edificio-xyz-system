@@ -530,7 +530,10 @@ model ComunicadoEnvio {
   idPersona     Int         @map("id_persona")
   fechaEnvio    DateTime?   @map("fecha_envio") @db.Timestamp(6)
   estadoEnvio   String?     @default("Pendiente") @map("estado_envio") @db.VarChar(20)
-  
+  estadoWhatsapp      String?   @map("estado_whatsapp") @db.VarChar(20)
+  fechaEnvioWhatsapp  DateTime? @map("fecha_envio_whatsapp") @db.Timestamp(6)
+  errorWhatsapp       String?   @map("error_whatsapp") @db.VarChar(120)
+
   comunicado    Comunicado  @relation(fields: [idComunicado], references: [idComunicado])
   persona       Persona     @relation(fields: [idPersona], references: [idPersona])
 
@@ -582,3 +585,11 @@ model ConfiguracionGlobal {
   @@schema("edificio")
 }
 
+model WhatsappSesion {
+  clave          String   @id @db.VarChar(200)
+  valor          String
+  actualizadoEn  DateTime @default(now()) @map("actualizado_en") @db.Timestamp(6)
+
+  @@map("whatsapp_sesion")
+  @@schema("edificio")
+}

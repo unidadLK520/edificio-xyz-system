@@ -17,6 +17,13 @@ import {
   buildComunicadoEmailHtml,
   buildComunicadoEmailText,
 } from '../modules/mailer';
+import {
+  whatsappService,
+  normalizarTelefono,
+  construirMensajeWhatsapp,
+  leerPausaMs,
+  dormir,
+} from '../modules/whatsapp';
 
 export const comunicadosRouter: IRouter = Router();
 comunicadosRouter.use(authMiddleware);
@@ -126,7 +133,109 @@ async function despacharCorreosComunicado(
     );
   }
 }
+// ── Helper: Envío en segundo plano por WhatsApp ──────────────────────────────
+// Cola global: un solo lote a la vez, para que la pausa entre mensajes sea real.
+let colaWhatsapp: Promise<void> = Promise.resolve();
 
+function encolarWhatsapp(
+  idComunicado: number,
+  titulo: string,
+  contenido: string,
+  soloWhatsapp: boolean
+): void {
+  colaWhatsapp = colaWhatsapp
+    .then(() => despacharWhatsappComunicado(idComunicado, titulo, contenido, soloWhatsapp))
+    .catch((err: any) => {
+      console.error('[COMUNICADOS] Error en la cola de WhatsApp:', err?.message || err);
+    });
+}
+
+async function despacharWhatsappComunicado(
+  idComunicado: number,
+  titulo: string,
+  contenido: string,
+  soloWhatsapp: boolean
+): Promise<void> {
+  const envios = await prisma.comunicadoEnvio.findMany({
+    where: { idComunicado, estadoWhatsapp: 'Pendiente' },
+    orderBy: { idEnvio: 'asc' },
+    include: { persona: { select: { telefono: true } } },
+  });
+
+  const mensaje = construirMensajeWhatsapp(titulo, contenido);
+  const vistos = new Set<string>();
+  let intentados = 0;
+  let fallosSeguidos = 0;
+  let detenido: string | null = null;
+
+  const marcar = async (
+    idEnvio: number,
+    estado: 'Enviado' | 'Fallido' | 'Omitido',
+    error: string | null
+  ): Promise<void> => {
+    const ahora = estado === 'Omitido' ? null : new Date();
+    try {
+      await prisma.comunicadoEnvio.update({
+        where: { idEnvio },
+        data: {
+          estadoWhatsapp: estado,
+          fechaEnvioWhatsapp: ahora,
+          errorWhatsapp: error ? error.slice(0, 120) : null,
+          ...(soloWhatsapp ? { estadoEnvio: estado, fechaEnvio: ahora } : {}),
+        },
+      });
+    } catch (err: any) {
+      console.error(
+        `[COMUNICADOS] No se pudo guardar el estado de WhatsApp del envío ${idEnvio}:`,
+        err?.message || err
+      );
+    }
+  };
+
+  for (const envio of envios) {
+    if (detenido) {
+      await marcar(envio.idEnvio, 'Fallido', detenido);
+      continue;
+    }
+
+    const tel = normalizarTelefono(envio.persona?.telefono);
+    if (!tel) {
+      await marcar(envio.idEnvio, 'Omitido', 'Sin teléfono válido');
+      continue;
+    }
+    if (vistos.has(tel)) {
+      await marcar(envio.idEnvio, 'Omitido', 'Número repetido en este comunicado');
+      continue;
+    }
+    vistos.add(tel);
+
+    if (intentados > 0) await dormir(leerPausaMs());
+    intentados++;
+
+    let resultado = await whatsappService.enviarTexto(tel, mensaje);
+    const esperas = [5000, 15000];
+    for (let i = 0; i < esperas.length && !resultado.ok && resultado.temporal && !resultado.limite; i++) {
+      await dormir(esperas[i]);
+      resultado = await whatsappService.enviarTexto(tel, mensaje);
+    }
+
+    if (resultado.ok) {
+      fallosSeguidos = 0;
+      await marcar(envio.idEnvio, 'Enviado', null);
+      continue;
+    }
+
+    await marcar(envio.idEnvio, 'Fallido', resultado.error);
+    if (resultado.limite) {
+      detenido = 'Detenido: WhatsApp limitó el envío';
+    } else if (resultado.temporal) {
+      fallosSeguidos++;
+      if (fallosSeguidos >= 3) detenido = 'Detenido: WhatsApp desconectado';
+    } else {
+      fallosSeguidos = 0;
+    }
+  }
+}
 // ── Schemas ──────────────────────────────────────────────────────────────────
 const comunicadoSchema = z.object({
   titulo: z.string().min(3).max(150),
@@ -328,7 +437,6 @@ comunicadosRouter.get(
     }
   }
 );
-
 // ── POST /comunicados ────────────────────────────────────────────────────────
 comunicadosRouter.post(
   '/',
@@ -346,6 +454,19 @@ comunicadosRouter.post(
       }
 
       const { titulo, contenido, canalEnvio, destinatarios } = result.data;
+
+      const incluyeCorreo = canalEnvio === 'Correo' || canalEnvio === 'Ambos';
+      const incluyeWhatsapp = canalEnvio === 'WhatsApp' || canalEnvio === 'Ambos';
+
+      // Si pide WhatsApp y no hay número conectado, no se crea nada
+      if (incluyeWhatsapp && !whatsappService.estaConectado()) {
+        res.status(409).json({
+          error: 'Conflict',
+          message:
+            'WhatsApp no está conectado. Vincula el número desde el servidor o elige otro canal de envío.',
+        });
+        return;
+      }
 
       // Si no hay destinatarios específicos, obtener todas las personas
       let personasIds = destinatarios;
@@ -372,6 +493,7 @@ comunicadosRouter.post(
                 data: personasIds.map((idPersona) => ({
                   idPersona,
                   estadoEnvio: 'Pendiente',
+                  ...(incluyeWhatsapp ? { estadoWhatsapp: 'Pendiente' } : {}),
                 })),
               },
             },
@@ -396,8 +518,7 @@ comunicadosRouter.post(
 
       res.status(201).json(comunicado);
 
-      // Despacho de correos en segundo plano fuera de la transacción (US3.2 CA06)
-      const incluyeCorreo = canalEnvio === 'Correo' || canalEnvio === 'Ambos';
+      // Correos en segundo plano (US3.2 CA06)
       if (incluyeCorreo) {
         setImmediate(() => {
           despacharCorreosComunicado(comunicado.idComunicado, titulo, contenido).catch((err) => {
@@ -408,12 +529,18 @@ comunicadosRouter.post(
           });
         });
       }
+
+      // WhatsApp en segundo plano
+      if (incluyeWhatsapp) {
+        setImmediate(() => {
+          encolarWhatsapp(comunicado.idComunicado, titulo, contenido, canalEnvio === 'WhatsApp');
+        });
+      }
     } catch (err) {
       next(err);
     }
   }
 );
-
 // ── DELETE /comunicados/:id ──────────────────────────────────────────────────
 comunicadosRouter.delete(
   '/:id',
