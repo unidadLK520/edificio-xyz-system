@@ -93,6 +93,8 @@ export default function LoginPage() {
   const [errorMessage, setErrorMessage] = useState('')
   const [successMessage, setSuccessMessage] = useState('')
   const [showPassword, setShowPassword] = useState(false)
+  const [loginDisabled, setLoginDisabled] = useState(false)
+  const [countdown, setCountdown] = useState(0)
 
   const handleSelectRole = (role: UserRole) => {
     setSelectedRole(role)
@@ -111,6 +113,37 @@ export default function LoginPage() {
     if (savedEmail) setEmail(savedEmail)
     if (savedRole && ROLES_SISTEMA.some((r) => r.role === savedRole)) {
       setSelectedRole(savedRole)
+    }
+
+    // Check if user recently logged out
+    const logoutTime = localStorage.getItem('logout_timestamp')
+    if (logoutTime) {
+      const elapsed = Date.now() - parseInt(logoutTime)
+      const cooldownTime = 30000 // 30 seconds
+
+      if (elapsed < cooldownTime) {
+        setLoginDisabled(true)
+        const remaining = Math.ceil((cooldownTime - elapsed) / 1000)
+        setCountdown(remaining)
+
+        const interval = setInterval(() => {
+          const newElapsed = Date.now() - parseInt(logoutTime)
+          const newRemaining = Math.ceil((cooldownTime - newElapsed) / 1000)
+
+          if (newRemaining <= 0) {
+            setLoginDisabled(false)
+            setCountdown(0)
+            localStorage.removeItem('logout_timestamp')
+            clearInterval(interval)
+          } else {
+            setCountdown(newRemaining)
+          }
+        }, 1000)
+
+        return () => clearInterval(interval)
+      } else {
+        localStorage.removeItem('logout_timestamp')
+      }
     }
   }, [])
 
@@ -483,17 +516,51 @@ export default function LoginPage() {
 
           </form>
 
-{/* Botón iniciar sesión con Google */}
+{/* Separador elegante */}
+<div className="relative my-4">
+  <div className="absolute inset-0 flex items-center">
+    <div className="w-full border-t border-[#cec8bc] dark:border-slate-800" />
+  </div>
+  <div className="relative flex justify-center text-[11px] uppercase tracking-wider">
+    <span className="bg-[#ede9e1] dark:bg-slate-900 px-3 text-[#7d776f] dark:text-slate-400 font-medium">
+      o continúa con
+    </span>
+  </div>
+</div>
+
+{/* Botón iniciar sesión con Google con acabados redondeados y separación */}
 <button
   type="button"
-  onClick={() => signIn('google', { callbackUrl: '/' })}
-  className="flex w-full items-center justify-center gap-2 rounded-md bg-white px-4 py-2 text-sm font-medium text-gray-800 shadow-sm hover:bg-gray-50"
+  onClick={() => {
+    if (!loginDisabled) {
+      signIn('google', { callbackUrl: '/departamentos' })
+    }
+  }}
+  disabled={loginDisabled}
+  className={`w-full py-2.5 sm:py-3 px-4 rounded-xl border border-[#cec8bc] dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-750 text-[#262422] dark:text-white font-semibold text-xs sm:text-sm transition-all shadow-sm hover:shadow-md flex items-center justify-center gap-2.5 cursor-pointer ${
+    loginDisabled ? 'opacity-50 cursor-not-allowed' : ''
+  }`}
 >
-  {/* Google logo (simple SVG) */}
-  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" className="h-5 w-5">
-    <path fill="#EA4335" d="M12 11.5v3.5h5.2c-.2 1-1.4 3-5.2 3-3.1 0-5.6-2.5-5.6-5.6s2.5-5.6 5.6-5.6c1.8 0 3 .8 3.6 1.3l2.5-2.4C17.5 6.7 15 5.5 12 5.5 7 5.5 3 9.5 3 14.5s4 9 9 9c5 0 8.5-3.5 8.5-8.5 0-.6-.1-1.1-.2-1.5H12z"/>
+  {/* Google logo oficial SVG multicolor */}
+  <svg className="w-4 h-4 shrink-0" viewBox="0 0 24 24">
+    <path
+      fill="#4285F4"
+      d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v4.51h6.6c-.29 1.52-1.14 2.8-2.4 3.65v3.03h3.88c2.27-2.09 3.665-5.17 3.665-9.12z"
+    />
+    <path
+      fill="#34A853"
+      d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.88-3.03c-1.08.72-2.45 1.16-4.05 1.16-3.12 0-5.77-2.1-6.72-4.93H1.25v3.13C3.26 21.36 7.35 24 12 24z"
+    />
+    <path
+      fill="#FBBC05"
+      d="M5.28 14.29c-.25-.72-.38-1.49-.38-2.29s.13-1.57.38-2.29V6.57H1.25C.45 8.15 0 9.99 0 12s.45 3.85 1.25 5.43l4.03-3.14z"
+    />
+    <path
+      fill="#EA4335"
+      d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.35 0 3.26 2.64 1.25 6.57l4.03 3.14c.95-2.83 3.6-4.96 6.72-4.96z"
+    />
   </svg>
-  Iniciar sesión con Google
+  <span>{loginDisabled ? `Espere ${countdown}s...` : 'Iniciar sesión con Google'}</span>
 </button>
         </div>
       </div>

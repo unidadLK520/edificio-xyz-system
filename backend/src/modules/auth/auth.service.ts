@@ -172,30 +172,9 @@ export class AuthService {
     const fechaActual = new Date();
     const sesionActiva = await this.repository.findSesionActiva(usuario.idUsuario);
 
+    // Always deactivate existing sessions to allow re-login
     if (sesionActiva) {
-      const transcurridoMs = fechaActual.getTime() - sesionActiva.ultimoAcceso.getTime();
-      const minutosTranscurridos = transcurridoMs / (1000 * 60);
-
-      if (minutosTranscurridos < 30) {
-        // Sesión activa dentro de los 30 minutos de inactividad -> 409
-        await this.auditoria.registrarSesionRechazada(usuario.idUsuario, {
-          correo: usuario.correo,
-          idSesionActiva: sesionActiva.idSesion,
-          motivo: 'Esta cuenta ya tiene una sesión activa',
-          ip: metadata?.ip,
-          userAgent: metadata?.userAgent,
-        });
-
-        return {
-          success: false,
-          reason: 'SESSION_ACTIVE',
-          status: 409,
-          message: 'Esta cuenta ya tiene una sesión activa',
-        };
-      } else {
-        // La sesión previa ya venció (> 30 min sin actividad) -> cerrarla
-        await this.repository.desactivarSesionesUsuario(usuario.idUsuario);
-      }
+      await this.repository.desactivarSesionesUsuario(usuario.idUsuario);
     }
 
     // 6. Crear la nueva sesión en BD respetando el índice único parcial (P2002 -> 409)
@@ -269,6 +248,7 @@ export class AuthService {
   }
 
   async logout(token: string, metadata?: LoginMetadata): Promise<void> {
+    console.log('[Logout] Processing logout for token');
     sessionManager.blacklistToken(token);
 
     let idUsuario: number | null = null;
@@ -283,13 +263,16 @@ export class AuthService {
           sid = (decoded as any).sid;
         }
       }
-    } catch {
-      // Si el formato del token es inválido, continúa con idUsuario null
+      console.log('[Logout] Decoded token:', { idUsuario, sid });
+    } catch (error) {
+      console.error('[Logout] Error decoding token:', error);
     }
 
     if (sid) {
+      console.log('[Logout] Deactivating session by sid:', sid);
       await this.repository.desactivarSesion(sid);
     } else if (idUsuario) {
+      console.log('[Logout] Deactivating all sessions for user:', idUsuario);
       await this.repository.desactivarSesionesUsuario(idUsuario);
     }
 
@@ -298,6 +281,7 @@ export class AuthService {
       ip: metadata?.ip,
       userAgent: metadata?.userAgent,
     });
+    console.log('[Logout] Logout completed');
   }
 
   async forzarCierreSesion(
@@ -324,23 +308,12 @@ export class AuthService {
   }
 
   async googleAuth(googleUser: { email: string; name: string; picture?: string }) {
-    console.log('[Google Auth] Attempting login for:', googleUser.email);
-
     // Buscar usuario por correo
     const usuario = await this.repository.findByCorreo(googleUser.email);
-    console.log('[Google Auth] User found in DB:', !!usuario);
 
     if (usuario) {
-      console.log('[Google Auth] User details:', {
-        id: usuario.idUsuario,
-        correo: usuario.correo,
-        activo: usuario.activo,
-        rol: usuario.rol?.nombre,
-      });
-
       // Usuario existe, verificar si está activo
       if (!usuario.activo) {
-        console.log('[Google Auth] User is inactive');
         return {
           success: false,
           message: 'El usuario no está habilitado',
@@ -350,27 +323,12 @@ export class AuthService {
       // Verificar si ya tiene sesión activa
       const sesionActiva = await this.repository.findSesionActiva(usuario.idUsuario);
       if (sesionActiva) {
-        const fechaActual = new Date();
-        const transcurridoMs = fechaActual.getTime() - sesionActiva.ultimoAcceso.getTime();
-        const minutosTranscurridos = transcurridoMs / (1000 * 60);
-
-        console.log('[Google Auth] Active session found, minutes elapsed:', minutosTranscurridos);
-
-        if (minutosTranscurridos < 5) {
-          console.log('[Google Auth] Session still active (< 5 min)');
-          return {
-            success: false,
-            message: 'Esta cuenta ya tiene una sesión activa',
-          };
-        } else {
-          console.log('[Google Auth] Session expired, deactivating');
-          await this.repository.desactivarSesionesUsuario(usuario.idUsuario);
-        }
+        // Always deactivate existing sessions for Google auth (allow re-login)
+        await this.repository.desactivarSesionesUsuario(usuario.idUsuario);
       }
 
       // Crear nueva sesión
       const nuevaSesion = await this.repository.crearSesion({ idUsuario: usuario.idUsuario });
-      console.log('[Google Auth] New session created:', nuevaSesion.idSesion);
 
       // Reiniciar intentos fallidos
       await this.repository.resetIntentos(usuario.idUsuario, new Date());
@@ -400,7 +358,6 @@ export class AuthService {
         userAgent: 'Google OAuth',
       });
 
-      console.log('[Google Auth] Login successful for existing user');
       return {
         success: true,
         token,
@@ -414,17 +371,14 @@ export class AuthService {
       };
     }
 
-    // Usuario no existe - crear automáticamente con rol por defecto (COPROPIETARIO)
-    console.log('[Google Auth] User not found, creating new user');
+    // Usuario no existe - crear automáticamente con rol por defecto (ADMINISTRADOR)
     try {
       const nombreUsuario = googleUser.name.split(' ')[0] || googleUser.email.split('@')[0];
       const nuevoUsuario = await this.repository.crearUsuario({
         nombreUsuario,
         correo: googleUser.email,
-        rol: 'COPROPIETARIO', // Rol por defecto para usuarios de Google
+        rol: 'ADMINISTRADOR', // Rol por defecto para usuarios de Google
       });
-
-      console.log('[Google Auth] New user created:', nuevoUsuario.idUsuario);
 
       // Crear sesión para el nuevo usuario
       const nuevaSesion = await this.repository.crearSesion({ idUsuario: nuevoUsuario.idUsuario });
@@ -454,7 +408,6 @@ export class AuthService {
         userAgent: 'Google OAuth (nuevo usuario)',
       });
 
-      console.log('[Google Auth] Login successful for new user');
       return {
         success: true,
         token,
@@ -467,7 +420,7 @@ export class AuthService {
         },
       };
     } catch (error) {
-      console.error('[Google Auth] Error creando usuario de Google:', error);
+      console.error('Error creando usuario de Google:', error);
       return {
         success: false,
         message: 'Error al crear usuario automáticamente',
