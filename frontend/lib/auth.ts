@@ -3,6 +3,8 @@
 
 import { SignJWT, jwtVerify } from 'jose'
 import { cookies } from 'next/headers'
+import { getServerSession } from 'next-auth'
+import { authOptions } from '@/app/api/auth/[...nextauth]/route'
 
 const jwtSecretEnv = process.env.JWT_SECRET
 
@@ -40,7 +42,29 @@ export async function verifySessionToken(token: string): Promise<JWTPayload | nu
 
 export async function getSession(): Promise<JWTPayload | null> {
   const cookieStore = await cookies()
+
+  // Primero intentar con el token del backend (auth_token)
   const token = cookieStore.get('auth_token')?.value
-  if (!token) return null
-  return verifySessionToken(token)
+  if (token) {
+    const session = verifySessionToken(token)
+    if (session) return session
+  }
+
+  // Si no hay token del backend, intentar con NextAuth
+  try {
+    const nextAuthSession = await getServerSession(authOptions)
+    if (nextAuthSession?.user?.email) {
+      // Crear un payload compatible desde la sesión de NextAuth
+      return {
+        idUsuario: 1, // ID temporal para usuarios de Google
+        nombreUsuario: nextAuthSession.user.name || 'Usuario',
+        correo: nextAuthSession.user.email,
+        rol: 'ADMINISTRADOR' // Rol por defecto para usuarios de Google
+      }
+    }
+  } catch (error) {
+    // Silenciar error en verificación de NextAuth
+  }
+
+  return null
 }

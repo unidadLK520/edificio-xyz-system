@@ -76,8 +76,18 @@ export function FechaSistemaProvider({ children }: { children: React.ReactNode }
   })
 
   useEffect(() => {
-    if (typeof window !== 'undefined' && window.location.pathname.startsWith('/login')) {
-      return
+    if (typeof window !== 'undefined') {
+      if (window.location.pathname.startsWith('/login')) {
+        return
+      }
+      const hasToken =
+        localStorage.getItem('auth_token') ||
+        document.cookie
+          .split('; ')
+          .find((row) => row.startsWith('auth_token='))
+      if (!hasToken) {
+        return
+      }
     }
     let isMounted = true
       ; (async () => {

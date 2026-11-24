@@ -100,6 +100,31 @@ export class AuthRepository {
       data: { ultimoAcceso: fecha },
     });
   }
+
+  async crearUsuario(data: { nombreUsuario: string; correo: string; rol: string }) {
+    // Buscar el rol por nombre
+    const rol = await prisma.rol.findUnique({
+      where: { nombre: data.rol },
+    });
+
+    if (!rol) {
+      throw new Error(`Rol ${data.rol} no encontrado`);
+    }
+
+    // Crear el usuario sin contraseña (Google auth no requiere password)
+    return prisma.usuario.create({
+      data: {
+        nombreUsuario: data.nombreUsuario,
+        correo: data.correo,
+        passwordHash: '', // Sin contraseña para usuarios de Google
+        idRol: rol.idRol,
+        activo: true,
+        fechaCreacion: new Date(),
+        intentosFallidos: 0,
+      },
+      include: { rol: true },
+    });
+  }
 }
 
 export const authRepository = new AuthRepository();

@@ -172,30 +172,9 @@ export class AuthService {
     const fechaActual = new Date();
     const sesionActiva = await this.repository.findSesionActiva(usuario.idUsuario);
 
+    // Always deactivate existing sessions to allow re-login
     if (sesionActiva) {
-      const transcurridoMs = fechaActual.getTime() - sesionActiva.ultimoAcceso.getTime();
-      const minutosTranscurridos = transcurridoMs / (1000 * 60);
-
-      if (minutosTranscurridos < 30) {
-        // Sesión activa dentro de los 30 minutos de inactividad -> 409
-        await this.auditoria.registrarSesionRechazada(usuario.idUsuario, {
-          correo: usuario.correo,
-          idSesionActiva: sesionActiva.idSesion,
-          motivo: 'Esta cuenta ya tiene una sesión activa',
-          ip: metadata?.ip,
-          userAgent: metadata?.userAgent,
-        });
-
-        return {
-          success: false,
-          reason: 'SESSION_ACTIVE',
-          status: 409,
-          message: 'Esta cuenta ya tiene una sesión activa',
-        };
-      } else {
-        // La sesión previa ya venció (> 30 min sin actividad) -> cerrarla
-        await this.repository.desactivarSesionesUsuario(usuario.idUsuario);
-      }
+      await this.repository.desactivarSesionesUsuario(usuario.idUsuario);
     }
 
     // 6. Crear la nueva sesión en BD respetando el índice único parcial (P2002 -> 409)
@@ -269,6 +248,7 @@ export class AuthService {
   }
 
   async logout(token: string, metadata?: LoginMetadata): Promise<void> {
+    console.log('[Logout] Processing logout for token');
     sessionManager.blacklistToken(token);
 
     let idUsuario: number | null = null;
@@ -283,13 +263,16 @@ export class AuthService {
           sid = (decoded as any).sid;
         }
       }
-    } catch {
-      // Si el formato del token es inválido, continúa con idUsuario null
+      console.log('[Logout] Decoded token:', { idUsuario, sid });
+    } catch (error) {
+      console.error('[Logout] Error decoding token:', error);
     }
 
     if (sid) {
+      console.log('[Logout] Deactivating session by sid:', sid);
       await this.repository.desactivarSesion(sid);
     } else if (idUsuario) {
+      console.log('[Logout] Deactivating all sessions for user:', idUsuario);
       await this.repository.desactivarSesionesUsuario(idUsuario);
     }
 
@@ -298,6 +281,7 @@ export class AuthService {
       ip: metadata?.ip,
       userAgent: metadata?.userAgent,
     });
+    console.log('[Logout] Logout completed');
   }
 
   async forzarCierreSesion(
@@ -321,6 +305,127 @@ export class AuthService {
 
   async getMe(idUsuario: number) {
     return this.repository.findById(idUsuario);
+  }
+
+  async googleAuth(googleUser: { email: string; name: string; picture?: string }) {
+    // Buscar usuario por correo
+    const usuario = await this.repository.findByCorreo(googleUser.email);
+
+    if (usuario) {
+      // Usuario existe, verificar si está activo
+      if (!usuario.activo) {
+        return {
+          success: false,
+          message: 'El usuario no está habilitado',
+        };
+      }
+
+      // Verificar si ya tiene sesión activa
+      const sesionActiva = await this.repository.findSesionActiva(usuario.idUsuario);
+      if (sesionActiva) {
+        // Always deactivate existing sessions for Google auth (allow re-login)
+        await this.repository.desactivarSesionesUsuario(usuario.idUsuario);
+      }
+
+      // Crear nueva sesión
+      const nuevaSesion = await this.repository.crearSesion({ idUsuario: usuario.idUsuario });
+
+      // Reiniciar intentos fallidos
+      await this.repository.resetIntentos(usuario.idUsuario, new Date());
+
+      // Generar JWT
+      const token = await new SignJWT({
+        idUsuario: usuario.idUsuario,
+        nombreUsuario: usuario.nombreUsuario,
+        correo: usuario.correo,
+        rol: usuario.rol.nombre,
+        idRol: usuario.idRol,
+        sid: nuevaSesion.idSesion,
+      })
+        .setProtectedHeader({ alg: 'HS256' })
+        .setIssuedAt()
+        .setExpirationTime('8h')
+        .sign(config.jwtSecret);
+
+      // Registrar actividad
+      sessionManager.recordActivity(token);
+
+      // Registrar auditoría
+      await this.auditoria.registrarLoginExitoso(usuario.idUsuario, {
+        correo: usuario.correo,
+        rol: usuario.rol.nombre,
+        ip: '0.0.0.0', // Google auth no tiene IP del cliente
+        userAgent: 'Google OAuth',
+      });
+
+      return {
+        success: true,
+        token,
+        usuario: {
+          idUsuario: usuario.idUsuario,
+          nombreUsuario: usuario.nombreUsuario,
+          correo: usuario.correo,
+          rol: usuario.rol.nombre,
+          ultimoAcceso: new Date(),
+        },
+      };
+    }
+
+    // Usuario no existe - crear automáticamente con rol por defecto (ADMINISTRADOR)
+    try {
+      const nombreUsuario = googleUser.name.split(' ')[0] || googleUser.email.split('@')[0];
+      const nuevoUsuario = await this.repository.crearUsuario({
+        nombreUsuario,
+        correo: googleUser.email,
+        rol: 'ADMINISTRADOR', // Rol por defecto para usuarios de Google
+      });
+
+      // Crear sesión para el nuevo usuario
+      const nuevaSesion = await this.repository.crearSesion({ idUsuario: nuevoUsuario.idUsuario });
+
+      // Generar JWT
+      const token = await new SignJWT({
+        idUsuario: nuevoUsuario.idUsuario,
+        nombreUsuario: nuevoUsuario.nombreUsuario,
+        correo: nuevoUsuario.correo,
+        rol: nuevoUsuario.rol.nombre,
+        idRol: nuevoUsuario.idRol,
+        sid: nuevaSesion.idSesion,
+      })
+        .setProtectedHeader({ alg: 'HS256' })
+        .setIssuedAt()
+        .setExpirationTime('8h')
+        .sign(config.jwtSecret);
+
+      // Registrar actividad
+      sessionManager.recordActivity(token);
+
+      // Registrar auditoría de creación y login
+      await this.auditoria.registrarLoginExitoso(nuevoUsuario.idUsuario, {
+        correo: nuevoUsuario.correo,
+        rol: nuevoUsuario.rol.nombre,
+        ip: '0.0.0.0',
+        userAgent: 'Google OAuth (nuevo usuario)',
+      });
+
+      return {
+        success: true,
+        token,
+        usuario: {
+          idUsuario: nuevoUsuario.idUsuario,
+          nombreUsuario: nuevoUsuario.nombreUsuario,
+          correo: nuevoUsuario.correo,
+          rol: nuevoUsuario.rol.nombre,
+          ultimoAcceso: new Date(),
+        },
+      };
+    } catch (error) {
+      console.error('Error creando usuario de Google:', error);
+      return {
+        success: false,
+        message: 'Error al crear usuario automáticamente',
+      };
+    }
   }
 }
 
