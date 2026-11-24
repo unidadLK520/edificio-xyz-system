@@ -92,8 +92,7 @@ export interface ComunicadoItem {
   resumenEnvios?: ResumenEnvios
 }
 
-// ── Enlaces directos wa.me y generarUrlWhatsApp retirados (Requisito: envíos vía API oficial) ──
-
+// Enlaces wa.me retirados: el envío por WhatsApp lo hace el backend
 // ── Plantillas Rápidas Amigables para Edificio XYZ (Requisito 8) ───────────────
 interface PlantillaComunicado {
   id: string
@@ -316,7 +315,7 @@ export default function ComunicadosAmigablesPage() {
             }
           }
         }
-      } catch {}
+      } catch { }
     }, 4000)
   }, [detenerPolling])
 
@@ -367,7 +366,7 @@ export default function ComunicadosAmigablesPage() {
           setActiveTab('enviados')
         }
       }
-    } catch {}
+    } catch { }
   }, [])
 
   const showToast = (msg: string) => {
@@ -454,7 +453,7 @@ export default function ComunicadosAmigablesPage() {
           setPersonas(mapped)
         }
       }
-    } catch {}
+    } catch { }
   }, [])
 
   useEffect(() => {
@@ -708,7 +707,7 @@ export default function ComunicadosAmigablesPage() {
   }, [comunicados, searchTerm, filtroCategoria])
 
   // Eliminar comunicado con validación de rol (Requisito 4)
-  
+
   const handleGuardarEdicionComunicado = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!comunicadoAEditar) return
@@ -807,18 +806,16 @@ export default function ComunicadosAmigablesPage() {
           <button
             type="button"
             onClick={() => setActiveTab('elaborar')}
-            className={`flex items-center gap-3 p-3.5 rounded-2xl border text-left transition-all cursor-pointer ${
-              activeTab === 'elaborar'
+            className={`flex items-center gap-3 p-3.5 rounded-2xl border text-left transition-all cursor-pointer ${activeTab === 'elaborar'
                 ? 'bg-blue-700 text-white border-blue-600 shadow-lg shadow-blue-900/20 ring-2 ring-blue-500/30'
                 : 'bg-[#ede9e1] hover:bg-[#e4ded3] dark:bg-slate-900 dark:hover:bg-slate-800/80 text-[#5c5750] dark:text-slate-400 border-[#cec8bc] dark:border-slate-800'
-            }`}
+              }`}
           >
             <div
-              className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
-                activeTab === 'elaborar'
+              className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${activeTab === 'elaborar'
                   ? 'bg-white/20 text-white'
                   : 'bg-blue-100 text-blue-800 dark:bg-slate-800 dark:text-blue-400'
-              }`}
+                }`}
             >
               <PenSquare className="w-5 h-5" />
             </div>
@@ -827,9 +824,8 @@ export default function ComunicadosAmigablesPage() {
                 1. Escribir Nuevo Aviso
               </div>
               <div
-                className={`text-[11px] truncate ${
-                  activeTab === 'elaborar' ? 'text-blue-100' : 'text-[#7d776f]'
-                }`}
+                className={`text-[11px] truncate ${activeTab === 'elaborar' ? 'text-blue-100' : 'text-[#7d776f]'
+                  }`}
               >
                 UI Elaboración Comunicados
               </div>
@@ -840,18 +836,16 @@ export default function ComunicadosAmigablesPage() {
         <button
           type="button"
           onClick={() => setActiveTab('enviados')}
-          className={`flex items-center gap-3 p-3.5 rounded-2xl border text-left transition-all cursor-pointer ${
-            activeTab === 'enviados'
+          className={`flex items-center gap-3 p-3.5 rounded-2xl border text-left transition-all cursor-pointer ${activeTab === 'enviados'
               ? 'bg-blue-700 text-white border-blue-600 shadow-lg shadow-blue-900/20 ring-2 ring-blue-500/30'
               : 'bg-[#ede9e1] hover:bg-[#e4ded3] dark:bg-slate-900 dark:hover:bg-slate-800/80 text-[#5c5750] dark:text-slate-400 border-[#cec8bc] dark:border-slate-800'
-          }`}
+            }`}
         >
           <div
-            className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
-              activeTab === 'enviados'
+            className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${activeTab === 'enviados'
                 ? 'bg-white/20 text-white'
                 : 'bg-blue-100 text-blue-800 dark:bg-slate-800 dark:text-blue-400'
-            }`}
+              }`}
           >
             <Users className="w-5 h-5" />
           </div>
@@ -861,19 +855,17 @@ export default function ComunicadosAmigablesPage() {
                 2. Avisos Enviados
               </span>
               <span
-                className={`text-[10px] font-bold px-1.5 py-0.5 rounded-md ${
-                  activeTab === 'enviados'
+                className={`text-[10px] font-bold px-1.5 py-0.5 rounded-md ${activeTab === 'enviados'
                     ? 'bg-white/20 text-white'
                     : 'bg-blue-100 text-blue-900 dark:bg-slate-800 dark:text-blue-300'
-                }`}
+                  }`}
               >
                 {comunicados.length}
               </span>
             </div>
             <div
-              className={`text-[11px] truncate ${
-                activeTab === 'enviados' ? 'text-blue-100' : 'text-[#7d776f]'
-              }`}
+              className={`text-[11px] truncate ${activeTab === 'enviados' ? 'text-blue-100' : 'text-[#7d776f]'
+                }`}
             >
               Supervisión de entregas y estados
             </div>
@@ -883,18 +875,16 @@ export default function ComunicadosAmigablesPage() {
         <button
           type="button"
           onClick={() => setActiveTab('cartelera')}
-          className={`flex items-center gap-3 p-3.5 rounded-2xl border text-left transition-all cursor-pointer ${
-            activeTab === 'cartelera'
+          className={`flex items-center gap-3 p-3.5 rounded-2xl border text-left transition-all cursor-pointer ${activeTab === 'cartelera'
               ? 'bg-blue-700 text-white border-blue-600 shadow-lg shadow-blue-900/20 ring-2 ring-blue-500/30'
               : 'bg-[#ede9e1] hover:bg-[#e4ded3] dark:bg-slate-900 dark:hover:bg-slate-800/80 text-[#5c5750] dark:text-slate-400 border-[#cec8bc] dark:border-slate-800'
-          }`}
+            }`}
         >
           <div
-            className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
-              activeTab === 'cartelera'
+            className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${activeTab === 'cartelera'
                 ? 'bg-white/20 text-white'
                 : 'bg-emerald-100 text-emerald-800 dark:bg-slate-800 dark:text-emerald-400'
-            }`}
+              }`}
           >
             <Megaphone className="w-5 h-5" />
           </div>
@@ -903,9 +893,8 @@ export default function ComunicadosAmigablesPage() {
               3. Cartelera Vecinos
             </div>
             <div
-              className={`text-[11px] truncate ${
-                activeTab === 'cartelera' ? 'text-blue-100' : 'text-[#7d776f]'
-              }`}
+              className={`text-[11px] truncate ${activeTab === 'cartelera' ? 'text-blue-100' : 'text-[#7d776f]'
+                }`}
             >
               Vista pública de circulares
             </div>
@@ -1051,11 +1040,10 @@ export default function ComunicadosAmigablesPage() {
                   <button
                     type="button"
                     onClick={() => setFormCanal('Ambos')}
-                    className={`p-3 rounded-2xl border text-left flex items-center gap-3 transition-all cursor-pointer ${
-                      formCanal === 'Ambos'
+                    className={`p-3 rounded-2xl border text-left flex items-center gap-3 transition-all cursor-pointer ${formCanal === 'Ambos'
                         ? 'bg-blue-700 text-white border-blue-600 shadow-md ring-2 ring-blue-500/20'
                         : 'bg-[#dfd9ce] hover:bg-[#d5cfc2] dark:bg-slate-800 dark:hover:bg-slate-700 text-[#262422] dark:text-white border-[#cec8bc] dark:border-slate-700'
-                    }`}
+                      }`}
                   >
                     <div className="w-9 h-9 rounded-xl bg-purple-100 text-purple-700 flex items-center justify-center shrink-0">
                       <Share2 className="w-5 h-5" />
@@ -1068,11 +1056,10 @@ export default function ComunicadosAmigablesPage() {
                   <button
                     type="button"
                     onClick={() => setFormCanal('WhatsApp')}
-                    className={`p-3 rounded-2xl border text-left flex items-center gap-3 transition-all cursor-pointer ${
-                      formCanal === 'WhatsApp'
+                    className={`p-3 rounded-2xl border text-left flex items-center gap-3 transition-all cursor-pointer ${formCanal === 'WhatsApp'
                         ? 'bg-emerald-700 text-white border-emerald-600 shadow-md ring-2 ring-emerald-500/20'
                         : 'bg-[#dfd9ce] hover:bg-[#d5cfc2] dark:bg-slate-800 dark:hover:bg-slate-700 text-[#262422] dark:text-white border-[#cec8bc] dark:border-slate-700'
-                    }`}
+                      }`}
                   >
                     <div className="w-9 h-9 rounded-xl bg-emerald-100 text-emerald-700 flex items-center justify-center shrink-0">
                       <Phone className="w-5 h-5" />
@@ -1085,11 +1072,10 @@ export default function ComunicadosAmigablesPage() {
                   <button
                     type="button"
                     onClick={() => setFormCanal('Correo')}
-                    className={`p-3 rounded-2xl border text-left flex items-center gap-3 transition-all cursor-pointer ${
-                      formCanal === 'Correo'
+                    className={`p-3 rounded-2xl border text-left flex items-center gap-3 transition-all cursor-pointer ${formCanal === 'Correo'
                         ? 'bg-blue-700 text-white border-blue-600 shadow-md ring-2 ring-blue-500/20'
                         : 'bg-[#dfd9ce] hover:bg-[#d5cfc2] dark:bg-slate-800 dark:hover:bg-slate-700 text-[#262422] dark:text-white border-[#cec8bc] dark:border-slate-700'
-                    }`}
+                      }`}
                   >
                     <div className="w-9 h-9 rounded-xl bg-blue-100 text-blue-700 flex items-center justify-center shrink-0">
                       <Mail className="w-5 h-5" />
@@ -1116,11 +1102,10 @@ export default function ComunicadosAmigablesPage() {
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
                   <label
                     onClick={() => setFormTipoDestinatarios('todos')}
-                    className={`flex items-center gap-2.5 p-3 rounded-xl border cursor-pointer font-bold ${
-                      formTipoDestinatarios === 'todos'
+                    className={`flex items-center gap-2.5 p-3 rounded-xl border cursor-pointer font-bold ${formTipoDestinatarios === 'todos'
                         ? 'bg-blue-100 border-blue-500 text-blue-900 dark:bg-blue-950 dark:text-blue-200'
                         : 'bg-[#dfd9ce] border-[#cec8bc] dark:bg-slate-800 dark:border-slate-700'
-                    }`}
+                      }`}
                   >
                     <input
                       type="radio"
@@ -1136,11 +1121,10 @@ export default function ComunicadosAmigablesPage() {
 
                   <label
                     onClick={() => setFormTipoDestinatarios('seleccion')}
-                    className={`flex items-center gap-2.5 p-3 rounded-xl border cursor-pointer font-bold ${
-                      formTipoDestinatarios === 'seleccion'
+                    className={`flex items-center gap-2.5 p-3 rounded-xl border cursor-pointer font-bold ${formTipoDestinatarios === 'seleccion'
                         ? 'bg-blue-100 border-blue-500 text-blue-900 dark:bg-blue-950 dark:text-blue-200'
                         : 'bg-[#dfd9ce] border-[#cec8bc] dark:bg-slate-800 dark:border-slate-700'
-                    }`}
+                      }`}
                   >
                     <input
                       type="radio"
@@ -1175,11 +1159,10 @@ export default function ComunicadosAmigablesPage() {
                           return (
                             <label
                               key={p.idPersona}
-                              className={`flex items-center justify-between p-2 rounded-xl text-xs cursor-pointer transition-colors ${
-                                checked
+                              className={`flex items-center justify-between p-2 rounded-xl text-xs cursor-pointer transition-colors ${checked
                                   ? 'bg-blue-100 dark:bg-blue-950/60 text-blue-900 dark:text-blue-200'
                                   : 'hover:bg-[#dfd9ce] dark:hover:bg-slate-800'
-                              }`}
+                                }`}
                             >
                               <div className="flex items-center gap-2.5">
                                 <input
@@ -1875,7 +1858,7 @@ export default function ComunicadosAmigablesPage() {
         </div>
       )}
 
-      
+
       {/* MODAL DE EDICIÓN DE COMUNICADO */}
       {comunicadoAEditar && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in duration-200">
