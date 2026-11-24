@@ -20,6 +20,7 @@ import {
 import {
   whatsappService,
   normalizarTelefono,
+  numeroPermitido,
   construirMensajeWhatsapp,
   leerPausaMs,
   dormir,
@@ -32,11 +33,15 @@ comunicadosRouter.use(authMiddleware);
 async function despacharCorreosComunicado(
   idComunicado: number,
   titulo: string,
-  contenido: string
+  contenido: string,
+  idEnvios?: number[]
 ): Promise<void> {
   try {
     const envios = await prisma.comunicadoEnvio.findMany({
-      where: { idComunicado },
+      where: {
+        idComunicado,
+        ...(idEnvios ? { idEnvio: { in: idEnvios }, estadoEnvio: 'Pendiente' } : {}),
+      },
       include: {
         persona: {
           select: {
@@ -141,10 +146,13 @@ function encolarWhatsapp(
   idComunicado: number,
   titulo: string,
   contenido: string,
-  soloWhatsapp: boolean
+  soloWhatsapp: boolean,
+  idEnvios?: number[]
 ): void {
   colaWhatsapp = colaWhatsapp
-    .then(() => despacharWhatsappComunicado(idComunicado, titulo, contenido, soloWhatsapp))
+    .then(() =>
+      despacharWhatsappComunicado(idComunicado, titulo, contenido, soloWhatsapp, idEnvios)
+    )
     .catch((err: any) => {
       console.error('[COMUNICADOS] Error en la cola de WhatsApp:', err?.message || err);
     });
@@ -154,16 +162,20 @@ async function despacharWhatsappComunicado(
   idComunicado: number,
   titulo: string,
   contenido: string,
-  soloWhatsapp: boolean
+  soloWhatsapp: boolean,
+  idEnvios?: number[]
 ): Promise<void> {
   const envios = await prisma.comunicadoEnvio.findMany({
-    where: { idComunicado, estadoWhatsapp: 'Pendiente' },
+    where: {
+      idComunicado,
+      estadoWhatsapp: 'Pendiente',
+      ...(idEnvios ? { idEnvio: { in: idEnvios } } : {}),
+    },
     orderBy: { idEnvio: 'asc' },
     include: { persona: { select: { telefono: true } } },
   });
 
   const mensaje = construirMensajeWhatsapp(titulo, contenido);
-  const vistos = new Set<string>();
   let intentados = 0;
   let fallosSeguidos = 0;
   let detenido: string | null = null;
@@ -203,11 +215,10 @@ async function despacharWhatsappComunicado(
       await marcar(envio.idEnvio, 'Omitido', 'Sin teléfono válido');
       continue;
     }
-    if (vistos.has(tel)) {
-      await marcar(envio.idEnvio, 'Omitido', 'Número repetido en este comunicado');
+    if (!numeroPermitido(tel)) {
+      await marcar(envio.idEnvio, 'Omitido', 'Modo prueba: número no autorizado');
       continue;
     }
-    vistos.add(tel);
 
     if (intentados > 0) await dormir(leerPausaMs());
     intentados++;
@@ -579,6 +590,108 @@ comunicadosRouter.delete(
       }, FINANZAS_TX_OPTIONS);
 
       res.status(204).send();
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+// ── POST /comunicados/:id/reenviar ───────────────────────────────────────────
+// Reenvía por un canal a personas concretas (idEnvios) o, si se omite, a los que fallaron.
+const reenviarSchema = z.object({
+  canal: z.enum(['Correo', 'WhatsApp']),
+  idEnvios: z.array(z.number().int().positive()).min(1).max(500).optional(),
+});
+
+comunicadosRouter.post(
+  '/:id/reenviar',
+  authorizeRoles('Administrador'),
+  async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const id = parseInt(req.params.id);
+      if (isNaN(id)) {
+        res.status(400).json({ error: 'Bad Request', message: 'ID inválido' });
+        return;
+      }
+      const parsed = reenviarSchema.safeParse(req.body);
+      if (!parsed.success) {
+        res.status(400).json({ error: 'Validation Error', message: 'Datos inválidos' });
+        return;
+      }
+      const { canal, idEnvios } = parsed.data;
+
+      const comunicado = await prisma.comunicado.findUnique({ where: { idComunicado: id } });
+      if (!comunicado) {
+        res.status(404).json({ error: 'Not Found', message: 'Comunicado no encontrado' });
+        return;
+      }
+
+      const permiteCorreo = comunicado.canalEnvio === 'Correo' || comunicado.canalEnvio === 'Ambos';
+      const permiteWhatsapp =
+        comunicado.canalEnvio === 'WhatsApp' || comunicado.canalEnvio === 'Ambos';
+      if ((canal === 'Correo' && !permiteCorreo) || (canal === 'WhatsApp' && !permiteWhatsapp)) {
+        res.status(409).json({
+          error: 'Conflict',
+          message: 'Este comunicado no se creó con ese canal de envío',
+        });
+        return;
+      }
+      if (canal === 'WhatsApp' && !whatsappService.estaConectado()) {
+        res.status(409).json({ error: 'Conflict', message: 'WhatsApp no está conectado' });
+        return;
+      }
+
+      const filtroFallidos =
+        canal === 'Correo' ? { estadoEnvio: 'Fallido' } : { estadoWhatsapp: 'Fallido' };
+      const objetivos = await prisma.comunicadoEnvio.findMany({
+        where: {
+          idComunicado: id,
+          ...(idEnvios ? { idEnvio: { in: idEnvios } } : filtroFallidos),
+        },
+        select: { idEnvio: true },
+      });
+      const ids = objetivos.map((o) => o.idEnvio);
+      if (ids.length === 0) {
+        res.json({ reenviados: 0 });
+        return;
+      }
+
+      const soloWhatsapp = comunicado.canalEnvio === 'WhatsApp';
+      await prisma.comunicadoEnvio.updateMany({
+        where: { idEnvio: { in: ids } },
+        data:
+          canal === 'Correo'
+            ? { estadoEnvio: 'Pendiente', fechaEnvio: null }
+            : {
+              estadoWhatsapp: 'Pendiente',
+              fechaEnvioWhatsapp: null,
+              errorWhatsapp: null,
+              ...(soloWhatsapp ? { estadoEnvio: 'Pendiente', fechaEnvio: null } : {}),
+            },
+      });
+
+      await auditoriaService.registrarEvento({
+        tablaAfectada: 'comunicados',
+        idRegistro: id.toString(),
+        accion: 'REENVIAR_COMUNICADO',
+        resultado: 'EXITO',
+        datosNuevos: { canal, cantidad: ids.length },
+        idUsuario: req.user?.idUsuario ?? null,
+      });
+
+      res.json({ reenviados: ids.length });
+
+      setImmediate(() => {
+        if (canal === 'Correo') {
+          despacharCorreosComunicado(id, comunicado.titulo, comunicado.contenido, ids).catch(
+            (err) => {
+              console.error('[COMUNICADOS] Error al reenviar correos:', err?.message || err);
+            }
+          );
+        } else {
+          encolarWhatsapp(id, comunicado.titulo, comunicado.contenido, soloWhatsapp, ids);
+        }
+      });
     } catch (err) {
       next(err);
     }

@@ -35,3 +35,16 @@ export function leerPausaMs(): number {
 export function dormir(ms: number): Promise<void> {
     return new Promise((resolve) => setTimeout(resolve, ms));
 }
+
+/**
+ * Seguro de envío. Por defecto (WHATSAPP_MODE sin definir o distinto de 'real') solo se
+ * envía a los números de WHATSAPP_TEST_NUMBERS (separados por coma). Con 'real' se envía a todos.
+ */
+export function numeroPermitido(tel: string): boolean {
+    if ((process.env.WHATSAPP_MODE || '').trim().toLowerCase() === 'real') return true;
+    const lista = (process.env.WHATSAPP_TEST_NUMBERS || '')
+        .split(',')
+        .map((s) => normalizarTelefono(s.trim()))
+        .filter((x): x is string => !!x);
+    return lista.includes(tel);
+}
