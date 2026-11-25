@@ -21,6 +21,7 @@ import { cuentasBancariasRouter } from './cuentas-bancarias.routes';
 import { movimientosBancariosRouter } from './movimientos-bancarios.routes';
 import { conciliacionRouter } from './conciliacion.routes';
 import { cobroRouter } from './cobro.routes';
+import { whatsappRouter } from './whatsapp.routes';
 
 export const router: IRouter = Router();
 
@@ -46,6 +47,7 @@ router.use('/personal', personalRouter);
 router.use('/auditoria', auditoriaRouter);
 router.use('/agua', aguaRouter);
 router.use('/cobro', cobroRouter);
+router.use('/whatsapp', whatsappRouter);
 
 
 

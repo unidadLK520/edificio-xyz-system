@@ -8,6 +8,7 @@ import { config } from './config';
 import { router } from './routes';
 import { errorMiddleware } from './middlewares/error.middleware';
 import { iniciarCronMora, iniciarCronAutogenExpensas } from './modules/expensas';
+import { whatsappService } from './modules/whatsapp';
 
 const app: Application = express();
 
@@ -96,6 +97,17 @@ if (process.env.NODE_ENV !== 'test') {
 
   // Iniciar tarea programada de autogeneración de expensas
   iniciarCronAutogenExpensas();
+  // Reconectar WhatsApp si ya hay un número vinculado (solo si WHATSAPP_PROVIDER=baileys)
+  void whatsappService.iniciar();
+
+  // Cierre ordenado: guarda la sesión de WhatsApp antes de apagar el servidor
+  process.on('SIGTERM', () => {
+    const forzar = setTimeout(() => process.exit(0), 8000);
+    whatsappService.detener().finally(() => {
+      clearTimeout(forzar);
+      process.exit(0);
+    });
+  });
 }
 
 export { app };
