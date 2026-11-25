@@ -86,3 +86,29 @@ whatsappRouter.delete(
         }
     }
 );
+
+whatsappRouter.post(
+    '/reconectar',
+    async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
+        try {
+            try {
+                await whatsappService.reconectar();
+            } catch (err: any) {
+                res.status(409).json({ error: 'Conflict', message: err?.message || 'No se pudo reconectar' });
+                return;
+            }
+
+            await auditoriaService.registrarEvento({
+                tablaAfectada: 'whatsapp_sesion',
+                idRegistro: 'sesion',
+                accion: 'RECONECTAR_WHATSAPP',
+                resultado: 'EXITO',
+                idUsuario: req.user?.idUsuario ?? null,
+            });
+
+            res.json(whatsappService.estadoActual());
+        } catch (err) {
+            next(err);
+        }
+    }
+);

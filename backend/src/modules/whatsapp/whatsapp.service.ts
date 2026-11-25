@@ -65,7 +65,11 @@ class WhatsappService {
     } | null = null;
 
     habilitado(): boolean {
-        return (process.env.WHATSAPP_PROVIDER || '').trim().toLowerCase() === 'baileys';
+        if ((process.env.WHATSAPP_PROVIDER || '').trim().toLowerCase() !== 'baileys') return false;
+        // Solo se conecta en producción (Render). En local hace falta pedirlo a propósito.
+        const esProduccion = process.env.NODE_ENV === 'production';
+        const permitirLocal = (process.env.WHATSAPP_PERMITIR_LOCAL || '').trim().toLowerCase() === 'true';
+        return esProduccion || permitirLocal;
     }
 
     estaConectado(): boolean {
@@ -274,7 +278,27 @@ class WhatsappService {
             });
         });
     }
+    /** Reconecta con la sesión guardada en la BD, sin vincular de nuevo. */
+    async reconectar(): Promise<void> {
+        if (!this.habilitado()) {
+            throw new Error('WhatsApp no está habilitado en este servidor');
+        }
+        if (this.pendienteCodigo) throw new Error('Hay una vinculación en curso');
 
+        await this.auth?.volcarTodo();
+        await this.cerrarSocket();
+        this.auth = null;
+
+        const lib = await this.cargarLib();
+        this.auth = await usarEstadoAuthBD(lib);
+        if (!this.auth.state.creds?.me?.id) {
+            this.estado = 'desconectado';
+            throw new Error('No hay un número vinculado: hay que vincular con el código');
+        }
+        this.intentos = 0;
+        this.ultimoError = null;
+        await this.conectar();
+    }
     async desvincular(): Promise<void> {
         const s = this.sock;
         if (s && this.estado === 'conectado') {
