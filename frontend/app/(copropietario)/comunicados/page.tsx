@@ -29,7 +29,6 @@ import {
   ChevronRight,
   Smartphone,
   CheckCheck,
-  MessageCircle,
   Smile,
   BadgeCheck
 } from 'lucide-react'
@@ -56,6 +55,9 @@ export interface EnvioDetalleItem {
   idPersona: number
   fechaEnvio?: string | null
   estadoEnvio?: string | null
+  estadoWhatsapp?: string | null
+  fechaEnvioWhatsapp?: string | null
+  errorWhatsapp?: string | null
   canal?: CanalEnvio
   persona?: {
     nombres: string
@@ -90,24 +92,7 @@ export interface ComunicadoItem {
   resumenEnvios?: ResumenEnvios
 }
 
-// ── Normalización de teléfonos y enlaces de WhatsApp (Requisito 7) ───────────
-function normalizarTelefonoBolivia(telefono?: string): string | null {
-  if (!telefono) return null
-  const digitos = telefono.replace(/\D/g, '')
-  if (!digitos) return null
-  if (digitos.length === 8) {
-    return `591${digitos}`
-  }
-  return digitos
-}
-
-function generarUrlWhatsApp(telefono?: string, titulo?: string, contenido?: string): string | null {
-  const telNorm = normalizarTelefonoBolivia(telefono)
-  if (!telNorm) return null
-  const texto = `*${titulo || 'Comunicado Edificio XYZ'}*\n\n${contenido || ''}`
-  return `https://wa.me/${telNorm}?text=${encodeURIComponent(texto)}`
-}
-
+// Enlaces wa.me retirados: el envío por WhatsApp lo hace el backend
 // ── Plantillas Rápidas Amigables para Edificio XYZ (Requisito 8) ───────────────
 interface PlantillaComunicado {
   id: string
@@ -281,12 +266,90 @@ export default function ComunicadosAmigablesPage() {
   const [comunicadoSeleccionadoDetalle, setComunicadoSeleccionadoDetalle] = useState<ComunicadoItem | null>(null)
   const [cargandoDetalle, setCargandoDetalle] = useState<boolean>(false)
   const [detalleEnvios, setDetalleEnvios] = useState<EnvioDetalleItem[]>([])
+  const [reenviandoCanal, setReenviandoCanal] = useState<string | null>(null)
+  const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null)
+  const pollingStartTimeRef = useRef<number>(0)
+
+  // Estado de conexión del servicio de WhatsApp
+  const [whatsappEstado, setWhatsappEstado] = useState<string | null>(null)
 
   const enviosVisiblesModal = useMemo(() => {
-    return detalleEnvios.filter(
-      (e) => (e.estadoEnvio || '').trim().toLowerCase() !== 'omitido'
-    )
+    return detalleEnvios
   }, [detalleEnvios])
+
+  const detenerPolling = useCallback(() => {
+    if (pollingIntervalRef.current) {
+      clearInterval(pollingIntervalRef.current)
+      pollingIntervalRef.current = null
+    }
+  }, [])
+
+  const iniciarPollingDetalle = useCallback((idComunicado: number, canalAviso: CanalEnvio) => {
+    detenerPolling()
+    pollingStartTimeRef.current = Date.now()
+    const MAX_POLLING_MS = 5 * 60 * 1000 // 5 minutos máximo
+    const incluyeCorreo = canalAviso === 'Correo' || canalAviso === 'Ambos'
+    const incluyeWhatsapp = canalAviso === 'WhatsApp' || canalAviso === 'Ambos'
+
+    pollingIntervalRef.current = setInterval(async () => {
+      if (Date.now() - pollingStartTimeRef.current >= MAX_POLLING_MS) {
+        detenerPolling()
+        return
+      }
+
+      try {
+        const res = await apiFetch(`/api/v1/comunicados/${idComunicado}`)
+        if (res.ok) {
+          const json = await res.json()
+          if (json.envios && Array.isArray(json.envios)) {
+            setDetalleEnvios(json.envios)
+
+            const hayPendiente = json.envios.some((e: EnvioDetalleItem) => {
+              const pendCorreo = incluyeCorreo && (e.estadoEnvio || '').trim().toLowerCase() === 'pendiente'
+              const pendWhatsapp = incluyeWhatsapp && (e.estadoWhatsapp || '').trim().toLowerCase() === 'pendiente'
+              return pendCorreo || pendWhatsapp
+            })
+
+            if (!hayPendiente) {
+              detenerPolling()
+            }
+          }
+        }
+      } catch { }
+    }, 4000)
+  }, [detenerPolling])
+
+  useEffect(() => {
+    if (!comunicadoSeleccionadoDetalle) {
+      detenerPolling()
+    }
+  }, [comunicadoSeleccionadoDetalle, detenerPolling])
+
+  useEffect(() => {
+    return () => {
+      detenerPolling()
+    }
+  }, [detenerPolling])
+
+  // GET /api/v1/whatsapp/estado al abrir la pestaña elaborar
+  useEffect(() => {
+    if (activeTab === 'elaborar') {
+      const fetchWhatsappEstado = async () => {
+        try {
+          const res = await apiFetch('/api/v1/whatsapp/estado')
+          if (res.ok) {
+            const data = await res.json()
+            setWhatsappEstado(data.estado || 'desconectado')
+          } else {
+            setWhatsappEstado('desconectado')
+          }
+        } catch {
+          setWhatsappEstado('desconectado')
+        }
+      }
+      fetchWhatsappEstado()
+    }
+  }, [activeTab])
 
   // Temporizadores para refresco automático (Requisito 3)
   const refreshTimersRef = useRef<NodeJS.Timeout[]>([])
@@ -303,7 +366,7 @@ export default function ComunicadosAmigablesPage() {
           setActiveTab('enviados')
         }
       }
-    } catch {}
+    } catch { }
   }, [])
 
   const showToast = (msg: string) => {
@@ -390,7 +453,7 @@ export default function ComunicadosAmigablesPage() {
           setPersonas(mapped)
         }
       }
-    } catch {}
+    } catch { }
   }, [])
 
   useEffect(() => {
@@ -404,6 +467,7 @@ export default function ComunicadosAmigablesPage() {
       showToast('Solo los administradores pueden consultar el detalle de entregas.')
       return
     }
+    detenerPolling()
     setComunicadoSeleccionadoDetalle(item)
     setCargandoDetalle(true)
     setDetalleEnvios([])
@@ -421,6 +485,53 @@ export default function ComunicadosAmigablesPage() {
       showToast('Error de conexión al obtener entregas.')
     } finally {
       setCargandoDetalle(false)
+    }
+  }
+
+  const handleCerrarDetalle = () => {
+    detenerPolling()
+    setComunicadoSeleccionadoDetalle(null)
+  }
+
+  const handleReenviar = async (canal: 'Correo' | 'WhatsApp', idEnvios?: number[]) => {
+    if (!comunicadoSeleccionadoDetalle) return
+    const idComunicado = comunicadoSeleccionadoDetalle.idComunicado
+    const tag = idEnvios && idEnvios.length > 0 ? `${canal}_${idEnvios[0]}` : `${canal}_all`
+    setReenviandoCanal(tag)
+
+    try {
+      const res = await apiFetch(`/api/v1/comunicados/${idComunicado}/reenviar`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          canal,
+          ...(idEnvios && idEnvios.length > 0 ? { idEnvios } : {})
+        })
+      })
+
+      if (!res.ok) {
+        const errJson = await res.json().catch(() => null)
+        showToast(errJson?.message || 'Error al reenviar el comunicado.')
+        return
+      }
+
+      const json = await res.json().catch(() => null)
+      showToast(`Reenviando ${json?.reenviados ?? ''} aviso(s) vía ${canal}.`)
+
+      const resDetalle = await apiFetch(`/api/v1/comunicados/${idComunicado}`)
+      if (resDetalle.ok) {
+        const jsonDetalle = await resDetalle.json()
+        if (jsonDetalle.envios && Array.isArray(jsonDetalle.envios)) {
+          setDetalleEnvios(jsonDetalle.envios)
+        }
+      }
+
+      fetchComunicados()
+      iniciarPollingDetalle(idComunicado, comunicadoSeleccionadoDetalle.canalEnvio)
+    } catch {
+      showToast('Error de conexión al reenviar.')
+    } finally {
+      setReenviandoCanal(null)
     }
   }
 
@@ -596,7 +707,7 @@ export default function ComunicadosAmigablesPage() {
   }, [comunicados, searchTerm, filtroCategoria])
 
   // Eliminar comunicado con validación de rol (Requisito 4)
-  
+
   const handleGuardarEdicionComunicado = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!comunicadoAEditar) return
@@ -695,18 +806,16 @@ export default function ComunicadosAmigablesPage() {
           <button
             type="button"
             onClick={() => setActiveTab('elaborar')}
-            className={`flex items-center gap-3 p-3.5 rounded-2xl border text-left transition-all cursor-pointer ${
-              activeTab === 'elaborar'
+            className={`flex items-center gap-3 p-3.5 rounded-2xl border text-left transition-all cursor-pointer ${activeTab === 'elaborar'
                 ? 'bg-blue-700 text-white border-blue-600 shadow-lg shadow-blue-900/20 ring-2 ring-blue-500/30'
                 : 'bg-[#ede9e1] hover:bg-[#e4ded3] dark:bg-slate-900 dark:hover:bg-slate-800/80 text-[#5c5750] dark:text-slate-400 border-[#cec8bc] dark:border-slate-800'
-            }`}
+              }`}
           >
             <div
-              className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
-                activeTab === 'elaborar'
+              className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${activeTab === 'elaborar'
                   ? 'bg-white/20 text-white'
                   : 'bg-blue-100 text-blue-800 dark:bg-slate-800 dark:text-blue-400'
-              }`}
+                }`}
             >
               <PenSquare className="w-5 h-5" />
             </div>
@@ -715,9 +824,8 @@ export default function ComunicadosAmigablesPage() {
                 1. Escribir Nuevo Aviso
               </div>
               <div
-                className={`text-[11px] truncate ${
-                  activeTab === 'elaborar' ? 'text-blue-100' : 'text-[#7d776f]'
-                }`}
+                className={`text-[11px] truncate ${activeTab === 'elaborar' ? 'text-blue-100' : 'text-[#7d776f]'
+                  }`}
               >
                 UI Elaboración Comunicados
               </div>
@@ -728,18 +836,16 @@ export default function ComunicadosAmigablesPage() {
         <button
           type="button"
           onClick={() => setActiveTab('enviados')}
-          className={`flex items-center gap-3 p-3.5 rounded-2xl border text-left transition-all cursor-pointer ${
-            activeTab === 'enviados'
+          className={`flex items-center gap-3 p-3.5 rounded-2xl border text-left transition-all cursor-pointer ${activeTab === 'enviados'
               ? 'bg-blue-700 text-white border-blue-600 shadow-lg shadow-blue-900/20 ring-2 ring-blue-500/30'
               : 'bg-[#ede9e1] hover:bg-[#e4ded3] dark:bg-slate-900 dark:hover:bg-slate-800/80 text-[#5c5750] dark:text-slate-400 border-[#cec8bc] dark:border-slate-800'
-          }`}
+            }`}
         >
           <div
-            className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
-              activeTab === 'enviados'
+            className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${activeTab === 'enviados'
                 ? 'bg-white/20 text-white'
                 : 'bg-blue-100 text-blue-800 dark:bg-slate-800 dark:text-blue-400'
-            }`}
+              }`}
           >
             <Users className="w-5 h-5" />
           </div>
@@ -749,19 +855,17 @@ export default function ComunicadosAmigablesPage() {
                 2. Avisos Enviados
               </span>
               <span
-                className={`text-[10px] font-bold px-1.5 py-0.5 rounded-md ${
-                  activeTab === 'enviados'
+                className={`text-[10px] font-bold px-1.5 py-0.5 rounded-md ${activeTab === 'enviados'
                     ? 'bg-white/20 text-white'
                     : 'bg-blue-100 text-blue-900 dark:bg-slate-800 dark:text-blue-300'
-                }`}
+                  }`}
               >
                 {comunicados.length}
               </span>
             </div>
             <div
-              className={`text-[11px] truncate ${
-                activeTab === 'enviados' ? 'text-blue-100' : 'text-[#7d776f]'
-              }`}
+              className={`text-[11px] truncate ${activeTab === 'enviados' ? 'text-blue-100' : 'text-[#7d776f]'
+                }`}
             >
               Supervisión de entregas y estados
             </div>
@@ -771,18 +875,16 @@ export default function ComunicadosAmigablesPage() {
         <button
           type="button"
           onClick={() => setActiveTab('cartelera')}
-          className={`flex items-center gap-3 p-3.5 rounded-2xl border text-left transition-all cursor-pointer ${
-            activeTab === 'cartelera'
+          className={`flex items-center gap-3 p-3.5 rounded-2xl border text-left transition-all cursor-pointer ${activeTab === 'cartelera'
               ? 'bg-blue-700 text-white border-blue-600 shadow-lg shadow-blue-900/20 ring-2 ring-blue-500/30'
               : 'bg-[#ede9e1] hover:bg-[#e4ded3] dark:bg-slate-900 dark:hover:bg-slate-800/80 text-[#5c5750] dark:text-slate-400 border-[#cec8bc] dark:border-slate-800'
-          }`}
+            }`}
         >
           <div
-            className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
-              activeTab === 'cartelera'
+            className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${activeTab === 'cartelera'
                 ? 'bg-white/20 text-white'
                 : 'bg-emerald-100 text-emerald-800 dark:bg-slate-800 dark:text-emerald-400'
-            }`}
+              }`}
           >
             <Megaphone className="w-5 h-5" />
           </div>
@@ -791,9 +893,8 @@ export default function ComunicadosAmigablesPage() {
               3. Cartelera Vecinos
             </div>
             <div
-              className={`text-[11px] truncate ${
-                activeTab === 'cartelera' ? 'text-blue-100' : 'text-[#7d776f]'
-              }`}
+              className={`text-[11px] truncate ${activeTab === 'cartelera' ? 'text-blue-100' : 'text-[#7d776f]'
+                }`}
             >
               Vista pública de circulares
             </div>
@@ -939,75 +1040,58 @@ export default function ComunicadosAmigablesPage() {
                   <button
                     type="button"
                     onClick={() => setFormCanal('Ambos')}
-                    className={`p-3 rounded-2xl border text-left flex items-center gap-3 transition-all cursor-pointer ${
-                      formCanal === 'Ambos'
+                    className={`p-3 rounded-2xl border text-left flex items-center gap-3 transition-all cursor-pointer ${formCanal === 'Ambos'
                         ? 'bg-blue-700 text-white border-blue-600 shadow-md ring-2 ring-blue-500/20'
                         : 'bg-[#dfd9ce] hover:bg-[#d5cfc2] dark:bg-slate-800 dark:hover:bg-slate-700 text-[#262422] dark:text-white border-[#cec8bc] dark:border-slate-700'
-                    }`}
+                      }`}
                   >
                     <div className="w-9 h-9 rounded-xl bg-purple-100 text-purple-700 flex items-center justify-center shrink-0">
                       <Share2 className="w-5 h-5" />
                     </div>
                     <div className="min-w-0">
                       <div className="text-xs font-extrabold">WhatsApp + Correo</div>
-                      <div
-                        className={`text-[10px] ${
-                          formCanal === 'Ambos' ? 'text-purple-100' : 'text-[#7d776f]'
-                        }`}
-                      >
-                        Recomendado (Correo + Enlace)
-                      </div>
                     </div>
                   </button>
 
                   <button
                     type="button"
                     onClick={() => setFormCanal('WhatsApp')}
-                    className={`p-3 rounded-2xl border text-left flex items-center gap-3 transition-all cursor-pointer ${
-                      formCanal === 'WhatsApp'
+                    className={`p-3 rounded-2xl border text-left flex items-center gap-3 transition-all cursor-pointer ${formCanal === 'WhatsApp'
                         ? 'bg-emerald-700 text-white border-emerald-600 shadow-md ring-2 ring-emerald-500/20'
                         : 'bg-[#dfd9ce] hover:bg-[#d5cfc2] dark:bg-slate-800 dark:hover:bg-slate-700 text-[#262422] dark:text-white border-[#cec8bc] dark:border-slate-700'
-                    }`}
+                      }`}
                   >
                     <div className="w-9 h-9 rounded-xl bg-emerald-100 text-emerald-700 flex items-center justify-center shrink-0">
                       <Phone className="w-5 h-5" />
                     </div>
                     <div className="min-w-0">
                       <div className="text-xs font-extrabold">Solo por WhatsApp</div>
-                      <div
-                        className={`text-[10px] ${
-                          formCanal === 'WhatsApp' ? 'text-emerald-100' : 'text-[#7d776f]'
-                        }`}
-                      >
-                        Envío manual vía enlace
-                      </div>
                     </div>
                   </button>
 
                   <button
                     type="button"
                     onClick={() => setFormCanal('Correo')}
-                    className={`p-3 rounded-2xl border text-left flex items-center gap-3 transition-all cursor-pointer ${
-                      formCanal === 'Correo'
+                    className={`p-3 rounded-2xl border text-left flex items-center gap-3 transition-all cursor-pointer ${formCanal === 'Correo'
                         ? 'bg-blue-700 text-white border-blue-600 shadow-md ring-2 ring-blue-500/20'
                         : 'bg-[#dfd9ce] hover:bg-[#d5cfc2] dark:bg-slate-800 dark:hover:bg-slate-700 text-[#262422] dark:text-white border-[#cec8bc] dark:border-slate-700'
-                    }`}
+                      }`}
                   >
                     <div className="w-9 h-9 rounded-xl bg-blue-100 text-blue-700 flex items-center justify-center shrink-0">
                       <Mail className="w-5 h-5" />
                     </div>
                     <div className="min-w-0">
                       <div className="text-xs font-extrabold">Por Correo Electrónico</div>
-                      <div
-                        className={`text-[10px] ${
-                          formCanal === 'Correo' ? 'text-blue-100' : 'text-[#7d776f]'
-                        }`}
-                      >
-                        Llega a su bandeja
-                      </div>
                     </div>
                   </button>
                 </div>
+
+                {((formCanal === 'WhatsApp' || formCanal === 'Ambos') && whatsappEstado !== 'conectado') && (
+                  <div className="mt-2.5 p-3 bg-amber-100 dark:bg-amber-950/70 border border-amber-300 dark:border-amber-800 text-amber-900 dark:text-amber-200 rounded-xl flex items-center gap-2 text-xs font-bold">
+                    <AlertCircle className="w-4 h-4 shrink-0 text-amber-600 dark:text-amber-400" />
+                    <span>WhatsApp no está conectado (estado actual: {whatsappEstado || 'desconectado'}). No es posible enviar avisos por este canal.</span>
+                  </div>
+                )}
               </div>
 
               {/* ¿A QUIÉN ENVIAR? */}
@@ -1018,11 +1102,10 @@ export default function ComunicadosAmigablesPage() {
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
                   <label
                     onClick={() => setFormTipoDestinatarios('todos')}
-                    className={`flex items-center gap-2.5 p-3 rounded-xl border cursor-pointer font-bold ${
-                      formTipoDestinatarios === 'todos'
+                    className={`flex items-center gap-2.5 p-3 rounded-xl border cursor-pointer font-bold ${formTipoDestinatarios === 'todos'
                         ? 'bg-blue-100 border-blue-500 text-blue-900 dark:bg-blue-950 dark:text-blue-200'
                         : 'bg-[#dfd9ce] border-[#cec8bc] dark:bg-slate-800 dark:border-slate-700'
-                    }`}
+                      }`}
                   >
                     <input
                       type="radio"
@@ -1038,11 +1121,10 @@ export default function ComunicadosAmigablesPage() {
 
                   <label
                     onClick={() => setFormTipoDestinatarios('seleccion')}
-                    className={`flex items-center gap-2.5 p-3 rounded-xl border cursor-pointer font-bold ${
-                      formTipoDestinatarios === 'seleccion'
+                    className={`flex items-center gap-2.5 p-3 rounded-xl border cursor-pointer font-bold ${formTipoDestinatarios === 'seleccion'
                         ? 'bg-blue-100 border-blue-500 text-blue-900 dark:bg-blue-950 dark:text-blue-200'
                         : 'bg-[#dfd9ce] border-[#cec8bc] dark:bg-slate-800 dark:border-slate-700'
-                    }`}
+                      }`}
                   >
                     <input
                       type="radio"
@@ -1077,11 +1159,10 @@ export default function ComunicadosAmigablesPage() {
                           return (
                             <label
                               key={p.idPersona}
-                              className={`flex items-center justify-between p-2 rounded-xl text-xs cursor-pointer transition-colors ${
-                                checked
+                              className={`flex items-center justify-between p-2 rounded-xl text-xs cursor-pointer transition-colors ${checked
                                   ? 'bg-blue-100 dark:bg-blue-950/60 text-blue-900 dark:text-blue-200'
                                   : 'hover:bg-[#dfd9ce] dark:hover:bg-slate-800'
-                              }`}
+                                }`}
                             >
                               <div className="flex items-center gap-2.5">
                                 <input
@@ -1130,7 +1211,7 @@ export default function ComunicadosAmigablesPage() {
               {/* Botón Grande de Envío */}
               <button
                 type="submit"
-                disabled={isSubmittingForm}
+                disabled={isSubmittingForm || ((formCanal === 'WhatsApp' || formCanal === 'Ambos') && whatsappEstado !== 'conectado')}
                 className="w-full flex items-center justify-center gap-2 py-4 bg-emerald-700 hover:bg-emerald-600 active:bg-emerald-800 text-white text-sm sm:text-base font-black rounded-2xl shadow-xl shadow-emerald-800/30 transition-all cursor-pointer disabled:opacity-50"
               >
                 <Send className="w-5 h-5" />
@@ -1498,7 +1579,7 @@ export default function ComunicadosAmigablesPage() {
                 </div>
               </div>
               <button
-                onClick={() => setComunicadoSeleccionadoDetalle(null)}
+                onClick={handleCerrarDetalle}
                 className="p-1.5 rounded-xl text-[#7d776f] hover:text-[#262422] dark:hover:text-white cursor-pointer"
               >
                 <X className="w-5 h-5" />
@@ -1506,7 +1587,7 @@ export default function ComunicadosAmigablesPage() {
             </div>
 
             {/* Aviso breve */}
-            <div className="p-3.5 rounded-2xl bg-[#dfd9ce]/70 dark:bg-slate-800/70 border border-[#cec8bc] dark:border-slate-700 space-y-1">
+            <div className="p-3.5 rounded-2xl bg-[#dfd9ce]/70 dark:bg-slate-800/70 border border-[#cec8bc] dark:border-slate-700 space-y-2">
               <div className="text-xs font-black text-[#262422] dark:text-white">
                 {comunicadoSeleccionadoDetalle.titulo}
               </div>
@@ -1514,6 +1595,32 @@ export default function ComunicadosAmigablesPage() {
                 <span>Canal: {comunicadoSeleccionadoDetalle.canalEnvio}</span>
                 <span>•</span>
                 <span>Total destinatarios: {enviosVisiblesModal.length}</span>
+              </div>
+
+              {/* Botones de Reenviar fallidos por canal */}
+              <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-[#cec8bc] dark:border-slate-700">
+                {(comunicadoSeleccionadoDetalle.canalEnvio === 'Correo' || comunicadoSeleccionadoDetalle.canalEnvio === 'Ambos') && (
+                  <button
+                    type="button"
+                    disabled={reenviandoCanal !== null || !detalleEnvios.some((e) => (e.estadoEnvio || '').trim().toLowerCase() === 'fallido')}
+                    onClick={() => handleReenviar('Correo')}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-blue-700 hover:bg-blue-600 active:bg-blue-800 text-white text-xs font-bold shadow-xs transition-colors cursor-pointer disabled:opacity-50"
+                  >
+                    <RotateCcw className={`w-3.5 h-3.5 ${reenviandoCanal === 'Correo_all' ? 'animate-spin' : ''}`} />
+                    <span>Reenviar fallidos Correo</span>
+                  </button>
+                )}
+                {(comunicadoSeleccionadoDetalle.canalEnvio === 'WhatsApp' || comunicadoSeleccionadoDetalle.canalEnvio === 'Ambos') && (
+                  <button
+                    type="button"
+                    disabled={reenviandoCanal !== null || !detalleEnvios.some((e) => (e.estadoWhatsapp || '').trim().toLowerCase() === 'fallido')}
+                    onClick={() => handleReenviar('WhatsApp')}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-700 hover:bg-emerald-600 active:bg-emerald-800 text-white text-xs font-bold shadow-xs transition-colors cursor-pointer disabled:opacity-50"
+                  >
+                    <RotateCcw className={`w-3.5 h-3.5 ${reenviandoCanal === 'WhatsApp_all' ? 'animate-spin' : ''}`} />
+                    <span>Reenviar fallidos WhatsApp</span>
+                  </button>
+                )}
               </div>
             </div>
 
@@ -1531,16 +1638,17 @@ export default function ComunicadosAmigablesPage() {
               ) : (
                 enviosVisiblesModal.map((envio, idx) => {
                   const colorAvatar = AVATAR_COLORS[idx % AVATAR_COLORS.length]
-                  const st = (envio.estadoEnvio || '').toLowerCase()
-                  const isEnviado = st === 'enviado' || st === 'entregado'
-                  const isFallido = st === 'fallido'
                   const personaDpto = personas.find((p) => p.idPersona === envio.idPersona)?.dptoNumero
 
-                  const urlWhatsApp = generarUrlWhatsApp(
-                    envio.persona?.telefono,
-                    comunicadoSeleccionadoDetalle.titulo,
-                    comunicadoSeleccionadoDetalle.contenido
-                  )
+                  const incluyeCorreo =
+                    comunicadoSeleccionadoDetalle.canalEnvio === 'Correo' ||
+                    comunicadoSeleccionadoDetalle.canalEnvio === 'Ambos'
+                  const incluyeWhatsapp =
+                    comunicadoSeleccionadoDetalle.canalEnvio === 'WhatsApp' ||
+                    comunicadoSeleccionadoDetalle.canalEnvio === 'Ambos'
+
+                  const stCorreo = (envio.estadoEnvio || '').trim().toLowerCase()
+                  const stWhatsapp = (envio.estadoWhatsapp || '').trim().toLowerCase()
 
                   return (
                     <div
@@ -1568,34 +1676,94 @@ export default function ComunicadosAmigablesPage() {
                       </div>
 
                       <div className="flex items-center gap-2 shrink-0">
-                        {isEnviado ? (
-                          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-black bg-emerald-100 text-emerald-900 dark:bg-emerald-950 dark:text-emerald-300">
-                            <CheckCheck className="w-3.5 h-3.5 text-emerald-600" />
-                            <span>Enviado</span>
-                          </span>
-                        ) : isFallido ? (
-                          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-black bg-rose-100 text-rose-900 dark:bg-rose-950 dark:text-rose-300">
-                            <AlertCircle className="w-3.5 h-3.5 text-rose-600" />
-                            <span>Fallido</span>
-                          </span>
-                        ) : (
-                          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-black bg-amber-100 text-amber-900 dark:bg-amber-950 dark:text-amber-300">
-                            <Clock className="w-3.5 h-3.5 text-amber-600" />
-                            <span>Pendiente</span>
-                          </span>
+                        {incluyeCorreo && (
+                          <div className="flex items-center gap-1.5">
+                            {stCorreo === 'enviado' || stCorreo === 'entregado' ? (
+                              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-black bg-emerald-100 text-emerald-900 dark:bg-emerald-950 dark:text-emerald-300">
+                                <CheckCheck className="w-3.5 h-3.5 text-emerald-600" />
+                                <span>Correo: Enviado</span>
+                              </span>
+                            ) : stCorreo === 'fallido' ? (
+                              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-black bg-rose-100 text-rose-900 dark:bg-rose-950 dark:text-rose-300">
+                                <AlertCircle className="w-3.5 h-3.5 text-rose-600" />
+                                <span>Correo: Fallido</span>
+                              </span>
+                            ) : stCorreo === 'omitido' ? (
+                              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-black bg-slate-200 text-slate-700 dark:bg-slate-800 dark:text-slate-300">
+                                <span>Correo: Omitido</span>
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-black bg-amber-100 text-amber-900 dark:bg-amber-950 dark:text-amber-300">
+                                <Clock className="w-3.5 h-3.5 text-amber-600" />
+                                <span>Correo: {envio.estadoEnvio || 'Pendiente'}</span>
+                              </span>
+                            )}
+
+                            {(stCorreo === 'fallido' || stCorreo === 'omitido') && (
+                              <button
+                                type="button"
+                                disabled={reenviandoCanal !== null}
+                                onClick={() => handleReenviar('Correo', [envio.idEnvio])}
+                                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-xl bg-blue-700 hover:bg-blue-600 active:bg-blue-800 text-white text-[10px] font-bold shadow-xs transition-colors cursor-pointer disabled:opacity-50"
+                                title="Reenviar correo"
+                              >
+                                <RotateCcw className={`w-3 h-3 ${reenviandoCanal === `Correo_${envio.idEnvio}` ? 'animate-spin' : ''}`} />
+                                <span>Reenviar</span>
+                              </button>
+                            )}
+                          </div>
                         )}
 
-                        {urlWhatsApp && (
-                          <a
-                            href={urlWhatsApp}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-[10px] font-bold shadow-xs transition-colors"
-                            title="Enviar manualmente por WhatsApp"
-                          >
-                            <MessageCircle className="w-3.5 h-3.5" />
-                            <span className="hidden sm:inline">Enviar por WhatsApp</span>
-                          </a>
+                        {incluyeWhatsapp && (
+                          <div className="flex items-center gap-1.5">
+                            {stWhatsapp === 'enviado' || stWhatsapp === 'entregado' ? (
+                              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-black bg-emerald-100 text-emerald-900 dark:bg-emerald-950 dark:text-emerald-300">
+                                <CheckCheck className="w-3.5 h-3.5 text-emerald-600" />
+                                <span>WhatsApp: Enviado</span>
+                              </span>
+                            ) : stWhatsapp === 'fallido' ? (
+                              <div className="flex flex-col items-end">
+                                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-black bg-rose-100 text-rose-900 dark:bg-rose-950 dark:text-rose-300">
+                                  <AlertCircle className="w-3.5 h-3.5 text-rose-600" />
+                                  <span>WhatsApp: Fallido</span>
+                                </span>
+                                {envio.errorWhatsapp && (
+                                  <span className="text-[10px] text-rose-600 dark:text-rose-400 font-mono truncate max-w-[180px]" title={envio.errorWhatsapp}>
+                                    {envio.errorWhatsapp}
+                                  </span>
+                                )}
+                              </div>
+                            ) : stWhatsapp === 'omitido' ? (
+                              <div className="flex flex-col items-end">
+                                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-black bg-slate-200 text-slate-700 dark:bg-slate-800 dark:text-slate-300">
+                                  <span>WhatsApp: Omitido</span>
+                                </span>
+                                {envio.errorWhatsapp && (
+                                  <span className="text-[10px] text-[#7d776f] font-mono truncate max-w-[180px]" title={envio.errorWhatsapp}>
+                                    {envio.errorWhatsapp}
+                                  </span>
+                                )}
+                              </div>
+                            ) : (
+                              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-black bg-amber-100 text-amber-900 dark:bg-amber-950 dark:text-amber-300">
+                                <Clock className="w-3.5 h-3.5 text-amber-600" />
+                                <span>WhatsApp: {envio.estadoWhatsapp || 'Pendiente'}</span>
+                              </span>
+                            )}
+
+                            {(stWhatsapp === 'fallido' || stWhatsapp === 'omitido') && (
+                              <button
+                                type="button"
+                                disabled={reenviandoCanal !== null}
+                                onClick={() => handleReenviar('WhatsApp', [envio.idEnvio])}
+                                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-xl bg-emerald-700 hover:bg-emerald-600 active:bg-emerald-800 text-white text-[10px] font-bold shadow-xs transition-colors cursor-pointer disabled:opacity-50"
+                                title="Reenviar WhatsApp"
+                              >
+                                <RotateCcw className={`w-3 h-3 ${reenviandoCanal === `WhatsApp_${envio.idEnvio}` ? 'animate-spin' : ''}`} />
+                                <span>Reenviar</span>
+                              </button>
+                            )}
+                          </div>
                         )}
                       </div>
                     </div>
@@ -1608,7 +1776,7 @@ export default function ComunicadosAmigablesPage() {
             <div className="pt-3 border-t border-[#cec8bc] dark:border-slate-800 flex justify-end">
               <button
                 type="button"
-                onClick={() => setComunicadoSeleccionadoDetalle(null)}
+                onClick={handleCerrarDetalle}
                 className="px-5 py-2.5 bg-blue-700 hover:bg-blue-600 text-white text-xs font-bold rounded-xl cursor-pointer"
               >
                 Entendido / Cerrar
@@ -1690,7 +1858,7 @@ export default function ComunicadosAmigablesPage() {
         </div>
       )}
 
-      
+
       {/* MODAL DE EDICIÓN DE COMUNICADO */}
       {comunicadoAEditar && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in duration-200">
