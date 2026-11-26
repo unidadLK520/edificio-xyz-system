@@ -8,24 +8,10 @@ import { usarEstadoAuthBD } from './whatsapp.auth';
 import type { AuthBD } from './whatsapp.auth';
 import { enmascararTelefono } from './whatsapp.utils';
 
-export type EstadoWhatsapp =
-    | 'deshabilitado'
-    | 'desconectado'
-    | 'conectando'
-    | 'esperando_codigo'
-    | 'conectado';
+import { programarReconexionHelper, cerrarSocketHelper, borrarSesionHelper } from './whatsapp.helpers';
+import type { EstadoWhatsapp, EstadoWhatsappInfo, ResultadoEnvio } from './whatsapp.types';
 
-export interface EstadoWhatsappInfo {
-    proveedor: string;
-    estado: EstadoWhatsapp;
-    vinculado: boolean;
-    numero: string | null;
-    ultimoError: string | null;
-}
 
-export type ResultadoEnvio =
-    | { ok: true }
-    | { ok: false; error: string; temporal: boolean; limite: boolean };
 
 // Baileys es solo ESM y este backend es CommonJS: import dinámico nativo.
 const importarEsm = new Function('m', 'return import(m)') as (m: string) => Promise<any>;
@@ -203,34 +189,9 @@ class WhatsappService {
         }
     }
 
-    private programarReconexion(ms: number): void {
-        if (this.reconexion) clearTimeout(this.reconexion);
-        this.reconexion = setTimeout(() => {
-            this.reconexion = null;
-            this.conectar().catch((err: any) => {
-                this.ultimoError = limpiarMensajeError(err);
-                this.estado = 'conectando';
-                this.programarReconexion(Math.min(30000, 2000 * 2 ** this.intentos++));
-            });
-        }, ms);
-    }
+    private programarReconexion(ms: number): void { programarReconexionHelper(this, ms); }
 
-    private async cerrarSocket(): Promise<void> {
-        if (this.reconexion) {
-            clearTimeout(this.reconexion);
-            this.reconexion = null;
-        }
-        const s = this.sock;
-        this.sock = null;
-        if (s) {
-            try {
-                s.end(undefined);
-            } catch {
-                // ignorar
-            }
-        }
-        this.estado = 'desconectado';
-    }
+    private async cerrarSocket(): Promise<void> { await cerrarSocketHelper(this); }
 
     private async borrarSesion(): Promise<void> {
         if (this.auth) await this.auth.limpiar();
