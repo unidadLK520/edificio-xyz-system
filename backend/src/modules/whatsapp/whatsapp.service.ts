@@ -9,6 +9,7 @@ import type { AuthBD } from './whatsapp.auth';
 import { enmascararTelefono } from './whatsapp.utils';
 
 import { programarReconexionHelper, cerrarSocketHelper, borrarSesionHelper } from './whatsapp.helpers';
+import type { EstadoWhatsapp, EstadoWhatsappInfo, ResultadoEnvio } from './whatsapp.types';
 
 
 
