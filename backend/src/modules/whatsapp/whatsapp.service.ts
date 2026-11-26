@@ -7,10 +7,10 @@ import { prisma } from '@edificio-xyz/database';
 import { usarEstadoAuthBD } from './whatsapp.auth';
 import type { AuthBD } from './whatsapp.auth';
 import { enmascararTelefono } from './whatsapp.utils';
-import { EstadoWhatsapp, EstadoWhatsappInfo, ResultadoEnvio } from './whatsapp.types';
-import { silentLogger, limpiarMensajeError, programarReconexionHelper, cerrarSocketHelper, borrarSesionHelper } from './whatsapp.helpers';
 
-import { EstadoWhatsapp, EstadoWhatsappInfo, ResultadoEnvio } from './whatsapp.types';
+import { programarReconexionHelper, cerrarSocketHelper, borrarSesionHelper } from './whatsapp.helpers';
+
+
 
 // Baileys es solo ESM y este backend es CommonJS: import dinámico nativo.
 const importarEsm = new Function('m', 'return import(m)') as (m: string) => Promise<any>;
